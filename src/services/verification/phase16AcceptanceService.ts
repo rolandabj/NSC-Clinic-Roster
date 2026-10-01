@@ -303,7 +303,8 @@ export class Phase16AcceptanceService {
         roles,
         specialties,
         leaveEntries,
-        leaveTypes
+        leaveTypes,
+        workingHoursPeriods
       )
     );
 
@@ -1292,7 +1293,8 @@ export class Phase16AcceptanceService {
     roles: ClinicalRole[],
     specialties: Specialty[],
     leaveEntries: LeaveEntry[],
-    leaveTypes: LeaveType[]
+    leaveTypes: LeaveType[],
+    workingHoursPeriods: WorkingHoursPeriod[] = []
   ): Promise<AcceptanceCheckResult> {
     const t0 = performance.now();
     const subchecks: { name: string; passed: boolean; message: string }[] = [];
@@ -1327,6 +1329,7 @@ export class Phase16AcceptanceService {
       specialties,
       leaveEntries,
       leaveTypes,
+      workingHoursPeriods,
       ackToken: 'ack-test-token-456',
     });
 
@@ -1360,6 +1363,7 @@ export class Phase16AcceptanceService {
       specialties,
       leaveEntries,
       leaveTypes,
+      workingHoursPeriods,
       changes: [
         {
           id: `${targetNurse.id}_2026-10-12`,

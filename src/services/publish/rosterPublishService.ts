@@ -21,10 +21,16 @@ import {
   EmailRecipientLog,
   Acknowledgment,
   ShareLink,
+  WorkingHoursPeriod,
 } from '../../types';
 import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
 import { AssignmentDiffItem } from '../history/diffEngine';
 import { getRepository } from '../repository';
+import {
+  calculateDutyDurationHours,
+  resolveFullTimeTargetHours,
+} from '../reports/hoursAccounting';
+import { clippedLeaveCredit } from '../leave/leaveCredit';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -45,6 +51,8 @@ export interface GenerateEmailPayloadParams {
   shareToken?: string;
   ackToken: string;
   isChangeAlert?: boolean;
+  /** Phase 6: periods supply the authoritative full-time target for the email summary. */
+  workingHoursPeriods?: WorkingHoursPeriod[];
 }
 
 export interface DispatchResult {
@@ -78,6 +86,7 @@ export class RosterPublishService {
       shareToken,
       ackToken,
       isChangeAlert,
+      workingHoursPeriods = [],
     } = params;
 
     const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
@@ -95,31 +104,28 @@ export class RosterPublishService {
       .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
     // Calculate hours summary
+    // Phase 6 parity: the same duty-duration helper the engine, validator and reports use.
     let dutyHours = 0;
     for (const a of nurseAsgns) {
-      const dw = dutyMap.get(a.dutyWindowId);
-      if (dw) {
-        const [sh, sm] = dw.startTime.split(':').map(Number);
-        const [eh, em] = dw.endTime.split(':').map(Number);
-        let mins = eh * 60 + em - (sh * 60 + sm);
-        if (mins < 0) mins += 24 * 60;
-        dutyHours += mins / 60;
-      }
+      dutyHours += calculateDutyDurationHours(dutyMap.get(a.dutyWindowId));
     }
 
+    // Phase 6 parity: type-driven, window-clipped leave credits (RO/DO = 0), counted per day —
+    // the email previously credited one day per leave entry at a flat 8h.
     let leaveCreditedHours = 0;
     for (const le of nurseLeaves) {
-      const lt = ltMap.get(le.leaveTypeId);
-      if (lt && lt.countsTowardHoursTarget) {
-        if (typeof lt.creditedHours === 'number') {
-          leaveCreditedHours += lt.creditedHours;
-        } else {
-          leaveCreditedHours += 8;
-        }
-      }
+      leaveCreditedHours += clippedLeaveCredit(
+        le,
+        ltMap.get(le.leaveTypeId),
+        schedule.startDate,
+        schedule.endDate
+      );
     }
 
-    const targetHours = Math.round((schedule.hoursTargetFullTime * (nurse.contractPercent || 100)) / 100);
+    // Phase 6 parity: the authoritative (period-derived) full-time target.
+    const targetHours = Math.round(
+      (resolveFullTimeTargetHours(schedule, workingHoursPeriods) * (nurse.contractPercent || 100)) / 100
+    );
     const totalEarnedHours = dutyHours + leaveCreditedHours;
     const variance = totalEarnedHours - targetHours;
 
