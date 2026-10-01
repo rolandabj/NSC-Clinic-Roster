@@ -345,33 +345,56 @@ export class AuthService {
     return this.currentUser;
   }
 
+  // Concurrency guard to prevent rapid clicks from triggering auth/cancelled-popup-request
+  private signingInPromise: Promise<UserProfile> | null = null;
+
   /**
    * Google sign in with the Firebase Google provider (account chooser popup).
    */
   public async signInWithGoogle(): Promise<UserProfile> {
-    const auth = getAppAuth();
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-
-    let fbUser: FirebaseUser;
-    try {
-      const result = await signInWithPopup(auth, provider);
-      fbUser = result.user;
-    } catch (err: any) {
-      if (err?.code === 'auth/popup-blocked') {
-        throw new Error('The sign in popup was blocked. Allow popups for this site, or open the app in a new tab, then try again.');
-      }
-      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
-        throw new Error('Sign in was cancelled.');
-      }
-      throw new Error(err?.message || 'Google sign in failed. Please try again.');
+    if (this.signingInPromise) {
+      return this.signingInPromise;
     }
 
-    this.idToken = await fbUser.getIdToken();
-    const profile = await this.resolveProfileOnce(fbUser);
-    this.currentUser = profile;
-    this.notify();
-    return profile;
+    this.signingInPromise = (async () => {
+      const auth = getAppAuth();
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+
+      let fbUser: FirebaseUser;
+      try {
+        const result = await signInWithPopup(auth, provider);
+        fbUser = result.user;
+      } catch (err: any) {
+        if (err?.code === 'auth/popup-blocked') {
+          throw new Error('The sign in popup was blocked by your browser. Please allow popups for this site or open the app in a new tab.');
+        }
+        if (err?.code === 'auth/popup-closed-by-user') {
+          throw new Error('Sign in popup was closed. If this happened immediately without closing the window, your browser or preview environment may be blocking third-party popup communication. Try opening the app in a new tab.');
+        }
+        if (err?.code === 'auth/cancelled-popup-request') {
+          throw new Error('A previous sign in attempt was already in progress. Please try again.');
+        }
+        if (err?.code === 'auth/unauthorized-domain') {
+          const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
+          throw new Error(`Domain "${currentHost}" is not listed in Firebase Authentication authorized domains. Please add it in Firebase Console > Authentication > Settings > Authorized domains.`);
+        }
+        if (err?.code === 'auth/network-request-failed') {
+          throw new Error('Network error during Google sign in. Please verify your connection and try again.');
+        }
+        throw new Error(err?.message || 'Google sign in failed. Please try again.');
+      }
+
+      this.idToken = await fbUser.getIdToken();
+      const profile = await this.resolveProfileOnce(fbUser);
+      this.currentUser = profile;
+      this.notify();
+      return profile;
+    })().finally(() => {
+      this.signingInPromise = null;
+    });
+
+    return this.signingInPromise;
   }
 
   private async signOutQuietly(): Promise<void> {
