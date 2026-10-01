@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  * 
  * Unified Export Dialog & Print Preview (Phase 11)
- * Supports Multi-Sheet Excel, CSV Matrix/Long, A3 Landscape Roster Print, and Per-Nurse Packets.
+ * Supports a PDF of the nurses' and doctors' grids, Multi-Sheet Excel, CSV Matrix/Long, and Per-Nurse Packets.
  */
 
 import React, { useEffect, useId, useState } from 'react';
@@ -68,6 +68,8 @@ interface ExportModalProps {
   currentBlockIndex?: number;
   blockDates?: string[];
   versionNumber?: number;
+  /** Public holiday dates, marked in the PDF. */
+  holidayDates?: string[];
   isOpen: boolean;
   onClose: () => void;
 }
@@ -96,8 +98,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   isOpen,
   onClose,
   workingHoursPeriods = [],
+  holidayDates = [],
 }) => {
-  const [activeTab, setActiveTab] = useState<ExportTab>('excel');
+  const [activeTab, setActiveTab] = useState<ExportTab>('print_roster');
+  const [pdfPageSize, setPdfPageSize] = useState<'a3' | 'a4'>('a3');
+  const [pdfScope, setPdfScope] = useState<'ALL' | 'ACTIVE_BLOCK'>('ALL');
+  const [pdfIncludeNurses, setPdfIncludeNurses] = useState(true);
+  const [pdfIncludeDoctors, setPdfIncludeDoctors] = useState(true);
+  const [isPdfBusy, setIsPdfBusy] = useState(false);
   const [excelScope, setExcelScope] = useState<'ALL' | 'ACTIVE_BLOCK'>('ALL');
   const [selectedNurseId, setSelectedNurseId] = useState<string>('ALL');
   const titleId = useId();
@@ -106,7 +114,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   // Start downloading the Excel library as soon as the dialog opens, so the
   // file is ready when the user clicks (browsers may block a late download).
   useEffect(() => {
-    if (isOpen) import('xlsx').catch(() => {});
+    if (isOpen) {
+      import('xlsx').catch(() => {});
+      import('jspdf').catch(() => {});
+      import('jspdf-autotable').catch(() => {});
+    }
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -145,6 +157,43 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       });
     } catch (err: any) {
       notify(`The Excel file could not be created: ${err?.message || err}`, 'error');
+    }
+  };
+
+  // PDF: nurses' roster and doctors' sessions, laid out like the Schedules screen
+  const handleDownloadPdf = async () => {
+    if (!pdfIncludeNurses && !pdfIncludeDoctors) {
+      notify('Choose the nurses, the doctors, or both.', 'warning');
+      return;
+    }
+    setIsPdfBusy(true);
+    try {
+      const { exportRosterToPdf } = await import('../../services/export/rosterPdfService');
+      await exportRosterToPdf({
+        clinicName,
+        schedule,
+        assignments,
+        nurses,
+        dutyWindows,
+        leaveEntries,
+        leaveTypes,
+        seniorityLevels,
+        doctors,
+        sessions,
+        roles,
+        specialties,
+        versionNumber,
+        dates: pdfScope === 'ACTIVE_BLOCK' && blockDates.length > 0 ? blockDates : undefined,
+        pageSize: pdfPageSize,
+        includeNurses: pdfIncludeNurses,
+        includeDoctors: pdfIncludeDoctors,
+        holidayDates,
+      });
+      notify('PDF downloaded.', 'success');
+    } catch (err: any) {
+      notify(`The PDF could not be created: ${err?.message || err}`, 'error');
+    } finally {
+      setIsPdfBusy(false);
     }
   };
 
@@ -255,6 +304,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         <div className="px-6 border-b border-slate-200 flex items-center gap-6 bg-white text-xs">
           <button
             type="button"
+            onClick={() => setActiveTab('print_roster')}
+            className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
+              activeTab === 'print_roster'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FileText className="w-4 h-4 text-rose-600" aria-hidden="true" />
+            <span>PDF (Nurses &amp; Doctors)</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('excel')}
             className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
               activeTab === 'excel'
@@ -277,19 +339,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           >
             <FileText className="w-4 h-4 text-blue-600" aria-hidden="true" />
             <span>CSV (Matrix &amp; Long)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('print_roster')}
-            className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
-              activeTab === 'print_roster'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Printer className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-            <span>A3 Landscape Roster Print</span>
           </button>
 
           <button
@@ -427,32 +476,71 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: A3 Print */}
+          {/* PDF: nurses' roster and doctors' sessions */}
           {activeTab === 'print_roster' && (
             <div className="space-y-4">
-              <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg space-y-2">
+              <div className="p-4 bg-rose-50/60 border border-rose-200 rounded-lg space-y-2">
                 <div className="flex items-center gap-2">
-                  <Printer className="w-5 h-5 text-indigo-600" />
-                  <h3 className="text-sm font-bold text-indigo-950">A3 Landscape Roster Print / PDF</h3>
+                  <FileText className="w-5 h-5 text-rose-600" aria-hidden="true" />
+                  <h3 className="text-sm font-bold text-rose-950">Schedule PDF: Nurses &amp; Doctors</h3>
                 </div>
-                <p className="text-xs text-indigo-900 leading-relaxed font-sans">
-                  Optimized for physical clinic noticeboards and PDF archiving. Includes repeating headers, clinic metadata banner, date columns, and complete bottom legend.
+                <p className="text-xs text-rose-950/80 leading-relaxed">
+                  Downloads a PDF laid out like the Schedules screen: every nurse with her shift and job for each day,
+                  then every doctor with the session hours and the nurse with them. Cells are colour coded by shift,
+                  weekends are shaded, sessions without a nurse are red, and a legend is added at the end.
                 </p>
               </div>
 
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-1 font-mono text-[11px] text-slate-600">
-                <p>• Paper Size: A3 Landscape (configured in print stylesheet)</p>
-                <p>• Header: Clinic Name, Schedule Period, Active Version v{versionNumber}, Printed Timestamp</p>
-                <p>• Legend: Duty window times &amp; leave acronyms attached automatically</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <fieldset className="p-3 border border-slate-200 rounded space-y-1.5">
+                  <legend className="px-1 font-semibold text-slate-700">Paper</legend>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="pdf-size" checked={pdfPageSize === 'a3'} onChange={() => setPdfPageSize('a3')} />
+                    <span>A3 landscape (whole period across)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="pdf-size" checked={pdfPageSize === 'a4'} onChange={() => setPdfPageSize('a4')} />
+                    <span>A4 landscape (split into parts)</span>
+                  </label>
+                </fieldset>
+                <fieldset className="p-3 border border-slate-200 rounded space-y-1.5">
+                  <legend className="px-1 font-semibold text-slate-700">Days</legend>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="pdf-scope" checked={pdfScope === 'ALL'} onChange={() => setPdfScope('ALL')} />
+                    <span>Whole schedule ({allDates.length} days)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pdf-scope"
+                      checked={pdfScope === 'ACTIVE_BLOCK'}
+                      disabled={blockDates.length === 0}
+                      onChange={() => setPdfScope('ACTIVE_BLOCK')}
+                    />
+                    <span>Current block only ({blockDates.length} days)</span>
+                  </label>
+                </fieldset>
+                <fieldset className="p-3 border border-slate-200 rounded space-y-1.5">
+                  <legend className="px-1 font-semibold text-slate-700">Include</legend>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={pdfIncludeNurses} onChange={(e) => setPdfIncludeNurses(e.target.checked)} />
+                    <span>Nurses&apos; roster ({nurses.length})</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={pdfIncludeDoctors} onChange={(e) => setPdfIncludeDoctors(e.target.checked)} />
+                    <span>Doctors&apos; sessions ({doctors.length})</span>
+                  </label>
+                </fieldset>
               </div>
 
               <button
                 type="button"
-                onClick={handleTriggerPrint}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+                onClick={handleDownloadPdf}
+                disabled={isPdfBusy}
+                className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
               >
-                <Printer className="w-4 h-4" aria-hidden="true" />
-                <span>Open Print Dialog (A3 Landscape)</span>
+                <Download className="w-4 h-4" aria-hidden="true" />
+                <span>{isPdfBusy ? 'Creating the PDF…' : 'Download PDF'}</span>
               </button>
             </div>
           )}

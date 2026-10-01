@@ -2180,6 +2180,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           currentBlockIndex={selectedBlockIndex}
           blockDates={blockDates}
           versionNumber={activeSchedule.activeVersionNumber || 1}
+          holidayDates={holidays.map((h) => h.date)}
           isOpen={isExportModalOpen}
           onClose={() => setIsExportModalOpen(false)}
         />
