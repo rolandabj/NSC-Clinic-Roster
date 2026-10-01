@@ -50,6 +50,7 @@ import {
   LockEntry,
 } from '../../types';
 import { ClinicContextState } from '../../types/navigation';
+import { loadClinicSetup } from '../../services/engine/clinicSetupService';
 import { ScheduleValidator, ValidationReport } from '../../services/validation/ScheduleValidator';
 import { computeScheduleDiff, ScheduleVersionDiff } from '../../services/history/diffEngine';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
@@ -173,6 +174,17 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         leaveTypes
       );
       setValidationReport(report);
+      // Check again with the clinic's opening hours, public holidays and the previous roster
+      loadClinicSetup(repo, schedule)
+        .then((setup) =>
+          setValidationReport(
+            ScheduleValidator.validate(
+              schedule, assignments, nurses, seniorityLevels, dutyWindows, sessions, leaveEntries, locks,
+              roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes, setup
+            )
+          )
+        )
+        .catch(() => {});
 
       // 2. Find latest published version for diffing
       const publishedList = versions.filter((v) => v.isPublished);

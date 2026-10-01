@@ -64,6 +64,8 @@ import {
   Invitation,
   WorkingHoursPeriod,
 } from '../../types';
+import { loadClinicSetup } from '../../services/engine/clinicSetupService';
+import type { ClinicSetup } from '../../services/engine/clinicModel';
 import { SchedulingEngine } from '../../services/engine/SchedulingEngine';
 import { calculateWorkingHoursForDateRange } from '../../services/periods/workingHoursPeriodService';
 import {
@@ -117,6 +119,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [dutyWindows, setDutyWindows] = useState<DutyWindow[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
   const [holidays, setHolidays] = useState<PublicHoliday[]>([]);
+  // Opening hours, public holidays and the end of the previous roster, for the engine and the checker
+  const clinicSetupRef = useRef<ClinicSetup | undefined>(undefined);
   const [quotas, setQuotas] = useState<NurseHoursQuota[]>([]);
 
   // Validation Report state
@@ -302,6 +306,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         setVersions(schedVersions);
 
         // Run validation
+        const initialClinicSetup = await loadClinicSetup(repo, current).catch(() => undefined);
+        clinicSetupRef.current = initialClinicSetup;
         const report = ScheduleValidator.validate(
           current,
           schedAssignments,
@@ -316,7 +322,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           sortedWhp,
           spList,
           dList,
-          ltList
+          ltList,
+          initialClinicSetup
         );
         setValidationReport(report);
       }
@@ -413,7 +420,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           workingHoursPeriods,
           specialties,
           doctors,
-          leaveTypes
+          leaveTypes,
+          clinicSetupRef.current
         );
         setValidationReport(report);
       }, 300);
@@ -452,7 +460,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           workingHoursPeriods,
           specialties,
           doctors,
-          leaveTypes
+          leaveTypes,
+          clinicSetupRef.current
         );
         setValidationReport(report);
       }
@@ -496,7 +505,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           workingHoursPeriods,
           specialties,
           doctors,
-          leaveTypes
+          leaveTypes,
+          clinicSetupRef.current
         );
         setValidationReport(report);
       }
@@ -525,7 +535,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         workingHoursPeriods,
         specialties,
         doctors,
-          leaveTypes
+          leaveTypes,
+          clinicSetupRef.current
       );
       setValidationReport(report);
     }
@@ -671,6 +682,20 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     };
   };
 
+  // Keep the clinic details current when another roster is opened or holidays change
+  useEffect(() => {
+    if (!activeSchedule) return;
+    let cancelled = false;
+    loadClinicSetup(repo, activeSchedule)
+      .then((setup) => {
+        if (!cancelled) clinicSetupRef.current = setup;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSchedule?.id, activeSchedule?.startDate, holidays]);
+
   // --- OPEN GENERATION PRE-FLIGHT ---
   const handleOpenPreflight = async (mode: RegenerateMode, targetSchedule?: Schedule) => {
     const sched = targetSchedule || activeSchedule;
@@ -772,6 +797,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     setIsGenerating(true);
 
     try {
+      // Fresh clinic details for this roster (holidays or the previous roster may have changed)
+      const generationClinicSetup = await loadClinicSetup(repo, activeSchedule).catch(() => clinicSetupRef.current);
+      clinicSetupRef.current = generationClinicSetup;
       setUndoStack((prev) => [assignments, ...prev].slice(0, 50));
       setRedoStack([]);
 
@@ -794,7 +822,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           },
           workingHoursPeriods,
           doctors,
-          leaveTypes
+          leaveTypes,
+          generationClinicSetup
         );
 
         let finalAssignments = result.assignments;
@@ -819,7 +848,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           workingHoursPeriods,
           specialties,
           doctors,
-          leaveTypes
+          leaveTypes,
+          clinicSetupRef.current
         );
         setValidationReport(report);
 
@@ -869,7 +899,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         },
         workingHoursPeriods,
         doctors,
-          leaveTypes
+          leaveTypes,
+          generationClinicSetup
       );
 
       // If engine resolved an authoritative period target, synchronize the schedule record
@@ -913,7 +944,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         workingHoursPeriods,
         specialties,
         doctors,
-          leaveTypes
+          leaveTypes,
+          clinicSetupRef.current
       );
       setValidationReport(report);
 

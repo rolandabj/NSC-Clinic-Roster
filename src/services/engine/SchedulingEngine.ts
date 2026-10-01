@@ -39,6 +39,17 @@ import { resolveFullTimeTarget, nurseLeaveHoursInRange, leaveDaysInRange } from 
 import { calculateWorkingHoursForDateRange } from '../periods/workingHoursPeriodService';
 import { generateDoctorSessionsForDateRange } from '../schedule/doctorScheduleService';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
+import {
+  ClinicSetup,
+  bloodCollectionRole,
+  canBeFreeNurse,
+  coveredMinutes,
+  isFreeDuring,
+  openingHourSlots,
+  overlaps,
+  resolveClinicSetup,
+  toMinutes,
+} from './clinicModel';
 
 /**
  * Resiliently finds a rule by templateKey, id, or semantic keywords in its name.
@@ -341,7 +352,8 @@ export class SchedulingEngine {
     onProgress?: GenerationProgressCallback,
     workingHoursPeriods?: WorkingHoursPeriod[],
     doctors: Doctor[] = [],
-    leaveTypes: LeaveType[] = []
+    leaveTypes: LeaveType[] = [],
+    clinicSetup?: ClinicSetup
   ): Promise<GenerationResult> {
     const startTimeMs = performance.now();
 
@@ -377,6 +389,10 @@ export class SchedulingEngine {
     ]);
     const plusOneEnabled = plusOneRule ? plusOneRule.enabled !== false : true;
     const minAdditionalNurses = plusOneEnabled ? (plusOneRule?.value ?? 1) : 0;
+
+    // At least one senior nurse on duty each day (Hard Rule H1)
+    const seniorRule = resolveRule(rules, 'SENIOR_ON_DUTY', 'rule-h1', ['senior nurse', 'senior on duty']);
+    const seniorRuleEnabled = seniorRule ? seniorRule.enabled !== false : true;
 
     // Maximum Working Hours Per Period rule lookup & configuration (Hard Rule H7)
     const maxHoursRule = resolveRule(rules, 'MAX_WORKING_HOURS_PER_PERIOD', 'rule-h7-max-hours', [
@@ -531,29 +547,45 @@ export class SchedulingEngine {
       }
     });
 
-    // 3. Nurse State Tracking
+    // 3. Clinic setup, the previous roster and quick lookups
+    const clinic = resolveClinicSetup(clinicSetup);
+    const openHours = openingHourSlots(clinic);
+    const dutyMapGlobal = new Map(dutyWindows.map((d) => [d.id, d]));
+    const activeDuties = dutyWindows.filter((d) => d.active !== false);
+    const nurseMap = new Map(sortedNurses.map((n) => [n.id, n]));
+
+    // Shifts of the roster just before this one: read only, used by the rules that look back.
+    const priorMap = new Map<string, Assignment>();
+    clinic.priorAssignments.forEach((a) => {
+      if (a.date < schedule.startDate) priorMap.set(`${a.nurseId}_${a.date}`, a);
+    });
+    const shiftOn = (nurseId: string, date: string): Assignment | undefined =>
+      resultAssignmentsMap.get(`${nurseId}_${date}`) || priorMap.get(`${nurseId}_${date}`);
+    const shiftDate = (date: string, days: number): string => {
+      const [y, m, d] = date.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d + days)).toISOString().split('T')[0];
+    };
+
+    const isOnApprovedLeave = (nurseId: string, date: string) =>
+      leaveEntries.some((le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate);
+    const hasDayOffLock = (nurseId: string, date: string) =>
+      activeLocks.some((l) => l.nurseId === nurseId && l.date === date && l.mode === 'OFF');
+    const isSenior = (nurse?: Nurse) => !!nurse && seniorLevelIds.has(nurse.seniorityLevelId);
+    const isLate = (duty?: DutyWindow) => !!duty && duty.endTime >= lateThreshold;
+
+    // 4. Nurse state
     const nurseStates = new Map<string, NurseDayState>();
     sortedNurses.forEach((nurse) => {
-      // Calculate credited leave hours for this nurse during the schedule period
       // Only the leave days inside this schedule count (shared hours rule)
-      const nurseLeaveHours = nurseLeaveHoursInRange(
-        nurse.id,
-        leaveEntries,
-        leaveTypes,
-        schedule.startDate,
-        schedule.endDate
-      );
+      const nurseLeaveHours = nurseLeaveHoursInRange(nurse.id, leaveEntries, leaveTypes, schedule.startDate, schedule.endDate);
 
-      // Calculate initial committed duty hours from retained locks and manual assignments
+      // Retained (pinned, hand set) shifts are committed up front and not counted again on their day.
       let initialPreservedDutyHours = 0;
       let initialWeekendsWorked = 0;
       resultAssignmentsMap.forEach((asgn) => {
         if (asgn.nurseId === nurse.id && asgn.date >= schedule.startDate && asgn.date <= schedule.endDate) {
-          const duty = dutyWindows.find((d) => d.id === asgn.dutyWindowId);
-          const shiftH = calculateDutyDurationHours(duty);
-          initialPreservedDutyHours += shiftH;
-          const dayOfWeek = new Date(asgn.date + 'T00:00:00Z').getUTCDay();
-          if (isWeekendDay(dayOfWeek)) initialWeekendsWorked++;
+          initialPreservedDutyHours += calculateDutyDurationHours(dutyMapGlobal.get(asgn.dutyWindowId));
+          if (isWeekendDate(asgn.date)) initialWeekendsWorked++;
         }
       });
 
@@ -561,9 +593,6 @@ export class SchedulingEngine {
         hasDuty: false,
         consecutiveWorkingDays: 0,
         consecutiveLateEnds: 0,
-        // Duty hours only: leave is already taken off the duty target below, so it
-        // must not also be counted here. Retained (locked, manual) shifts are
-        // committed up front and not counted again on their own day.
         totalDutyHoursEarned: initialPreservedDutyHours,
         leaveHoursCredited: nurseLeaveHours,
         initialLockedHours: initialPreservedDutyHours,
@@ -573,26 +602,27 @@ export class SchedulingEngine {
       });
     });
 
-    // Compute per-nurse contracted target and maximum allowable hours in this schedule period
-    const nurseTargetMap = new Map<
-      string,
-      { contractTarget: number; dutyTarget: number; maxAllowedHours: number }
-    >();
+    // Each nurse's goal (contract share of the full time target, minus leave) and hard ceiling.
+    const nurseTargetMap = new Map<string, { contractTarget: number; dutyTarget: number; maxAllowedHours: number }>();
     sortedNurses.forEach((nurse) => {
       const contractTarget = Math.round(effectiveFullTimeTarget * (nurse.contractPercent / 100));
       const leaveHours = nurseStates.get(nurse.id)?.leaveHoursCredited || 0;
       const dutyTarget = Math.max(0, contractTarget - leaveHours);
-      // Hard cap allows at most an indivisible 8h shift fraction or up to maxHoursToleranceRatio (105%)
-      const maxAllowed = Math.max(
-        dutyTarget,
-        Math.min(dutyTarget + 8, Math.round(dutyTarget * maxHoursToleranceRatio))
-      );
-      nurseTargetMap.set(nurse.id, {
-        contractTarget,
-        dutyTarget,
-        maxAllowedHours: maxAllowed,
-      });
+      // The ceiling allows one shift's worth over the goal at most (8h, or the H7 tolerance if smaller)
+      const maxAllowed = Math.max(dutyTarget, Math.min(dutyTarget + 8, Math.round(dutyTarget * maxHoursToleranceRatio)));
+      nurseTargetMap.set(nurse.id, { contractTarget, dutyTarget, maxAllowedHours: maxAllowed });
     });
+
+    /**
+     * Pacing: by the end of day N a nurse should have worked about N/total of
+     * her goal, so hours are spread evenly over the period instead of being
+     * used up in the first weeks. Positive = behind pace (needs hours).
+     */
+    const hoursBehindPace = (nurseId: string, dayIdx: number): number => {
+      const target = nurseTargetMap.get(nurseId)?.dutyTarget ?? 0;
+      const pace = (target * (dayIdx + 1)) / Math.max(1, totalDays);
+      return pace - (nurseStates.get(nurseId)?.totalDutyHoursEarned ?? 0);
+    };
 
     let createdCount = 0;
     let unmetSlotsCount = 0;
@@ -603,127 +633,202 @@ export class SchedulingEngine {
     let doctorSpecialtyPairingsCount = 0;
     let doctorFallbackPairingsCount = 0;
 
-    // Global duty window lookup
-    const dutyMapGlobal = new Map(dutyWindows.map((d) => [d.id, d]));
-
-    // Deterministic calendar lookback helper for Hard Rule H2 (Max 6 consecutive working days)
-    const getConsecutiveDaysWorkedEndingYesterday = (nurseId: string, currentDateStr: string): number => {
-      let consecutive = 0;
-      const [y, m, d] = currentDateStr.split('-').map(Number);
-      // Look back as far as the configured limit (capped at 31 days)
+    // Consecutive working days ending the day before `date` (this roster and the previous one)
+    const getConsecutiveDaysWorkedEndingYesterday = (nurseId: string, date: string): number => {
       const lookback = Math.min(Number.isFinite(maxConsecutiveDays) ? maxConsecutiveDays : 31, 31);
-      for (let i = 1; i <= lookback; i++) {
-        const prevDate = new Date(Date.UTC(y, m - 1, d - i)).toISOString().split('T')[0];
-        if (resultAssignmentsMap.has(`${nurseId}_${prevDate}`)) {
-          consecutive++;
-        } else {
-          break;
-        }
+      let run = 0;
+      for (let i = 1; i <= lookback && shiftOn(nurseId, shiftDate(date, -i)); i++) run++;
+      return run;
+    };
+    // Consecutive working days already fixed right after `date` (pinned or hand set shifts)
+    const getConsecutiveDaysFixedFromTomorrow = (nurseId: string, date: string): number => {
+      let run = 0;
+      for (let i = 1; i <= 31 && resultAssignmentsMap.has(`${nurseId}_${shiftDate(date, i)}`); i++) run++;
+      return run;
+    };
+    const getConsecutiveLateDutiesEndingYesterday = (nurseId: string, date: string): number => {
+      let run = 0;
+      for (let i = 1; i <= maxConsecutiveLate + 2; i++) {
+        const prev = shiftOn(nurseId, shiftDate(date, -i));
+        if (!prev || !isLate(dutyMapGlobal.get(prev.dutyWindowId))) break;
+        run++;
       }
-      return consecutive;
+      return run;
+    };
+    const getConsecutiveLateFixedFromTomorrow = (nurseId: string, date: string): number => {
+      let run = 0;
+      for (let i = 1; i <= maxConsecutiveLate + 2; i++) {
+        const next = resultAssignmentsMap.get(`${nurseId}_${shiftDate(date, i)}`);
+        if (!next || !isLate(dutyMapGlobal.get(next.dutyWindowId))) break;
+        run++;
+      }
+      return run;
+    };
+    const restHoursBetween = (prevEnd: string, nextStart: string) => (24 * 60 - toMinutes(prevEnd) + toMinutes(nextStart)) / 60;
+
+    /**
+     * Every hard rule for giving `nurse` the shift `duty` on `date`, looking
+     * both back (this roster and the previous one) and forward (shifts already
+     * fixed later in this roster). `extraHours` is what the change adds to her
+     * total (the whole shift, or the difference when a shift is extended).
+     */
+    const fitsHardRules = (
+      nurse: Nurse,
+      date: string,
+      duty: DutyWindow,
+      extraHours: number,
+      opts: { replacingOwnShift?: boolean } = {}
+    ): boolean => {
+      if (!opts.replacingOwnShift && resultAssignmentsMap.has(`${nurse.id}_${date}`)) return false; // H4
+      if (isOnApprovedLeave(nurse.id, date) || hasDayOffLock(nurse.id, date)) return false; // H5
+
+      // H2: max consecutive working days, counting the run on both sides of this day
+      if (consecutiveDaysSeverity === 'HARD' && Number.isFinite(maxConsecutiveDays)) {
+        const run = getConsecutiveDaysWorkedEndingYesterday(nurse.id, date) + 1 + getConsecutiveDaysFixedFromTomorrow(nurse.id, date);
+        if (run > maxConsecutiveDays) return false;
+      }
+
+      // H3: minimum rest after yesterday's shift and before tomorrow's fixed shift
+      if (minRestHoursRequired > 0) {
+        const yesterday = shiftOn(nurse.id, shiftDate(date, -1));
+        const yDuty = yesterday ? dutyMapGlobal.get(yesterday.dutyWindowId) : undefined;
+        if (yDuty && restHoursBetween(yDuty.endTime, duty.startTime) < minRestHoursRequired) return false;
+        const tomorrow = resultAssignmentsMap.get(`${nurse.id}_${shiftDate(date, 1)}`);
+        const tDuty = tomorrow ? dutyMapGlobal.get(tomorrow.dutyWindowId) : undefined;
+        if (tDuty && restHoursBetween(duty.endTime, tDuty.startTime) < minRestHoursRequired) return false;
+      }
+
+      // H7: hours ceiling
+      const limits = nurseTargetMap.get(nurse.id);
+      const state = nurseStates.get(nurse.id);
+      if (maxHoursEnabled && maxHoursSeverity === 'HARD' && limits && state && state.totalDutyHoursEarned + extraHours > limits.maxAllowedHours) {
+        return false;
+      }
+
+      // S1: max consecutive late duties, both sides of this day
+      if (consecutiveLateEnabled && consecutiveLateSeverity === 'HARD' && isLate(duty)) {
+        const run = getConsecutiveLateDutiesEndingYesterday(nurse.id, date) + 1 + getConsecutiveLateFixedFromTomorrow(nurse.id, date);
+        if (run > maxConsecutiveLate) return false;
+      }
+      return true;
     };
 
-    // Deterministic calendar lookback helper for Hard Rule S1 (Consecutive late duties ending at or after 21:00)
-    const getConsecutiveLateDutiesEndingYesterday = (nurseId: string, currentDateStr: string): number => {
-      let consecutive = 0;
-      const [y, m, d] = currentDateStr.split('-').map(Number);
-      for (let i = 1; i <= maxConsecutiveLate + 2; i++) {
-        const prevDate = new Date(Date.UTC(y, m - 1, d - i)).toISOString().split('T')[0];
-        const prevAsgn = resultAssignmentsMap.get(`${nurseId}_${prevDate}`);
-        if (!prevAsgn) break;
-        const prevDuty = dutyMapGlobal.get(prevAsgn.dutyWindowId);
-        if (prevDuty && prevDuty.endTime >= lateThreshold) {
-          consecutive++;
-        } else {
-          break;
-        }
-      }
-      return consecutive;
+    /** Records a new shift for a nurse and updates her counters. */
+    const placeShift = (asgn: Assignment, isWeekend: boolean, isHoliday: boolean, isNurseClinic: boolean) => {
+      resultAssignmentsMap.set(`${asgn.nurseId}_${asgn.date}`, asgn);
+      createdCount++;
+      const state = nurseStates.get(asgn.nurseId);
+      const duty = dutyMapGlobal.get(asgn.dutyWindowId);
+      if (!state) return;
+      state.totalDutyHoursEarned += calculateDutyDurationHours(duty);
+      state.lastDutyEndTime = duty ? `${asgn.date} ${duty.endTime}` : state.lastDutyEndTime;
+      if (isWeekend) state.weekendsWorked += 1;
+      if (isHoliday) state.holidaysWorked += 1;
+      if (isNurseClinic) state.nurseClinicCount += 1;
     };
+
+    /** Takes a generated shift away again (used when a senior takes it over). */
+    const removeShift = (asgn: Assignment, isWeekend: boolean) => {
+      resultAssignmentsMap.delete(`${asgn.nurseId}_${asgn.date}`);
+      createdCount = Math.max(0, createdCount - 1);
+      const state = nurseStates.get(asgn.nurseId);
+      if (!state) return;
+      state.totalDutyHoursEarned = Math.max(0, state.totalDutyHoursEarned - calculateDutyDurationHours(dutyMapGlobal.get(asgn.dutyWindowId)));
+      if (isWeekend) state.weekendsWorked = Math.max(0, state.weekendsWorked - 1);
+      if (asgn.kind === 'CLINICAL_ROLE' && asgn.clinicalRoleId === nurseClinicRole.id) {
+        state.nurseClinicCount = Math.max(0, state.nurseClinicCount - 1);
+      }
+    };
+
+    /** Duties ordered by how much of [start, end) they cover, then shortest first. */
+    const dutiesCovering = (start: string, end: string): DutyWindow[] =>
+      [...activeDuties]
+        .filter((d) => coveredMinutes(d, start, end) > 0)
+        .sort((a, b) => {
+          const cover = coveredMinutes(b, start, end) - coveredMinutes(a, start, end);
+          if (cover !== 0) return cover;
+          return calculateDutyDurationHours(a) - calculateDutyDurationHours(b);
+        });
+
+    // A small, stable number per nurse and day, so ties go to a different nurse on different days
+    // instead of always to the first name in the alphabet.
+    const tieOrder = (nurseId: string, date: string): number => {
+      let h = 2166136261;
+      const text = `${date}|${nurseId}`;
+      for (let i = 0; i < text.length; i++) {
+        h ^= text.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return h >>> 0;
+    };
+
+    // Each nurse's fixed point (0 to 1) for when she floats, see the float pass
+    const floatPhase = (nurseId: string): number => tieOrder(nurseId, 'float') / 4294967296;
 
     // Build quick lookup for doctor -> set of specialtyIds
     const doctorSpecialtiesMap = new Map<string, Set<string>>();
-    if (doctors && doctors.length > 0) {
-      doctors.forEach((doc) => {
-        if (doc.specialtyIds) {
-          doctorSpecialtiesMap.set(doc.id, new Set(doc.specialtyIds));
-        }
-      });
-    }
+    doctors.forEach((doc) => {
+      if (doc.specialtyIds) doctorSpecialtiesMap.set(doc.id, new Set(doc.specialtyIds));
+    });
     sessions.forEach((s) => {
       if (s.doctorId && s.specialtyId) {
-        if (!doctorSpecialtiesMap.has(s.doctorId)) {
-          doctorSpecialtiesMap.set(s.doctorId, new Set());
-        }
+        if (!doctorSpecialtiesMap.has(s.doctorId)) doctorSpecialtiesMap.set(s.doctorId, new Set());
         doctorSpecialtiesMap.get(s.doctorId)!.add(s.specialtyId);
       }
     });
 
-    // Helper: Strict Profile Allocation (Hard Rule H8)
-    // Determines if a nurse is permitted to be scheduled with a given doctor or specialty based on their profile.
+    const specialtyMatchesPref = (prefRefId: string, spec: Specialty | undefined | null): boolean => {
+      if (!spec) return false;
+      const p = prefRefId.toLowerCase();
+      const code = spec.code.toLowerCase();
+      return (
+        prefRefId === spec.id ||
+        p === code ||
+        p === spec.name.toLowerCase() ||
+        (code === 'pcc' && p.includes('pcc')) ||
+        (code === 'ped' && (p.includes('ped') || p.includes('pedia')))
+      );
+    };
+
+    // H8: a nurse with doctor or specialty allocations in her profile only works with those.
     const isNurseAllocatedToDoctorOrSpecialty = (
       nurse: Nurse,
       targetDoctorId?: string,
       targetSpecialtyId?: string,
       directDocSpecialtyIds?: string[]
     ): boolean => {
-      // Check if nurse has configured ANY doctor or specialty preferences
-      const hasSpecificAllocations = nurse.preferences?.some(
-        (p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY'
-      );
-
-      // If nurse has NO doctor or specialty preferences configured, they are an unrestricted clinic nurse
-      if (!hasSpecificAllocations) {
-        return true;
-      }
-
-      // Check direct doctor preference match
-      if (targetDoctorId && nurse.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === targetDoctorId)) {
-        return true;
-      }
-
-      // Collect all candidate specialty IDs for the target doctor/specialty
+      const hasSpecificAllocations = nurse.preferences?.some((p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY');
+      if (!hasSpecificAllocations) return true; // unrestricted clinic nurse
+      if (targetDoctorId && nurse.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === targetDoctorId)) return true;
       const candidateSpecIds = new Set<string>();
-      if (targetSpecialtyId) {
-        candidateSpecIds.add(targetSpecialtyId);
-      }
-      if (directDocSpecialtyIds) {
-        directDocSpecialtyIds.forEach((sid) => candidateSpecIds.add(sid));
-      }
-      if (targetDoctorId && doctorSpecialtiesMap.has(targetDoctorId)) {
-        doctorSpecialtiesMap.get(targetDoctorId)!.forEach((sid) => candidateSpecIds.add(sid));
-      }
-
-      // Check specialty preference match
+      if (targetSpecialtyId) candidateSpecIds.add(targetSpecialtyId);
+      directDocSpecialtyIds?.forEach((sid) => candidateSpecIds.add(sid));
+      if (targetDoctorId) doctorSpecialtiesMap.get(targetDoctorId)?.forEach((sid) => candidateSpecIds.add(sid));
       for (const pref of nurse.preferences || []) {
-        if (pref.kind === 'SPECIALTY') {
-          if (candidateSpecIds.has(pref.refId)) {
-            return true;
-          }
-          const prefLower = pref.refId.toLowerCase();
-          for (const sid of candidateSpecIds) {
-            const specObj = specialties.find((s) => s.id === sid);
-            if (specObj) {
-              if (
-                prefLower === specObj.code.toLowerCase() ||
-                prefLower === specObj.name.toLowerCase() ||
-                (specObj.code.toLowerCase() === 'pcc' && prefLower.includes('pcc')) ||
-                (specObj.code.toLowerCase() === 'ped' && (prefLower.includes('ped') || prefLower.includes('pedia')))
-              ) {
-                return true;
-              }
-            }
-          }
+        if (pref.kind !== 'SPECIALTY') continue;
+        if (candidateSpecIds.has(pref.refId)) return true;
+        for (const sid of candidateSpecIds) {
+          if (specialtyMatchesPref(pref.refId, specialties.find((s) => s.id === sid))) return true;
         }
       }
-
       return false;
     };
 
-    // 4. Iterate Days with Chunking (Yielding to Event Loop every 5 days)
+    const canWorkWithDoctor = (nurse: Nurse, doctorId: string, session?: DoctorSession): boolean => {
+      if (!nurse.isClinicNurse || isExclusiveNurseClinic(nurse, roles)) return false;
+      const docObj = doctors.find((d) => d.id === doctorId);
+      const docSpecId = session?.specialtyId || docObj?.specialtyIds?.[0];
+      return isNurseAllocatedToDoctorOrSpecialty(nurse, doctorId, docSpecId, docObj?.specialtyIds);
+    };
+
+    const ncRoleIds = new Set([nurseClinicRole.id, 'role-nurse-clinic']);
+    const isNurseClinicAssignment = (a: Assignment) => a.kind === 'CLINICAL_ROLE' && !!a.clinicalRoleId && ncRoleIds.has(a.clinicalRoleId);
+
+    // 5. Day by day
     for (let dayIdx = 0; dayIdx < datesList.length; dayIdx++) {
       const date = datesList[dayIdx];
       const isWeekend = isWeekendDate(date);
+      const isHoliday = clinic.holidays.has(date);
 
       if (onProgress && dayIdx % 5 === 0) {
         onProgress({
@@ -733,48 +838,85 @@ export class SchedulingEngine {
           statusText: `Optimizing Day ${dayIdx + 1} of ${totalDays} (${date})...`,
           percent: Math.round(((dayIdx + 1) / totalDays) * 100),
         });
-        // Non-blocking chunk yield
         await new Promise((resolve) => setTimeout(resolve, 8));
       }
 
-      // Collect demands for this date
-      const existingToday = Array.from(resultAssignmentsMap.values()).filter((a) => a.date === date);
-      const coveredDoctorIds = new Set(
-        existingToday.filter((a) => a.kind === 'DOCTOR' && a.doctorId).map((a) => a.doctorId!)
-      );
-      const coveredRoleCounts = new Map<string, number>();
-      existingToday
-        .filter((a) => a.kind === 'CLINICAL_ROLE' && a.clinicalRoleId)
-        .forEach((a) => {
-          coveredRoleCounts.set(
-            a.clinicalRoleId!,
-            (coveredRoleCounts.get(a.clinicalRoleId!) || 0) + 1
-          );
-        });
-      const coveredNurseClinicCount =
-        (coveredRoleCounts.get(nurseClinicRole.id) || 0) +
-        (coveredRoleCounts.get('role-nurse-clinic') || 0);
+      // Nurses in a fresh, fair order for today (used for ties)
+      const dayOrder = [...sortedNurses].sort((a, b) => tieOrder(a.id, date) - tieOrder(b.id, date));
+      const existingToday = () => Array.from(resultAssignmentsMap.values()).filter((a) => a.date === date);
 
-      const daySessions = sessions
-        .filter((s) => !s.cancelled && s.date === date && !coveredDoctorIds.has(s.doctorId))
-        .sort((a, b) => {
-          // Late ending sessions first (e.g. 21:00)
-          return b.endTime.localeCompare(a.endTime);
+      // Retained shifts today count toward today's counters
+      existingToday().forEach((asgn) => {
+        const state = nurseStates.get(asgn.nurseId);
+        if (state && isNurseClinicAssignment(asgn)) state.nurseClinicCount += 1;
+      });
+
+      // 5.0 Public holiday: one nurse covers the clinic; doctor sessions are ignored.
+      if (isHoliday) {
+        if (existingToday().length === 0) {
+          const holidayDuties = dutiesCovering(clinic.openTime, clinic.closeTime);
+          let best: { nurse: Nurse; duty: DutyWindow; score: number } | null = null;
+          for (const duty of holidayDuties) {
+            for (const nurse of dayOrder) {
+              if (!fitsHardRules(nurse, date, duty, calculateDutyDurationHours(duty))) continue;
+              let score = coveredMinutes(duty, clinic.openTime, clinic.closeTime) / 6; // cover the opening hours first
+              if (isSenior(nurse)) score += 60;
+              if (canBeFreeNurse(nurse, roles)) score += 30;
+              score += hoursBehindPace(nurse.id, dayIdx) * 1.5;
+              score -= (nurseStates.get(nurse.id)?.holidaysWorked || 0) * 40; // share holidays out
+              if (!best || score > best.score) best = { nurse, duty, score };
+            }
+          }
+          if (best) {
+            placeShift(
+              {
+                id: `asgn-gen-${best.nurse.id}-${date}-HOL`,
+                scheduleId: schedule.id,
+                nurseId: best.nurse.id,
+                date,
+                dutyWindowId: best.duty.id,
+                kind: 'CLINICAL_ROLE',
+                clinicalRoleId: nurseClinicRole.id,
+                locked: false,
+                source: 'GENERATED',
+                note: 'Public holiday cover (on call doctor)',
+              },
+              isWeekend,
+              true,
+              true
+            );
+          } else {
+            unmetSlotsCount++;
+          }
+        }
+        continue;
+      }
+
+      // 5.1 Today's jobs
+      const coveredDoctorIds = new Set(existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId).map((a) => a.doctorId!));
+      const allDaySessions: DoctorSession[] = [];
+      const seenDoctors = new Set<string>();
+      sessions
+        .filter((s) => !s.cancelled && s.date === date)
+        .sort((a, b) => a.startTime.localeCompare(b.startTime))
+        .forEach((s) => {
+          // Doctors work one session a day; a duplicate entry is ignored.
+          if (seenDoctors.has(s.doctorId)) return;
+          seenDoctors.add(s.doctorId);
+          allDaySessions.push(s);
         });
+      const daySessions = allDaySessions
+        .filter((s) => !coveredDoctorIds.has(s.doctorId))
+        .sort((a, b) => b.endTime.localeCompare(a.endTime)); // late ending sessions first
 
       const daySlots: InternalSlot[] = [];
-
-      // 4.1 Doctor session slots
       daySessions.forEach((sess) => {
         const docSpecialty = specialties.find((s) => s.id === sess.specialtyId);
         const hasPriority1Nurse = sortedNurses.some((n) =>
           n.preferences?.some(
             (p) =>
               (p.kind === 'DOCTOR' && p.refId === sess.doctorId && p.rank === 1) ||
-              (p.kind === 'SPECIALTY' &&
-                (p.refId === sess.specialtyId ||
-                  (docSpecialty && (p.refId.toLowerCase() === docSpecialty.code.toLowerCase() || p.refId.toLowerCase() === docSpecialty.name.toLowerCase()))) &&
-                p.rank === 1)
+              (p.kind === 'SPECIALTY' && specialtyMatchesPref(p.refId, docSpecialty) && p.rank === 1)
           )
         );
         daySlots.push({
@@ -783,601 +925,211 @@ export class SchedulingEngine {
           targetId: sess.doctorId,
           startTime: sess.startTime,
           endTime: sess.endTime,
-          // Higher priority for doctors with dedicated Priority 1 nurses and late-ending clinics
           priority: sess.endTime >= '19:00' ? 130 : hasPriority1Nurse ? 125 : 120,
         });
       });
 
-      // 4.2 Clinical role slots (e.g. Blood Collection & IV / PHL, and Dedicated Nurse Clinic)
-      let addedNurseClinicSlot = false;
-      const remainingNcQuota = Math.max(0, ncQuota - coveredNurseClinicCount);
-
-      roles.forEach((role) => {
-        const isNc =
-          role.id === nurseClinicRole.id ||
-          role.acronym === 'NC' ||
-          role.name.toLowerCase().includes('nurse clinic');
-
-        if (isNc) {
-          if (ncEnabled) {
-            addedNurseClinicSlot = true;
-            for (let q = 0; q < remainingNcQuota; q++) {
-              daySlots.push({
-                date,
-                kind: 'CLINICAL_ROLE',
-                targetId: role.id,
-                startTime: role.defaultStartTime || '09:00',
-                endTime: role.defaultEndTime || '17:00',
-                // Doctor clinics filled first (120-130); then Dedicated Nurse Clinic (110 when HARD, 75 when SOFT)
-                priority: ncSeverity === 'HARD' ? 110 : 75,
-              });
-            }
-          }
-        } else {
-          const roleCovered = coveredRoleCounts.get(role.id) || 0;
-          const quota = Math.max(0, (role.defaultDailyQuota || 1) - roleCovered);
-          const hasRoleP1Nurse = sortedNurses.some((n) =>
-            n.preferences?.some(
-              (p) =>
-                p.kind === 'CLINICAL_ROLE' &&
-                (p.refId === role.id || p.refId.toLowerCase() === role.acronym.toLowerCase()) &&
-                p.rank === 1
-            )
-          );
-          for (let q = 0; q < quota; q++) {
-            daySlots.push({
-              date,
-              kind: 'CLINICAL_ROLE',
-              targetId: role.id,
-              startTime: role.defaultStartTime || '09:00',
-              endTime: role.defaultEndTime || '13:00',
-              priority: hasRoleP1Nurse ? 125 : 90,
-            });
-          }
-        }
-      });
-
-      // If Nurse Clinic wasn't in roles array but rule is enabled, add it explicitly
-      if (ncEnabled && !addedNurseClinicSlot) {
-        for (let q = 0; q < remainingNcQuota; q++) {
+      // The free nurse (Nurse Clinic and blood collection together), for the opening hours
+      const coveredFree = existingToday().filter(
+        (a) => isNurseClinicAssignment(a) || (a.kind === 'CLINICAL_ROLE' && a.clinicalRoleId === bloodCollectionRole(roles)?.id)
+      ).length;
+      if (ncEnabled) {
+        for (let q = coveredFree; q < ncQuota; q++) {
           daySlots.push({
             date,
             kind: 'CLINICAL_ROLE',
             targetId: nurseClinicRole.id,
-            startTime: nurseClinicRole.defaultStartTime || '09:00',
-            endTime: nurseClinicRole.defaultEndTime || '17:00',
+            startTime: clinic.openTime,
+            endTime: clinic.closeTime,
             priority: ncSeverity === 'HARD' ? 110 : 75,
           });
         }
       }
-
-      // Sort slots by priority
-      daySlots.sort((a, b) => b.priority - a.priority);
-
-      // Track nurses assigned on THIS day
-      const nursesAssignedToday = new Set<string>();
-
-      // Check pre-existing locks or manual assignments for today
-      sortedNurses.forEach((nurse) => {
-        const key = `${nurse.id}_${date}`;
-        if (resultAssignmentsMap.has(key)) {
-          nursesAssignedToday.add(nurse.id);
-          const asgn = resultAssignmentsMap.get(key)!;
-          const duty = dutyWindows.find((d) => d.id === asgn.dutyWindowId) || fullDayDuty;
-          const state = nurseStates.get(nurse.id);
-          if (state) {
-            state.consecutiveWorkingDays = getConsecutiveDaysWorkedEndingYesterday(nurse.id, date) + 1;
-            // Hours and weekends of retained shifts were committed up front.
-            state.lastDutyEndTime = `${date} ${duty.endTime}`;
-            if (
-              asgn.kind === 'CLINICAL_ROLE' &&
-              (asgn.clinicalRoleId === nurseClinicRole.id || asgn.clinicalRoleId === 'role-nurse-clinic')
-            ) {
-              state.nurseClinicCount += 1;
-            }
-            if (duty.endTime >= lateThreshold) {
-              state.consecutiveLateEnds += 1;
-            } else {
-              state.consecutiveLateEnds = 0;
-            }
-          }
+      // Other roles the clinic has set up (blood collection is part of the free nurse's job)
+      const phl = bloodCollectionRole(roles);
+      roles.forEach((role) => {
+        if (ncRoleIds.has(role.id) || role.acronym === 'NC' || role.name.toLowerCase().includes('nurse clinic')) return;
+        if (ncEnabled && phl && role.id === phl.id) return;
+        const roleCovered = existingToday().filter((a) => a.kind === 'CLINICAL_ROLE' && a.clinicalRoleId === role.id).length;
+        for (let q = roleCovered; q < (role.defaultDailyQuota || 1); q++) {
+          daySlots.push({
+            date,
+            kind: 'CLINICAL_ROLE',
+            targetId: role.id,
+            startTime: role.defaultStartTime || clinic.openTime,
+            endTime: role.defaultEndTime || clinic.closeTime,
+            priority: 90,
+          });
         }
       });
+      daySlots.sort((a, b) => b.priority - a.priority);
 
-      // 4.3 Slot Assignment Pass
+      // 5.2 Fill each job
       for (const slot of daySlots) {
-        const isNurseClinicSlot =
-          slot.kind === 'CLINICAL_ROLE' &&
-          (slot.targetId === nurseClinicRole.id ||
-            slot.targetId === 'role-nurse-clinic' ||
-            roles.find((r) => r.id === slot.targetId)?.acronym === 'NC');
+        const isNurseClinicSlot = slot.kind === 'CLINICAL_ROLE' && ncRoleIds.has(slot.targetId);
+        const slotSession = slot.kind === 'DOCTOR' ? daySessions.find((s) => s.doctorId === slot.targetId) : undefined;
+        const { priorityTier, fallbackTier } = SchedulingEngine.partitionCandidateDuties(slot, dutyWindows);
+        const tiersToEvaluate: DutyWindow[][] = [priorityTier, fallbackTier].filter((t) => t.length > 0);
+        if (tiersToEvaluate.length === 0) tiersToEvaluate.push([fullDayDuty]);
 
-        // Partition candidate duties for this slot into Priority Tier and Fallback/Standard Tier
-        const { priorityTier, fallbackTier } = SchedulingEngine.partitionCandidateDuties(
-          slot,
-          dutyWindows
-        );
-
-        // Build tiers sequence: Priority duties first; fallback duties second
-        const tiersToEvaluate: DutyWindow[][] = [];
-        if (priorityTier.length > 0) {
-          tiersToEvaluate.push(priorityTier);
-        }
-        if (fallbackTier.length > 0) {
-          tiersToEvaluate.push(fallbackTier);
-        }
-        if (tiersToEvaluate.length === 0) {
-          tiersToEvaluate.push([fullDayDuty]);
+        let candidateCohorts: { tierRank: number; nurses: Nurse[] }[];
+        if (slot.kind === 'DOCTOR') {
+          const docSpecialtyId = slotSession?.specialtyId;
+          const docSpecialty = docSpecialtyId ? specialties.find((s) => s.id === docSpecialtyId) : null;
+          const prefersDoctor = (n: Nurse, rank?: (r: number) => boolean) =>
+            !!n.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId && (!rank || rank(p.rank)));
+          const prefersSpec = (n: Nurse, rank?: (r: number) => boolean) =>
+            !!docSpecialtyId &&
+            !!n.preferences?.some((p) => p.kind === 'SPECIALTY' && (!rank || rank(p.rank)) && specialtyMatchesPref(p.refId, docSpecialty));
+          candidateCohorts = [
+            { tierRank: 1, nurses: dayOrder.filter((n) => prefersDoctor(n, (r) => r === 1)) },
+            { tierRank: 2, nurses: dayOrder.filter((n) => prefersDoctor(n, (r) => r === 2)) },
+            { tierRank: 3, nurses: dayOrder.filter((n) => prefersDoctor(n, (r) => r >= 3)) },
+            { tierRank: 4, nurses: dayOrder.filter((n) => !prefersDoctor(n) && prefersSpec(n, (r) => r === 1)) },
+            { tierRank: 5, nurses: dayOrder.filter((n) => !prefersDoctor(n) && !prefersSpec(n, (r) => r === 1) && prefersSpec(n)) },
+            { tierRank: 6, nurses: dayOrder.filter((n) => !prefersDoctor(n) && !prefersSpec(n)) },
+          ];
+        } else {
+          const role = roles.find((r) => r.id === slot.targetId);
+          const matchesRole = (p: NursePreference, rank?: number) =>
+            p.kind === 'CLINICAL_ROLE' &&
+            (rank === undefined || p.rank === rank) &&
+            (p.refId === slot.targetId || (!!role && (p.refId.toLowerCase() === role.acronym.toLowerCase() || p.refId.toLowerCase() === role.name.toLowerCase())));
+          candidateCohorts = [
+            { tierRank: 1, nurses: dayOrder.filter((n) => n.preferences?.some((p) => matchesRole(p, 1))) },
+            { tierRank: 2, nurses: dayOrder.filter((n) => !n.preferences?.some((p) => matchesRole(p, 1)) && n.preferences?.some((p) => matchesRole(p, 2))) },
+            { tierRank: 3, nurses: dayOrder.filter((n) => !n.preferences?.some((p) => matchesRole(p, 1) || matchesRole(p, 2)) && n.preferences?.some((p) => matchesRole(p))) },
+            { tierRank: 4, nurses: dayOrder.filter((n) => !n.preferences?.some((p) => matchesRole(p)) && n.capabilityIds.includes(slot.targetId)) },
+            { tierRank: 5, nurses: dayOrder.filter((n) => !n.preferences?.some((p) => matchesRole(p)) && !n.capabilityIds.includes(slot.targetId)) },
+          ];
         }
 
         let bestNurse: Nurse | null = null;
-        let bestScore = -999999;
         let chosenDuty: DutyWindow = fullDayDuty;
-        let matchedPairingTier = 0; // 1 = Priority #1, 2 = Priority #2, 3 = Priority #3+, 4 = Specialty, 5 = General Pool
+        let matchedPairingTier = 0;
 
-        // Hierarchical Cohort Partitioning:
-        // When slot is DOCTOR, partition candidate nurses by their assigned doctor priority:
-        // Cohort 1: Nurses who have this doctor assigned as Priority #1
-        // Cohort 2: Nurses who have this doctor assigned as Priority #2
-        // Cohort 3: Nurses who have this doctor assigned as Priority #3+
-        // Cohort 4: Nurses with matching doctor specialty
-        // Cohort 5: Remaining qualified clinic nurses
-        let candidateCohorts: { label: string; tierRank: number; nurses: Nurse[] }[];
-
-        if (slot.kind === 'DOCTOR') {
-          const docSession = daySessions.find((s) => s.doctorId === slot.targetId);
-          const docSpecialtyId = docSession?.specialtyId;
-          const docSpecialty = docSpecialtyId ? specialties.find((s) => s.id === docSpecialtyId) : null;
-
-          const matchesDoctorSpec = (pref: NursePreference, targetRank?: number) => {
-            if (pref.kind !== 'SPECIALTY') return false;
-            if (targetRank !== undefined && pref.rank !== targetRank) return false;
-            if (!docSpecialtyId) return false;
-            if (pref.refId === docSpecialtyId) return true;
-            if (docSpecialty) {
-              const prefRefLower = pref.refId.toLowerCase();
-              if (
-                prefRefLower === docSpecialty.code.toLowerCase() ||
-                prefRefLower === docSpecialty.name.toLowerCase() ||
-                (docSpecialty.code.toLowerCase() === 'pcc' && prefRefLower.includes('pcc'))
-              ) {
-                return true;
-              }
-            }
-            return false;
-          };
-
-          // Tier 1: Assigned Doctor with Priority #1 (rank === 1)
-          const p1Nurses = sortedNurses.filter((n) =>
-            n.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId && p.rank === 1)
-          );
-
-          // Tier 2: Assigned Doctor with Priority #2 (rank === 2)
-          const p2Nurses = sortedNurses.filter((n) =>
-            n.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId && p.rank === 2)
-          );
-
-          // Tier 3: Assigned Doctor with Priority #3+ (rank >= 3)
-          const p3Nurses = sortedNurses.filter((n) =>
-            n.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId && p.rank >= 3)
-          );
-
-          // Tier 4: Matching Doctor Specialty Priority #1 (e.g. Primary Care / PCC Specialty Rank 1)
-          const specP1Nurses = docSpecialtyId
-            ? sortedNurses.filter(
-                (n) =>
-                  !n.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId) &&
-                  n.preferences?.some((p) => matchesDoctorSpec(p, 1))
-              )
-            : [];
-
-          // Tier 5: Matching Doctor Specialty Priority #2+
-          const specP2PlusNurses = docSpecialtyId
-            ? sortedNurses.filter(
-                (n) =>
-                  !n.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId) &&
-                  !n.preferences?.some((p) => matchesDoctorSpec(p, 1)) &&
-                  n.preferences?.some((p) => matchesDoctorSpec(p))
-              )
-            : [];
-
-          // Tier 6: General Pool Clinic Nurses (remaining eligible clinic nurses who are permitted to assist this doctor/specialty)
-          // STRICT ALLOCATION: Nurses who have defined doctor/specialty allocations (e.g. Pediatrics) must NEVER be assigned to an unallocated doctor (e.g. PCC)
-          const fallbackNurses = sortedNurses.filter(
-            (n) =>
-              !n.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId) &&
-              !n.preferences?.some((p) => matchesDoctorSpec(p)) &&
-              isNurseAllocatedToDoctorOrSpecialty(n, slot.targetId, docSpecialtyId)
-          );
-
-          candidateCohorts = [
-            { label: 'DOCTOR_P1', tierRank: 1, nurses: p1Nurses },
-            { label: 'DOCTOR_P2', tierRank: 2, nurses: p2Nurses },
-            { label: 'DOCTOR_P3', tierRank: 3, nurses: p3Nurses },
-            { label: 'DOCTOR_SPEC_P1', tierRank: 4, nurses: specP1Nurses },
-            { label: 'DOCTOR_SPEC_P2', tierRank: 5, nurses: specP2PlusNurses },
-            { label: 'DOCTOR_FALLBACK', tierRank: 6, nurses: fallbackNurses },
-          ];
-        } else if (slot.kind === 'CLINICAL_ROLE') {
-          const role = roles.find((r) => r.id === slot.targetId);
-          const matchesRole = (pref: NursePreference, targetRank?: number) => {
-            if (pref.kind !== 'CLINICAL_ROLE') return false;
-            if (targetRank !== undefined && pref.rank !== targetRank) return false;
-            if (pref.refId === slot.targetId) return true;
-            if (role && (pref.refId.toLowerCase() === role.acronym.toLowerCase() || pref.refId.toLowerCase() === role.name.toLowerCase())) return true;
-            return false;
-          };
-
-          const roleP1 = sortedNurses.filter((n) =>
-            n.preferences?.some((p) => matchesRole(p, 1))
-          );
-          const roleP2 = sortedNurses.filter((n) =>
-            !n.preferences?.some((p) => matchesRole(p, 1)) &&
-            n.preferences?.some((p) => matchesRole(p, 2))
-          );
-          const roleP3 = sortedNurses.filter((n) =>
-            !n.preferences?.some((p) => matchesRole(p, 1) || matchesRole(p, 2)) &&
-            n.preferences?.some((p) => matchesRole(p))
-          );
-          const capableNurses = sortedNurses.filter(
-            (n) =>
-              !n.preferences?.some((p) => matchesRole(p)) &&
-              n.capabilityIds.includes(slot.targetId)
-          );
-          const roleFallback = sortedNurses.filter(
-            (n) =>
-              !n.preferences?.some((p) => matchesRole(p)) &&
-              !n.capabilityIds.includes(slot.targetId)
-          );
-
-          candidateCohorts = [
-            { label: 'ROLE_P1', tierRank: 1, nurses: roleP1 },
-            { label: 'ROLE_P2', tierRank: 2, nurses: roleP2 },
-            { label: 'ROLE_P3', tierRank: 3, nurses: roleP3 },
-            { label: 'ROLE_CAPABLE', tierRank: 4, nurses: capableNurses },
-            { label: 'ROLE_FALLBACK', tierRank: 5, nurses: roleFallback },
-          ];
-        } else if (slot.kind === 'SPECIALTY') {
-          const spec = specialties.find((s) => s.id === slot.targetId);
-          const matchesSpecialty = (pref: NursePreference, targetRank?: number) => {
-            if (pref.kind !== 'SPECIALTY') return false;
-            if (targetRank !== undefined && pref.rank !== targetRank) return false;
-            if (pref.refId === slot.targetId) return true;
-            if (spec) {
-              const prefRefLower = pref.refId.toLowerCase();
-              if (
-                prefRefLower === spec.code.toLowerCase() ||
-                prefRefLower === spec.name.toLowerCase() ||
-                (spec.code.toLowerCase() === 'pcc' && prefRefLower.includes('pcc')) ||
-                (spec.code.toLowerCase() === 'ped' && (prefRefLower.includes('ped') || prefRefLower.includes('pedia')))
-              ) {
-                return true;
-              }
-            }
-            return false;
-          };
-
-          const specP1 = sortedNurses.filter((n) =>
-            n.preferences?.some((p) => matchesSpecialty(p, 1))
-          );
-          const specP2 = sortedNurses.filter((n) =>
-            !n.preferences?.some((p) => matchesSpecialty(p, 1)) &&
-            n.preferences?.some((p) => matchesSpecialty(p, 2))
-          );
-          const specP3 = sortedNurses.filter((n) =>
-            !n.preferences?.some((p) => matchesSpecialty(p, 1) || matchesSpecialty(p, 2)) &&
-            n.preferences?.some((p) => matchesSpecialty(p))
-          );
-          const specFallback = sortedNurses.filter(
-            (n) =>
-              !n.preferences?.some((p) => matchesSpecialty(p)) &&
-              isNurseAllocatedToDoctorOrSpecialty(n, undefined, slot.targetId)
-          );
-
-          candidateCohorts = [
-            { label: 'SPEC_P1', tierRank: 1, nurses: specP1 },
-            { label: 'SPEC_P2', tierRank: 2, nurses: specP2 },
-            { label: 'SPEC_P3', tierRank: 3, nurses: specP3 },
-            { label: 'SPEC_FALLBACK', tierRank: 4, nurses: specFallback },
-          ];
-        } else {
-          candidateCohorts = [
-            { label: 'ROLE_STANDARD', tierRank: 0, nurses: sortedNurses },
-          ];
-        }
-
-        // Multi-tier hierarchical assignment pass:
-        // Evaluates cohorts in strict priority order. If a higher priority cohort yields a candidate
-        // who satisfies all hard constraints, they are selected immediately and lower cohorts are skipped.
         for (const cohort of candidateCohorts) {
           if (cohort.nurses.length === 0) continue;
-
-          let cohortBestNurse: Nurse | null = null;
-          let cohortBestScore = -999999;
-          let cohortChosenDuty: DutyWindow | null = null;
+          let cohortBest: { nurse: Nurse; duty: DutyWindow } | null = null;
 
           for (const tier of tiersToEvaluate) {
-            let tierBestNurse: Nurse | null = null;
-            let tierBestScore = -999999;
-            let tierChosenDuty: DutyWindow | null = null;
+            let tierBestScore = -Infinity;
+            let tierBest: { nurse: Nurse; duty: DutyWindow } | null = null;
 
             for (const candidateDuty of tier) {
+              // A doctor's nurse must overlap the session (partial cover is accepted)
+              if (slot.kind === 'DOCTOR' && !overlaps(candidateDuty.startTime, candidateDuty.endTime, slot.startTime, slot.endTime)) continue;
+
               for (const nurse of cohort.nurses) {
-                const key = `${nurse.id}_${date}`;
-
-                // HARD CONSTRAINT H4: One duty per nurse per day
-                if (nursesAssignedToday.has(nurse.id)) continue;
-                if (resultAssignmentsMap.has(key)) continue;
-
-                // HARD CONSTRAINT H5: Approved leave or LockEntry(OFF)
-                const onLeave = leaveEntries.some(
-                  (le) =>
-                    le.nurseId === nurse.id &&
-                    le.approved &&
-                    date >= le.startDate &&
-                    date <= le.endDate
-                );
-                if (onLeave) continue;
-
-                const hasLockOff = activeLocks.some(
-                  (l) => l.nurseId === nurse.id && l.date === date && l.mode === 'OFF'
-                );
-                if (hasLockOff) continue;
-
-                // HARD CONSTRAINT: Exclusive Nurse Clinic & Clinic Nurse Capability
-                // When a nurse is not assigned as clinic nurse with no doctor and specialty preference
-                // and only the nurse clinic option is selected, that nurse is exclusively nurse clinic
-                // and must NEVER be assigned to a doctor or specialty session.
-                const isExclusiveNC = isExclusiveNurseClinic(nurse, roles);
-                if (isExclusiveNC && (slot.kind === 'DOCTOR' || slot.kind === 'SPECIALTY')) {
-                  continue;
-                }
-                if (!nurse.isClinicNurse && (slot.kind === 'DOCTOR' || slot.kind === 'SPECIALTY')) {
-                  continue;
-                }
-
-                // HARD CONSTRAINT H6: Capability check
-                if (slot.kind === 'CLINICAL_ROLE') {
+                // Who may take this job
+                if (slot.kind === 'DOCTOR' && !canWorkWithDoctor(nurse, slot.targetId, slotSession)) continue;
+                if (isNurseClinicSlot && !canBeFreeNurse(nurse, roles)) continue; // must do blood collection too
+                if (slot.kind === 'CLINICAL_ROLE' && !isNurseClinicSlot) {
                   const role = roles.find((r) => r.id === slot.targetId);
-                  if (role?.acronym === 'PHL' && !nurse.capabilityIds.includes(role.id)) {
-                    continue; // Nurse lacks Phlebotomy/IV credential
-                  }
+                  if (role?.acronym === 'PHL' && !nurse.capabilityIds.includes(role.id)) continue; // H6
                 }
-
-                // HARD CONSTRAINT H8: Strict Doctor / Specialty Profile Allocation
-                // Nurses must only be scheduled to doctors or specialties mentioned in their profile.
-                if (slot.kind === 'DOCTOR') {
-                  const docSession = daySessions.find((s) => s.doctorId === slot.targetId);
-                  const docObj = doctors?.find((d) => d.id === slot.targetId);
-                  const docSpecId = docSession?.specialtyId || docObj?.specialtyIds?.[0];
-                  if (!isNurseAllocatedToDoctorOrSpecialty(nurse, slot.targetId, docSpecId, docObj?.specialtyIds)) {
-                    continue; // Violates Hard Rule H8: Nurse is not allocated to this doctor or department
-                  }
-                } else if (slot.kind === 'SPECIALTY') {
-                  if (!isNurseAllocatedToDoctorOrSpecialty(nurse, undefined, slot.targetId)) {
-                    continue; // Violates Hard Rule H8: Nurse is not allocated to this specialty
-                  }
-                }
-
-                // HARD CONSTRAINT H2: Max consecutive working days
-                const state = nurseStates.get(nurse.id)!;
-                const consecutiveDaysEndingYesterday = getConsecutiveDaysWorkedEndingYesterday(nurse.id, date);
-                if (consecutiveDaysSeverity === 'HARD' && consecutiveDaysEndingYesterday >= maxConsecutiveDays) continue;
-
-                // HARD CONSTRAINT H3: Minimum rest between consecutive duties
-                if (state.lastDutyEndTime) {
-                  const [lastDateStr, lastTimeStr] = state.lastDutyEndTime.split(' ');
-                  const lastDate = new Date(lastDateStr);
-                  const currDate = new Date(date);
-                  const diffDays = Math.round((currDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-                  if (diffDays === 1) {
-                    const [prevEndH, prevEndM] = lastTimeStr.split(':').map(Number);
-                    const [currStartH, currStartM] = candidateDuty.startTime.split(':').map(Number);
-                    const restHours = (24 - prevEndH - prevEndM / 60) + (currStartH + currStartM / 60);
-                    if (restHours < minRestHoursRequired) {
-                      continue; // Violates mandatory rest period
-                    }
-                  }
-                }
-
-                // HARD CONSTRAINT H7: Maximum working hours limit (prevent nurse overwork)
-                const nurseLimits = nurseTargetMap.get(nurse.id);
                 const shiftHours = calculateDutyDurationHours(candidateDuty);
-                if (
-                  maxHoursEnabled &&
-                  maxHoursSeverity === 'HARD' &&
-                  nurseLimits &&
-                  state.totalDutyHoursEarned + shiftHours > nurseLimits.maxAllowedHours
-                ) {
-                  continue; // Violates Hard Rule H7: exceeds maximum allowable working hours in period
-                }
+                if (!fitsHardRules(nurse, date, candidateDuty, shiftHours)) continue;
 
-                // HARD CONSTRAINT S1: Maximum consecutive late duties ending at 21:00
-                const consecutiveLateEndingYesterday = getConsecutiveLateDutiesEndingYesterday(nurse.id, date);
-                if (
-                  candidateDuty.endTime >= lateThreshold &&
-                  consecutiveLateEnabled &&
-                  consecutiveLateSeverity === 'HARD' &&
-                  consecutiveLateEndingYesterday >= maxConsecutiveLate
-                ) {
-                  continue; // Violates Hard Rule: Exceeds max consecutive late duties ending at 21:00
-                }
-
-                // SOFT SCORING FORMULA
+                const state = nurseStates.get(nurse.id)!;
+                const limits = nurseTargetMap.get(nurse.id);
                 let score = 0;
 
-                // S0: Pacing penalty: If nurse is 1 day away from hitting the consecutive days ceiling, apply soft penalty (-60)
-                if (consecutiveDaysEndingYesterday >= maxConsecutiveDays - 1) {
+                // How much of the job the shift covers
+                const slotMinutes = Math.max(1, toMinutes(slot.endTime) - toMinutes(slot.startTime));
+                const coverShare = coveredMinutes(candidateDuty, slot.startTime, slot.endTime) / slotMinutes;
+                score += coverShare >= 1 ? 40 : coverShare * 20;
+
+                // Pacing: prefer not to bring a nurse up to the consecutive days limit
+                if (getConsecutiveDaysWorkedEndingYesterday(nurse.id, date) >= maxConsecutiveDays - 1) {
                   score -= 60;
                 }
 
-                // Dedicated Nurse Clinic equity & preferences
                 if (isNurseClinicSlot) {
-                  // If the nurse is exclusively dedicated to Nurse Clinic, award highest priority (+200 pts)
-                  if (isExclusiveNC) {
-                    score += 200;
-                  }
-                  // Distribute Nurse Clinic fairly across nursing pool
+                  if (isExclusiveNurseClinic(nurse, roles)) score += 200;
                   score -= state.nurseClinicCount * 25;
-                  const ncPref = nurse.preferences?.find(
-                    (p) =>
-                      p.kind === 'CLINICAL_ROLE' &&
-                      (p.refId === nurseClinicRole.id || p.refId === 'role-nurse-clinic')
-                  );
+                  const ncPref = nurse.preferences?.find((p) => p.kind === 'CLINICAL_ROLE' && ncRoleIds.has(p.refId));
                   if (ncPref) score += ncPref.rank === 1 ? 40 : 20;
-
-                  // Nurses who have assigned doctors are reserved for doctor clinics
-                  const hasDoctorAssignment = nurse.preferences?.some((p) => p.kind === 'DOCTOR');
-                  if (hasDoctorAssignment) {
-                    score -= 50;
-                  }
+                  // Nurses with their own doctors are kept for doctor clinics
+                  if (nurse.preferences?.some((p) => p.kind === 'DOCTOR')) score -= 50;
                 }
 
-                // S2: Fine-grained preference honoring within same cohort
                 if (slot.kind === 'DOCTOR') {
-                  const pref = nurse.preferences?.find(
-                    (p) => p.kind === 'DOCTOR' && p.refId === slot.targetId
-                  );
-                  const docSession = daySessions.find((s) => s.doctorId === slot.targetId);
-                  const docSpecialty = docSession ? specialties.find((s) => s.id === docSession.specialtyId) : null;
-                  const specPref = docSession
-                    ? nurse.preferences?.find(
-                        (p) =>
-                          p.kind === 'SPECIALTY' &&
-                          (p.refId === docSession.specialtyId ||
-                            (docSpecialty &&
-                              (p.refId.toLowerCase() === docSpecialty.code.toLowerCase() ||
-                               p.refId.toLowerCase() === docSpecialty.name.toLowerCase() ||
-                               (docSpecialty.code.toLowerCase() === 'pcc' && p.refId.toLowerCase().includes('pcc')))))
-                      )
-                    : null;
+                  const pref = nurse.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId);
+                  const docSpecialty = slotSession ? specialties.find((s) => s.id === slotSession.specialtyId) : null;
+                  const specPref = nurse.preferences?.find((p) => p.kind === 'SPECIALTY' && specialtyMatchesPref(p.refId, docSpecialty));
+                  if (pref) score += pref.rank === 1 ? 80 : pref.rank === 2 ? 40 : 20;
+                  else if (specPref) score += specPref.rank === 1 ? 70 : specPref.rank === 2 ? 35 : 15;
 
-                  if (pref) {
-                    score += pref.rank === 1 ? 80 : pref.rank === 2 ? 40 : 20;
-                  } else if (specPref) {
-                    // Specialty match bonus
-                    score += specPref.rank === 1 ? 70 : specPref.rank === 2 ? 35 : 15;
-                  }
-
-                  // Cross-session Opportunity Cost Guard (General Rule):
-                  // If this nurse has other active sessions on this day where they also match a Rank 1 preference (Doctor or Specialty),
-                  // apply an opportunity cost penalty so nurses whose exclusive top choice is THIS slot get priority,
-                  // preserving multi-qualified nurses for their other active top choices today.
-                  const otherActiveRank1ChoicesCount = daySessions.filter((otherSess) => {
-                    if (otherSess.doctorId === slot.targetId) return false;
-                    const otherSpec = specialties.find((s) => s.id === otherSess.specialtyId);
+                  // Keep nurses whose first choice is another doctor working today for that doctor
+                  const otherFirstChoices = daySessions.filter((other) => {
+                    if (other.doctorId === slot.targetId) return false;
+                    const otherSpec = specialties.find((s) => s.id === other.specialtyId);
                     return nurse.preferences?.some(
                       (p) =>
-                        ((p.kind === 'DOCTOR' && p.refId === otherSess.doctorId) ||
-                         (p.kind === 'SPECIALTY' &&
-                           (p.refId === otherSess.specialtyId ||
-                             (otherSpec &&
-                               (p.refId.toLowerCase() === otherSpec.code.toLowerCase() ||
-                                p.refId.toLowerCase() === otherSpec.name.toLowerCase() ||
-                                (otherSpec.code.toLowerCase() === 'pcc' && p.refId.toLowerCase().includes('pcc'))))))) &&
-                        p.rank === 1
+                        p.rank === 1 &&
+                        ((p.kind === 'DOCTOR' && p.refId === other.doctorId) || (p.kind === 'SPECIALTY' && specialtyMatchesPref(p.refId, otherSpec)))
                     );
                   }).length;
-
-                  if (otherActiveRank1ChoicesCount > 0) {
-                    score -= 50 * otherActiveRank1ChoicesCount;
-                  }
-                } else if (slot.kind === 'CLINICAL_ROLE') {
+                  score -= 50 * otherFirstChoices;
+                } else if (!isNurseClinicSlot) {
                   const role = roles.find((r) => r.id === slot.targetId);
                   const rolePref = nurse.preferences?.find(
                     (p) =>
                       p.kind === 'CLINICAL_ROLE' &&
-                      (p.refId === slot.targetId ||
-                        (role && (p.refId.toLowerCase() === role.acronym.toLowerCase() || p.refId.toLowerCase() === role.name.toLowerCase())))
+                      (p.refId === slot.targetId || (!!role && (p.refId.toLowerCase() === role.acronym.toLowerCase() || p.refId.toLowerCase() === role.name.toLowerCase())))
                   );
-                  if (rolePref) {
-                    score += rolePref.rank === 1 ? 80 : rolePref.rank === 2 ? 40 : 20;
-                  }
+                  if (rolePref) score += rolePref.rank === 1 ? 80 : rolePref.rank === 2 ? 40 : 20;
                 }
 
-                // S3: Hours fairness — score bonus for nurses furthest below target
-                const dutyTarget = nurseLimits?.dutyTarget ?? Math.round(effectiveFullTimeTarget * (nurse.contractPercent / 100));
-                const hoursDeficit = dutyTarget - state.totalDutyHoursEarned;
-                if (hoursDeficit <= 0) {
-                  score -= 150; // Nurse has already met duty hours target; strongly prioritize nurses with remaining hours
-                } else {
-                  score += hoursDeficit * 1.5; // Scale bonus to prioritize nurses with the greatest hours deficit
+                // Hours: favour nurses behind their pace; a nurse who reached her goal comes last
+                if (limits && state.totalDutyHoursEarned >= limits.dutyTarget) score -= 150;
+                else score += hoursBehindPace(nurse.id, dayIdx) * 1.5;
+
+                // Weekend fairness
+                if (isWeekend) score -= state.weekendsWorked * 25;
+
+                // SOFT late duty limit
+                if (consecutiveLateEnabled && isLate(candidateDuty)) {
+                  const lateRun = getConsecutiveLateDutiesEndingYesterday(nurse.id, date);
+                  if (lateRun >= maxConsecutiveLate) score -= 150;
+                  else if (lateRun >= maxConsecutiveLate - 1) score -= 50;
                 }
 
-                // S4: Weekend equity — prioritize nurses who worked fewer weekends
-                if (isWeekend) {
-                  score -= state.weekendsWorked * 25;
-                }
+                // A senior helps meet the one senior a day rule
+                if (isSenior(nurse)) score += 10;
 
-                // S1: Consecutive late duties ending at 21:00 (penalty if already approaching ceiling)
-                if (consecutiveLateEnabled && candidateDuty.endTime >= lateThreshold) {
-                  if (consecutiveLateEndingYesterday >= maxConsecutiveLate) {
-                    score -= 150; // soft rule violation penalty
-                  } else if (consecutiveLateEndingYesterday >= maxConsecutiveLate - 1) {
-                    score -= 50; // pacing penalty when 1 away from limit
-                  }
-                }
-
-                // Seniority distribution
-                if (seniorLevelIds.has(nurse.seniorityLevelId)) {
-                  score += 10;
-                }
-
-                // Priority weighting bonus
-                if (candidateDuty.isPriority) {
-                  score += 30;
-                }
+                if (candidateDuty.isPriority) score += 30;
                 score += (candidateDuty.priorityRank ?? 100) * 0.05;
-
-                // Overhang & Additional Nurse Scoring:
-                // If duty extends past doctor session (e.g. duty ends at 21:00 while doctor leaves at 18:00),
-                // this nurse counts as an additional nurse from 18:00 to 21:00!
-                // Award a bonus, and an extra bonus if the nurse is nurse-clinic enabled.
-                const hasOverhang = slot.kind === 'DOCTOR' && candidateDuty.endTime > slot.endTime;
-                if (hasOverhang) {
-                  const isNcQualified =
-                    nurse.capabilityIds.includes(nurseClinicRole.id) ||
-                    nurse.capabilityIds.includes('role-nurse-clinic') ||
-                    nurse.capabilityIds.some((cid) => roles.find((r) => r.id === cid)?.acronym === 'NC') ||
-                    seniorLevelIds.has(nurse.seniorityLevelId);
-
-                  if (isNcQualified) {
-                    score += 45; // High priority for nurse-clinic qualified staff on overhang hours
-                  } else {
-                    score += 15;
-                  }
-                }
 
                 if (score > tierBestScore) {
                   tierBestScore = score;
-                  tierBestNurse = nurse;
-                  tierChosenDuty = candidateDuty;
+                  tierBest = { nurse, duty: candidateDuty };
                 }
               }
             }
-
-            // If this duty tier found an eligible nurse and duty, adopt it and do not drop to fallback
-            if (tierBestNurse && tierChosenDuty) {
-              cohortBestNurse = tierBestNurse;
-              cohortBestScore = tierBestScore;
-              cohortChosenDuty = tierChosenDuty;
+            if (tierBest) {
+              cohortBest = tierBest;
               break;
             }
           }
 
-          // If this priority cohort found a valid candidate who satisfies hard rules:
-          if (cohortBestNurse && cohortChosenDuty) {
-            bestNurse = cohortBestNurse;
-            bestScore = cohortBestScore;
-            chosenDuty = cohortChosenDuty;
+          if (cohortBest) {
+            bestNurse = cohortBest.nurse;
+            chosenDuty = cohortBest.duty;
             matchedPairingTier = cohort.tierRank;
-            break; // Stop evaluating lower-priority cohorts!
+            break;
           }
         }
 
-        // Place assignment if candidate found
-        if (bestNurse) {
-          const newAssignment: Assignment = {
+        if (slot.kind === 'DOCTOR') doctorSessionsTotal++;
+        if (!bestNurse) {
+          unmetSlotsCount++;
+          continue;
+        }
+
+        placeShift(
+          {
             id: `asgn-gen-${bestNurse.id}-${date}-${slot.kind}${isNurseClinicSlot ? '-nc' : ''}`,
             scheduleId: schedule.id,
             nurseId: bestNurse.id,
@@ -1389,621 +1141,227 @@ export class SchedulingEngine {
             specialtyId: slot.kind === 'SPECIALTY' ? slot.targetId : undefined,
             locked: false,
             source: 'GENERATED',
-            note: isNurseClinicSlot
-              ? 'Dedicated Nurse Clinic (not assigned to doctor)'
-              : undefined,
-          };
-
-          resultAssignmentsMap.set(`${bestNurse.id}_${date}`, newAssignment);
-          nursesAssignedToday.add(bestNurse.id);
-          createdCount++;
-
-          if (slot.kind === 'DOCTOR') {
-            doctorSessionsTotal++;
-            if (matchedPairingTier === 1) doctorPriority1PairingsCount++;
-            else if (matchedPairingTier === 2) doctorPriority2PairingsCount++;
-            else if (matchedPairingTier === 3) doctorPriority3PlusPairingsCount++;
-            else if (matchedPairingTier === 4 || matchedPairingTier === 5) doctorSpecialtyPairingsCount++;
-            else doctorFallbackPairingsCount++;
-          }
-
-          // Update nurse counters
-          const state = nurseStates.get(bestNurse.id)!;
-          state.consecutiveWorkingDays = getConsecutiveDaysWorkedEndingYesterday(bestNurse.id, date) + 1;
-          state.totalDutyHoursEarned += calculateDutyDurationHours(chosenDuty);
-          state.lastDutyEndTime = `${date} ${chosenDuty.endTime}`;
-          if (isNurseClinicSlot) {
-            state.nurseClinicCount += 1;
-          }
-          if (isWeekend) {
-            state.weekendsWorked += 1;
-          }
-          if (chosenDuty.endTime >= lateThreshold) {
-            state.consecutiveLateEnds += 1;
-          } else {
-            state.consecutiveLateEnds = 0;
-          }
-        } else {
-          unmetSlotsCount++;
-          if (slot.kind === 'DOCTOR') {
-            doctorSessionsTotal++;
-          }
-        }
-      }
-
-      // 4.4 Senior Fixer Pass (HARD RULE H1: At least one senior on each active duty window)
-      // Check active duty windows today
-      const dutiesToday = new Set<string>();
-      resultAssignmentsMap.forEach((asgn) => {
-        if (asgn.date === date) {
-          dutiesToday.add(asgn.dutyWindowId);
-        }
-      });
-
-      dutiesToday.forEach((dutyId) => {
-        const assignedToDuty = Array.from(resultAssignmentsMap.values()).filter(
-          (a) => a.date === date && a.dutyWindowId === dutyId
+            note: isNurseClinicSlot ? 'Nurse Clinic and blood collection (not with a doctor)' : undefined,
+          },
+          isWeekend,
+          false,
+          isNurseClinicSlot
         );
-        const hasSenior = assignedToDuty.some((a) => {
-          const n = sortedNurses.find((x) => x.id === a.nurseId);
-          return n && seniorLevelIds.has(n.seniorityLevelId);
-        });
 
-        // Only a generated cell can be handed to a senior (never a pinned or manual one).
-        const swappableAssignment = assignedToDuty.find((a) => a.source === 'GENERATED');
-        if (!hasSenior && swappableAssignment) {
-          const targetAssignment = swappableAssignment;
-          const targetDuty = dutyWindows.find((d) => d.id === targetAssignment.dutyWindowId) || fullDayDuty;
-
-          // Look for an available senior not working today who satisfies hard constraints
-          const availableSenior = sortedNurses.find((n) => {
-            if (!seniorLevelIds.has(n.seniorityLevelId)) return false;
-            if (nursesAssignedToday.has(n.id)) return false;
-
-            // Exclusive Nurse Clinic staff cannot be swapped into doctor or specialty assignments
-            if (
-              (targetAssignment.kind === 'DOCTOR' || targetAssignment.kind === 'SPECIALTY') &&
-              (!n.isClinicNurse || isExclusiveNurseClinic(n, roles))
-            ) {
-              return false;
-            }
-
-            // Strict Profile Allocation check for senior swap (Hard Rule H8)
-            if (targetAssignment.kind === 'DOCTOR' && targetAssignment.doctorId) {
-              const docSession = daySessions.find((s) => s.doctorId === targetAssignment.doctorId);
-              const docObj = doctors?.find((d) => d.id === targetAssignment.doctorId);
-              const docSpecId = docSession?.specialtyId || docObj?.specialtyIds?.[0];
-              if (!isNurseAllocatedToDoctorOrSpecialty(n, targetAssignment.doctorId, docSpecId, docObj?.specialtyIds)) {
-                return false;
-              }
-            } else if (targetAssignment.kind === 'SPECIALTY' && targetAssignment.specialtyId) {
-              if (!isNurseAllocatedToDoctorOrSpecialty(n, undefined, targetAssignment.specialtyId)) {
-                return false;
-              }
-            }
-
-            const key = `${n.id}_${date}`;
-            if (resultAssignmentsMap.has(key)) return false;
-
-            const onLeave = leaveEntries.some(
-              (le) =>
-                le.nurseId === n.id &&
-                le.approved &&
-                date >= le.startDate &&
-                date <= le.endDate
-            );
-            if (onLeave) return false;
-
-            // A day off lock always wins
-            if (activeLocks.some((l) => l.nurseId === n.id && l.date === date && l.mode === 'OFF')) return false;
-
-            // Phlebotomy (PHL) cells need the PHL capability (Hard Rule H6)
-            if (targetAssignment.kind === 'CLINICAL_ROLE' && targetAssignment.clinicalRoleId) {
-              const role = roles.find((r) => r.id === targetAssignment.clinicalRoleId);
-              if (role?.acronym === 'PHL' && !n.capabilityIds.includes(role.id)) return false;
-            }
-
-            const seniorState = nurseStates.get(n.id);
-            if (seniorState) {
-              if (consecutiveDaysSeverity === 'HARD' && getConsecutiveDaysWorkedEndingYesterday(n.id, date) >= maxConsecutiveDays) return false;
-              const seniorLimits = nurseTargetMap.get(n.id);
-              const seniorShiftHours = calculateDutyDurationHours(targetDuty);
-              if (
-                maxHoursEnabled &&
-                maxHoursSeverity === 'HARD' &&
-                seniorLimits &&
-                seniorState.totalDutyHoursEarned + seniorShiftHours > seniorLimits.maxAllowedHours
-              ) {
-                return false;
-              }
-              if (
-                targetDuty.endTime >= lateThreshold &&
-                consecutiveLateEnabled &&
-                consecutiveLateSeverity === 'HARD' &&
-                getConsecutiveLateDutiesEndingYesterday(n.id, date) >= maxConsecutiveLate
-              ) {
-                return false;
-              }
-              if (seniorState.lastDutyEndTime) {
-                const [lastDateStr, lastTimeStr] = seniorState.lastDutyEndTime.split(' ');
-                const lastDate = new Date(lastDateStr);
-                const currDate = new Date(date);
-                const diffDays = Math.round((currDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-                if (diffDays === 1) {
-                  const [prevEndH, prevEndM] = lastTimeStr.split(':').map(Number);
-                  const [currStartH, currStartM] = targetDuty.startTime.split(':').map(Number);
-                  const restHours = (24 - prevEndH - prevEndM / 60) + (currStartH + currStartM / 60);
-                  if (restHours < minRestHoursRequired) return false;
-                }
-              }
-            }
-
-            return true;
-          });
-
-          if (availableSenior) {
-            // Release junior
-            resultAssignmentsMap.delete(`${targetAssignment.nurseId}_${date}`);
-            nursesAssignedToday.delete(targetAssignment.nurseId);
-            const juniorState = nurseStates.get(targetAssignment.nurseId);
-            if (juniorState) {
-              // Undo everything today's shift added to the junior's state
-              juniorState.consecutiveWorkingDays = getConsecutiveDaysWorkedEndingYesterday(targetAssignment.nurseId, date);
-              juniorState.totalDutyHoursEarned = Math.max(
-                0,
-                juniorState.totalDutyHoursEarned - calculateDutyDurationHours(targetDuty)
-              );
-              juniorState.consecutiveLateEnds = getConsecutiveLateDutiesEndingYesterday(targetAssignment.nurseId, date);
-              if (isWeekend) juniorState.weekendsWorked = Math.max(0, juniorState.weekendsWorked - 1);
-              if (
-                targetAssignment.kind === 'CLINICAL_ROLE' &&
-                (targetAssignment.clinicalRoleId === nurseClinicRole.id || targetAssignment.clinicalRoleId === 'role-nurse-clinic')
-              ) {
-                juniorState.nurseClinicCount = Math.max(0, juniorState.nurseClinicCount - 1);
-              }
-              // Rest is measured from yesterday's shift, which is now the junior's last duty
-              const [yy, mm, dd] = date.split('-').map(Number);
-              const yesterday = new Date(Date.UTC(yy, mm - 1, dd - 1)).toISOString().split('T')[0];
-              const yesterdayAsgn = resultAssignmentsMap.get(`${targetAssignment.nurseId}_${yesterday}`);
-              const yesterdayDuty = yesterdayAsgn ? dutyMapGlobal.get(yesterdayAsgn.dutyWindowId) : undefined;
-              juniorState.lastDutyEndTime = yesterdayDuty ? `${yesterday} ${yesterdayDuty.endTime}` : undefined;
-            }
-
-            // Assign senior
-            const swappedAsgn: Assignment = {
-              ...targetAssignment,
-              id: `asgn-gen-${availableSenior.id}-${date}-H1SWAP`,
-              nurseId: availableSenior.id,
-            };
-            resultAssignmentsMap.set(`${availableSenior.id}_${date}`, swappedAsgn);
-            nursesAssignedToday.add(availableSenior.id);
-            const seniorState = nurseStates.get(availableSenior.id);
-            if (seniorState) {
-              seniorState.consecutiveWorkingDays = getConsecutiveDaysWorkedEndingYesterday(availableSenior.id, date) + 1;
-              seniorState.totalDutyHoursEarned += calculateDutyDurationHours(targetDuty);
-              seniorState.lastDutyEndTime = `${date} ${targetDuty.endTime}`;
-              if (isWeekend) seniorState.weekendsWorked += 1;
-              if (targetDuty.endTime >= lateThreshold) {
-                seniorState.consecutiveLateEnds += 1;
-              } else {
-                seniorState.consecutiveLateEnds = 0;
-              }
-            }
-          }
-        }
-      });
-
-      // 4.5 Hourly +1 Additional Nurse Balancing Pass:
-      // Ensure at least one additional nurse above active doctors during clinic operating hours.
-      // Count every doctor working today, including doctors whose nurse was pinned or set by hand
-      // (daySessions above only holds sessions that still needed a nurse).
-      const allDaySessions = sessions.filter((s) => !s.cancelled && s.date === date);
-      if (plusOneEnabled && allDaySessions.length > 0) {
-        const dutyMapLocal = new Map(dutyWindows.map((d) => [d.id, d]));
-
-        let hasDeficit = true;
-        let attempts = 0;
-
-        while (hasDeficit && attempts < 5) {
-          attempts++;
-          hasDeficit = false;
-
-          let worstHour = -1;
-          let maxDeficit = 0;
-
-          for (let hour = 9; hour <= 20; hour++) {
-            const hourStart = `${String(hour).padStart(2, '0')}:00`;
-            const hourEnd = `${String(hour + 1).padStart(2, '0')}:00`;
-
-            const docsActive = allDaySessions.filter(
-              (s) => s.startTime < hourEnd && s.endTime > hourStart
-            ).length;
-
-            const nursesActive = Array.from(resultAssignmentsMap.values()).filter((a) => {
-              if (a.date !== date) return false;
-              const duty = dutyMapLocal.get(a.dutyWindowId) || fullDayDuty;
-              return duty.startTime < hourEnd && duty.endTime > hourStart;
-            }).length;
-
-            const isOperating = docsActive > 0 || (hour >= 9 && hour <= 20 && allDaySessions.length > 0);
-            const required = docsActive + (isOperating ? minAdditionalNurses : 0);
-            const deficit = Math.max(0, required - nursesActive);
-
-            if (deficit > maxDeficit) {
-              maxDeficit = deficit;
-              worstHour = hour;
-            }
-          }
-
-          if (maxDeficit > 0 && worstHour >= 0) {
-            hasDeficit = true;
-
-            // Strategy A: Duty extension / overhang.
-            // Check if an already assigned nurse has a duty ending earlier (e.g. 16:00 or 17:00),
-            // and extend to Full Day (09:00-21:00) or Late (11:00-21:00), prioritizing nurse-clinic enabled staff.
-            let promoted = false;
-            if (worstHour >= 16) {
-              // Only cells the engine generated may be extended; pinned and hand set cells stay as they are.
-              const eligibleAssigned = Array.from(resultAssignmentsMap.values()).filter((a) => {
-                if (a.date !== date || a.locked || a.source !== 'GENERATED') return false;
-                const duty = dutyMapLocal.get(a.dutyWindowId);
-                return duty && duty.endTime < '21:00';
-              });
-
-              eligibleAssigned.sort((a, b) => {
-                const nurseA = sortedNurses.find((n) => n.id === a.nurseId);
-                const nurseB = sortedNurses.find((n) => n.id === b.nurseId);
-                const aNc =
-                  nurseA?.capabilityIds.includes(nurseClinicRole.id) ||
-                  nurseA?.capabilityIds.includes('role-nurse-clinic') ||
-                  nurseA?.capabilityIds.some((cid) => roles.find((r) => r.id === cid)?.acronym === 'NC') ||
-                  (nurseA && seniorLevelIds.has(nurseA.seniorityLevelId))
-                    ? 1
-                    : 0;
-                const bNc =
-                  nurseB?.capabilityIds.includes(nurseClinicRole.id) ||
-                  nurseB?.capabilityIds.includes('role-nurse-clinic') ||
-                  nurseB?.capabilityIds.some((cid) => roles.find((r) => r.id === cid)?.acronym === 'NC') ||
-                  (nurseB && seniorLevelIds.has(nurseB.seniorityLevelId))
-                    ? 1
-                    : 0;
-                return bNc - aNc;
-              });
-
-              for (const asgn of eligibleAssigned) {
-                const nurse = sortedNurses.find((n) => n.id === asgn.nurseId);
-                if (!nurse) continue;
-                const state = nurseStates.get(nurse.id);
-                const newDuty = fullDayDuty.endTime >= '21:00' ? fullDayDuty : lateDuty;
-                if (
-                  newDuty.endTime >= lateThreshold &&
-                  consecutiveLateEnabled &&
-                  consecutiveLateSeverity === 'HARD' &&
-                  getConsecutiveLateDutiesEndingYesterday(nurse.id, date) >= maxConsecutiveLate
-                ) {
-                  continue; // Duty extension would exceed maximum consecutive late duties ending at 21:00
-                }
-                const oldDuty = dutyMapLocal.get(asgn.dutyWindowId) || fullDayDuty;
-                const addedHours =
-                  calculateDutyDurationHours(newDuty) -
-                  calculateDutyDurationHours(oldDuty);
-
-                const nurseLimits = nurseTargetMap.get(nurse.id);
-                if (
-                  maxHoursEnabled &&
-                  maxHoursSeverity === 'HARD' &&
-                  nurseLimits &&
-                  state &&
-                  state.totalDutyHoursEarned + addedHours > nurseLimits.maxAllowedHours
-                ) {
-                  continue; // Duty extension would cause overwork
-                }
-
-                // Replace the cell with an extended copy (never change the caller's objects)
-                resultAssignmentsMap.set(`${asgn.nurseId}_${date}`, {
-                  ...asgn,
-                  dutyWindowId: newDuty.id,
-                  note: asgn.note
-                    ? `${asgn.note} (Extended for +1 clinic coverage)`
-                    : 'Extended for +1 clinic coverage (overhang)',
-                });
-
-                if (state) {
-                  state.totalDutyHoursEarned += Math.max(0, addedHours);
-                  state.lastDutyEndTime = `${date} ${newDuty.endTime}`;
-                  if (newDuty.endTime >= lateThreshold) {
-                    state.consecutiveLateEnds += 1;
-                  }
-                }
-                promoted = true;
-                break;
-              }
-            }
-
-            // Strategy B: If promotion was not possible or did not resolve deficit, schedule an unassigned nurse
-            if (!promoted) {
-              const chosenDuty =
-                worstHour >= 16
-                  ? lateDuty.endTime >= '21:00'
-                    ? lateDuty
-                    : fullDayDuty
-                  : worstHour <= 10 && earlyDuty.startTime <= '08:00'
-                  ? earlyDuty
-                  : fullDayDuty;
-              const chosenDutyHours = calculateDutyDurationHours(chosenDuty);
-
-              const unassignedNurses = sortedNurses.filter((nurse) => {
-                if (nursesAssignedToday.has(nurse.id)) return false;
-                const onLeave = leaveEntries.some(
-                  (le) =>
-                    le.nurseId === nurse.id &&
-                    le.approved &&
-                    date >= le.startDate &&
-                    date <= le.endDate
-                );
-                if (onLeave) return false;
-                const offLock = locks.some(
-                  (lk) =>
-                    lk.nurseId === nurse.id &&
-                    lk.date === date &&
-                    lk.mode === 'OFF'
-                );
-                if (offLock) return false;
-
-                const state = nurseStates.get(nurse.id);
-                if (consecutiveDaysSeverity === 'HARD' && getConsecutiveDaysWorkedEndingYesterday(nurse.id, date) >= maxConsecutiveDays) return false;
-
-                const nurseLimits = nurseTargetMap.get(nurse.id);
-                if (
-                  maxHoursEnabled &&
-                  maxHoursSeverity === 'HARD' &&
-                  nurseLimits &&
-                  state &&
-                  state.totalDutyHoursEarned + chosenDutyHours > nurseLimits.maxAllowedHours
-                ) {
-                  return false; // Nurse cannot be scheduled for +1 without exceeding maximum working hours
-                }
-
-                if (
-                  chosenDuty.endTime >= lateThreshold &&
-                  consecutiveLateEnabled &&
-                  consecutiveLateSeverity === 'HARD' &&
-                  getConsecutiveLateDutiesEndingYesterday(nurse.id, date) >= maxConsecutiveLate
-                ) {
-                  return false; // Violates Hard Rule: Exceeds max consecutive late duties ending at 21:00
-                }
-
-                if (state?.lastDutyEndTime) {
-                  const [lastDateStr, lastTimeStr] = state.lastDutyEndTime.split(' ');
-                  const lastDate = new Date(lastDateStr);
-                  const currDate = new Date(date);
-                  const diffDays = Math.round((currDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-                  if (diffDays === 1) {
-                    const [prevEndH, prevEndM] = lastTimeStr.split(':').map(Number);
-                    const [currStartH, currStartM] = chosenDuty.startTime.split(':').map(Number);
-                    const restHours = (24 - prevEndH - prevEndM / 60) + (currStartH + currStartM / 60);
-                    if (restHours < minRestHoursRequired) return false;
-                  }
-                }
-
-                return true;
-              });
-
-              if (unassignedNurses.length > 0) {
-                unassignedNurses.sort((a, b) => {
-                  const aNc =
-                    a.capabilityIds.includes(nurseClinicRole.id) ||
-                    a.capabilityIds.includes('role-nurse-clinic') ||
-                    a.capabilityIds.some((cid) => roles.find((r) => r.id === cid)?.acronym === 'NC') ||
-                    seniorLevelIds.has(a.seniorityLevelId)
-                      ? 1
-                      : 0;
-                  const bNc =
-                    b.capabilityIds.includes(nurseClinicRole.id) ||
-                    b.capabilityIds.includes('role-nurse-clinic') ||
-                    b.capabilityIds.some((cid) => roles.find((r) => r.id === cid)?.acronym === 'NC') ||
-                    seniorLevelIds.has(b.seniorityLevelId)
-                      ? 1
-                      : 0;
-                  if (bNc !== aNc) return bNc - aNc;
-
-                  const nurseLimitsA = nurseTargetMap.get(a.id);
-                  const dutyTargetA = nurseLimitsA?.dutyTarget ?? Math.round(effectiveFullTimeTarget * (a.contractPercent / 100));
-                  const deficitA = dutyTargetA - (nurseStates.get(a.id)?.totalDutyHoursEarned || 0);
-
-                  const nurseLimitsB = nurseTargetMap.get(b.id);
-                  const dutyTargetB = nurseLimitsB?.dutyTarget ?? Math.round(effectiveFullTimeTarget * (b.contractPercent / 100));
-                  const deficitB = dutyTargetB - (nurseStates.get(b.id)?.totalDutyHoursEarned || 0);
-                  return deficitB - deficitA;
-                });
-
-                const bestCandidate = unassignedNurses[0];
-                const isNcQualified =
-                  bestCandidate.capabilityIds.includes(nurseClinicRole.id) ||
-                  bestCandidate.capabilityIds.includes('role-nurse-clinic') ||
-                  bestCandidate.capabilityIds.some(
-                    (cid) => roles.find((r) => r.id === cid)?.acronym === 'NC'
-                  ) ||
-                  seniorLevelIds.has(bestCandidate.seniorityLevelId);
-
-                const addlAsgn: Assignment = {
-                  id: `asgn-gen-${bestCandidate.id}-${date}-addl`,
-                  scheduleId: schedule.id,
-                  nurseId: bestCandidate.id,
-                  date,
-                  dutyWindowId: chosenDuty.id,
-                  kind: 'CLINICAL_ROLE',
-                  clinicalRoleId: isNcQualified ? nurseClinicRole.id : undefined,
-                  doctorId: undefined,
-                  locked: false,
-                  source: 'GENERATED',
-                  note: isNcQualified
-                    ? 'Additional Nurse (Nurse Clinic Qualified Overhang / Float)'
-                    : 'Additional Nurse (Clinic Coverage Float)',
-                };
-
-                resultAssignmentsMap.set(`${bestCandidate.id}_${date}`, addlAsgn);
-                nursesAssignedToday.add(bestCandidate.id);
-                createdCount++;
-
-                const state = nurseStates.get(bestCandidate.id);
-                if (state) {
-                  state.consecutiveWorkingDays = getConsecutiveDaysWorkedEndingYesterday(bestCandidate.id, date) + 1;
-                  state.totalDutyHoursEarned += calculateDutyDurationHours(chosenDuty);
-                  state.lastDutyEndTime = `${date} ${chosenDuty.endTime}`;
-                  if (isNcQualified) state.nurseClinicCount += 1;
-                  if (isWeekend) state.weekendsWorked += 1;
-                  if (chosenDuty.endTime >= lateThreshold) {
-                    state.consecutiveLateEnds += 1;
-                  } else {
-                    state.consecutiveLateEnds = 0;
-                  }
-                }
-              } else {
-                break;
-              }
-            }
-          }
+        if (slot.kind === 'DOCTOR') {
+          if (matchedPairingTier === 1) doctorPriority1PairingsCount++;
+          else if (matchedPairingTier === 2) doctorPriority2PairingsCount++;
+          else if (matchedPairingTier === 3) doctorPriority3PlusPairingsCount++;
+          else if (matchedPairingTier === 4 || matchedPairingTier === 5) doctorSpecialtyPairingsCount++;
+          else doctorFallbackPairingsCount++;
         }
       }
 
-      // 4.6 Float/Pool Pass: Assign remaining available nurses to Specialty Pool so nobody sits idle if hours needed
-      sortedNurses.forEach((nurse) => {
-        if (!nursesAssignedToday.has(nurse.id)) {
-          const state = nurseStates.get(nurse.id)!;
-          const nurseLimits = nurseTargetMap.get(nurse.id);
-          const nurseTarget = nurseLimits?.dutyTarget ?? Math.round(effectiveFullTimeTarget * (nurse.contractPercent / 100));
-          const consecutiveDaysEndingYesterday = getConsecutiveDaysWorkedEndingYesterday(nurse.id, date);
+      // 5.3 Free nurse at every opening hour (rule "additional nurse"): one nurse who is not
+      // with a doctor at that hour and is qualified for blood collection.
+      if (plusOneEnabled && minAdditionalNurses > 0) {
+        const freeNursesDuring = (start: string, end: string) =>
+          existingToday().filter(
+            (a) => canBeFreeNurse(nurseMap.get(a.nurseId), roles) && isFreeDuring(a, dutyMapGlobal.get(a.dutyWindowId), allDaySessions, start, end)
+          ).length;
+        const uncoveredHours = () => openHours.filter((h) => freeNursesDuring(h.start, h.end) < minAdditionalNurses);
 
-          // If significantly below target and under consecutive day limit, place in general pool
-          // Float pool must NEVER push a nurse over their duty target, and never push to 6 or 7 consecutive days
-          if (
-            state.totalDutyHoursEarned < nurseTarget &&
-            // The float pool keeps a one day margin under the limit while the rule is on
-            // (HARD or SOFT); only a switched off rule removes the limit.
-            consecutiveDaysEndingYesterday < maxConsecutiveDays - 1
-          ) {
-            const onLeave = leaveEntries.some(
-              (le) =>
-                le.nurseId === nurse.id &&
-                le.approved &&
-                date >= le.startDate &&
-                date <= le.endDate
-            );
-            if (onLeave) return;
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const gaps = uncoveredHours();
+          if (gaps.length === 0) break;
+          const gap = gaps[0];
+          let fixed = false;
 
-            // A day off lock always wins
-            if (activeLocks.some((l) => l.nurseId === nurse.id && l.date === date && l.mode === 'OFF')) return;
-
-            // Prioritize priority duty windows first; fallback to standard duties for pool
-            const activePoolDuties = dutyWindows.filter((d) => d.active !== false);
-            const priorityPool = activePoolDuties.filter((d) => Boolean(d.isPriority));
-            const standardPool = activePoolDuties.filter((d) => !d.isPriority);
-            const poolTiers = [priorityPool, standardPool, [earlyDuty]];
-
-            let selectedPoolDuty: DutyWindow | null = null;
-            for (const tier of poolTiers) {
-              for (const cand of tier) {
-                const poolShiftHours = calculateDutyDurationHours(cand);
-                if (
-                  maxHoursEnabled &&
-                  nurseLimits &&
-                  state.totalDutyHoursEarned + poolShiftHours > nurseLimits.maxAllowedHours
-                ) {
-                  continue; // Pool duty would exceed max allowable hours
-                }
-
-                if (
-                  cand.endTime >= lateThreshold &&
-                  consecutiveLateEnabled &&
-                  consecutiveLateSeverity === 'HARD' &&
-                  getConsecutiveLateDutiesEndingYesterday(nurse.id, date) >= maxConsecutiveLate
-                ) {
-                  continue; // Pool duty would exceed max consecutive late duties
-                }
-
-                let restCompliant = true;
-                if (state.lastDutyEndTime) {
-                  const [lastDateStr, lastTimeStr] = state.lastDutyEndTime.split(' ');
-                  const lastDate = new Date(lastDateStr);
-                  const currDate = new Date(date);
-                  const diffDays = Math.round((currDate.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-                  if (diffDays === 1) {
-                    const [prevEndH, prevEndM] = lastTimeStr.split(':').map(Number);
-                    const [currStartH, currStartM] = cand.startTime.split(':').map(Number);
-                    const restHours = (24 - prevEndH - prevEndM / 60) + (currStartH + currStartM / 60);
-                    if (restHours < minRestHoursRequired) {
-                      restCompliant = false;
-                    }
-                  }
-                }
-                if (restCompliant) {
-                  selectedPoolDuty = cand;
-                  break;
-                }
-              }
-              if (selectedPoolDuty) break;
+          // A: stretch a generated free nurse's shift over the gap (a longer duty that keeps her hours)
+          const stretchable = existingToday()
+            .filter((a) => a.source === 'GENERATED' && !a.locked && a.kind !== 'DOCTOR' && canBeFreeNurse(nurseMap.get(a.nurseId), roles))
+            .sort((a, b) => hoursBehindPace(b.nurseId, dayIdx) - hoursBehindPace(a.nurseId, dayIdx));
+          for (const asgn of stretchable) {
+            const nurse = nurseMap.get(asgn.nurseId);
+            const oldDuty = dutyMapGlobal.get(asgn.dutyWindowId);
+            if (!nurse || !oldDuty) continue;
+            const longer = activeDuties
+              .filter((d) => d.startTime <= oldDuty.startTime && d.endTime >= oldDuty.endTime && d.id !== oldDuty.id && overlaps(d.startTime, d.endTime, gap.start, gap.end))
+              .sort((a, b) => calculateDutyDurationHours(a) - calculateDutyDurationHours(b))[0];
+            if (!longer) continue;
+            const added = calculateDutyDurationHours(longer) - calculateDutyDurationHours(oldDuty);
+            if (!fitsHardRules(nurse, date, longer, added, { replacingOwnShift: true })) continue;
+            resultAssignmentsMap.set(`${asgn.nurseId}_${date}`, {
+              ...asgn,
+              dutyWindowId: longer.id,
+              note: asgn.note ? `${asgn.note} (extended to keep a free nurse on duty)` : 'Extended to keep a free nurse on duty',
+            });
+            const state = nurseStates.get(asgn.nurseId);
+            if (state) {
+              state.totalDutyHoursEarned += Math.max(0, added);
+              state.lastDutyEndTime = `${date} ${longer.endTime}`;
             }
+            fixed = true;
+            break;
+          }
+          if (fixed) continue;
 
-            if (!selectedPoolDuty) return;
-
-            // Resolve float pool identity:
-            // If nurse has an allocated specialty in their profile, assign their own allocated specialty!
-            // If nurse has NO specialty preference, do NOT assign an arbitrary specialty like specialties[0] (e.g. PCC).
-            // Instead, assign as general clinical float (CLINICAL_ROLE).
-            // Specialty cells need a clinic nurse who is not exclusive to the Nurse Clinic.
-            const canTakeSpecialty = nurse.isClinicNurse && !isExclusiveNurseClinic(nurse, roles);
-            const nurseAllocatedSpecPref = canTakeSpecialty
-              ? nurse.preferences?.find((p) => p.kind === 'SPECIALTY')
-              : undefined;
-            const matchingAllocatedSpec = nurseAllocatedSpecPref
-              ? specialties.find(
-                  (s) =>
-                    s.id === nurseAllocatedSpecPref.refId ||
-                    s.code.toLowerCase() === nurseAllocatedSpecPref.refId.toLowerCase() ||
-                    s.name.toLowerCase() === nurseAllocatedSpecPref.refId.toLowerCase()
-                )
-              : null;
-
-            const poolAssignment: Assignment = {
-              id: `asgn-gen-${nurse.id}-${date}-POOL`,
+          // B: add another qualified nurse, on the duty that covers the most uncovered hours
+          const gapCover = (d: DutyWindow) => gaps.filter((h) => overlaps(d.startTime, d.endTime, h.start, h.end)).length;
+          const duties = activeDuties
+            .filter((d) => overlaps(d.startTime, d.endTime, gap.start, gap.end))
+            .sort((a, b) => gapCover(b) - gapCover(a) || calculateDutyDurationHours(a) - calculateDutyDurationHours(b));
+          let added: { nurse: Nurse; duty: DutyWindow; score: number } | null = null;
+          for (const duty of duties) {
+            for (const nurse of dayOrder) {
+              if (!canBeFreeNurse(nurse, roles)) continue;
+              if (!fitsHardRules(nurse, date, duty, calculateDutyDurationHours(duty))) continue;
+              let score = gapCover(duty) * 20 + hoursBehindPace(nurse.id, dayIdx) * 1.5;
+              if (isExclusiveNurseClinic(nurse, roles)) score += 50;
+              if (isWeekend) score -= (nurseStates.get(nurse.id)?.weekendsWorked || 0) * 25;
+              if (!added || score > added.score) added = { nurse, duty, score };
+            }
+            if (added) break; // best duty first
+          }
+          if (!added) break; // nobody qualified is free: the validator will flag the gap
+          placeShift(
+            {
+              id: `asgn-gen-${added.nurse.id}-${date}-free`,
               scheduleId: schedule.id,
-              nurseId: nurse.id,
+              nurseId: added.nurse.id,
               date,
-              dutyWindowId: selectedPoolDuty.id,
-              kind: matchingAllocatedSpec ? 'SPECIALTY' : 'CLINICAL_ROLE',
-              specialtyId: matchingAllocatedSpec ? matchingAllocatedSpec.id : undefined,
-              clinicalRoleId: matchingAllocatedSpec ? undefined : 'role-float',
+              dutyWindowId: added.duty.id,
+              kind: 'CLINICAL_ROLE',
+              clinicalRoleId: nurseClinicRole.id,
               locked: false,
               source: 'GENERATED',
-              note: matchingAllocatedSpec
-                ? `${matchingAllocatedSpec.name} Coverage / Float Pool (${selectedPoolDuty.isPriority ? 'Priority' : 'Standard'})`
-                : `General Clinic / Float Pool (${selectedPoolDuty.isPriority ? 'Priority' : 'Standard'})`,
-            };
-            resultAssignmentsMap.set(`${nurse.id}_${date}`, poolAssignment);
-            nursesAssignedToday.add(nurse.id);
-            state.consecutiveWorkingDays = consecutiveDaysEndingYesterday + 1;
-            state.totalDutyHoursEarned += calculateDutyDurationHours(selectedPoolDuty);
-            state.lastDutyEndTime = `${date} ${selectedPoolDuty.endTime}`;
-            if (isWeekend) state.weekendsWorked += 1;
-            if (selectedPoolDuty.endTime >= lateThreshold) {
-              state.consecutiveLateEnds += 1;
-            } else {
-              state.consecutiveLateEnds = 0;
+              note: 'Free nurse (Nurse Clinic and blood collection)',
+            },
+            isWeekend,
+            false,
+            true
+          );
+        }
+      }
+
+      // 5.4 At least one senior nurse on duty today (any shift)
+      if (seniorRuleEnabled && !existingToday().some((a) => isSenior(nurseMap.get(a.nurseId)))) {
+        const seniors = dayOrder
+          .filter((n) => isSenior(n) && !resultAssignmentsMap.has(`${n.id}_${date}`))
+          // Even a SOFT consecutive days rule is kept here: this pass adds or moves shifts by choice.
+          .filter(
+            (n) =>
+              getConsecutiveDaysWorkedEndingYesterday(n.id, date) + 1 + getConsecutiveDaysFixedFromTomorrow(n.id, date) <=
+              maxConsecutiveDays
+          )
+          .sort((a, b) => hoursBehindPace(b.id, dayIdx) - hoursBehindPace(a.id, dayIdx));
+
+        // A: a senior who needs hours joins as an extra nurse (nobody loses a shift)
+        let done = false;
+        for (const senior of seniors) {
+          if (hoursBehindPace(senior.id, dayIdx) <= 0) break;
+          const duty = dutiesCovering(clinic.openTime, clinic.closeTime).find((d) => fitsHardRules(senior, date, d, calculateDutyDurationHours(d)));
+          if (!duty) continue;
+          const free = canBeFreeNurse(senior, roles);
+          placeShift(
+            {
+              id: `asgn-gen-${senior.id}-${date}-SENIOR`,
+              scheduleId: schedule.id,
+              nurseId: senior.id,
+              date,
+              dutyWindowId: duty.id,
+              kind: 'CLINICAL_ROLE',
+              clinicalRoleId: free ? nurseClinicRole.id : 'role-float',
+              locked: false,
+              source: 'GENERATED',
+              note: 'Senior nurse on duty',
+            },
+            isWeekend,
+            false,
+            free
+          );
+          done = true;
+          break;
+        }
+
+        // B: otherwise a senior takes over a generated junior's job; the junior may still float later
+        if (!done) {
+          const juniorShifts = existingToday().filter((a) => a.source === 'GENERATED' && !a.locked);
+          outer: for (const senior of seniors) {
+            for (const asgn of juniorShifts) {
+              const duty = dutyMapGlobal.get(asgn.dutyWindowId);
+              if (!duty) continue;
+              if (asgn.kind === 'DOCTOR' && asgn.doctorId) {
+                if (!canWorkWithDoctor(senior, asgn.doctorId, allDaySessions.find((s) => s.doctorId === asgn.doctorId))) continue;
+              }
+              if (isNurseClinicAssignment(asgn) && !canBeFreeNurse(senior, roles)) continue;
+              if (asgn.kind === 'CLINICAL_ROLE' && asgn.clinicalRoleId) {
+                const role = roles.find((r) => r.id === asgn.clinicalRoleId);
+                if (role?.acronym === 'PHL' && !senior.capabilityIds.includes(role.id)) continue;
+              }
+              if (!fitsHardRules(senior, date, duty, calculateDutyDurationHours(duty))) continue;
+              removeShift(asgn, isWeekend);
+              placeShift(
+                { ...asgn, id: `asgn-gen-${senior.id}-${date}-H1SWAP`, nurseId: senior.id },
+                isWeekend,
+                false,
+                isNurseClinicAssignment(asgn)
+              );
+              break outer;
             }
-            createdCount++;
           }
         }
-      });
+      }
 
-      // End-of-Day Lifecycle: Reset consecutive working days for all nurses who took rest today
-      sortedNurses.forEach((nurse) => {
-        if (!nursesAssignedToday.has(nurse.id)) {
-          const state = nurseStates.get(nurse.id)!;
-          state.consecutiveWorkingDays = 0;
-          state.consecutiveLateEnds = 0;
+      // 5.5 Float shifts: only for nurses who are behind their pace, so nobody falls short of
+      // her hours goal and hours stay spread over the whole period.
+      for (const nurse of dayOrder) {
+        if (resultAssignmentsMap.has(`${nurse.id}_${date}`)) continue;
+        const state = nurseStates.get(nurse.id)!;
+        const limits = nurseTargetMap.get(nurse.id);
+        if (!limits || state.totalDutyHoursEarned >= limits.dutyTarget) continue;
+        // Keep a one day margin under the consecutive days limit while the rule is on
+        if (getConsecutiveDaysWorkedEndingYesterday(nurse.id, date) >= maxConsecutiveDays - 1) continue;
+
+        const poolTiers = [activeDuties.filter((d) => d.isPriority), activeDuties.filter((d) => !d.isPriority), [earlyDuty]];
+        let selected: DutyWindow | null = null;
+        for (const tier of poolTiers) {
+          for (const cand of tier) {
+            const hours = calculateDutyDurationHours(cand);
+            // Behind pace by enough for this shift. Each nurse has her own fixed point
+            // between 0 and one shift, so spare nurses don't all float on the same days;
+            // on the last day anyone short by half a shift or more floats.
+            const threshold = dayIdx === totalDays - 1 ? hours / 2 : hours * floatPhase(nurse.id);
+            if (hoursBehindPace(nurse.id, dayIdx) < threshold) continue;
+            if (maxHoursEnabled && state.totalDutyHoursEarned + hours > limits.maxAllowedHours) continue;
+            if (!fitsHardRules(nurse, date, cand, hours)) continue;
+            selected = cand;
+            break;
+          }
+          if (selected) break;
         }
-      });
+        if (!selected) continue;
+
+        // A nurse with a specialty in her profile floats in that specialty, otherwise in the general pool.
+        const canTakeSpecialty = nurse.isClinicNurse && !isExclusiveNurseClinic(nurse, roles);
+        const specPref = canTakeSpecialty ? nurse.preferences?.find((p) => p.kind === 'SPECIALTY') : undefined;
+        const spec = specPref ? specialties.find((s) => specialtyMatchesPref(specPref.refId, s)) : null;
+        placeShift(
+          {
+            id: `asgn-gen-${nurse.id}-${date}-POOL`,
+            scheduleId: schedule.id,
+            nurseId: nurse.id,
+            date,
+            dutyWindowId: selected.id,
+            kind: spec ? 'SPECIALTY' : 'CLINICAL_ROLE',
+            specialtyId: spec ? spec.id : undefined,
+            clinicalRoleId: spec ? undefined : 'role-float',
+            locked: false,
+            source: 'GENERATED',
+            note: spec
+              ? `${spec.name} Coverage / Float Pool (${selected.isPriority ? 'Priority' : 'Standard'})`
+              : `General Clinic / Float Pool (${selected.isPriority ? 'Priority' : 'Standard'})`,
+          },
+          isWeekend,
+          false,
+          false
+        );
+      }
     }
 
     if (onProgress) {
@@ -2016,8 +1374,6 @@ export class SchedulingEngine {
       });
     }
 
-    const durationMs = Math.round(performance.now() - startTimeMs);
-
     return {
       scheduleId: schedule.id,
       assignments: Array.from(resultAssignmentsMap.values()),
@@ -2025,7 +1381,7 @@ export class SchedulingEngine {
       preservedLocksCount,
       preservedManualCount,
       unmetSlotsCount,
-      generationDurationMs: durationMs,
+      generationDurationMs: Math.round(performance.now() - startTimeMs),
       doctorSessionsTotal,
       doctorPriority1PairingsCount,
       doctorPriority2PairingsCount,
