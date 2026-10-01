@@ -33,7 +33,9 @@ import {
   Rule,
   LeaveEntry,
   LockEntry,
+  WorkingHoursPeriod,
 } from '../../types';
+import { resolveFullTimeTargetHours } from '../../services/reports/hoursAccounting';
 import { getRepository } from '../../services/repository';
 
 interface FairnessModalProps {
@@ -45,6 +47,8 @@ interface FairnessModalProps {
   seniorityLevels: SeniorityLevel[];
   leaveEntries: LeaveEntry[];
   locks: LockEntry[];
+  /** Phase 5: periods supply the authoritative full-time target for the fairness deltas. */
+  workingHoursPeriods?: WorkingHoursPeriod[];
   isOpen: boolean;
   onClose: () => void;
   onApplyAssignments: (updated: Assignment[], note: string) => void;
@@ -81,6 +85,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
   seniorityLevels,
   leaveEntries,
   locks,
+  workingHoursPeriods = [],
   isOpen,
   onClose,
   onApplyAssignments,
@@ -144,7 +149,10 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
       }
 
       const weekendsOff = Math.max(0, totalWeekendDays - weekendsWorked);
-      const targetHours = Math.round((schedule.hoursTargetFullTime * (nurse.contractPercent || 100)) / 100);
+      // Phase 5 parity: the authoritative (period-derived) target.
+      const targetHours = Math.round(
+        (resolveFullTimeTargetHours(schedule, workingHoursPeriods) * (nurse.contractPercent || 100)) / 100
+      );
       const hoursDelta = totalDutyHours - targetHours;
 
       return {
@@ -158,7 +166,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
         lateEndsCount,
       };
     });
-  }, [nurses, assignments, dutyMap, holidayDateSet, schedule]);
+  }, [nurses, assignments, dutyMap, holidayDateSet, schedule, workingHoursPeriods]);
 
   // Compute Overall Balance Spread Score (0 - 100)
   const spreadScore = useMemo(() => {

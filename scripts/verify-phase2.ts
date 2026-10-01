@@ -442,7 +442,7 @@ async function main(): Promise<void> {
     );
     const clippedAccounting = calculateNurseHoursAccounting(
       NURSE, SCHEDULE, clippedRun.assignments, [DUTY_D], [straddling], LEAVE_TYPES,
-      SENIORITY, [], [], []
+      SENIORITY, [], [], [], [], [PERIOD]
     );
     // The validator's period target is 40h and the report's earned total is 40h, so a single
     // HOURS_IMBALANCE finding would prove the two disagree (unclipped leave would read 64h;
@@ -460,9 +460,18 @@ async function main(): Promise<void> {
       0,
       `hours findings: ${clippedHoursFindings.map((f) => f.message).join(' | ')}`
     );
-    // Known divergence (tracked for the reports/period parity phase): the hours report derives
-    // its target from schedule.hoursTargetFullTime, not from the working-hours period.
-    assert.equal(clippedAccounting.targetHours, 160, 'report target unexpectedly changed');
+    // Phase 5 parity: the report now resolves the same authoritative target as the engine and
+    // the validator (the working-hours period wins over schedule.hoursTargetFullTime = 160h).
+    assert.equal(
+      clippedAccounting.targetHours,
+      PERIOD.workingHours,
+      `report target ${clippedAccounting.targetHours}h != period target ${PERIOD.workingHours}h`
+    );
+    assert.equal(
+      clippedAccounting.fullTimeTargetHours,
+      PERIOD.workingHours,
+      'report full-time target is not period-derived'
+    );
 
     const ro = makeLeave({ leaveTypeId: 'lt-ro', startDate: DATES[1], endDate: DATES[2], hoursCredited: 0 });
     const roRun = await runEngine({ locks: [makeDutyLock(DATES[0])], leaveEntries: [ro], leaveTypes: LEAVE_TYPES });

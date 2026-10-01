@@ -33,6 +33,7 @@ import {
   ClinicalRole,
   Specialty,
   NurseHoursQuota,
+  WorkingHoursPeriod,
 } from '../../types';
 import {
   calculateNurseHoursAccounting,
@@ -49,6 +50,8 @@ interface HoursAccountingSheetProps {
   dutyWindows: DutyWindow[];
   leaveEntries: LeaveEntry[];
   leaveTypes: LeaveType[];
+  /** Phase 5: periods supply the authoritative full-time target for report parity. */
+  workingHoursPeriods?: WorkingHoursPeriod[];
   seniorityLevels: SeniorityLevel[];
   doctors: Doctor[];
   roles: ClinicalRole[];
@@ -64,6 +67,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
   dutyWindows,
   leaveEntries,
   leaveTypes,
+  workingHoursPeriods = [],
   seniorityLevels,
   doctors,
   roles,
@@ -90,7 +94,8 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
         doctors,
         roles,
         specialties,
-        quotas
+        quotas,
+        workingHoursPeriods
       )
     );
   }, [

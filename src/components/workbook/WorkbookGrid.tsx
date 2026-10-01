@@ -52,9 +52,13 @@ import {
   PublicHoliday,
   AssignmentKind,
   AssignmentSource,
+  WorkingHoursPeriod,
 } from '../../types';
 import { ValidationReport, ValidationFinding } from '../../services/validation/ScheduleValidator';
-import { calculateDutyDurationHours } from '../../services/reports/hoursAccounting';
+import {
+  calculateDutyDurationHours,
+  resolveFullTimeTargetHours,
+} from '../../services/reports/hoursAccounting';
 import {
   clippedLeaveCredit,
   resolveLeaveHoursPerDay,
@@ -78,6 +82,8 @@ interface WorkbookGridProps {
   specialties: Specialty[];
   holidays: PublicHoliday[];
   validationReport: ValidationReport;
+  /** Phase 5: periods supply the authoritative full-time target for the per-nurse hours chip. */
+  workingHoursPeriods?: WorkingHoursPeriod[];
   currentBlockIndex: number;
   onBlockChange: (index: number) => void;
   onAssignmentsChange: (next: Assignment[]) => void;
@@ -109,6 +115,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   specialties,
   holidays,
   validationReport,
+  workingHoursPeriods = [],
   currentBlockIndex,
   onBlockChange,
   onAssignmentsChange,
@@ -235,7 +242,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     });
 
     const totalHours = dutyHours + leaveHours;
-    const targetHours = Math.round(schedule.hoursTargetFullTime * (nurse.contractPercent / 100));
+    // Phase 5 parity: resolve the same authoritative target as engine/validator/report.
+    const targetHours = Math.round(
+      resolveFullTimeTargetHours(schedule, workingHoursPeriods) * (nurse.contractPercent / 100)
+    );
     const percent = Math.min(100, Math.round((totalHours / targetHours) * 100));
 
     return { totalHours, targetHours, percent, dutyHours, leaveHours };

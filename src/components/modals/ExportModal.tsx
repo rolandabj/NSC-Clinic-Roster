@@ -34,6 +34,7 @@ import {
   ClinicalRole,
   Specialty,
   Rule,
+  WorkingHoursPeriod,
 } from '../../types';
 import {
   exportRosterToExcel,
@@ -44,6 +45,7 @@ import {
 import {
   calculateNurseHoursAccounting,
   calculateDutyDurationHours,
+  resolveFullTimeTargetHours,
   NurseHoursAccounting,
 } from '../../services/reports/hoursAccounting';
 
@@ -55,6 +57,8 @@ interface ExportModalProps {
   dutyWindows: DutyWindow[];
   leaveEntries: LeaveEntry[];
   leaveTypes: LeaveType[];
+  /** Phase 5: periods supply the authoritative full-time target for report/export parity. */
+  workingHoursPeriods?: WorkingHoursPeriod[];
   seniorityLevels: SeniorityLevel[];
   doctors: Doctor[];
   sessions: DoctorSession[];
@@ -80,6 +84,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   dutyWindows,
   leaveEntries,
   leaveTypes,
+  workingHoursPeriods = [],
   seniorityLevels,
   doctors,
   sessions,
@@ -127,6 +132,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       rules,
       versionNumber,
       blockDates: excelScope === 'ACTIVE_BLOCK' ? blockDates : undefined,
+      workingHoursPeriods,
     });
   };
 
@@ -186,7 +192,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       seniorityLevels,
       doctors,
       roles,
-      specialties
+      specialties,
+      [],
+      workingHoursPeriods
     )
   );
 
@@ -493,7 +501,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="text-right font-mono text-[10px]">
                 <p className="font-bold">VERSION: v{versionNumber}</p>
                 <p className="text-slate-600">Printed: {new Date().toLocaleString()}</p>
-                <p className="text-slate-600">Hours Target: {schedule.hoursTargetFullTime}h FT</p>
+                <p className="text-slate-600">
+                  Hours Target: {resolveFullTimeTargetHours(schedule, workingHoursPeriods)}h FT
+                </p>
               </div>
             </div>
 

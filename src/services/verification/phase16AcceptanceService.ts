@@ -16,7 +16,10 @@ import { ScheduleValidator } from '../validation/ScheduleValidator';
 import { RosterPublishService } from '../publish/rosterPublishService';
 import { computeScheduleDiff } from '../history/diffEngine';
 import { exportRosterToExcel, exportRosterToCsvMatrix, exportRosterToCsvLong } from '../export/rosterExportService';
-import { calculateNurseHoursAccounting } from '../reports/hoursAccounting';
+import {
+  calculateNurseHoursAccounting,
+  resolveFullTimeTargetHours,
+} from '../reports/hoursAccounting';
 import { repositoryManager } from '../repository';
 import {
   Schedule,
@@ -35,6 +38,7 @@ import {
   PublicHoliday,
   ScheduleVersion,
   ShareLink,
+  WorkingHoursPeriod,
 } from '../../types';
 
 export interface AcceptanceCheckResult {
@@ -90,6 +94,7 @@ export class Phase16AcceptanceService {
       holidays,
       versions,
       shareLinks,
+      workingHoursPeriods,
     ] = await Promise.all([
       repo.list('schedules'),
       repo.list('assignments'),
@@ -107,6 +112,7 @@ export class Phase16AcceptanceService {
       repo.list('holidays'),
       repo.list('versions'),
       repo.list('shareLinks'),
+      repo.list('workingHoursPeriods'),
     ]);
 
     const activeSchedule =
@@ -166,7 +172,8 @@ export class Phase16AcceptanceService {
         seniorityLevels,
         doctors,
         roles,
-        specialties
+        specialties,
+        workingHoursPeriods
       )
     );
 
@@ -234,7 +241,8 @@ export class Phase16AcceptanceService {
         seniorityLevels,
         doctors,
         roles,
-        specialties
+        specialties,
+        workingHoursPeriods
       )
     );
 
@@ -580,7 +588,8 @@ export class Phase16AcceptanceService {
     seniorityLevels: SeniorityLevel[],
     doctors: Doctor[],
     roles: ClinicalRole[],
-    specialties: Specialty[]
+    specialties: Specialty[],
+    workingHoursPeriods: WorkingHoursPeriod[] = []
   ): Promise<AcceptanceCheckResult> {
     const t0 = performance.now();
     const subchecks: { name: string; passed: boolean; message: string }[] = [];
@@ -615,7 +624,9 @@ export class Phase16AcceptanceService {
       seniorityLevels,
       doctors,
       roles,
-      specialties
+      specialties,
+      [],
+      workingHoursPeriods
     );
 
     const leaveCalculationWorking = accounting.leaveHours >= 0;
@@ -939,15 +950,20 @@ export class Phase16AcceptanceService {
     seniorityLevels: SeniorityLevel[],
     doctors: Doctor[],
     roles: ClinicalRole[],
-    specialties: Specialty[]
+    specialties: Specialty[],
+    workingHoursPeriods: WorkingHoursPeriod[] = []
   ): Promise<AcceptanceCheckResult> {
     const t0 = performance.now();
     const subchecks: { name: string; passed: boolean; message: string }[] = [];
 
+    // Phase 5: the authoritative target is period-derived (schedule fallback) — the same
+    // resolver the report uses, so the acceptance expectations can no longer drift from it.
+    const resolvedFullTime = resolveFullTimeTargetHours(schedule, workingHoursPeriods);
+
     // Full-time nurse target
     const fullTimeNurse = nurses.find((n) => n.contractPercent === 100);
-    const expectedFullTime = schedule.hoursTargetFullTime;
-    const fullTimeTarget = Math.round(schedule.hoursTargetFullTime * ((fullTimeNurse?.contractPercent || 100) / 100));
+    const expectedFullTime = resolvedFullTime;
+    const fullTimeTarget = Math.round(resolvedFullTime * ((fullTimeNurse?.contractPercent || 100) / 100));
     const fullTimePassed = fullTimeTarget === expectedFullTime;
 
     subchecks.push({
@@ -958,8 +974,8 @@ export class Phase16AcceptanceService {
 
     // Part-time nurse target (50%)
     const partTimeNurse = nurses.find((n) => n.contractPercent === 50);
-    const expectedPartTime = Math.round(schedule.hoursTargetFullTime * 0.5);
-    const partTimeTarget = Math.round(schedule.hoursTargetFullTime * ((partTimeNurse?.contractPercent || 50) / 100));
+    const expectedPartTime = Math.round(resolvedFullTime * 0.5);
+    const partTimeTarget = Math.round(resolvedFullTime * ((partTimeNurse?.contractPercent || 50) / 100));
     const partTimePassed = partTimeTarget === expectedPartTime;
 
     subchecks.push({
@@ -979,7 +995,9 @@ export class Phase16AcceptanceService {
       seniorityLevels,
       doctors,
       roles,
-      specialties
+      specialties,
+      [],
+      workingHoursPeriods
     );
     subchecks.push({
       name: 'Hours Pace Status Indicator',

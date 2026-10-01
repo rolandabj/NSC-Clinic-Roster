@@ -63,6 +63,7 @@ import {
 } from '../../types';
 import { SchedulingEngine } from '../../services/engine/SchedulingEngine';
 import { calculateWorkingHoursForDateRange } from '../../services/periods/workingHoursPeriodService';
+import { resolveFullTimeTargetHours } from '../../services/reports/hoursAccounting';
 import {
   GenerationPreflightSummary,
   GenerationProgress,
@@ -598,13 +599,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     }
   };
 
-  // Helper to determine Dedicated Period or Prorated chip for a schedule
+  // Helper to determine Dedicated Period or Prorated chip for a schedule.
+  // Phase 5: the chip shows the authoritative (period-derived) target, so it can no longer
+  // disagree with the engine, validator, hours report and export.
   const getSchedulePeriodChip = (sched: Schedule) => {
+    const resolvedTarget = resolveFullTimeTargetHours(sched, workingHoursPeriods);
     if (sched.periodName) {
       const isExact = !sched.periodName.toLowerCase().includes('prorated');
       return {
-        label: isExact ? `Period: ${sched.periodName} · ${sched.hoursTargetFullTime}h` : sched.periodName,
-        tooltip: `Period target: ${sched.hoursTargetFullTime}h FT contracted hours`,
+        label: isExact ? `Period: ${sched.periodName} · ${resolvedTarget}h` : sched.periodName,
+        tooltip: `Period target: ${resolvedTarget}h FT contracted hours`,
         isExact,
       };
     }
@@ -613,21 +617,21 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       const calc = calculateWorkingHoursForDateRange(sched.startDate, sched.endDate, workingHoursPeriods);
       if (calc.isExactMatch && calc.matchedPeriod) {
         return {
-          label: `Period: ${calc.matchedPeriod.name} · ${sched.hoursTargetFullTime || calc.targetHours}h`,
-          tooltip: `Exact match for dedicated cycle ${calc.matchedPeriod.name} (${calc.targetHours}h FT)`,
+          label: `Period: ${calc.matchedPeriod.name} · ${resolvedTarget}h`,
+          tooltip: `Exact match for dedicated cycle ${calc.matchedPeriod.name} (${resolvedTarget}h FT)`,
           isExact: true,
         };
       }
       return {
-        label: `${calc.totalScheduleDays}d Prorated · ${sched.hoursTargetFullTime || calc.targetHours}h`,
+        label: `${calc.totalScheduleDays}d Prorated · ${resolvedTarget}h`,
         tooltip: calc.description,
         isExact: false,
       };
     }
 
     return {
-      label: `${sched.hoursTargetFullTime || 160}h Target`,
-      tooltip: `Standard target: ${sched.hoursTargetFullTime || 160} working hours`,
+      label: `${resolvedTarget}h Target`,
+      tooltip: `Standard target: ${resolvedTarget} working hours`,
       isExact: false,
     };
   };
@@ -1440,6 +1444,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 specialties={specialties}
                 holidays={holidays}
                 validationReport={validationReport}
+                workingHoursPeriods={workingHoursPeriods}
                 currentBlockIndex={selectedBlockIndex}
                 onBlockChange={(idx) => setSelectedBlockIndex(idx)}
                 onAssignmentsChange={handleAssignmentsChange}
@@ -1512,6 +1517,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 schedule={activeSchedule}
                 assignments={assignments}
                 nurses={nurses}
+                workingHoursPeriods={workingHoursPeriods}
                 dutyWindows={dutyWindows}
                 leaveEntries={leaveEntries}
                 leaveTypes={leaveTypes}
@@ -2060,6 +2066,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           roles={roles}
           specialties={specialties}
           rules={rules}
+          workingHoursPeriods={workingHoursPeriods}
           currentBlockIndex={selectedBlockIndex}
           blockDates={blockDates}
           versionNumber={activeSchedule.activeVersionNumber || 1}
@@ -2164,7 +2171,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          {formatDate(s.startDate)} to {formatDate(s.endDate)} ({s.blockWeeks * 7}d blocks · {s.hoursTargetFullTime}h target)
+                          {formatDate(s.startDate)} to {formatDate(s.endDate)} ({s.blockWeeks * 7}d blocks · {resolveFullTimeTargetHours(s, workingHoursPeriods)}h target)
                         </p>
                         {(() => {
                           const chip = getSchedulePeriodChip(s);
@@ -2300,6 +2307,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           seniorityLevels={seniorityLevels}
           leaveEntries={leaveEntries}
           locks={locks}
+          workingHoursPeriods={workingHoursPeriods}
           isOpen={isFairnessModalOpen}
           onClose={() => setIsFairnessModalOpen(false)}
           onApplyAssignments={(updated, note) => {

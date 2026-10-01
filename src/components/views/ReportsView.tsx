@@ -48,10 +48,12 @@ import {
   ClinicalRole,
   Specialty,
   NurseHoursQuota,
+  WorkingHoursPeriod,
 } from '../../types';
 import {
   NurseHoursAccounting,
   ClinicHoursMetrics,
+  resolveFullTimeTargetHours,
   calculateNurseHoursAccounting,
   calculateClinicHoursMetrics,
   HoursAccountingStatus,
@@ -89,6 +91,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
   const [roles, setClinicalRoles] = useState<ClinicalRole[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [quotas, setQuotas] = useState<NurseHoursQuota[]>([]);
+  const [workingHoursPeriods, setWorkingHoursPeriods] = useState<WorkingHoursPeriod[]>([]);
 
   // Navigation & View State
   const [activeTab, setActiveTab] = useState<TabMode>('ledger');
@@ -122,6 +125,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
         crList,
         spList,
         qList,
+        whpList,
       ] = await Promise.all([
         repo.list('schedules'),
         repo.list('assignments'),
@@ -134,6 +138,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
         repo.list('clinicalRoles'),
         repo.list('specialties'),
         repo.list('quotas'),
+        repo.list('workingHoursPeriods'),
       ]);
 
       const uniqueSchedules = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
@@ -146,6 +151,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
       setClinicalRoles(crList);
       setSpecialties(spList);
       setQuotas(qList);
+      setWorkingHoursPeriods(whpList);
 
       const activeNursesList = nList.filter((n) => n.active);
       setNurses(activeNursesList);
@@ -196,7 +202,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
         doctors,
         roles,
         specialties,
-        quotas
+        quotas,
+        workingHoursPeriods
       )
     );
   }, [
@@ -211,6 +218,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
     roles,
     specialties,
     quotas,
+    workingHoursPeriods,
   ]);
 
   // Compute high-level clinic metrics & fairness equity indices
@@ -463,8 +471,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
             </h1>
           </div>
           <p className="text-xs text-slate-500 mt-0.5 font-sans">
-            {activeSchedule?.hoursTargetFullTime
-              ? `Audit contracted targets (${activeSchedule.hoursTargetFullTime}h full-time / ${Math.round(activeSchedule.hoursTargetFullTime * 0.5)}h half-time), duty shift hours, credited leave hours, and weekend equity.`
+            {activeSchedule
+              ? `Audit contracted targets (${resolveFullTimeTargetHours(activeSchedule, workingHoursPeriods)}h full-time / ${Math.round(resolveFullTimeTargetHours(activeSchedule, workingHoursPeriods) * 0.5)}h half-time), duty shift hours, credited leave hours, and weekend equity.`
               : 'Audit contracted targets for full-time and part-time staff, duty shift hours, credited leave hours, and weekend equity.'}
           </p>
         </div>

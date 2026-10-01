@@ -20,10 +20,12 @@ import {
   ClinicalRole,
   Specialty,
   Rule,
+  WorkingHoursPeriod,
 } from '../../types';
 import {
   calculateNurseHoursAccounting,
   calculateDutyDurationHours,
+  resolveFullTimeTargetHours,
   NurseHoursAccounting,
 } from '../reports/hoursAccounting';
 
@@ -44,6 +46,8 @@ export interface RosterExportOptions {
   versionNumber?: number;
   blockIndex?: number; // Optional specific block export
   blockDates?: string[]; // Optional specific block dates
+  /** Phase 5: authoritative full-time target source (periods win over schedule fallback). */
+  workingHoursPeriods?: WorkingHoursPeriod[];
 }
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -108,7 +112,8 @@ export function exportRosterToExcel(options: RosterExportOptions) {
 
   // Title / Metadata Banner Rows
   rosterAoa.push([clinicName.toUpperCase(), '', '', '', '', `SCHEDULE: ${schedule.name}`, '', '', `VERSION: v${versionNumber}`]);
-  rosterAoa.push([`Period: ${schedule.startDate} to ${schedule.endDate}`, '', '', '', '', `Target: ${schedule.hoursTargetFullTime}h Full-Time`, '', '', `Exported: ${new Date().toLocaleString()}`]);
+  // Phase 5: the header shows the authoritative (period-derived) target, matching the Hours sheet.
+  rosterAoa.push([`Period: ${schedule.startDate} to ${schedule.endDate}`, '', '', '', '', `Target: ${resolveFullTimeTargetHours(schedule, options.workingHoursPeriods || [])}h Full-Time`, '', '', `Exported: ${new Date().toLocaleString()}`]);
   rosterAoa.push([]); // blank separator
 
   // Header Row: Staff info + Dates
@@ -133,7 +138,9 @@ export function exportRosterToExcel(options: RosterExportOptions) {
       seniorityLevels,
       doctors,
       roles,
-      specialties
+      specialties,
+      [],
+      options.workingHoursPeriods || []
     );
     nurseAccountingMap.set(nurse.id, acct);
   });

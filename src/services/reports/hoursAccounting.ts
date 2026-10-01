@@ -17,8 +17,10 @@ import {
   ClinicalRole,
   Specialty,
   NurseHoursQuota,
+  WorkingHoursPeriod,
 } from '../../types';
 import { resolveLeaveHoursPerDay } from '../leave/leaveCredit';
+import { calculateWorkingHoursForDateRange } from '../periods/workingHoursPeriodService';
 
 export type HoursAccountingStatus =
   | 'OPTIMAL'        // 90% - 110%
@@ -167,6 +169,25 @@ export function calculateDutyDurationHours(duty?: DutyWindow): number {
 /**
  * Calculates hours accounting and complete timesheet timeline for a single nurse.
  */
+/**
+ * Resolves the authoritative full-time hours target for a schedule (Phase 5 parity).
+ * Working-hours periods (Settings → dedicated periods) win; `schedule.hoursTargetFullTime`
+ * is the fallback. This is the exact order the engine and the validator use, so reports,
+ * exports and the UI can no longer disagree with them.
+ */
+export function resolveFullTimeTargetHours(
+  schedule: Schedule,
+  workingHoursPeriods: WorkingHoursPeriod[] = []
+): number {
+  let target = 0;
+  if (workingHoursPeriods.length > 0 && schedule.startDate && schedule.endDate) {
+    const calc = calculateWorkingHoursForDateRange(schedule.startDate, schedule.endDate, workingHoursPeriods);
+    if (calc.targetHours > 0) target = calc.targetHours;
+  }
+  if (!target || target <= 0) target = schedule.hoursTargetFullTime || 160;
+  return target;
+}
+
 export function calculateNurseHoursAccounting(
   nurse: Nurse,
   schedule: Schedule,
@@ -178,7 +199,8 @@ export function calculateNurseHoursAccounting(
   doctors: Doctor[],
   roles: ClinicalRole[],
   specialties: Specialty[],
-  quotas: NurseHoursQuota[] = []
+  quotas: NurseHoursQuota[] = [],
+  workingHoursPeriods: WorkingHoursPeriod[] = []
 ): NurseHoursAccounting {
   const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
   const leaveTypeMap = new Map(leaveTypes.map((l) => [l.id, l]));
@@ -188,7 +210,9 @@ export function calculateNurseHoursAccounting(
   const specialtyMap = new Map(specialties.map((s) => [s.id, s]));
 
   const seniority = seniorityMap.get(nurse.seniorityLevelId);
-  const fullTimeTargetHours = schedule.hoursTargetFullTime || 160;
+  // Phase 5: parity with the engine and validator — the working-hours period supplies the
+  // full-time target; `schedule.hoursTargetFullTime` is only the fallback.
+  const fullTimeTargetHours = resolveFullTimeTargetHours(schedule, workingHoursPeriods);
   const targetHours = Math.round(fullTimeTargetHours * (nurse.contractPercent / 100));
 
   // Filter nurse assignments in schedule period
