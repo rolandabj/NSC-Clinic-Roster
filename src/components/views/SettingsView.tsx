@@ -758,8 +758,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       await repo.bulkUpsert('seniorityLevels', updatedWithRanks);
       triggerSaveNotification('Seniority hierarchy reordered and saved.');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save seniority ranks:', err);
+      alert(`The new seniority order was not saved: ${err?.message || err}`);
       loadData();
     }
   };

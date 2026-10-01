@@ -417,9 +417,11 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
               <AlertTriangle className="w-4 h-4" />
             </span>
             <div className="leading-tight">
-              <strong className="font-semibold mr-1">Firestore Free Daily Write Quota Reached:</strong>
+              <strong className="font-semibold mr-1">Firestore Free Daily Quota Reached:</strong>
               <span className="text-amber-800/90 dark:text-amber-300/90">
-                The database reached the Spark free tier limit (20,000 writes/day). The app remains operational in <strong>read-only mode</strong>. All clinical schedules and nurse data are preserved. Write operations will resume automatically tomorrow when Google Cloud resets the daily quota.
+                The database reached its free daily limit. Saved data is safe, but <strong>new changes are not being saved</strong>. Screens show
+                &quot;Not saved&quot; for anything that could not be stored, and the roster retries automatically after the quota resets at
+                midnight Pacific time. Upgrading the Firebase plan removes the limit.
               </span>
             </div>
           </div>

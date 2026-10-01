@@ -85,7 +85,9 @@ export class FirestoreRepository implements IRepository {
     } catch (err: any) {
       quotaTracker.notifyQuotaExceeded(err);
       console.warn(`[FirestoreRepository] list failed for ${colName}:`, err?.message || err);
-      return [];
+      // Never pretend a failed read is an empty collection: screens would show
+      // an empty roster and a later save could delete the real records.
+      throw err;
     }
   }
 
@@ -101,7 +103,7 @@ export class FirestoreRepository implements IRepository {
     } catch (err: any) {
       quotaTracker.notifyQuotaExceeded(err);
       console.warn(`[FirestoreRepository] get failed for ${colName}/${id}:`, err?.message || err);
-      return null;
+      throw err;
     }
   }
 
@@ -109,9 +111,7 @@ export class FirestoreRepository implements IRepository {
     colName: T,
     data: Omit<EntityForCollection<T>, 'id'> & { id?: string }
   ): Promise<EntityForCollection<T>> {
-    if (quotaTracker.isQuotaExceeded()) {
-      throw new Error('Firestore daily write quota reached. Operation paused until quota resets.');
-    }
+    quotaTracker.assertWritable();
     const docId = data.id || uuidv4();
     const docRef = doc(this.db, colName, docId);
     const entity = sanitizePayload({ ...data, id: docId }) as EntityForCollection<T>;
@@ -129,9 +129,7 @@ export class FirestoreRepository implements IRepository {
     id: string,
     data: Partial<EntityForCollection<T>>
   ): Promise<EntityForCollection<T>> {
-    if (quotaTracker.isQuotaExceeded()) {
-      throw new Error('Firestore daily write quota reached. Operation paused until quota resets.');
-    }
+    quotaTracker.assertWritable();
     const docRef = doc(this.db, colName, id);
     const cleanData = sanitizePayload(data);
     try {
@@ -148,9 +146,7 @@ export class FirestoreRepository implements IRepository {
     colName: T,
     id: string
   ): Promise<void> {
-    if (quotaTracker.isQuotaExceeded()) {
-      throw new Error('Firestore daily write quota reached. Operation paused until quota resets.');
-    }
+    quotaTracker.assertWritable();
     const docRef = doc(this.db, colName, id);
     try {
       await deleteDoc(docRef);
@@ -172,10 +168,8 @@ export class FirestoreRepository implements IRepository {
     options?: { replace?: boolean }
   ): Promise<void> {
     if (!items || items.length === 0) return;
-    if (quotaTracker.isQuotaExceeded()) {
-      console.warn('[FirestoreRepository] Skipping bulkUpsert: write quota currently exceeded.');
-      return;
-    }
+    // Fail loudly instead of skipping, so the caller can tell the user nothing was saved.
+    quotaTracker.assertWritable();
     try {
       for (let i = 0; i < items.length; i += BATCH_LIMIT) {
         const chunk = items.slice(i, i + BATCH_LIMIT);
@@ -201,10 +195,7 @@ export class FirestoreRepository implements IRepository {
     ids: string[]
   ): Promise<void> {
     if (!ids || ids.length === 0) return;
-    if (quotaTracker.isQuotaExceeded()) {
-      console.warn('[FirestoreRepository] Skipping bulkRemove: write quota currently exceeded.');
-      return;
-    }
+    quotaTracker.assertWritable();
     try {
       for (let i = 0; i < ids.length; i += BATCH_LIMIT) {
         const chunk = ids.slice(i, i + BATCH_LIMIT);

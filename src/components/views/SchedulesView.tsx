@@ -40,6 +40,7 @@ import {
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
 import { syncScheduleAssignments } from '../../services/repository/assignmentSync';
+import { quotaTracker, QuotaExceededError } from '../../services/firebase/quotaTracker';
 import {
   Schedule,
   ScheduleVersion,
@@ -171,6 +172,15 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [lastAutosavedAt, setLastAutosavedAt] = useState<string | null>(null);
+  // Save status shown in the toolbar: saving, saved, or why the last save failed.
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // Changes are only written after the workspace loaded completely; otherwise a
+  // partly loaded (empty) roster could overwrite the real one.
+  const workspaceLoadedRef = useRef(false);
+  // The latest roster that could not be saved, retried by the autosave timer.
+  const pendingSaveRef = useRef<{ scheduleId: string; assignments: Assignment[] } | null>(null);
   const [workingHoursPeriods, setWorkingHoursPeriods] = useState<WorkingHoursPeriod[]>([]);
 
   // Undo/Redo stack (50 steps)
@@ -198,6 +208,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   const loadData = async () => {
     try {
+      setLoadError(null);
       const [
         schedList,
         asgnList,
@@ -302,8 +313,43 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         );
         setValidationReport(report);
       }
-    } catch (err) {
+      workspaceLoadedRef.current = true;
+    } catch (err: any) {
       console.error('Error loading schedule workspace:', err);
+      workspaceLoadedRef.current = false;
+      setLoadError(err?.message || 'The schedule workspace could not be loaded.');
+    }
+  };
+
+  /**
+   * Saves a roster and reports the outcome in the toolbar. A failed save is
+   * kept and retried by the autosave timer; nothing is silently dropped.
+   */
+  const persistAssignments = async (scheduleId: string, list: Assignment[]): Promise<boolean> => {
+    if (!workspaceLoadedRef.current) {
+      setSaveError('Not saved: the workspace did not load completely. Reload the page before editing.');
+      return false;
+    }
+    setIsSaving(true);
+    try {
+      await syncScheduleAssignments(repo, scheduleId, list);
+      if (pendingSaveRef.current?.scheduleId === scheduleId) pendingSaveRef.current = null;
+      setSaveError(null);
+      setLastAutosavedAt(
+        new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      );
+      return true;
+    } catch (err: any) {
+      console.error('Failed to save assignments:', err);
+      pendingSaveRef.current = { scheduleId, assignments: list };
+      setSaveError(
+        err instanceof QuotaExceededError
+          ? err.message
+          : `Not saved: ${err?.message || 'the database could not be reached'}. Retrying automatically.`
+      );
+      return false;
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -311,28 +357,18 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     loadData();
   }, []);
 
-  // Autosave draft every 30 seconds to persistence (Phase 10)
+  // Every edit is saved immediately. This timer only retries a save that
+  // failed (for example while offline or when the daily quota is used up), so
+  // it costs no database reads while everything is saved.
   useEffect(() => {
-    if (!activeSchedule) return;
-
-    const autosaveTimer = setInterval(async () => {
-      try {
-        if (activeSchedule) {
-          await syncScheduleAssignments(repo, activeSchedule.id, assignments);
-          const timeStr = new Date().toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          });
-          setLastAutosavedAt(timeStr);
-        }
-      } catch (err) {
-        console.error('Autosave error:', err);
+    const retryTimer = setInterval(() => {
+      const pending = pendingSaveRef.current;
+      if (pending && !quotaTracker.isQuotaExceeded()) {
+        void persistAssignments(pending.scheduleId, pending.assignments);
       }
     }, 30000);
-
-    return () => clearInterval(autosaveTimer);
-  }, [activeSchedule, assignments]);
+    return () => clearInterval(retryTimer);
+  }, []);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -350,9 +386,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
     // Save to repository and clean up any deleted assignments
     if (activeSchedule) {
-      syncScheduleAssignments(repo, activeSchedule.id, next).catch((err) => {
-        console.error('Failed to sync assignments on change:', err);
-      });
+      void persistAssignments(activeSchedule.id, next);
 
       if (validationTimerRef.current) {
         clearTimeout(validationTimerRef.current);
@@ -380,6 +414,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   const handleLocksChange = async (nextLocks: LockEntry[]) => {
     setLocks(nextLocks);
+    if (!workspaceLoadedRef.current) {
+      setSaveError('Not saved: the workspace did not load completely. Reload the page before editing.');
+      return;
+    }
     try {
       const existing = await repo.list('locks');
       const nextIds = new Set(nextLocks.map((l) => l.id));
@@ -409,13 +447,20 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         );
         setValidationReport(report);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to sync locks:', err);
+      setSaveError(
+        err instanceof QuotaExceededError ? err.message : `Lock change not saved: ${err?.message || 'database unavailable'}.`
+      );
     }
   };
 
   const handleLeaveEntriesChange = async (nextLeaves: LeaveEntry[]) => {
     setLeaveEntries(nextLeaves);
+    if (!workspaceLoadedRef.current) {
+      setSaveError('Not saved: the workspace did not load completely. Reload the page before editing.');
+      return;
+    }
     try {
       const existing = await repo.list('leaveEntries');
       const nextIds = new Set(nextLeaves.map((l) => l.id));
@@ -445,8 +490,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         );
         setValidationReport(report);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to sync leave entries:', err);
+      setSaveError(
+        err instanceof QuotaExceededError ? err.message : `Leave change not saved: ${err?.message || 'database unavailable'}.`
+      );
     }
   };
 
@@ -741,7 +789,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           finalAssignments = finalAssignments.filter((a) => a.source === 'LOCK');
         }
 
-        await syncScheduleAssignments(repo, activeSchedule.id, finalAssignments);
+        await persistAssignments(activeSchedule.id, finalAssignments);
         setAssignments(finalAssignments);
 
         const report = ScheduleValidator.validate(
@@ -833,7 +881,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         );
       }
 
-      await syncScheduleAssignments(repo, effectiveSchedule.id, result.assignments);
+      await persistAssignments(effectiveSchedule.id, result.assignments);
       setAssignments(result.assignments);
 
       const report = ScheduleValidator.validate(
@@ -982,7 +1030,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     setRedoStack((prev) => [assignments, ...prev].slice(0, 50));
     setUndoStack(nextUndo);
 
-    await syncScheduleAssignments(repo, activeSchedule.id, previous);
+    await persistAssignments(activeSchedule.id, previous);
     setAssignments(previous);
     triggerToast('Undo applied.');
   };
@@ -995,7 +1043,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     setUndoStack((prev) => [assignments, ...prev].slice(0, 50));
     setRedoStack(nextRedo);
 
-    await syncScheduleAssignments(repo, activeSchedule.id, next);
+    await persistAssignments(activeSchedule.id, next);
     setAssignments(next);
     triggerToast('Redo applied.');
   };
@@ -1225,13 +1273,44 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             <span>Swap</span>
           </button>
 
-          {lastAutosavedAt && (
-            <span
-              className="text-[10px] text-slate-400 font-mono hidden md:inline"
-              title="Draft assignments automatically saved every 30s"
-            >
-              Autosaved {lastAutosavedAt}
+          {loadError ? (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">
+              <span>Could not load the roster ({loadError}). Changes will not be saved.</span>
+              <button onClick={() => loadData()} className="underline cursor-pointer">
+                Reload
+              </button>
             </span>
+          ) : saveError ? (
+            <span
+              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1 max-w-md"
+              role="alert"
+            >
+              <span className="truncate" title={saveError}>{saveError}</span>
+              {pendingSaveRef.current && (
+                <button
+                  onClick={() => {
+                    const pending = pendingSaveRef.current;
+                    if (!pending) return;
+                    quotaTracker.reset();
+                    void persistAssignments(pending.scheduleId, pending.assignments);
+                  }}
+                  className="underline cursor-pointer shrink-0"
+                >
+                  Retry now
+                </button>
+              )}
+            </span>
+          ) : isSaving ? (
+            <span className="text-[10px] text-slate-400 font-mono hidden md:inline">Saving...</span>
+          ) : (
+            lastAutosavedAt && (
+              <span
+                className="text-[10px] text-slate-400 font-mono hidden md:inline"
+                title="Every change is saved to the database as you make it"
+              >
+                Saved {lastAutosavedAt}
+              </span>
+            )
           )}
         </div>
 
