@@ -24,6 +24,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { CollectionName, EntityForCollection } from '../../types';
 import { IRepository, SubscribeCallback, Unsubscribe } from './IRepository';
 import { quotaTracker } from '../firebase/quotaTracker';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { LiveCollectionCache } from './liveCollectionCache';
 
 // Firestore allows at most 500 writes in one batch; stay safely below it.
 const BATCH_LIMIT = 450;
@@ -58,6 +60,7 @@ function sanitizePayload(obj: any): any {
 export class FirestoreRepository implements IRepository {
   private db: Firestore;
   private app: FirebaseApp;
+  private cache: LiveCollectionCache;
 
   constructor(config: FirebaseClientConfig) {
     if (!getApps().length) {
@@ -71,12 +74,25 @@ export class FirestoreRepository implements IRepository {
     } else {
       this.db = getFirestore(this.app);
     }
+    this.cache = new LiveCollectionCache(this.db);
+    // A cached copy belongs to the user who could read it: drop it whenever
+    // the signed in user changes, so the next user's reads go through the rules.
+    let lastUid: string | null | undefined;
+    onAuthStateChanged(getAuth(this.app), (user) => {
+      const uid = user?.uid ?? null;
+      if (uid !== lastUid) {
+        lastUid = uid;
+        this.cache.reset();
+      }
+    });
   }
 
   async list<T extends CollectionName>(
     colName: T,
     filter?: { field: string; operator: '==' | '!='; value: any }
   ): Promise<EntityForCollection<T>[]> {
+    const cached = await this.cache.list(colName, filter);
+    if (cached) return cached as EntityForCollection<T>[];
     try {
       const colRef = collection(this.db, colName);
       const q = filter ? query(colRef, where(filter.field, filter.operator, filter.value)) : query(colRef);
@@ -95,6 +111,8 @@ export class FirestoreRepository implements IRepository {
     colName: T,
     id: string
   ): Promise<EntityForCollection<T> | null> {
+    const cached = this.cache.getDoc(colName, id);
+    if (cached) return cached.item as EntityForCollection<T> | null;
     try {
       const docRef = doc(this.db, colName, id);
       const snap = await getDoc(docRef);
@@ -134,6 +152,8 @@ export class FirestoreRepository implements IRepository {
     const cleanData = sanitizePayload(data);
     try {
       await setDoc(docRef, cleanData, { merge: true });
+      const cached = this.cache.getDoc(colName, id);
+      if (cached?.item) return cached.item as EntityForCollection<T>;
       const snap = await getDoc(docRef);
       return { id: snap.id, ...snap.data() } as EntityForCollection<T>;
     } catch (err: any) {

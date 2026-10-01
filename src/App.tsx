@@ -7,13 +7,19 @@
  * any clinical rosters, scheduling sheets, or management views.
  */
 
-import React, { useEffect, useState } from 'react';
-import { AppShell } from './components/layout/AppShell';
+import React, { useEffect, useState, Suspense, lazy } from 'react';
 import { LoginPage } from './components/auth/LoginPage';
-import { PublishedRosterView } from './components/views/PublishedRosterView';
+import { PageLoading } from './components/common/PageLoading';
 import { AcknowledgePage } from './components/views/AcknowledgePage';
 import { authService, UserProfile } from './services/auth/authService';
 import { Building2, Loader2 } from 'lucide-react';
+
+// The signed in app and the public roster page load on demand, so the sign in
+// screen and public links don't download the whole app first.
+const AppShell = lazy(() => import('./components/layout/AppShell').then((m) => ({ default: m.AppShell })));
+const PublishedRosterView = lazy(() =>
+  import('./components/views/PublishedRosterView').then((m) => ({ default: m.PublishedRosterView }))
+);
 
 function parsePublicLink(): { kind: 'published' | 'ack'; token: string; nurse?: string } | null {
   if (typeof window === 'undefined') return null;
@@ -98,13 +104,15 @@ export default function App() {
     }
     if (publicLink?.kind === 'published') {
       return (
-        <PublishedRosterView
-          shareToken={publicLink.token}
-          nurseIdParam={publicLink.nurse}
-          onExitPreview={() => {
-            window.location.href = window.location.origin;
-          }}
-        />
+        <Suspense fallback={<PageLoading />}>
+          <PublishedRosterView
+            shareToken={publicLink.token}
+            nurseIdParam={publicLink.nurse}
+            onExitPreview={() => {
+              window.location.href = window.location.origin;
+            }}
+          />
+        </Suspense>
       );
     }
   }
@@ -115,7 +123,11 @@ export default function App() {
   }
 
   // 4. Authenticated session: render AppShell
-  return <AppShell currentUser={currentUser} />;
+  return (
+    <Suspense fallback={<PageLoading label="Opening the roster…" />}>
+      <AppShell currentUser={currentUser} />
+    </Suspense>
+  );
 }
 
 

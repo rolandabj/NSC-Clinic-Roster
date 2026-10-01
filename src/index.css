@@ -1,5 +1,39 @@
 @import "tailwindcss";
 
+/* The app has a light theme only. Without this, Tailwind applies the few
+   dark: classes whenever the computer is in dark mode, which darkened the top
+   bar and a few dialogs while everything else stayed light. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Entry animations used across the app (animate-in fade-in zoom-in-95 ...),
+   defined here so no extra package is needed. */
+@keyframes app-enter {
+  from {
+    opacity: var(--app-enter-opacity, 1);
+    transform: translate3d(var(--app-enter-x, 0), var(--app-enter-y, 0), 0) scale(var(--app-enter-scale, 1));
+  }
+}
+@utility animate-in {
+  animation: app-enter 150ms ease-out;
+}
+@utility fade-in {
+  --app-enter-opacity: 0;
+}
+@utility zoom-in-95 {
+  --app-enter-scale: 0.95;
+}
+@utility slide-in-from-top-2 {
+  --app-enter-y: -0.5rem;
+}
+@utility slide-in-from-right {
+  --app-enter-x: 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-in {
+    animation: none;
+  }
+}
+
 @layer base {
   :root {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

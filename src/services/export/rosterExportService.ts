@@ -7,7 +7,7 @@
  */
 
 import { isWeekendDay } from '../../utils/weekend';
-import * as XLSX from 'xlsx';
+import { CsvValue, downloadCsv, toCsv } from '../../utils/csv';
 import {
   Schedule,
   Assignment,
@@ -73,7 +73,9 @@ export function getScheduleDates(startDate: string, endDate: string): string[] {
 /**
  * 1. Excel (.xlsx) Multi-Sheet Workbook Export
  */
-export function exportRosterToExcel(options: RosterExportOptions) {
+/** Builds and downloads the workbook. The Excel library loads only when this runs. */
+export async function exportRosterToExcel(options: RosterExportOptions) {
+  const XLSX = await import('xlsx');
   const {
     clinicName,
     schedule,
@@ -448,14 +450,10 @@ export function exportRosterToCsvMatrix(options: RosterExportOptions): string {
   const leaveTypeMap = new Map(leaveTypes.map((l) => [l.id, l]));
 
   const headers = ['Employee Code', 'Full Name', 'Contract %', ...dates];
-  const lines: string[] = [headers.join(',')];
+  const rows: CsvValue[][] = [headers];
 
   nurses.forEach((nurse) => {
-    const row: string[] = [
-      `"${nurse.employeeCode}"`,
-      `"${nurse.fullName}"`,
-      `${nurse.contractPercent}%`,
-    ];
+    const row: CsvValue[] = [nurse.employeeCode, nurse.fullName, `${nurse.contractPercent}%`];
 
     dates.forEach((dateStr) => {
       const asgn = assignments.find((a) => a.nurseId === nurse.id && a.date === dateStr);
@@ -465,7 +463,7 @@ export function exportRosterToCsvMatrix(options: RosterExportOptions): string {
 
       if (leave) {
         const lt = leaveTypeMap.get(leave.leaveTypeId);
-        row.push(`"${lt?.acronym || 'LEAVE'}"`);
+        row.push(lt?.acronym || 'LEAVE');
       } else if (asgn) {
         const duty = dutyMap.get(asgn.dutyWindowId);
         let targetLabel = '';
@@ -480,27 +478,17 @@ export function exportRosterToCsvMatrix(options: RosterExportOptions): string {
           targetLabel = s ? s.code : '';
         }
         const cellText = targetLabel ? `${duty?.acronym || 'D'}-${targetLabel}` : duty?.acronym || 'D';
-        row.push(`"${cellText}"`);
+        row.push(cellText);
       } else {
-        row.push('"—"');
+        row.push('—');
       }
     });
 
-    lines.push(row.join(','));
+    rows.push(row);
   });
 
-  const csvContent = lines.join('\n');
-  if (typeof document !== 'undefined') {
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const cleanClinic = sanitizeFileName(clinicName);
-    a.setAttribute('download', `${cleanClinic}_matrix_${schedule.startDate}_${schedule.endDate}_v${versionNumber}.csv`);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
+  const csvContent = toCsv(rows);
+  downloadCsv(`${sanitizeFileName(clinicName)}_matrix_${schedule.startDate}_${schedule.endDate}_v${versionNumber}.csv`, csvContent);
   return csvContent;
 }
 
@@ -544,7 +532,7 @@ export function exportRosterToCsvLong(options: RosterExportOptions): string {
     'Notes',
   ];
 
-  const lines: string[] = [headers.join(',')];
+  const rows: CsvValue[][] = [headers];
 
   assignments.forEach((a) => {
     const nurse = nurseMap.get(a.nurseId);
@@ -566,36 +554,24 @@ export function exportRosterToCsvLong(options: RosterExportOptions): string {
       targetName = spec ? `${spec.name} Pool` : 'Specialty Pool';
     }
 
-    lines.push(
-      [
-        a.date,
-        weekday,
-        `"${nurse?.employeeCode || a.nurseId}"`,
-        `"${nurse?.fullName || a.nurseId}"`,
-        `"${seniority?.name || 'Staff'}"`,
-        `"${duty?.acronym || 'D'}"`,
-        `"${duty?.startTime || '09:00'}–${duty?.endTime || '21:00'}"`,
-        calculateDutyDurationHours(duty),
-        a.kind,
-        `"${targetName}"`,
-        a.source,
-        a.locked ? 'YES' : 'NO',
-        `"${a.note || ''}"`,
-      ].join(',')
-    );
+    rows.push([
+      a.date,
+      weekday,
+      nurse?.employeeCode || a.nurseId,
+      nurse?.fullName || a.nurseId,
+      seniority?.name || 'Staff',
+      duty?.acronym || 'D',
+      `${duty?.startTime || '09:00'}–${duty?.endTime || '21:00'}`,
+      calculateDutyDurationHours(duty),
+      a.kind,
+      targetName,
+      a.source,
+      a.locked ? 'YES' : 'NO',
+      a.note || '',
+    ]);
   });
 
-  const csvContent = lines.join('\n');
-  if (typeof document !== 'undefined') {
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const cleanClinic = sanitizeFileName(clinicName);
-    a.setAttribute('download', `${cleanClinic}_long_${schedule.startDate}_${schedule.endDate}_v${versionNumber}.csv`);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
+  const csvContent = toCsv(rows);
+  downloadCsv(`${sanitizeFileName(clinicName)}_long_${schedule.startDate}_${schedule.endDate}_v${versionNumber}.csv`, csvContent);
   return csvContent;
 }
