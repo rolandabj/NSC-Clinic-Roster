@@ -101,7 +101,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   holidayDates = [],
 }) => {
   const [activeTab, setActiveTab] = useState<ExportTab>('print_roster');
-  const [pdfPageSize, setPdfPageSize] = useState<'a3' | 'a4'>('a3');
+  const [pdfSplit, setPdfSplit] = useState(false);
   const [pdfScope, setPdfScope] = useState<'ALL' | 'ACTIVE_BLOCK'>('ALL');
   const [pdfIncludeNurses, setPdfIncludeNurses] = useState(true);
   const [pdfIncludeDoctors, setPdfIncludeDoctors] = useState(true);
@@ -184,7 +184,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         specialties,
         versionNumber,
         dates: pdfScope === 'ACTIVE_BLOCK' && blockDates.length > 0 ? blockDates : undefined,
-        pageSize: pdfPageSize,
+        split: pdfSplit,
         includeNurses: pdfIncludeNurses,
         includeDoctors: pdfIncludeDoctors,
         holidayDates,
@@ -493,14 +493,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 <fieldset className="p-3 border border-slate-200 rounded space-y-1.5">
-                  <legend className="px-1 font-semibold text-slate-700">Paper</legend>
+                  <legend className="px-1 font-semibold text-slate-700">A4 landscape</legend>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="pdf-size" checked={pdfPageSize === 'a3'} onChange={() => setPdfPageSize('a3')} />
-                    <span>A3 landscape (whole period across)</span>
+                    <input type="radio" name="pdf-layout" checked={!pdfSplit} onChange={() => setPdfSplit(false)} />
+                    <span>Whole period on one page</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="pdf-size" checked={pdfPageSize === 'a4'} onChange={() => setPdfPageSize('a4')} />
-                    <span>A4 landscape (split into parts)</span>
+                    <input type="radio" name="pdf-layout" checked={pdfSplit} onChange={() => setPdfSplit(true)} />
+                    <span>Split into halves (larger text)</span>
                   </label>
                 </fieldset>
                 <fieldset className="p-3 border border-slate-200 rounded space-y-1.5">

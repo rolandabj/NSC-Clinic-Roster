@@ -7,8 +7,8 @@
  * colour coded cells, weekends shaded), with a header on every page, page
  * numbers and a legend. The PDF library loads only when an export runs.
  *
- *   A3 landscape: the whole period on one page width (up to 31 days)
- *   A4 landscape: the period split into parts of up to 16 days
+ * Paper is A4 landscape: by default the whole period fits across one page;
+ * with split: true it is split into parts of up to 16 days for larger text.
  */
 
 import {
@@ -45,7 +45,8 @@ export interface RosterPdfOptions {
   versionNumber?: number;
   /** Days to include (default: the whole schedule). */
   dates?: string[];
-  pageSize?: 'a3' | 'a4';
+  /** Split the period into parts of up to 16 days (larger text). */
+  split?: boolean;
   includeNurses?: boolean;
   includeDoctors?: boolean;
   /** Public holiday dates, marked in the column headers. */
@@ -119,7 +120,7 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
     roles,
     specialties,
     versionNumber = schedule.activeVersionNumber || 1,
-    pageSize = 'a3',
+    split = false,
     includeNurses = true,
     includeDoctors = true,
   } = options;
@@ -135,29 +136,29 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
   const nurseMap = new Map(nurses.map((n) => [n.id, n]));
   const shiftByNurseDate = new Map(assignments.map((a) => [`${a.nurseId}_${a.date}`, a]));
 
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: pageSize });
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 10;
-  const daysPerPart = pageSize === 'a3' ? 31 : 16;
-  const nameWidth = 42;
-  const totalWidth = 16;
+  const margin = 8;
+  const daysPerPart = split ? 16 : 31;
+  const nameWidth = split ? 42 : 33;
+  const totalWidth = split ? 16 : 11;
   const generatedAt = new Date().toLocaleString();
-  const baseFontSize = pageSize === 'a3' ? 7 : 6.8;
+  const baseFontSize = split ? 6.8 : 5;
 
   const drawPageFrame = (title: string) => {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(13);
+    doc.setFontSize(11);
     doc.setTextColor(...INK);
     doc.text(clinicName, margin, 12);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
+    doc.setFontSize(8);
     doc.setTextColor(...MUTED);
     doc.text(`${title}  ·  ${schedule.name}  ·  ${schedule.startDate} to ${schedule.endDate}`, margin, 17.5);
     doc.text(`Version ${versionNumber}  ·  Generated ${generatedAt}`, pageWidth - margin, 12, { align: 'right' });
     doc.setDrawColor(...GRID);
     doc.line(margin, 20, pageWidth - margin, 20);
-    doc.setFontSize(7.5);
+    doc.setFontSize(7);
     doc.text(`Page ${doc.getNumberOfPages()} of {total}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
   };
 
@@ -175,8 +176,8 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
   const baseTable = (dates: string[], rowCount: number) => {
     const dayWidth = (pageWidth - 2 * margin - nameWidth - totalWidth) / Math.max(1, dates.length);
     const usableHeight = pageHeight - 23 - 12 - 12; // header, footer, column heads
-    const rowHeight = Math.min(16, Math.max(7, usableHeight / Math.max(1, rowCount)));
-    const fontSize = Math.min(baseFontSize + 1.2, baseFontSize + (rowHeight - 9) * 0.25);
+    const rowHeight = Math.min(16, Math.max(split ? 7 : 5.5, usableHeight / Math.max(1, rowCount)));
+    const fontSize = Math.min(baseFontSize + 1, baseFontSize + Math.max(0, rowHeight - 9) * 0.15);
     const columnStyles: Record<number, any> = { 0: { cellWidth: nameWidth, halign: 'left' }, [dates.length + 1]: { cellWidth: totalWidth } };
     dates.forEach((_, i) => (columnStyles[i + 1] = { cellWidth: dayWidth }));
     return {
@@ -186,7 +187,7 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
     styles: {
       font: 'helvetica',
       fontSize,
-      cellPadding: 0.8,
+      cellPadding: split ? 0.8 : 0.4,
       minCellHeight: rowHeight,
       halign: 'center' as const,
       valign: 'middle' as const,
@@ -310,15 +311,18 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
             return row.push(`${time}\nNo nurse`);
           }
           fills.set(`${dr.id}_${i}`, { fill: SESSION_FILL });
-          return row.push(`${time}\n${paired.join(' + ')}`);
+          return row.push(`${time}\n${paired.join('\n')}`);
         });
         row.push(String(count));
         return row;
       });
 
       const title = parts.length > 1 ? `Doctors' Clinic Sessions (part ${part + 1} of ${parts.length})` : "Doctors' Clinic Sessions";
+      const doctorTable = baseTable(dates, doctorRows.length);
+      // Session hours and names are longer than shift codes: slightly smaller text so names don't break
+      if (!split) doctorTable.styles = { ...doctorTable.styles, fontSize: doctorTable.styles.fontSize - 0.6, cellPadding: 0.25 };
       autoTable(doc, {
-        ...baseTable(dates, doctorRows.length),
+        ...doctorTable,
         head: [['Doctor', ...dates.map(dayHead), 'Sessions']],
         body,
         didParseCell: (data: any) => {
