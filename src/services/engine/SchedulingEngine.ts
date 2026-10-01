@@ -624,6 +624,21 @@ export class SchedulingEngine {
       return pace - (nurseStates.get(nurseId)?.totalDutyHoursEarned ?? 0);
     };
 
+    /**
+     * Hours a shift would take a nurse over her goal (0 when it fits). Optional
+     * shifts (floats, an extra senior) must fit; a job that must be covered
+     * (a doctor, the free nurse, a holiday) may go over only when nobody who
+     * fits is available, and never past the hours limit (H7).
+     */
+    const hoursOverGoal = (nurseId: string, extraHours: number): number => {
+      const target = nurseTargetMap.get(nurseId)?.dutyTarget ?? 0;
+      return Math.max(0, (nurseStates.get(nurseId)?.totalDutyHoursEarned ?? 0) + extraHours - target);
+    };
+    const overGoalPenalty = (nurseId: string, extraHours: number): number => {
+      const over = hoursOverGoal(nurseId, extraHours);
+      return over > 0 ? 300 + over * 20 : 0;
+    };
+
     let createdCount = 0;
     let unmetSlotsCount = 0;
     let doctorSessionsTotal = 0;
@@ -864,6 +879,7 @@ export class SchedulingEngine {
               if (canBeFreeNurse(nurse, roles)) score += 30;
               score += hoursBehindPace(nurse.id, dayIdx) * 1.5;
               score -= (nurseStates.get(nurse.id)?.holidaysWorked || 0) * 40; // share holidays out
+              score -= overGoalPenalty(nurse.id, calculateDutyDurationHours(duty));
               if (!best || score > best.score) best = { nurse, duty, score };
             }
           }
@@ -1082,9 +1098,11 @@ export class SchedulingEngine {
                   if (rolePref) score += rolePref.rank === 1 ? 80 : rolePref.rank === 2 ? 40 : 20;
                 }
 
-                // Hours: favour nurses behind their pace; a nurse who reached her goal comes last
+                // Hours: favour nurses behind their pace; anyone this shift would take over
+                // her goal comes last (she is used only when nobody else can cover the job)
+                score += hoursBehindPace(nurse.id, dayIdx) * 1.5;
+                score -= overGoalPenalty(nurse.id, shiftHours);
                 if (limits && state.totalDutyHoursEarned >= limits.dutyTarget) score -= 150;
-                else score += hoursBehindPace(nurse.id, dayIdx) * 1.5;
 
                 // Weekend fairness
                 if (isWeekend) score -= state.weekendsWorked * 25;
@@ -1185,6 +1203,7 @@ export class SchedulingEngine {
               .sort((a, b) => calculateDutyDurationHours(a) - calculateDutyDurationHours(b))[0];
             if (!longer) continue;
             const added = calculateDutyDurationHours(longer) - calculateDutyDurationHours(oldDuty);
+            if (hoursOverGoal(nurse.id, added) > 0) continue; // stretching is optional: stay within her goal
             if (!fitsHardRules(nurse, date, longer, added, { replacingOwnShift: true })) continue;
             resultAssignmentsMap.set(`${asgn.nurseId}_${date}`, {
               ...asgn,
@@ -1212,11 +1231,11 @@ export class SchedulingEngine {
               if (!canBeFreeNurse(nurse, roles)) continue;
               if (!fitsHardRules(nurse, date, duty, calculateDutyDurationHours(duty))) continue;
               let score = gapCover(duty) * 20 + hoursBehindPace(nurse.id, dayIdx) * 1.5;
+              score -= overGoalPenalty(nurse.id, calculateDutyDurationHours(duty));
               if (isExclusiveNurseClinic(nurse, roles)) score += 50;
               if (isWeekend) score -= (nurseStates.get(nurse.id)?.weekendsWorked || 0) * 25;
               if (!added || score > added.score) added = { nurse, duty, score };
             }
-            if (added) break; // best duty first
           }
           if (!added) break; // nobody qualified is free: the validator will flag the gap
           placeShift(
@@ -1255,7 +1274,9 @@ export class SchedulingEngine {
         let done = false;
         for (const senior of seniors) {
           if (hoursBehindPace(senior.id, dayIdx) <= 0) break;
-          const duty = dutiesCovering(clinic.openTime, clinic.closeTime).find((d) => fitsHardRules(senior, date, d, calculateDutyDurationHours(d)));
+          const duty = dutiesCovering(clinic.openTime, clinic.closeTime).find(
+            (d) => hoursOverGoal(senior.id, calculateDutyDurationHours(d)) === 0 && fitsHardRules(senior, date, d, calculateDutyDurationHours(d))
+          );
           if (!duty) continue;
           const free = canBeFreeNurse(senior, roles);
           placeShift(
@@ -1282,7 +1303,9 @@ export class SchedulingEngine {
         // B: otherwise a senior takes over a generated junior's job; the junior may still float later
         if (!done) {
           const juniorShifts = existingToday().filter((a) => a.source === 'GENERATED' && !a.locked);
-          outer: for (const senior of seniors) {
+          // Seniors who stay within their goal are tried first
+          const bySpareHours = [...seniors].sort((a, b) => hoursOverGoal(a.id, 8) - hoursOverGoal(b.id, 8));
+          outer: for (const senior of bySpareHours) {
             for (const asgn of juniorShifts) {
               const duty = dutyMapGlobal.get(asgn.dutyWindowId);
               if (!duty) continue;
@@ -1318,7 +1341,9 @@ export class SchedulingEngine {
         // Keep a one day margin under the consecutive days limit while the rule is on
         if (getConsecutiveDaysWorkedEndingYesterday(nurse.id, date) >= maxConsecutiveDays - 1) continue;
 
-        const poolTiers = [activeDuties.filter((d) => d.isPriority), activeDuties.filter((d) => !d.isPriority), [earlyDuty]];
+        // Floats are optional, so they must fit within her goal: longer shifts first, then shorter ones
+        const byLength = (list: DutyWindow[]) => [...list].sort((a, b) => calculateDutyDurationHours(b) - calculateDutyDurationHours(a));
+        const poolTiers = [byLength(activeDuties.filter((d) => d.isPriority)), byLength(activeDuties.filter((d) => !d.isPriority))];
         let selected: DutyWindow | null = null;
         for (const tier of poolTiers) {
           for (const cand of tier) {
@@ -1328,7 +1353,7 @@ export class SchedulingEngine {
             // on the last day anyone short by half a shift or more floats.
             const threshold = dayIdx === totalDays - 1 ? hours / 2 : hours * floatPhase(nurse.id);
             if (hoursBehindPace(nurse.id, dayIdx) < threshold) continue;
-            if (maxHoursEnabled && state.totalDutyHoursEarned + hours > limits.maxAllowedHours) continue;
+            if (hoursOverGoal(nurse.id, hours) > 0) continue;
             if (!fitsHardRules(nurse, date, cand, hours)) continue;
             selected = cand;
             break;
