@@ -5,7 +5,7 @@
  * Individual Nurse Timesheet & Hours Audit Modal (Phase 9)
  */
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import {
   X,
   Clock,
@@ -24,6 +24,8 @@ import {
 import { NurseHoursAccounting } from '../../services/reports/hoursAccounting';
 import { Schedule } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
+import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
+import { useDialogA11y } from '../common/useDialogA11y';
 
 interface NurseTimesheetModalProps {
   schedule: Schedule;
@@ -39,6 +41,8 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
   onClose,
 }) => {
   const [filterType, setFilterType] = useState<'ALL' | 'DUTY' | 'LEAVE' | 'WEEKEND'>('ALL');
+  const titleId = useId();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen && !!accounting, onClose);
 
   if (!isOpen || !accounting) return null;
 
@@ -84,52 +88,49 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
       'Notes',
     ];
 
-    const lines = [headers.join(',')];
+    const rows: CsvValue[][] = [headers];
     timeline.forEach((item) => {
       const doctorOrRole = item.doctor
-        ? `"${item.doctor.fullName}"`
+        ? item.doctor.fullName
         : item.clinicalRole
-        ? `"${item.clinicalRole.name}"`
+        ? item.clinicalRole.name
         : item.specialty
-        ? `"${item.specialty.name} Pool"`
-        : '""';
+        ? `${item.specialty.name} Pool`
+        : '';
 
-      lines.push(
-        [
-          formatDate(item.date),
-          item.weekdayName,
-          item.isWeekend ? 'YES' : 'NO',
-          item.type,
-          item.dutyWindow ? `"${item.dutyWindow.name} (${item.dutyWindow.acronym})"` : '""',
-          item.dutyWindow ? item.hoursEarned : 0,
-          doctorOrRole,
-          item.leaveType ? `"${item.leaveType.name} (${item.leaveType.acronym})"` : '""',
-          item.hoursEarned,
-          `"${item.source || ''}"`,
-          `"${item.notes || ''}"`,
-        ].join(',')
-      );
+      rows.push([
+        formatDate(item.date),
+        item.weekdayName,
+        item.isWeekend ? 'YES' : 'NO',
+        item.type,
+        item.dutyWindow ? `${item.dutyWindow.name} (${item.dutyWindow.acronym})` : '',
+        item.dutyWindow ? item.hoursEarned : 0,
+        doctorOrRole,
+        item.leaveType ? `${item.leaveType.name} (${item.leaveType.acronym})` : '',
+        item.hoursEarned,
+        item.source || '',
+        item.notes || '',
+      ]);
     });
 
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.setAttribute('download', `timesheet-${nurse.employeeCode}-${schedule.name}.csv`);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadCsv(`timesheet-${nurse.employeeCode}-${schedule.name}.csv`, toCsv(rows));
   };
 
   const isUnder = status === 'UNDER' || status === 'CRITICAL_UNDER';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-xs p-4 select-none animate-in fade-in duration-150">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden"
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
+            <div aria-hidden="true" className="w-10 h-10 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
               {nurse.fullName
                 .split(' ')
                 .map((n) => n[0])
@@ -138,7 +139,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">{nurse.fullName}</h2>
+                <h2 id={titleId} className="text-base font-bold text-slate-900">{nurse.fullName}</h2>
                 <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-semibold">
                   {nurse.employeeCode}
                 </span>
@@ -162,17 +163,20 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={handleExportNurseCsv}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-100 rounded text-xs font-medium text-slate-700 transition-colors cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <Download className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
               <span>Export Timesheet</span>
             </button>
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Close"
               className="p-1.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -272,6 +276,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
           {/* Filter Pills */}
           <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded text-[11px]">
             <button
+              type="button"
               onClick={() => setFilterType('ALL')}
               className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
                 filterType === 'ALL'
@@ -282,6 +287,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
               All Days ({timeline.length})
             </button>
             <button
+              type="button"
               onClick={() => setFilterType('DUTY')}
               className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
                 filterType === 'DUTY'
@@ -292,6 +298,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
               Duties Only ({totalShiftsCount})
             </button>
             <button
+              type="button"
               onClick={() => setFilterType('LEAVE')}
               className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
                 filterType === 'LEAVE'
@@ -302,6 +309,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
               Leaves Only
             </button>
             <button
+              type="button"
               onClick={() => setFilterType('WEEKEND')}
               className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
                 filterType === 'WEEKEND'
@@ -481,6 +489,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
             </div>
 
             <button
+              type="button"
               onClick={onClose}
               className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-medium transition-colors cursor-pointer"
             >

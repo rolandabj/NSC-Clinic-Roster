@@ -6,7 +6,7 @@
  * Supports downloadable CSV templates, client-side parsing, validation preview, and bulk upsert.
  */
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import {
   X,
   Upload,
@@ -21,6 +21,8 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { Nurse, Doctor, SeniorityLevel, Specialty, ClinicalRole } from '../../types';
 import { getRepository } from '../../services/repository';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify } from '../common/dialogs';
 
 interface BulkImportModalProps {
   seniorityLevels: SeniorityLevel[];
@@ -50,6 +52,8 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const [parsedRows, setParsedRows] = useState<any[]>([]);
   const [errorCount, setErrorCount] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
+  const titleId = useId();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -229,7 +233,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       onImportComplete();
       onClose();
     } catch (err: any) {
-      alert(`Import failed: ${err.message}`);
+      notify(`Import failed: ${err.message}`, 'error');
     } finally {
       setIsImporting(false);
     }
@@ -237,16 +241,22 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs font-sans text-slate-800">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs font-sans text-slate-800"
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
-              <Upload className="w-4 h-4" />
+              <Upload className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 id={titleId} className="text-base font-bold text-slate-900">
                   Bulk CSV Import Center
                 </h2>
               </div>
@@ -257,10 +267,12 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -268,6 +280,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         <div className="px-6 py-2.5 bg-slate-100/70 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => {
                 setActiveTab('NURSES');
                 setParsedRows([]);
@@ -279,11 +292,12 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                   : 'text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <Users className="w-3.5 h-3.5" />
+              <Users className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Import Nurses</span>
             </button>
 
             <button
+              type="button"
               onClick={() => {
                 setActiveTab('DOCTORS');
                 setParsedRows([]);
@@ -295,16 +309,17 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                   : 'text-slate-600 hover:bg-slate-200'
               }`}
             >
-              <Stethoscope className="w-3.5 h-3.5" />
+              <Stethoscope className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Import Doctors</span>
             </button>
           </div>
 
           <button
+            type="button"
             onClick={activeTab === 'NURSES' ? handleDownloadNurseTemplate : handleDownloadDoctorTemplate}
             className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold cursor-pointer shadow-2xs"
           >
-            <Download className="w-3 h-3 text-slate-500" />
+            <Download className="w-3 h-3 text-slate-500" aria-hidden="true" />
             <span>Download Sample CSV</span>
           </button>
         </div>
@@ -320,6 +335,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
               <input
                 type="file"
                 accept=".csv"
+                aria-label="Upload CSV file"
                 onChange={handleFileUpload}
                 className="text-[11px] text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border file:border-slate-300 file:text-xs file:font-semibold file:bg-slate-50 hover:file:bg-slate-100 cursor-pointer"
               />
@@ -327,6 +343,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
             <textarea
               rows={4}
+              aria-label="Paste CSV text"
               placeholder={
                 activeTab === 'NURSES'
                   ? 'fullName,gmail,employeeCode,seniorityLevel,contractPercent,dateOfBirth\nAmina Mansoor,amina@clinic.ae,N-109,Staff Nurse,100,1992-05-14'
@@ -347,12 +364,12 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                 </span>
                 {errorCount > 0 ? (
                   <span className="text-rose-600 font-bold text-[11px] flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>{errorCount} rows with invalid data</span>
                   </span>
                 ) : (
                   <span className="text-emerald-700 font-bold text-[11px] flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>All {parsedRows.length} rows valid and ready</span>
                   </span>
                 )}
@@ -418,7 +435,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
             onClick={handleExecuteImport}
             className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40"
           >
-            <Upload className="w-4 h-4" />
+            <Upload className="w-4 h-4" aria-hidden="true" />
             <span>Confirm &amp; Import ({parsedRows.length})</span>
           </button>
         </div>

@@ -7,7 +7,7 @@
  * contract hours targets, and immediate generation options.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useId } from 'react';
 import {
   X,
   Calendar,
@@ -33,6 +33,7 @@ import {
   generateDoctorSessionsForDateRange,
   populateRecurringDoctorSessionsForSchedule,
 } from '../../services/schedule/doctorScheduleService';
+import { useDialogA11y } from '../common/useDialogA11y';
 
 interface CreateScheduleModalProps {
   isOpen: boolean;
@@ -70,6 +71,8 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
   // Active Doctors & Recurring Schedule Auto-Fill
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [autoFillDoctorSchedules, setAutoFillDoctorSchedules] = useState<boolean>(true);
+  const titleId = useId();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
 
   useEffect(() => {
     const repo = getRepository();
@@ -336,15 +339,21 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-xl w-full overflow-hidden text-xs flex flex-col max-h-[90vh]">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-xl w-full overflow-hidden text-xs flex flex-col max-h-[90vh]"
+      >
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-indigo-600 text-white shadow-xs">
-              <CalendarRange className="w-4 h-4" />
+              <CalendarRange className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Create New Schedule Period</h3>
+              <h3 id={titleId} className="text-sm font-bold text-slate-900">Create New Schedule Period</h3>
               <p className="text-[11px] text-slate-500">
                 Choose start and end dates, block partitioning, and nurse work hour targets.
               </p>
@@ -353,9 +362,10 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close"
             className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 cursor-pointer transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -410,6 +420,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                   <input
                     type="date"
                     required
+                    aria-label="Start date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer shadow-2xs"
@@ -431,6 +442,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                     type="date"
                     required
                     min={startDate}
+                    aria-label="End date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
                     className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer shadow-2xs"
@@ -537,13 +549,14 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                 }}
                 className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer underline flex items-center gap-1"
               >
-                <RefreshCw className="w-2.5 h-2.5" />
+                <RefreshCw className="w-2.5 h-2.5" aria-hidden="true" />
                 <span>Reset to standard naming</span>
               </button>
             </div>
             <input
               type="text"
               required
+              aria-label="Schedule title"
               value={scheduleName}
               onChange={(e) => {
                 setScheduleName(e.target.value);
@@ -561,6 +574,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                 Block Partition (Workbook Paging)
               </label>
               <select
+                aria-label="Block partition"
                 value={blockWeeks}
                 onChange={(e) => setBlockWeeks(Number(e.target.value) as BlockWeeks)}
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer"
@@ -587,6 +601,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                   type="number"
                   step="any"
                   min="0"
+                  aria-label="Full-time target hours"
                   value={hoursTarget}
                   onChange={(e) => setHoursTarget(e.target.value)}
                   placeholder="e.g. 160, 176, 37.5, 80"
@@ -697,17 +712,17 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
             >
               {isSubmitting ? (
                 <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
                   <span>Creating Schedule...</span>
                 </>
               ) : generateImmediately ? (
                 <>
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Create &amp; Generate Roster</span>
                 </>
               ) : (
                 <>
-                  <PlusCircle className="w-3.5 h-3.5" />
+                  <PlusCircle className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Create Blank Schedule</span>
                 </>
               )}

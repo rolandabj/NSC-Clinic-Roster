@@ -5,7 +5,7 @@
  * Version Compare & Diff Modal (Phase 10)
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useId } from 'react';
 import {
   X,
   Diff,
@@ -36,6 +36,8 @@ import {
   ScheduleVersionDiff,
   AssignmentDiffItem,
 } from '../../services/history/diffEngine';
+import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
+import { useDialogA11y } from '../common/useDialogA11y';
 
 interface VersionCompareModalProps {
   schedule: Schedule;
@@ -121,6 +123,9 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
     specialties,
   ]);
 
+  const titleId = useId();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const filteredChanges = diffResult.allChanges.filter((item) => {
@@ -153,47 +158,44 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
       'Change Summary',
     ];
 
-    const lines = [headers.join(',')];
+    const rows: CsvValue[][] = [headers];
     diffResult.allChanges.forEach((c) => {
-      lines.push(
-        [
-          c.date,
-          c.weekday,
-          `"${c.nurseName}"`,
-          c.changeType,
-          c.before ? `"${c.before.dutyAcronym}"` : '""',
-          c.before ? `"${c.before.dutyTimes}"` : '""',
-          c.before ? `"${c.before.targetName}"` : '""',
-          c.after ? `"${c.after.dutyAcronym}"` : '""',
-          c.after ? `"${c.after.dutyTimes}"` : '""',
-          c.after ? `"${c.after.targetName}"` : '""',
-          `"${c.description}"`,
-        ].join(',')
-      );
+      rows.push([
+        c.date,
+        c.weekday,
+        c.nurseName,
+        c.changeType,
+        c.before ? c.before.dutyAcronym : '',
+        c.before ? c.before.dutyTimes : '',
+        c.before ? c.before.targetName : '',
+        c.after ? c.after.dutyAcronym : '',
+        c.after ? c.after.dutyTimes : '',
+        c.after ? c.after.targetName : '',
+        c.description,
+      ]);
     });
 
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.setAttribute('download', `diff-${diffResult.baseVersionLabel}-vs-${diffResult.targetVersionLabel}.csv`);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    downloadCsv(`diff-${diffResult.baseVersionLabel}-vs-${diffResult.targetVersionLabel}.csv`, toCsv(rows));
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden text-xs">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden text-xs"
+      >
         {/* Header */}
         <div className="px-6 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded bg-indigo-100 text-indigo-700 flex items-center justify-center">
-              <Diff className="w-4 h-4" />
+              <Diff className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">Compare Schedule Versions</h2>
+                <h2 id={titleId} className="text-base font-bold text-slate-900">Compare Schedule Versions</h2>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold">
                   DIFF ENGINE
                 </span>
@@ -206,18 +208,21 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={handleExportDiffCsv}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-100 rounded text-xs font-medium text-slate-700 transition-colors cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <Download className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
               <span>Export Diff CSV</span>
             </button>
 
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Close"
               className="p-1.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -229,6 +234,7 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-slate-500 font-medium">Base (Older):</span>
               <select
+                aria-label="Base version (older)"
                 value={baseId}
                 onChange={(e) => setBaseId(e.target.value)}
                 className="px-2.5 py-1.5 border border-slate-300 rounded font-semibold text-slate-800 bg-white"
@@ -242,12 +248,13 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
               </select>
             </div>
 
-            <ArrowRight className="w-4 h-4 text-slate-400" />
+            <ArrowRight className="w-4 h-4 text-slate-400" aria-hidden="true" />
 
             {/* Target Selector */}
             <div className="flex items-center gap-2">
               <span className="text-slate-500 font-medium">Target (Newer):</span>
               <select
+                aria-label="Target version (newer)"
                 value={targetId}
                 onChange={(e) => setTargetId(e.target.value)}
                 className="px-2.5 py-1.5 border border-slate-300 rounded font-semibold text-slate-800 bg-white"
@@ -286,6 +293,7 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
               <input
                 type="text"
+                aria-label="Search changes"
                 placeholder="Search changed nurse, date, doctor..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -298,6 +306,7 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
             <div className="flex items-center gap-1.5">
               <span className="text-slate-500">Nurse:</span>
               <select
+                aria-label="Filter by nurse"
                 value={nurseFilter}
                 onChange={(e) => setNurseFilter(e.target.value)}
                 className="px-2 py-1 border border-slate-200 rounded bg-white text-slate-700"
@@ -314,6 +323,7 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
             <div className="flex items-center gap-1.5">
               <span className="text-slate-500">Change:</span>
               <select
+                aria-label="Filter by change type"
                 value={changeTypeFilter}
                 onChange={(e) => setChangeTypeFilter(e.target.value as any)}
                 className="px-2 py-1 border border-slate-200 rounded bg-white text-slate-700"
@@ -469,6 +479,7 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={onClose}
               className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded font-medium cursor-pointer"
             >

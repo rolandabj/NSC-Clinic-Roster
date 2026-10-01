@@ -6,7 +6,9 @@
  * Full Validation Gate, Versioning, Per-Nurse HTML Email Preview, Diff Generation & Dispatch.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify } from '../common/dialogs';
 import {
   X,
   Send,
@@ -205,6 +207,12 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       }
     }
   }, [isOpen, schedule.id]);
+
+  const titleId = useId();
+  // Esc does nothing while emails are being dispatched, so a stray key press can't hide a running publish.
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, () => {
+    if (currentStep !== 'SENDING') onClose();
+  });
 
   if (!isOpen) return null;
 
@@ -422,23 +430,29 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       setCurrentStep('DONE');
       onPublishComplete(newVersion);
     } catch (err: any) {
-      alert(`Publishing failed: ${err.message}`);
+      notify(`Publishing failed: ${err.message}`, 'error');
       setCurrentStep('PREVIEW');
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden text-xs">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden text-xs"
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 id={titleId} className="text-base font-bold text-slate-900">
                   {publishKind === 'CHANGE' ? 'Publish Schedule Change Alerts' : 'Publish Official Duty Roster'}
                 </h2>
               </div>
@@ -456,10 +470,12 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="p-1.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -670,6 +686,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 <input
                   type="text"
                   required
+                  aria-label="Version release note"
                   placeholder="e.g. Official October release approved by Clinical Director"
                   value={versionNote}
                   onChange={(e) => setVersionNote(e.target.value)}
@@ -687,6 +704,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 </label>
                 <textarea
                   rows={2}
+                  aria-label="Optional broadcast message to staff"
                   placeholder="e.g. Please note Dr. Yusuf's Thursday sessions start at 15:00. Contact supervisor for swaps."
                   value={generalBroadcastNote}
                   onChange={(e) => setGeneralBroadcastNote(e.target.value)}
@@ -718,6 +736,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                   <User className="w-4 h-4 text-indigo-600" />
                   <span className="font-bold text-slate-800 text-xs">Inspect Nurse Email:</span>
                   <select
+                    aria-label="Inspect nurse email"
                     value={previewNurseId}
                     onChange={(e) => setPreviewNurseId(e.target.value)}
                     className="px-2.5 py-1 border border-slate-300 rounded bg-white text-xs font-semibold text-slate-800"
@@ -871,7 +890,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 onClick={handleExecuteDispatch}
                 className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs transition-colors"
               >
-                <Send className="w-4 h-4" />
+                <Send className="w-4 h-4" aria-hidden="true" />
                 <span>Confirm &amp; Publish ({selectedNurseIds.size} Emails)</span>
               </button>
             </>

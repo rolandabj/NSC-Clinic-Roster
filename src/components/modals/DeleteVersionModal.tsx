@@ -6,7 +6,7 @@
  * Provides safe, explicit confirmation before permanently deleting a roster version checkpoint.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   AlertTriangle,
   Trash2,
@@ -19,6 +19,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { ScheduleVersion } from '../../types';
+import { useDialogA11y } from '../common/useDialogA11y';
 
 interface DeleteVersionModalProps {
   isOpen: boolean;
@@ -52,6 +53,12 @@ export const DeleteVersionModal: React.FC<DeleteVersionModalProps> = ({
     }
   }, [isOpen, version]);
 
+  const titleId = useId();
+  // Closing is blocked while the delete is running (same as the Cancel and X buttons).
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen && !!version, () => {
+    if (!isDeleting) onClose();
+  });
+
   if (!isOpen || !version) return null;
 
   const assignmentCount = version.snapshot.assignments?.length || 0;
@@ -70,16 +77,22 @@ export const DeleteVersionModal: React.FC<DeleteVersionModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div className="bg-white rounded-xl border border-rose-200 shadow-2xl max-w-lg w-full overflow-hidden text-xs">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-xl border border-rose-200 shadow-2xl max-w-lg w-full overflow-hidden text-xs"
+      >
         {/* Header */}
         <div className="px-6 py-4 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 shadow-2xs">
-              <Trash2 className="w-5 h-5 text-rose-600" />
+              <Trash2 className="w-5 h-5 text-rose-600" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 id={titleId} className="text-base font-bold text-slate-900">
                   Delete Version v{version.number}
                 </h2>
                 {version.isPublished && (
@@ -100,12 +113,14 @@ export const DeleteVersionModal: React.FC<DeleteVersionModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             disabled={isDeleting}
+            aria-label="Close"
             className="p-1.5 rounded-lg hover:bg-rose-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer disabled:opacity-50"
             title="Cancel"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -222,7 +237,7 @@ export const DeleteVersionModal: React.FC<DeleteVersionModalProps> = ({
                 }}
                 className="px-2.5 py-1.5 bg-white border border-rose-300 hover:bg-rose-50 text-rose-700 font-semibold rounded-lg shrink-0 text-xs shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-1.5"
               >
-                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" aria-hidden="true" />
                 <span>Delete Schedule</span>
               </button>
             </div>
@@ -253,7 +268,7 @@ export const DeleteVersionModal: React.FC<DeleteVersionModalProps> = ({
               </>
             ) : (
               <>
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Permanently Delete Version v{version.number}</span>
               </>
             )}

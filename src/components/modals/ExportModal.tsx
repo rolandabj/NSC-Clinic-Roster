@@ -6,7 +6,7 @@
  * Supports Multi-Sheet Excel, CSV Matrix/Long, A3 Landscape Roster Print, and Per-Nurse Packets.
  */
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import {
   X,
   FileSpreadsheet,
@@ -42,6 +42,8 @@ import {
   exportRosterToCsvLong,
   getScheduleDates,
 } from '../../services/export/rosterExportService';
+import { notify } from '../common/dialogs';
+import { useDialogA11y } from '../common/useDialogA11y';
 import {
   calculateNurseHoursAccounting,
   calculateDutyDurationHours,
@@ -98,6 +100,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [activeTab, setActiveTab] = useState<ExportTab>('excel');
   const [excelScope, setExcelScope] = useState<'ALL' | 'ACTIVE_BLOCK'>('ALL');
   const [selectedNurseId, setSelectedNurseId] = useState<string>('ALL');
+  const titleId = useId();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -113,8 +117,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const activeDates = excelScope === 'ACTIVE_BLOCK' && blockDates.length > 0 ? blockDates : allDates;
 
   // 1. Download Excel
-  const handleDownloadExcel = () => {
-    exportRosterToExcel({
+  const handleDownloadExcel = async () => {
+    try {
+      await exportRosterToExcel({
       workingHoursPeriods,
       clinicName,
       schedule,
@@ -131,7 +136,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       rules,
       versionNumber,
       blockDates: excelScope === 'ACTIVE_BLOCK' ? blockDates : undefined,
-    });
+      });
+    } catch (err: any) {
+      notify(`The Excel file could not be created: ${err?.message || err}`, 'error');
+    }
   };
 
   // 2. Download CSV Matrix
@@ -204,16 +212,22 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none animate-in fade-in duration-150 print:static print:p-0 print:bg-white">
       {/* Modal Container (Hidden during native print, print section rendered below) */}
-      <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs print:hidden">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs print:hidden"
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded bg-indigo-100 text-indigo-700 flex items-center justify-center">
-              <Download className="w-4 h-4" />
+              <Download className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">Export &amp; Print Center</h2>
+                <h2 id={titleId} className="text-base font-bold text-slate-900">Export &amp; Print Center</h2>
               </div>
               <p className="text-[11px] text-slate-500 font-sans mt-0.5">
                 {schedule.name} · Version v{versionNumber} ({schedule.startDate} to {schedule.endDate})
@@ -222,16 +236,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="p-1.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
         {/* Tab Navigation */}
         <div className="px-6 border-b border-slate-200 flex items-center gap-6 bg-white text-xs">
           <button
+            type="button"
             onClick={() => setActiveTab('excel')}
             className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
               activeTab === 'excel'
@@ -239,11 +256,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" aria-hidden="true" />
             <span>Excel (.xlsx via SheetJS)</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab('csv')}
             className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
               activeTab === 'csv'
@@ -251,11 +269,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <FileText className="w-4 h-4 text-blue-600" />
+            <FileText className="w-4 h-4 text-blue-600" aria-hidden="true" />
             <span>CSV (Matrix &amp; Long)</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab('print_roster')}
             className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
               activeTab === 'print_roster'
@@ -263,11 +282,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Printer className="w-4 h-4 text-indigo-600" />
+            <Printer className="w-4 h-4 text-indigo-600" aria-hidden="true" />
             <span>A3 Landscape Roster Print</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab('print_packets')}
             className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
               activeTab === 'print_packets'
@@ -275,7 +295,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Users className="w-4 h-4 text-purple-600" />
+            <Users className="w-4 h-4 text-purple-600" aria-hidden="true" />
             <span>Per-Nurse Packets</span>
           </button>
         </div>
@@ -346,10 +366,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
 
               <button
+                type="button"
                 onClick={handleDownloadExcel}
                 className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-4 h-4" aria-hidden="true" />
                 <span>Download Multi-Sheet Excel (.xlsx)</span>
               </button>
             </div>
@@ -369,10 +390,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     Formatted exactly like the workbook grid: staff rows on the left with dates across the header columns, filled with duty acronyms and pairings.
                   </p>
                   <button
+                    type="button"
                     onClick={handleDownloadCsvMatrix}
                     className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
                   >
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Download Matrix CSV</span>
                   </button>
                 </div>
@@ -387,10 +409,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     One row per clinical assignment including date, employee code, hours, duty times, doctor pairing, lock status, and source. Best for SQL/BI imports.
                   </p>
                   <button
+                    type="button"
                     onClick={handleDownloadCsvLong}
                     className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
                   >
-                    <Download className="w-3.5 h-3.5" />
+                    <Download className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Download Long CSV</span>
                   </button>
                 </div>
@@ -418,10 +441,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
 
               <button
+                type="button"
                 onClick={handleTriggerPrint}
                 className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-4 h-4" aria-hidden="true" />
                 <span>Open Print Dialog (A3 Landscape)</span>
               </button>
             </div>
@@ -443,6 +467,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="flex items-center gap-2 bg-slate-50 p-3 rounded border border-slate-200">
                 <span className="font-semibold text-slate-700 text-xs">Print Selection:</span>
                 <select
+                  aria-label="Print selection"
                   value={selectedNurseId}
                   onChange={(e) => setSelectedNurseId(e.target.value)}
                   className="px-2.5 py-1.5 border border-slate-300 rounded font-medium bg-white text-slate-800"
@@ -457,10 +482,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
 
               <button
+                type="button"
                 onClick={handleTriggerPrint}
                 className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-4 h-4" aria-hidden="true" />
                 <span>Print Individual Staff Packet{selectedNurseId === 'ALL' ? 's' : ''}</span>
               </button>
             </div>
@@ -473,6 +499,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             Exporting Version: v{versionNumber} · {clinicName}
           </span>
           <button
+            type="button"
             onClick={onClose}
             className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded font-medium cursor-pointer"
           >

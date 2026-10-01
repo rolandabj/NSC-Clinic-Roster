@@ -6,9 +6,10 @@
  * Triggered by '?' key or Help button.
  */
 
-import React from 'react';
+import React, { useId } from 'react';
 import { X, Command, Keyboard } from 'lucide-react';
 import { t } from '../../services/i18n';
+import { useDialogA11y } from '../common/useDialogA11y';
 
 interface ShortcutsModalProps {
   isOpen: boolean;
@@ -43,20 +44,29 @@ const SHORTCUTS: ShortcutItem[] = [
 ];
 
 export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose }) => {
+  const titleId = useId();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const categories = ['Navigation', 'Editing', 'Clipboard & History', 'Global'] as const;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full p-5 space-y-4 text-xs font-sans text-slate-800 dark:text-slate-100">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full p-5 space-y-4 text-xs font-sans text-slate-800 dark:text-slate-100"
+      >
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-              <Keyboard className="w-4 h-4" />
+              <Keyboard className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+              <h3 id={titleId} className="font-bold text-slate-900 dark:text-white text-sm">
                 Workbook Keyboard Shortcuts
               </h3>
               <p className="text-[11px] text-slate-500 font-mono">
@@ -66,10 +76,12 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -108,6 +120,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
         <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
           <span>Excel-style navigation &amp; editing compliant</span>
           <button
+            type="button"
             onClick={onClose}
             className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer"
           >

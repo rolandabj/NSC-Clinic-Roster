@@ -7,7 +7,7 @@
  * applies MANUAL edits with AuditEvents for change alert email tracking.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useId } from 'react';
 import {
   X,
   ArrowLeftRight,
@@ -37,6 +37,8 @@ import {
 } from '../../types';
 import { getRepository } from '../../services/repository';
 import { checkAssignment } from '../../services/engine/assignmentChecks';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify } from '../common/dialogs';
 
 interface SwapManagerModalProps {
   schedule: Schedule;
@@ -161,6 +163,9 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
     };
   }, [selectedAsgnA, selectedAsgnB, nurseAId, nurseBId, nurseMap, locks, leaveEntries, assignments, nurses, dutyWindows, roles, rules]);
 
+  const titleId = useId();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const handleExecuteSwap = async () => {
@@ -232,7 +237,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
       );
       onClose();
     } catch (err: any) {
-      alert(`Swap execution failed: ${err.message}`);
+      notify(`Swap execution failed: ${err.message}`, 'error');
     } finally {
       setIsExecuting(false);
     }
@@ -263,16 +268,22 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs font-sans text-slate-800">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs font-sans text-slate-800"
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-              <ArrowLeftRight className="w-4 h-4" />
+              <ArrowLeftRight className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 id={titleId} className="text-base font-bold text-slate-900">
                   Shift Swap Manager
                 </h2>
               </div>
@@ -283,10 +294,12 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -301,6 +314,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
               </span>
 
               <select
+                aria-label="Primary nurse (Nurse A)"
                 value={nurseAId}
                 onChange={(e) => setNurseAId(e.target.value)}
                 className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-medium"
@@ -317,6 +331,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
                   Select Shift to Relinquish:
                 </label>
                 <select
+                  aria-label="Nurse A shift to relinquish"
                   value={assignmentAId}
                   onChange={(e) => setAssignmentAId(e.target.value)}
                   className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-mono text-[11px]"
@@ -362,6 +377,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
               </span>
 
               <select
+                aria-label="Partner nurse (Nurse B)"
                 value={nurseBId}
                 onChange={(e) => setNurseBId(e.target.value)}
                 className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-medium"
@@ -378,6 +394,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
                   Select Shift to Relinquish:
                 </label>
                 <select
+                  aria-label="Nurse B shift to relinquish"
                   value={assignmentBId}
                   onChange={(e) => setAssignmentBId(e.target.value)}
                   className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-mono text-[11px]"
@@ -423,6 +440,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             </label>
             <input
               type="text"
+              aria-label="Reason or swap notes"
               placeholder="e.g. Mutual accommodation for clinic CME conference on Saturday"
               value={swapReason}
               onChange={(e) => setSwapReason(e.target.value)}
@@ -447,7 +465,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             onClick={handleExecuteSwap}
             className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40 transition-colors"
           >
-            <ArrowLeftRight className="w-4 h-4" />
+            <ArrowLeftRight className="w-4 h-4" aria-hidden="true" />
             <span>Confirm &amp; Execute Shift Swap</span>
           </button>
         </div>

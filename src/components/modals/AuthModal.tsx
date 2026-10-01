@@ -7,7 +7,7 @@
  * granted permissions breakdown, session status indicators, and 1-click test personas.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   X,
   LogIn,
@@ -33,6 +33,8 @@ import {
 import { ClinicContextState } from '../../types/navigation';
 import { authService, UserProfile, UserPrivileges, MASTER_ADMIN_EMAIL } from '../../services/auth/authService';
 import { UserRole } from '../../types';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify } from '../common/dialogs';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -57,6 +59,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     });
     return unsub;
   }, []);
+
+  const titleId = useId();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -103,25 +108,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full overflow-hidden text-xs">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-2xl max-w-lg w-full overflow-hidden text-xs"
+      >
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/60">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold">
-              <Shield className="w-3.5 h-3.5" />
+              <Shield className="w-3.5 h-3.5" aria-hidden="true" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">Clinic Identity &amp; RBAC Access</h2>
+              <h2 id={titleId} className="text-sm font-bold text-slate-900 dark:text-white">Clinic Identity &amp; RBAC Access</h2>
               <p className="text-[10px] text-slate-400 font-mono">
                 GOOGLE WORKSPACE SSO · DIRECTORY ROLES · TEST PERSONAS
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/60 transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -156,7 +169,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         window.location.reload();
                       }
                     } catch (err: any) {
-                      alert(err?.message || 'Could not verify status. Please check your network connection.');
+                      notify(err?.message || 'Could not verify status. Please check your network connection.', 'error');
                     }
                   }}
                   className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer transition-colors shadow-2xs"
@@ -237,7 +250,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   onClick={handleSignOut}
                   className="text-rose-600 hover:text-rose-700 font-semibold inline-flex items-center gap-1 cursor-pointer"
                 >
-                  <LogOut className="w-3 h-3" />
+                  <LogOut className="w-3 h-3" aria-hidden="true" />
                   <span>Sign Out</span>
                 </button>
               )}
@@ -327,7 +340,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             }}
             className="text-indigo-600 dark:text-indigo-400 hover:underline text-[11px] font-semibold cursor-pointer flex items-center gap-1"
           >
-            <Settings className="w-3 h-3" />
+            <Settings className="w-3 h-3" aria-hidden="true" />
             <span>Enterprise Directory &amp; RBAC in Settings</span>
           </button>
 

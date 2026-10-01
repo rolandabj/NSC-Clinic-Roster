@@ -7,7 +7,7 @@
  */
 
 import { isWeekendDay } from '../../utils/weekend';
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import {
   X,
   Eye,
@@ -38,6 +38,7 @@ import {
   Specialty,
   LeaveType,
 } from '../../types';
+import { useDialogA11y } from '../common/useDialogA11y';
 
 interface VersionViewModalProps {
   version: ScheduleVersion | null;
@@ -74,6 +75,8 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNurseId, setSelectedNurseId] = useState<string>('ALL');
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number>(0);
+  const titleId = useId();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen && !!version, onClose);
 
   if (!isOpen || !version) return null;
 
@@ -132,16 +135,22 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-6xl w-full max-h-[92vh] flex flex-col overflow-hidden text-xs">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-6xl w-full max-h-[92vh] flex flex-col overflow-hidden text-xs"
+      >
         {/* Modal Top Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-              <Eye className="w-5 h-5" />
+              <Eye className="w-5 h-5" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 id={titleId} className="text-base font-bold text-slate-900">
                   Version v{version.number} Snapshot Inspector
                 </h2>
                 {version.isPublished && (
@@ -170,7 +179,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium cursor-pointer shadow-xs transition-colors"
                 title="Restore this version as active schedule draft"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Restore Draft</span>
               </button>
             )}
@@ -184,7 +193,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 rounded-lg font-medium cursor-pointer shadow-2xs transition-colors"
                 title="Permanently delete this version"
               >
-                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" aria-hidden="true" />
                 <span>Delete</span>
               </button>
             )}
@@ -192,9 +201,10 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close"
               className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -212,7 +222,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
+              <LayoutGrid className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Calendar Matrix</span>
             </button>
             <button
@@ -224,7 +234,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <List className="w-3.5 h-3.5" />
+              <List className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Shifts List</span>
             </button>
           </div>
@@ -249,6 +259,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
               <input
                 type="text"
+                aria-label="Search staff or date"
                 placeholder="Search staff, date..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -258,6 +269,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
 
             {/* Nurse dropdown */}
             <select
+              aria-label="Filter by nurse"
               value={selectedNurseId}
               onChange={(e) => setSelectedNurseId(e.target.value)}
               className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-700 text-xs cursor-pointer"
@@ -279,8 +291,9 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                   onClick={() => setSelectedBlockIndex((p) => p - 1)}
                   className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
                   title="Previous block"
+                  aria-label="Previous block"
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
                 <span className="px-2 font-mono font-bold text-[11px] text-slate-700">
                   Block {selectedBlockIndex + 1}/{totalBlocks}
@@ -291,8 +304,9 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                   onClick={() => setSelectedBlockIndex((p) => p + 1)}
                   className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
                   title="Next block"
+                  aria-label="Next block"
                 >
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
               </div>
             )}

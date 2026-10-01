@@ -7,7 +7,7 @@
  * including options to update a single-day override or modify a recurring weekly shift.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   X,
   Clock,
@@ -25,6 +25,8 @@ import {
   WEEKDAY_FULL_NAMES,
   getWeekdayFromIsoDate,
 } from '../../services/schedule/doctorScheduleService';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify } from '../common/dialogs';
 
 export interface EditDoctorShiftModalProps {
   isOpen: boolean;
@@ -124,6 +126,9 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
     }
   }, [isOpen, doctor, date, existingSession, recurringPatternSlot, specialties]);
 
+  const titleId = useId();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen && !!doctor && !!date, onClose);
+
   if (!isOpen || !doctor || !date) return null;
 
   // Calculate duration in hours
@@ -156,7 +161,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('Failed to save shift:', err);
-      alert(`Failed to save doctor shift: ${err.message || 'Unknown error'}`);
+      notify(`Failed to save doctor shift: ${err.message || 'Unknown error'}`, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -174,7 +179,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('Failed to delete shift:', err);
-      alert(`Failed to remove shift: ${err.message || 'Unknown error'}`);
+      notify(`Failed to remove shift: ${err.message || 'Unknown error'}`, 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -182,15 +187,21 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200"
+      >
         {/* Header */}
         <div className="px-5 py-4 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
-              <Stethoscope className="w-5 h-5" />
+              <Stethoscope className="w-5 h-5" aria-hidden="true" />
             </div>
             <div>
-              <h2 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
+              <h2 id={titleId} className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
                 <span>{existingSession ? 'Edit Doctor Shift' : 'Add Doctor Shift'}</span>
                 {isExistingRecurring && (
                   <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-indigo-500/30 border border-indigo-400/40 text-indigo-200">
@@ -204,10 +215,12 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
@@ -269,6 +282,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                 <input
                   type="time"
                   required
+                  aria-label="Start time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
                   className="w-full pl-8 pr-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
@@ -285,6 +299,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                 <input
                   type="time"
                   required
+                  aria-label="End time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
                   className="w-full pl-8 pr-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-mono font-semibold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
@@ -303,6 +318,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                 <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                 <input
                   type="text"
+                  aria-label="Room or clinic suite"
                   value={room}
                   onChange={(e) => setRoom(e.target.value)}
                   placeholder="e.g. Suite 101"
@@ -328,6 +344,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                 Clinical Specialty
               </label>
               <select
+                aria-label="Clinical specialty"
                 value={specialtyId}
                 onChange={(e) => setSpecialtyId(e.target.value)}
                 className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -467,7 +484,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                   onClick={() => setShowDeleteConfirm(true)}
                   className="inline-flex items-center gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Remove Shift</span>
                 </button>
               )}
@@ -486,7 +503,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                 disabled={isSaving}
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
               >
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
                 <span>{isSaving ? 'Saving...' : 'Save Shift'}</span>
               </button>
             </div>

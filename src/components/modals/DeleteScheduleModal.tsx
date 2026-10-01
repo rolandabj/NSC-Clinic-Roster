@@ -7,7 +7,7 @@
  * along with its assignments, versions, and publication links.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   AlertTriangle,
   Trash2,
@@ -19,6 +19,7 @@ import {
   History,
 } from 'lucide-react';
 import { Schedule } from '../../types';
+import { useDialogA11y } from '../common/useDialogA11y';
 
 interface DeleteScheduleModalProps {
   isOpen: boolean;
@@ -47,6 +48,12 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
     }
   }, [isOpen, schedule]);
 
+  const titleId = useId();
+  // Closing is blocked while the delete is running (same as the Cancel and X buttons).
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen && !!schedule, () => {
+    if (!isDeleting) onClose();
+  });
+
   if (!isOpen || !schedule) return null;
 
   const handleDelete = async () => {
@@ -61,16 +68,22 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div className="bg-white rounded-xl border border-rose-200 shadow-2xl max-w-lg w-full overflow-hidden text-xs">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-xl border border-rose-200 shadow-2xl max-w-lg w-full overflow-hidden text-xs"
+      >
         {/* Header */}
         <div className="px-6 py-4 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 shadow-2xs">
-              <Trash2 className="w-5 h-5 text-rose-600" />
+              <Trash2 className="w-5 h-5 text-rose-600" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 id={titleId} className="text-base font-bold text-slate-900">
                   Delete Schedule
                 </h2>
                 <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-bold font-mono text-[10px]">
@@ -84,12 +97,14 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             disabled={isDeleting}
+            aria-label="Close"
             className="p-1.5 rounded-lg hover:bg-rose-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer disabled:opacity-50"
             title="Cancel"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -193,7 +208,7 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
               </>
             ) : (
               <>
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Permanently Delete Schedule</span>
               </>
             )}

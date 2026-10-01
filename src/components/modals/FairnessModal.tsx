@@ -8,7 +8,7 @@
  */
 
 import { isWeekendDay } from '../../utils/weekend';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useId } from 'react';
 import {
   X,
   Scale,
@@ -38,6 +38,8 @@ import {
 } from '../../types';
 import { getRepository } from '../../services/repository';
 import { checkAssignment } from '../../services/engine/assignmentChecks';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify } from '../common/dialogs';
 
 interface FairnessModalProps {
   schedule: Schedule;
@@ -240,6 +242,9 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
     return swaps;
   }, [metrics, assignments, dutyMap, locks, leaveEntries, nurses, dutyWindows, roles, rules]);
 
+  const titleId = useId();
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const handleApplyRebalance = async () => {
@@ -275,7 +280,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
       onApplyAssignments(updated, `Rebalanced ${swapsToApply.length} shifts towards parity`);
       onClose();
     } catch (err: any) {
-      alert(`Rebalancing failed: ${err.message}`);
+      notify(`Rebalancing failed: ${err.message}`, 'error');
     } finally {
       setIsApplying(false);
     }
@@ -283,16 +288,22 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs font-sans text-slate-800">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs font-sans text-slate-800"
+      >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
-              <Scale className="w-4 h-4" />
+              <Scale className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900">
+                <h2 id={titleId} className="text-base font-bold text-slate-900">
                   Roster Fairness &amp; Parity Dashboard
                 </h2>
               </div>
@@ -303,10 +314,12 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close"
             className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
@@ -338,6 +351,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
           {/* Tab Selector */}
           <div className="flex items-center gap-1 bg-white p-1 rounded border border-slate-200">
             <button
+              type="button"
               onClick={() => setActiveTab('METRICS')}
               className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition-colors ${
                 activeTab === 'METRICS'
@@ -348,6 +362,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
               Staff Metrics Grid
             </button>
             <button
+              type="button"
               onClick={() => {
                 setActiveTab('REBALANCE');
                 setSelectedSwaps(new Set(proposedSwaps.map((s) => s.id)));
@@ -358,7 +373,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                   : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
-              <Sparkles className="w-3 h-3" />
+              <Sparkles className="w-3 h-3" aria-hidden="true" />
               <span>Parity Rebalance ({proposedSwaps.length})</span>
             </button>
           </div>
@@ -447,14 +462,8 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                     {proposedSwaps.map((s) => {
                       const isSelected = selectedSwaps.has(s.id);
                       return (
-                        <div
+                        <label
                           key={s.id}
-                          onClick={() => {
-                            const next = new Set(selectedSwaps);
-                            if (isSelected) next.delete(s.id);
-                            else next.add(s.id);
-                            setSelectedSwaps(next);
-                          }}
                           className={`p-3 rounded border transition-colors cursor-pointer flex items-center justify-between ${
                             isSelected
                               ? 'border-indigo-600 bg-indigo-50/40 text-slate-900'
@@ -465,7 +474,12 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                             <input
                               type="checkbox"
                               checked={isSelected}
-                              onChange={() => {}}
+                              onChange={() => {
+                                const next = new Set(selectedSwaps);
+                                if (isSelected) next.delete(s.id);
+                                else next.add(s.id);
+                                setSelectedSwaps(next);
+                              }}
                               className="rounded text-indigo-600 pointer-events-none"
                             />
                             <div>
@@ -479,7 +493,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                                 <span className="text-rose-700 font-medium">
                                   {s.overloadedNurse.fullName}
                                 </span>
-                                <ArrowRight className="w-3 h-3 text-slate-400" />
+                                <ArrowRight className="w-3 h-3 text-slate-400" aria-hidden="true" />
                                 <span className="text-emerald-700 font-bold">
                                   {s.underloadedNurse.fullName}
                                 </span>
@@ -488,7 +502,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                           </div>
 
                           <span className="text-[11px] text-slate-500 font-mono">{s.reason}</span>
-                        </div>
+                        </label>
                       );
                     })}
                   </div>
@@ -519,7 +533,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
               onClick={handleApplyRebalance}
               className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40"
             >
-              <CheckCircle2 className="w-4 h-4" />
+              <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
               <span>Apply {selectedSwaps.size} Parity Swaps</span>
             </button>
           )}
