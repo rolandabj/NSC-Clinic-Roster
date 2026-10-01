@@ -25,6 +25,9 @@ import {
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { syncPublicRoster, removePublicRoster } from '../../services/publish/publicRosterService';
+import { ensurePublicRosters } from '../../services/publish/publicRosterService';
+import { authService } from '../../services/auth/authService';
+import { canEditClinicData } from '../../services/auth/access';
 import {
   Schedule,
   ScheduleVersion,
@@ -73,7 +76,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         repo.list('shareLinks'),
         repo.list('invitations'),
       ]);
-      setShareLinks(links.filter((l) => l.scheduleId === schedule.id));
+      const schedLinks = links.filter((l) => l.scheduleId === schedule.id);
+      setShareLinks(schedLinks);
+      // Links made before public snapshots existed get one now (editors only).
+      if (canEditClinicData(authService.getCurrentUser())) void ensurePublicRosters(schedLinks);
       setInvitations(invites.filter((i) => i.scheduleId === schedule.id));
     } catch (err) {
       console.error('Error loading share links:', err);

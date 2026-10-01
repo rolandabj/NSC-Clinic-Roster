@@ -24,7 +24,7 @@ function isAllowedWebhookUrl(raw: string): boolean {
     return false;
   }
   if (url.protocol !== 'https:') return false;
-  const host = url.hostname.toLowerCase();
+  const host = url.hostname.toLowerCase().replace(/\.+$/, '');
   if (!host.includes('.') || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.internal')) return false;
   // Reject IP address literals (IPv4 and IPv6).
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith('[') || host.includes(':')) return false;

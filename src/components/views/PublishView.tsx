@@ -56,6 +56,9 @@ import {
 } from '../../types';
 import { PublishModal } from '../modals/PublishModal';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
+import { ensurePublicRosters } from '../../services/publish/publicRosterService';
+import { canEditClinicData } from '../../services/auth/access';
+import { authService } from '../../services/auth/authService';
 import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
 
 interface PublishViewProps {
@@ -162,6 +165,8 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       setPublishLogs(plList.sort((a, b) => b.sentAt.localeCompare(a.sentAt)));
       setAcknowledgments(ackList);
       setShareLinks(linkList);
+      // Links made before public snapshots existed get one now (editors only).
+      if (canEditClinicData(authService.getCurrentUser())) void ensurePublicRosters(linkList);
 
       const current =
         uniqueSchedules.find((s) => s.id === context.activeScheduleId) || uniqueSchedules[0];

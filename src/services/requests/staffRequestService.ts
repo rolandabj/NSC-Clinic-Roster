@@ -299,7 +299,12 @@ export async function decideRequest(
         operator: '==',
         value: existing.nurseId,
       })) as LockEntry[];
-      if (!locks.some((l) => l.date === existing.date)) {
+      const sameDay = locks.filter((l) => l.date === existing.date);
+      // An approved day off wins over a pinned shift on the same day.
+      for (const l of sameDay.filter((l) => l.mode !== 'OFF')) {
+        await repo.remove('locks', l.id);
+      }
+      if (!sameDay.some((l) => l.mode === 'OFF')) {
         await repo.create('locks', {
           id: lockId,
           nurseId: existing.nurseId,

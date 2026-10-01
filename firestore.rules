@@ -77,7 +77,9 @@ service cloud.firestore {
       allow list: if isApproved();
       allow create, delete: if isEditor();
       allow update: if isEditor() || (
-        resource.data.token == ackId
+        // By token without signing in, or (for older acknowledgments whose id
+        // is not the token) by any approved signed in user.
+        (resource.data.token == ackId || isApproved())
         && resource.data.get('ackAt', null) == null
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ackAt'])
         && request.resource.data.ackAt is string
@@ -87,13 +89,14 @@ service cloud.firestore {
     // ---------------------------------------------------------------------
     // Public roster snapshots: the document id is the random share token.
     // Anyone holding the link can read that one snapshot (never list them).
-    // Restricted links only open for the listed, signed in email addresses.
+    // Restricted links are for staff accounts: they only open for the listed
+    // signed in email addresses (and for editors, who manage the links).
     // ---------------------------------------------------------------------
     match /publicRosters/{token} {
       allow get: if resource.data.revoked != true && (
         resource.data.isPublic == true
         || (signedIn() && myEmail() in resource.data.allowedEmails)
-        || isApproved()
+        || isEditor()
       );
       allow list: if false;
       allow write: if isEditor();

@@ -439,8 +439,9 @@ export class RosterPublishService {
 
       if (response.ok) {
         const json = await response.json();
-        if (json.data?.status === 'SENT' || json.status === 'ok') {
-          recipientLog.status = 'SENT';
+        // The server reports the real delivery result in data.status.
+        if (json.data?.status === 'SENT' || json.data?.status === 'MOCK_SENT') {
+          recipientLog.status = json.data.status;
         } else {
           recipientLog.status = json.data?.status || 'FAILED';
           recipientLog.errorMessage = json.data?.error || 'Dispatch error returned from server';

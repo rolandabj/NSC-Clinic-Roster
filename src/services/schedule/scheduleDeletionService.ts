@@ -7,6 +7,7 @@
  * assignments, versions, publish logs, acknowledgments, share links, and invitations.
  */
 
+import { removePublicRoster } from '../publish/publicRosterService';
 import { IRepository } from '../repository/IRepository';
 
 export interface ScheduleDeleteResult {
@@ -57,6 +58,8 @@ export async function deleteEntireSchedule(
     const allShareLinks = await repo.list('shareLinks');
     const schedLinks = allShareLinks.filter((l) => l.scheduleId === scheduleId);
     for (const l of schedLinks) {
+      // Remove the public snapshot first: it cannot be found once the link is gone.
+      if (l.token) await removePublicRoster(l.token);
       await repo.remove('shareLinks', l.id);
     }
   } catch (err) {

@@ -142,3 +142,21 @@ export async function loadPublicRoster(token: string): Promise<PublicRosterDoc |
     return null;
   }
 }
+
+/**
+ * Creates missing snapshots for active share links (for example links made
+ * before snapshots existed). Called when an editor opens the share or publish
+ * screens. Failures are logged, never thrown.
+ */
+export async function ensurePublicRosters(links: ShareLink[]): Promise<void> {
+  const repo = getRepository();
+  for (const link of links) {
+    if (link.revoked || !link.token || !link.pointsToVersionId) continue;
+    try {
+      const existing = await repo.get('publicRosters', link.token);
+      if (!existing) await syncPublicRoster(link);
+    } catch (err) {
+      console.warn('[publicRosterService] Could not create snapshot for share link:', err);
+    }
+  }
+}

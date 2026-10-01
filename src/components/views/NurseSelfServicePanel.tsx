@@ -260,6 +260,8 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                 {myLeaves.map((l) => {
                   const lt = leaveTypes.find((t) => t.id === l.leaveTypeId);
                   const isPending = l.status === 'PENDING' || (!l.approved && l.status !== 'REJECTED');
+                  // Only requests filed with a PENDING status can be withdrawn (see firestore.rules).
+                  const canCancel = l.status === 'PENDING';
                   const isApproved = l.status === 'APPROVED' || l.approved === true;
                   const isRejected = l.status === 'REJECTED';
 
@@ -313,7 +315,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                         )}
                       </td>
                       <td className="py-2.5 px-3 text-right">
-                        {isPending && (
+                        {canCancel && (
                           <button
                             onClick={() => handleCancelLeave(l.id)}
                             disabled={isBusy}

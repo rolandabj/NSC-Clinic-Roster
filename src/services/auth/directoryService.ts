@@ -121,7 +121,7 @@ export class RoleDirectoryService {
     try {
       // 2. WHITELIST GATEKEEPER: Query userAccess collection
       const [userAccessList, nurses, doctors, seniorityLevels] = await Promise.all([
-        (repo.list('userAccess') as Promise<UserAccessRecord[]>),
+        (repo.list('userAccess') as Promise<UserAccessRecord[]>).catch(() => [] as UserAccessRecord[]), // only the owner may list access records
         (repo.list('nurses') as Promise<Nurse[]>),
         (repo.list('doctors') as Promise<Doctor[]>),
         (repo.list('seniorityLevels') as Promise<SeniorityLevel[]>),
@@ -286,7 +286,7 @@ export class RoleDirectoryService {
     const repo = repoOverride || getRepository();
 
     const [userAccessList, nurses, doctors, seniorityLevels] = await Promise.all([
-      (repo.list('userAccess') as Promise<UserAccessRecord[]>),
+      (repo.list('userAccess') as Promise<UserAccessRecord[]>).catch(() => [] as UserAccessRecord[]), // only the owner may list access records
       (repo.list('nurses') as Promise<Nurse[]>),
       (repo.list('doctors') as Promise<Doctor[]>),
       (repo.list('seniorityLevels') as Promise<SeniorityLevel[]>),

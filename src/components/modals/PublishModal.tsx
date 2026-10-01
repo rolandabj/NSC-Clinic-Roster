@@ -294,7 +294,8 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       //    and refresh every active link's public snapshot.
       const existingLinks = await repo.list('shareLinks', { field: 'scheduleId', operator: '==', value: schedule.id });
       const schedLinks = existingLinks.filter((l) => !l.revoked);
-      if (schedLinks.length === 0) {
+      // Emails need a public link that nurses can open without an account.
+      if (!schedLinks.some((l) => l.public)) {
         const newLink: ShareLink = {
           id: uuidv4(),
           scheduleId: schedule.id,
@@ -313,10 +314,15 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         if (link.pointsToVersionId !== versionId) {
           await repo.update('shareLinks', link.id, { pointsToVersionId: versionId });
         }
-        await syncPublicRoster({ ...link, pointsToVersionId: versionId });
+        try {
+          await syncPublicRoster({ ...link, pointsToVersionId: versionId });
+        } catch (syncErr: any) {
+          // A snapshot problem must not stop the publish; the link can be refreshed from Share.
+          logs.push(`⚠ Could not refresh share link snapshot: ${syncErr?.message || syncErr}`);
+          setSendLogs([...logs]);
+        }
       }
-      // Personal email links use the clinic wide public link when there is one.
-      const emailShareToken = (schedLinks.find((l) => l.public) || schedLinks[0]).token;
+      const emailShareToken = schedLinks.find((l) => l.public)!.token;
 
       // 4. Dispatch Email to Selected Nurses
       const targetNurses = nurses.filter((n) => selectedNurseIds.has(n.id));

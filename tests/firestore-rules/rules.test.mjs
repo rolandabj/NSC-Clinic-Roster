@@ -72,6 +72,9 @@ await t('anon cannot list acks', false, getDocs(collection(anon, 'acknowledgment
 await t('anon cannot change other ack fields', false, updateDoc(doc(anon, 'acknowledgments/ack-t1'), { nurseId: 'n9' }));
 await t('anon acknowledges once', true, updateDoc(doc(anon, 'acknowledgments/ack-t1'), { ackAt: '2026-10-01T00:00:00Z' }));
 await t('anon cannot acknowledge twice', false, updateDoc(doc(anon, 'acknowledgments/ack-t1'), { ackAt: '2026-10-02T00:00:00Z' }));
+await t('anon cannot acknowledge legacy ack', false, updateDoc(doc(anon, 'acknowledgments/legacy'), { ackAt: '2026-10-01T00:00:00Z' }));
+await t('viewer acknowledges legacy ack once', true, updateDoc(doc(viewer, 'acknowledgments/legacy'), { ackAt: '2026-10-01T00:00:00Z' }));
+await t('viewer cannot re-acknowledge legacy ack', false, updateDoc(doc(viewer, 'acknowledgments/legacy'), { ackAt: '2026-10-03T00:00:00Z' }));
 await t('viewer cannot create ack', false, setDoc(doc(viewer, 'acknowledgments/ack-z'), { token: 'ack-z' }));
 // public rosters
 await t('anon reads public roster', true, getDoc(doc(anon, 'publicRosters/sh_pub')));
@@ -79,6 +82,8 @@ await t('anon cannot list public rosters', false, getDocs(collection(anon, 'publ
 await t('anon cannot read restricted roster', false, getDoc(doc(anon, 'publicRosters/sh_priv')));
 await t('allowed email reads restricted roster', true, getDoc(doc(env.authenticatedContext('f', tok('friend@x.com')).firestore(), 'publicRosters/sh_priv')));
 await t('other email cannot read restricted roster', false, getDoc(doc(stranger, 'publicRosters/sh_priv')));
+await t('approved viewer not on list cannot read restricted roster', false, getDoc(doc(viewer, 'publicRosters/sh_priv')));
+await t('editor reads restricted roster', true, getDoc(doc(editor, 'publicRosters/sh_priv')));
 await t('revoked roster unreadable', false, getDoc(doc(anon, 'publicRosters/sh_rev')));
 await t('viewer cannot write public roster', false, setDoc(doc(viewer, 'publicRosters/sh_new'), { isPublic: true }));
 await t('editor writes public roster', true, setDoc(doc(editor, 'publicRosters/sh_new'), { isPublic: true, allowedEmails: [], revoked: false }));
