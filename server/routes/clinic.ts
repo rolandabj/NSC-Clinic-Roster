@@ -19,13 +19,22 @@ export const clinicRouter = Router();
 
 /**
  * GET /api/clinic
- * Returns the clinic profile
+ * Returns the clinic profile. Callers who are not signed in (the login page)
+ * only receive the clinic name, and nothing is written.
  */
-clinicRouter.get('/clinic', async (_req: Request, res: Response) => {
+clinicRouter.get('/clinic', async (req: Request, res: Response) => {
   try {
     const repo = getServerRepository();
     const clinics = await repo.list('clinics');
     let profile = clinics[0];
+
+    if (!req.user) {
+      res.json({
+        status: 'ok',
+        data: { name: profile?.name || 'American Hospital Nad Al Sheba OutPatient clinic' },
+      });
+      return;
+    }
 
     if (!profile) {
       profile = {

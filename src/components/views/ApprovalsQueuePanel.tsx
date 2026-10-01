@@ -62,7 +62,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
       const token = authService.getToken();
       const res = await fetch('/api/approvals/pending', {
         headers: {
-          Authorization: `Bearer ${token || 'local-owner'}`,
+          Authorization: `Bearer ${token || ''}`,
         },
       });
 
@@ -93,7 +93,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token || 'local-owner'}`,
+          Authorization: `Bearer ${token || ''}`,
         },
         body: JSON.stringify({
           kind: activeDecision.kind,

@@ -9,6 +9,7 @@
 import { Router, Request, Response } from 'express';
 import { getServerRepository } from '../db/index';
 import { CollectionName } from '../../src/types';
+import { requireAuth, requirePlanner } from '../middleware/auth';
 
 export const crudRouter = Router();
 
@@ -37,9 +38,35 @@ const ALLOWED_COLLECTIONS: Set<string> = new Set<CollectionName>([
   'audit',
   'templates',
   'swaps',
-  'userAccess',
   'availabilityRequests',
 ]);
+
+// Collections holding tokens, email bodies or history: planners only, even for reads.
+const PLANNER_READ_COLLECTIONS: Set<string> = new Set<CollectionName>([
+  'shareLinks',
+  'invitations',
+  'emailLog',
+  'acknowledgments',
+  'audit',
+]);
+
+// Every CRUD route requires a signed in, approved user. Writes require a planner.
+crudRouter.use('/data', requireAuth, (req: Request, res: Response, next) => {
+  if (req.method !== 'GET') {
+    return requirePlanner(req, res, next);
+  }
+  next();
+});
+
+// Reads of sensitive collections require a planner. This runs on the decoded
+// :collection parameter (the same value the handlers use), so percent encoding
+// the collection name cannot bypass it.
+crudRouter.param('collection', (req: Request, res: Response, next, collection: string) => {
+  if (PLANNER_READ_COLLECTIONS.has(collection)) {
+    return requirePlanner(req, res, next);
+  }
+  next();
+});
 
 function validateCollection(req: Request, res: Response): CollectionName | null {
   const collection = req.params.collection as CollectionName;

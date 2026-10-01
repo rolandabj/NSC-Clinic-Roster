@@ -8,7 +8,6 @@
  */
 
 import express, { Request, Response } from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
@@ -19,7 +18,7 @@ import {
   isServerDatabaseCleared,
 } from './services/seed/serverSeedRunner';
 import { adminRouter } from './routes/admin';
-import { authMiddleware } from './middleware/auth';
+import { authMiddleware, requireAuth, requireOwner } from './middleware/auth';
 import { authRouter } from './routes/auth';
 import { clinicRouter } from './routes/clinic';
 import { staffRouter } from './routes/staff';
@@ -87,15 +86,50 @@ export async function startServer() {
     },
   });
 
+  // 3. General limit on authentication, email and acknowledgment endpoints
+  const sensitiveRateLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+      error: 'TooManyRequests',
+      message: 'Rate limit exceeded: please wait a minute and try again.',
+    },
+  });
+
   // Middlewares
-  app.use(cors());
+  // No CORS middleware: the browser app is served from this same origin, so
+  // cross origin calls to the API are not needed and are not allowed.
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-  app.use(authMiddleware);
 
-  // Apply Rate Limiters to Targeted Public Endpoints
+  // Apply Rate Limiters to Targeted Public Endpoints (before token verification)
   app.use('/api/share', shareRateLimiter);
   app.use('/api/roster/calendar', calendarRateLimiter);
+  app.use('/api/auth', sensitiveRateLimiter);
+  app.use('/api/email', sensitiveRateLimiter);
+  app.use('/api/roster/acknowledge', sensitiveRateLimiter);
+
+  app.use(authMiddleware);
+
+  // Every API route requires a signed in, approved user, except this short list
+  // of public endpoints (each one checks its own token where relevant).
+  const PUBLIC_API_ROUTES: Array<{ method: string; pattern: RegExp }> = [
+    { method: 'GET', pattern: /^\/api\/health$/ },
+    { method: 'GET', pattern: /^\/api\/clinic$/ },
+    { method: 'GET', pattern: /^\/api\/auth\/(me|verify)$/ },
+    { method: 'POST', pattern: /^\/api\/auth\/logout$/ },
+    { method: 'GET', pattern: /^\/api\/share\/[^/]+$/ },
+    { method: 'GET', pattern: /^\/api\/roster\/calendar\/[^/]+$/ },
+    { method: 'POST', pattern: /^\/api\/roster\/acknowledge$/ },
+  ];
+  app.use('/api', (req: Request, res: Response, next) => {
+    const fullPath = (req.baseUrl + req.path).replace(/\/+$/, '') || '/';
+    const isPublic = PUBLIC_API_ROUTES.some((r) => r.method === req.method && r.pattern.test(fullPath));
+    if (isPublic) return next();
+    return requireAuth(req, res, next);
+  });
 
   // Verify database state on cold start (no auto-seeding of demo data)
   try {
@@ -107,8 +141,13 @@ export async function startServer() {
     console.error('[Server] Cold start database check failed:', err);
   }
 
-  // Expanded Health & Observability Endpoint
-  app.get('/api/health', async (_req: Request, res: Response) => {
+  // Public liveness check: reveals nothing about the server.
+  app.get('/api/health', (_req: Request, res: Response) => {
+    res.json({ status: 'healthy', timestamp: new Date().toISOString(), service: 'ClinicRoster API' });
+  });
+
+  // Detailed health & observability (owner only)
+  app.get('/api/health/details', requireOwner, async (_req: Request, res: Response) => {
     try {
       const mem = process.memoryUsage();
       const storageStats = await serverRepo.getStorageStats();
@@ -134,7 +173,6 @@ export async function startServer() {
         },
         database: {
           engine: 'JsonFileRepository',
-          directory: storageStats.storageDirectory,
           totalSizeBytes: storageStats.totalSizeBytes,
           totalSizeReadable: storageStats.totalSizeReadable,
           collectionsCount: storageStats.collectionsCount,
@@ -191,6 +229,14 @@ export async function startServer() {
   } else {
     // Look for client dist either at process.cwd()/dist or relative
     const distPath = path.resolve(process.cwd(), 'dist');
+    // The bundled server code lives in dist/ too; never serve it to browsers.
+    app.use((req: Request, res: Response, next) => {
+      if (/^\/server\.js(\.map)?$/i.test(req.path)) {
+        res.status(404).end();
+        return;
+      }
+      next();
+    });
     app.use(express.static(distPath));
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.resolve(distPath, 'index.html'));

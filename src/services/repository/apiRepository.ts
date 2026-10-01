@@ -27,15 +27,6 @@ export class ApiRepository implements IRepository {
     const bearerToken = authService.getBearerToken();
     if (bearerToken) {
       headers['Authorization'] = `Bearer ${bearerToken}`;
-      return headers;
-    }
-
-    // 2. Secondary: Saved session token fallback
-    if (typeof localStorage !== 'undefined') {
-      const token = localStorage.getItem('clinic_auth_token');
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
     }
     return headers;
   }

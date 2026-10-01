@@ -26,16 +26,8 @@ export default function App() {
     return 'American Hospital Nad Al Sheba OutPatient clinic';
   });
 
-  // Check if current URL is an external shared link (e.g., token-based public roster share)
-  const isPublicShareLink = (): boolean => {
-    if (typeof window === 'undefined') return false;
-    const search = window.location.search;
-    const hash = window.location.hash;
-    return search.includes('token=') || hash.includes('token=') || hash.startsWith('#published');
-  };
-
   useEffect(() => {
-    // 1. Await initial session validation from /api/auth/me
+    // 1. Await the initial Firebase Auth session check
     authService.whenReady().then((user) => {
       setCurrentUser(user);
       setIsAuthChecking(false);
@@ -97,12 +89,13 @@ export default function App() {
     );
   }
 
-  // 2. If unauthenticated and not viewing a public shared roster link: strictly render LoginPage
-  if (!currentUser && !isPublicShareLink()) {
+  // 2. Every view, including shared roster and acknowledgment links, requires sign in.
+  // The URL hash is kept, so the link opens once the user has signed in.
+  if (!currentUser) {
     return <LoginPage clinicName={clinicName} onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
 
-  // 3. Authenticated session (or verified public token view): render AppShell
+  // 3. Authenticated session: render AppShell
   return <AppShell currentUser={currentUser} />;
 }
 

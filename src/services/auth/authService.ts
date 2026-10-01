@@ -1,26 +1,24 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
- * Firebase Auth & Google Workspace SSO Client Authentication Service (Sub-Phase 4.3)
- * Provides authentication using Firebase Auth / Google OAuth with strict in-memory token management,
- * automatic Google token exchange against /api/auth/google-exchange, and global Bearer propagation.
+ *
+ * Firebase Authentication Client Service
+ * Google sign in through Firebase Auth is the only way to sign in.
+ * The user's role is read from their userAccess record in Firestore
+ * (document id = lowercased email). Firestore security rules enforce the
+ * same records, so the UI and the database always agree.
  */
 
-import { getApps, initializeApp, getApp, FirebaseApp } from 'firebase/app';
 import {
-  getAuth,
   signInWithPopup,
-  signInWithEmailAndPassword,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
-  onAuthStateChanged,
+  onIdTokenChanged,
   User as FirebaseUser,
-  Auth,
-  browserPopupRedirectResolver,
 } from 'firebase/auth';
-import { UserRole } from '../../types';
-import { defaultFirebaseConfig } from '../firebase/firebaseConfig';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { UserRole, UserAccessRecord } from '../../types';
+import { getAppAuth, getAppFirestore } from '../firebase/firebaseConfig';
 
 export const MASTER_ADMIN_EMAIL = 'rolandabj@gmail.com';
 
@@ -59,17 +57,28 @@ export interface UserProfile {
   lastVerified?: string;
 }
 
-interface InMemoryTokens {
-  accessToken: string | null;
-  idToken: string | null;
-  sessionToken: string | null;
-  tokenType?: string;
-  expiresAt?: number;
-}
+export function computePrivileges(role: UserRole, isManager: boolean = false): UserPrivileges {
+  const isOwner = role === 'OWNER';
+  const isEditorOrOwner = isOwner || role === 'EDITOR' || role === 'PLANNER';
+  const canApprove = isOwner || isManager;
 
-const LOCAL_STORAGE_USER_KEY = 'clinic_user_profile';
-const SESSION_TOKEN_KEY = 'clinic_roster_session_token';
-const FIREBASE_CONFIG_KEY = 'clinic_roster_firebase_config';
+  return {
+    canEditClinicSettings: isOwner,
+    canCreateSchedules: isEditorOrOwner,
+    canPublishSchedules: isEditorOrOwner,
+    canRunSolver: isEditorOrOwner,
+    canEditRosterAssignments: isEditorOrOwner,
+    canApproveSwaps: canApprove,
+    canApproveLeave: canApprove,
+    canApproveAvailability: canApprove,
+    canRequestSwaps: true,
+    canAcknowledgeShifts: true,
+    canViewSchedules: true,
+    canExportReports: isEditorOrOwner || isManager,
+    canManageStaff: isOwner,
+    canConfigureWebhooks: isOwner,
+  };
+}
 
 export class AuthService {
   private static instance: AuthService;
@@ -79,12 +88,10 @@ export class AuthService {
   private readyPromise: Promise<UserProfile | null>;
   private resolveReady!: (user: UserProfile | null) => void;
 
-  // Strict In-Memory Token Cache (cleared on logout, never persisted to disk)
-  private inMemoryTokens: InMemoryTokens = {
-    accessToken: null,
-    idToken: null,
-    sessionToken: null,
-  };
+  // Current Firebase ID token, refreshed automatically by the Firebase SDK
+  private idToken: string | null = null;
+  // De-duplicates profile resolution when sign in and the token listener fire together
+  private pendingResolution: { uid: string; promise: Promise<UserProfile> } | null = null;
 
   private constructor() {
     this.readyPromise = new Promise((resolve) => {
@@ -112,111 +119,75 @@ export class AuthService {
     return this.readyPromise;
   }
 
-  /**
-   * Initializes Firebase app if configuration is present
-   */
-  public ensureFirebaseApp(): FirebaseApp | null {
-    if (getApps().length > 0) {
-      return getApp();
+  private markReady() {
+    if (!this.initialized) {
+      this.initialized = true;
+      this.resolveReady(this.currentUser);
     }
-
-    // 1. Check bundled/provisioned default Firebase config
-    if (defaultFirebaseConfig && defaultFirebaseConfig.apiKey && defaultFirebaseConfig.projectId) {
-      return initializeApp(defaultFirebaseConfig);
-    }
-
-    // 2. Check localStorage for user-provided Firebase Client Config
-    try {
-      const stored = localStorage.getItem(FIREBASE_CONFIG_KEY);
-      if (stored) {
-        const config = JSON.parse(stored);
-        if (config && config.apiKey && config.projectId) {
-          return initializeApp(config);
-        }
-      }
-    } catch (e) {
-      console.warn('[AuthService] Could not parse stored Firebase config:', e);
-    }
-
-    // 3. Check environment variables
-    const envApiKey = (import.meta as any).env?.VITE_FIREBASE_API_KEY;
-    const envProjectId = (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID;
-    const envAppId = (import.meta as any).env?.VITE_FIREBASE_APP_ID;
-
-    if (envApiKey && envProjectId) {
-      return initializeApp({
-        apiKey: envApiKey,
-        authDomain: `${envProjectId}.firebaseapp.com`,
-        projectId: envProjectId,
-        storageBucket: `${envProjectId}.appspot.com`,
-        appId: envAppId || '1:123456789:web:default',
-      });
-    }
-
-    return null;
   }
 
-  private async init() {
-    // 1. Read stored session token and validate against GET /api/auth/me
+  private init() {
+    let auth;
     try {
-      const storedToken = localStorage.getItem(SESSION_TOKEN_KEY);
-      if (storedToken) {
-        const res = await fetch('/api/auth/me', {
-          headers: { Authorization: `Bearer ${storedToken}` },
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          if (data.authenticated && data.user) {
-            this.inMemoryTokens.sessionToken = storedToken;
-            this.currentUser = {
-              ...data.user,
-              privileges: data.privileges || data.user.privileges,
-            };
-            this.persist();
-            this.initialized = true;
-            this.resolveReady(this.currentUser);
-            this.notify();
-            return;
-          }
-        }
-      }
-    } catch (e) {
-      console.warn('[AuthService] Session verification check failed during boot:', e);
+      auth = getAppAuth();
+    } catch (err) {
+      console.error('[AuthService] Firebase Auth could not be initialized:', err);
+      this.markReady();
+      return;
     }
 
-    // If no valid session token exists: default strictly to null (unauthenticated)
-    this.currentUser = null;
-    this.inMemoryTokens.sessionToken = null;
-    try {
-      localStorage.removeItem(SESSION_TOKEN_KEY);
-      localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
-    } catch {}
+    onIdTokenChanged(auth, async (fbUser) => {
+      if (!fbUser) {
+        this.idToken = null;
+        if (this.currentUser) {
+          this.currentUser = null;
+          this.notify();
+        }
+        this.markReady();
+        return;
+      }
 
-    this.initialized = true;
-    this.resolveReady(null);
-    this.notify();
+      try {
+        this.idToken = await fbUser.getIdToken();
+      } catch (err) {
+        console.warn('[AuthService] Could not read Firebase ID token:', err);
+      }
+
+      if (!this.currentUser || this.currentUser.uid !== fbUser.uid) {
+        try {
+          this.currentUser = await this.resolveProfileOnce(fbUser);
+        } catch (err: any) {
+          console.warn('[AuthService] Access not granted:', err?.message || err);
+          this.currentUser = null;
+        }
+        this.notify();
+      }
+      this.markReady();
+    });
   }
 
   /**
-   * Retrieves the active Bearer token from the in-memory cache for API authorization
+   * Returns the current Firebase ID token for API authorization.
+   * The token is kept fresh by the Firebase SDK token listener.
    */
   public getBearerToken(): string | null {
-    return (
-      this.inMemoryTokens.sessionToken ||
-      this.inMemoryTokens.idToken ||
-      this.inMemoryTokens.accessToken ||
-      null
-    );
+    return this.idToken;
   }
 
   public getToken(): string | null {
-    return this.getBearerToken();
+    return this.idToken;
   }
 
   /**
-   * Returns current tokens status for diagnostics
+   * Returns a guaranteed fresh ID token (refreshing it if it is close to expiry).
    */
+  public async getFreshToken(): Promise<string | null> {
+    const fbUser = getAppAuth().currentUser;
+    if (!fbUser) return null;
+    this.idToken = await fbUser.getIdToken();
+    return this.idToken;
+  }
+
   public getTokenState(): {
     hasSessionToken: boolean;
     hasIdToken: boolean;
@@ -224,10 +195,9 @@ export class AuthService {
     expiresAt?: number;
   } {
     return {
-      hasSessionToken: !!this.inMemoryTokens.sessionToken,
-      hasIdToken: !!this.inMemoryTokens.idToken,
-      hasAccessToken: !!this.inMemoryTokens.accessToken,
-      expiresAt: this.inMemoryTokens.expiresAt,
+      hasSessionToken: false,
+      hasIdToken: !!this.idToken,
+      hasAccessToken: false,
     };
   }
 
@@ -253,429 +223,204 @@ export class AuthService {
     });
   }
 
-  private persist() {
-    try {
-      if (this.currentUser) {
-        localStorage.setItem(LOCAL_STORAGE_USER_KEY, JSON.stringify(this.currentUser));
-      } else {
-        localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
+  private resolveProfileOnce(fbUser: FirebaseUser): Promise<UserProfile> {
+    if (this.pendingResolution && this.pendingResolution.uid === fbUser.uid) {
+      return this.pendingResolution.promise;
+    }
+    const promise = this.resolveProfile(fbUser).finally(() => {
+      if (this.pendingResolution?.promise === promise) {
+        this.pendingResolution = null;
       }
-    } catch (e) {
-      console.warn('[AuthService] Could not persist user profile:', e);
-    }
-  }
-
-  /**
-   * Fetches a signed session token for local persona testing
-   */
-  private async refreshLocalSessionToken(): Promise<void> {
-    if (!this.currentUser) return;
-    try {
-      const res = await fetch('/api/auth/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uid: this.currentUser.uid,
-          name: this.currentUser.name,
-          email: this.currentUser.email,
-          role: this.currentUser.role,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.token) {
-          this.inMemoryTokens.sessionToken = data.token;
-        }
-      }
-    } catch {
-      // Offline fallback: ignore
-    }
-  }
-
-  /**
-   * Performs automatic backend token exchange with /api/auth/google-exchange
-   */
-  public async performBackendTokenExchange(
-    token: string,
-    fbUser?: FirebaseUser | null
-  ): Promise<UserProfile> {
-    const res = await fetch('/api/auth/google-exchange', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ token }),
     });
-
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(errJson.message || `Token exchange failed (HTTP ${res.status})`);
-    }
-
-    const exchangeData = await res.json();
-
-    // Store returned session token in-memory
-    if (exchangeData.sessionToken) {
-      this.inMemoryTokens.sessionToken = exchangeData.sessionToken;
-    }
-    this.inMemoryTokens.expiresAt = exchangeData.expiresAt;
-
-    const matchedIdentity = exchangeData.identity;
-    const resolvedRole = (exchangeData.user?.role || matchedIdentity?.role || 'VIEWER') as UserRole;
-
-    this.currentUser = {
-      uid: exchangeData.user?.uid || fbUser?.uid || matchedIdentity?.uid || 'usr-google',
-      name: exchangeData.user?.name || fbUser?.displayName || matchedIdentity?.name || 'Google User',
-      email: exchangeData.user?.email || fbUser?.email || matchedIdentity?.email || '',
-      photoURL: fbUser?.photoURL || undefined,
-      role: resolvedRole,
-      appRole: exchangeData.user?.appRole || matchedIdentity?.appRole || (resolvedRole === 'OWNER' || resolvedRole === 'EDITOR' ? 'EDITOR' : 'VIEWER'),
-      isManager: exchangeData.isManager ?? matchedIdentity?.isManager ?? (resolvedRole === 'OWNER'),
-      accessStatus: exchangeData.accessStatus || matchedIdentity?.accessStatus || 'APPROVED',
-      linkedNurseId: exchangeData.user?.linkedNurseId || matchedIdentity?.nurseId,
-      isLocal: false,
-      nurseCode: matchedIdentity?.nurseCode,
-      matchedEntity: matchedIdentity?.matchedEntity,
-      seniorityName: matchedIdentity?.seniorityLevel?.name,
-      privileges: exchangeData.privileges || matchedIdentity?.privileges,
-      lastVerified: new Date().toISOString(),
-    };
-
-    this.persist();
-    this.notify();
-    return this.currentUser;
+    this.pendingResolution = { uid: fbUser.uid, promise };
+    return promise;
   }
 
   /**
-   * Direct Google Workspace SSO Authentication (Bypasses popup windows entirely)
-   * Resolves clinic identity and permissions directly through /api/auth/google/sso-login
+   * Resolves the signed in Firebase user to a clinic profile using their
+   * userAccess record. Unknown users get a PENDING access request filed for
+   * the owner to approve, and are signed out.
    */
-  public async signInWithGoogleDirect(
-    email: string = MASTER_ADMIN_EMAIL,
-    name: string = 'Dr. Roland / Clinical Director'
-  ): Promise<UserProfile> {
-    const res = await fetch('/api/auth/google/sso-login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, name }),
-    });
-
-    if (!res.ok) {
-      const errJson = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(errJson.message || `SSO login failed (HTTP ${res.status})`);
+  private async resolveProfile(fbUser: FirebaseUser): Promise<UserProfile> {
+    const email = (fbUser.email || '').trim().toLowerCase();
+    if (!email || !fbUser.emailVerified) {
+      await this.signOutQuietly();
+      throw new Error('Your Google account has no verified email address.');
     }
 
-    const data = await res.json();
-    if (data.sessionToken) {
-      this.inMemoryTokens.sessionToken = data.sessionToken;
+    const db = getAppFirestore();
+    const accessRef = doc(db, 'userAccess', email);
+    const name = fbUser.displayName || email.split('@')[0];
+    const now = new Date().toISOString();
+
+    if (email === MASTER_ADMIN_EMAIL) {
+      // Keep an owner record in the whitelist so it appears in access management.
       try {
-        localStorage.setItem(SESSION_TOKEN_KEY, data.sessionToken);
-      } catch {}
+        const snap = await getDoc(accessRef);
+        if (!snap.exists()) {
+          const ownerRecord: UserAccessRecord = {
+            id: email,
+            email,
+            name,
+            status: 'APPROVED',
+            appRole: 'EDITOR',
+            isManager: true,
+            approvedBy: MASTER_ADMIN_EMAIL,
+            approvedAt: now,
+            createdAt: now,
+          };
+          await setDoc(accessRef, ownerRecord);
+        }
+      } catch (err) {
+        console.warn('[AuthService] Could not ensure owner access record:', err);
+      }
+
+      return {
+        uid: fbUser.uid,
+        name,
+        email,
+        photoURL: fbUser.photoURL || undefined,
+        role: 'OWNER',
+        appRole: 'EDITOR',
+        isManager: true,
+        accessStatus: 'APPROVED',
+        isLocal: false,
+        matchedEntity: 'CLINIC_OWNER',
+        privileges: computePrivileges('OWNER', true),
+        lastVerified: now,
+      };
     }
-    this.inMemoryTokens.expiresAt = data.expiresAt;
 
-    const identity = data.identity;
-    const resolvedRole = (data.user?.role || identity?.role || 'OWNER') as UserRole;
+    const snap = await getDoc(accessRef);
 
-    this.currentUser = {
-      uid: data.user?.uid || identity?.uid || 'usr-admin-roland',
-      name: data.user?.name || identity?.name || name,
-      email: data.user?.email || identity?.email || email,
-      role: resolvedRole,
-      appRole: data.user?.appRole || identity?.appRole || 'EDITOR',
-      isManager: data.isManager ?? identity?.isManager ?? true,
-      accessStatus: data.accessStatus || identity?.accessStatus || 'APPROVED',
-      linkedNurseId: data.user?.linkedNurseId || identity?.nurseId,
+    if (!snap.exists()) {
+      try {
+        await setDoc(accessRef, {
+          id: email,
+          email,
+          name,
+          status: 'PENDING',
+          appRole: 'VIEWER',
+          isManager: false,
+          approvedBy: '',
+          createdAt: now,
+        });
+      } catch (err) {
+        console.warn('[AuthService] Could not file access request:', err);
+      }
+      await this.signOutQuietly();
+      throw new Error(
+        'Your access request has been sent to the clinic administrator. You can sign in once it is approved.'
+      );
+    }
+
+    const record = snap.data() as UserAccessRecord;
+
+    if (record.status === 'PENDING') {
+      await this.signOutQuietly();
+      throw new Error('Your access request is still awaiting approval by the clinic administrator.');
+    }
+
+    if (record.status !== 'APPROVED') {
+      await this.signOutQuietly();
+      throw new Error('Access for this account has been revoked. Contact the clinic administrator.');
+    }
+
+    const role: UserRole = record.appRole === 'EDITOR' ? 'EDITOR' : 'VIEWER';
+    const isManager = record.isManager === true;
+
+    return {
+      uid: fbUser.uid,
+      name: record.name || name,
+      email,
+      photoURL: fbUser.photoURL || undefined,
+      role,
+      appRole: record.appRole || 'VIEWER',
+      isManager,
+      accessStatus: 'APPROVED',
+      linkedNurseId: record.linkedNurseId,
       isLocal: false,
-      nurseCode: identity?.nurseCode,
-      matchedEntity: identity?.matchedEntity || 'CLINIC_OWNER',
-      seniorityName: identity?.seniorityLevel?.name || 'Medical Director',
-      privileges: data.privileges || identity?.privileges,
-      lastVerified: new Date().toISOString(),
+      privileges: computePrivileges(role, isManager),
+      lastVerified: now,
     };
+  }
 
-    this.persist();
+  /**
+   * Re-reads the signed in user's access record (e.g. after the owner changed their role).
+   */
+  public async refreshProfile(): Promise<UserProfile | null> {
+    const fbUser = getAppAuth().currentUser;
+    if (!fbUser) return null;
+    try {
+      this.currentUser = await this.resolveProfile(fbUser);
+    } catch (err) {
+      this.currentUser = null;
+      this.notify();
+      throw err;
+    }
     this.notify();
     return this.currentUser;
   }
 
   /**
-   * Google Sign-In with real Firebase Google Auth provider.
-   * Challenges the user with Google's account chooser / credential dialog.
-   * Upon successful authentication, exchanges the true Google ID token with the backend.
+   * Google sign in with the Firebase Google provider (account chooser popup).
    */
   public async signInWithGoogle(): Promise<UserProfile> {
-    const app = this.ensureFirebaseApp();
-    if (!app) {
-      throw new Error('Firebase Authentication is not initialized.');
-    }
-
-    const auth: Auth = getAuth(app);
+    const auth = getAppAuth();
     const provider = new GoogleAuthProvider();
-    provider.addScope('https://www.googleapis.com/auth/userinfo.email');
-    provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
-    provider.setCustomParameters({
-      prompt: 'select_account',
-    });
+    provider.setCustomParameters({ prompt: 'select_account' });
 
+    let fbUser: FirebaseUser;
     try {
-      const result = await signInWithPopup(auth, provider, browserPopupRedirectResolver);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const fbUser = result.user;
-
-      if (!fbUser || !fbUser.email) {
-        throw new Error('Google sign-in succeeded but returned no user email address.');
-      }
-
-      const idToken = await fbUser.getIdToken(true);
-      this.inMemoryTokens.idToken = idToken;
-      this.inMemoryTokens.accessToken = credential?.accessToken || null;
-
-      // Exchange the real Google ID token with backend to dynamically resolve RBAC and session token
-      return await this.performBackendTokenExchange(idToken, fbUser);
+      const result = await signInWithPopup(auth, provider);
+      fbUser = result.user;
     } catch (err: any) {
-      console.warn('[AuthService] Google popup sign-in encountered an issue:', err?.code || err?.message);
-      // In the AI Studio iframe sandbox environment, cross-origin communication from popup to iframe
-      // can be blocked by browser sandbox/COOP policies. Seamlessly resolve the Google Workspace session:
-      if (
-        err.code === 'auth/popup-closed-by-user' ||
-        err.code === 'auth/cancelled-popup-request' ||
-        err.code === 'auth/popup-blocked' ||
-        (typeof err.message === 'string' &&
-          (err.message.toLowerCase().includes('popup') ||
-            err.message.toLowerCase().includes('closed') ||
-            err.message.toLowerCase().includes('blocked')))
-      ) {
-        console.info('[AuthService] Completing Google Workspace authentication via verified session...');
-        return await this.signInWithGoogleDirect(MASTER_ADMIN_EMAIL, 'Dr. Roland / Clinical Director');
+      if (err?.code === 'auth/popup-blocked') {
+        throw new Error('The sign in popup was blocked. Allow popups for this site, or open the app in a new tab, then try again.');
       }
-      throw new Error(err.message || 'Google sign-in failed. Please try again.');
-    }
-  }
-
-  /**
-   * Email & Password Authentication (Phase 2)
-   * Challenges user with email and password credentials.
-   * Authenticates with Firebase Auth (or secure backend credential verification)
-   * and dynamically resolves clinical roles from the authenticated email.
-   */
-  public async signInWithEmailPassword(email: string, password: string): Promise<UserProfile> {
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      throw new Error('Please enter your email address.');
-    }
-    if (!password) {
-      throw new Error('Please enter your password.');
+      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+        throw new Error('Sign in was cancelled.');
+      }
+      throw new Error(err?.message || 'Google sign in failed. Please try again.');
     }
 
-    // 1. First attempt authenticating via Firebase Auth if initialized
-    let fbAuthError: any = null;
-    const app = this.ensureFirebaseApp();
-    if (app) {
-      try {
-        const auth = getAuth(app);
-        const userCredential = await signInWithEmailAndPassword(auth, trimmedEmail, password);
-        const fbUser = userCredential.user;
-        const idToken = await fbUser.getIdToken(true);
-        this.inMemoryTokens.idToken = idToken;
-        return await this.performBackendTokenExchange(idToken, fbUser);
-      } catch (err: any) {
-        fbAuthError = err;
-        console.warn('[AuthService] Firebase Email/Password auth attempt note:', err.code, err.message);
-        if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-          throw new Error('Invalid email or password. Please check your credentials.');
-        }
-      }
-    }
-
-    // 2. If Firebase Auth is not enabled for email/password or returned configuration error,
-    // authenticate via secure backend credential validation endpoint
-    try {
-      const res = await fetch('/api/auth/password-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: trimmedEmail, password }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ message: res.statusText }));
-        throw new Error(errData.message || 'Invalid email or password.');
-      }
-
-      const data = await res.json();
-      if (data.sessionToken) {
-        this.inMemoryTokens.sessionToken = data.sessionToken;
-        try {
-          localStorage.setItem(SESSION_TOKEN_KEY, data.sessionToken);
-        } catch {}
-      }
-      this.inMemoryTokens.expiresAt = data.expiresAt;
-
-      const identity = data.identity;
-      const resolvedRole = (data.user?.role || identity?.role || 'VIEWER') as UserRole;
-
-      this.currentUser = {
-        uid: data.user?.uid || identity?.uid || 'usr-staff',
-        name: data.user?.name || identity?.name || trimmedEmail.split('@')[0],
-        email: data.user?.email || identity?.email || trimmedEmail,
-        role: resolvedRole,
-        appRole: data.user?.appRole || identity?.appRole || (resolvedRole === 'OWNER' || resolvedRole === 'EDITOR' ? 'EDITOR' : 'VIEWER'),
-        isManager: data.isManager ?? identity?.isManager ?? (resolvedRole === 'OWNER'),
-        accessStatus: data.accessStatus || identity?.accessStatus || 'APPROVED',
-        linkedNurseId: data.user?.linkedNurseId || identity?.nurseId,
-        isLocal: false,
-        nurseCode: identity?.nurseCode,
-        matchedEntity: identity?.matchedEntity,
-        seniorityName: identity?.seniorityLevel?.name,
-        privileges: data.privileges || identity?.privileges,
-        lastVerified: new Date().toISOString(),
-      };
-
-      this.persist();
-      this.notify();
-      return this.currentUser;
-    } catch (backendErr: any) {
-      if (fbAuthError && (fbAuthError.code === 'auth/user-not-found' || fbAuthError.code === 'auth/wrong-password')) {
-        throw new Error('Invalid email or password.');
-      }
-      throw new Error(backendErr.message || 'Authentication failed. Please check your credentials.');
-    }
-  }
-
-  /**
-   * Local Mode Persona Switcher (Owner, Planner, Staff, Viewer)
-   */
-  public async signInAsLocalPersona(profile: Partial<UserProfile>): Promise<UserProfile> {
-    // Clear any previous Google cloud tokens
-    this.inMemoryTokens.idToken = null;
-    this.inMemoryTokens.accessToken = null;
-
-    const email = profile.email || 'rolandabj@gmail.com';
-    const isRoland = email.toLowerCase() === MASTER_ADMIN_EMAIL;
-
-    this.currentUser = {
-      uid: profile.uid || (isRoland ? 'usr-admin-roland' : `local-${Date.now()}`),
-      name: profile.name || (isRoland ? 'Dr. Roland / Clinical Director' : 'Test Persona'),
-      email: email,
-      photoURL: profile.photoURL,
-      role: isRoland ? 'OWNER' : (profile.role || 'STAFF'),
-      appRole: isRoland || profile.role === 'PLANNER' || profile.role === 'EDITOR' ? 'EDITOR' : 'VIEWER',
-      isManager: isRoland ? true : !!profile.isManager,
-      isLocal: true,
-      nurseCode: profile.nurseCode,
-      matchedEntity: profile.matchedEntity,
-      seniorityName: profile.seniorityName,
-      privileges: profile.privileges,
-    };
-
-    // Obtain signed session token for backend testing
-    await this.refreshLocalSessionToken();
-
-    this.persist();
+    this.idToken = await fbUser.getIdToken();
+    const profile = await this.resolveProfileOnce(fbUser);
+    this.currentUser = profile;
     this.notify();
-    return this.currentUser;
+    return profile;
   }
 
-  /**
-   * One-click direct email authentication via directory matching (No popups required)
-   */
-  public async signInWithEmail(email: string, name?: string): Promise<UserProfile> {
-    const trimmedEmail = email.trim();
-    if (!trimmedEmail) {
-      throw new Error('Please enter a valid email address.');
-    }
-
-    // Direct Google SSO authentication without popup
+  private async signOutQuietly(): Promise<void> {
     try {
-      return await this.signInWithGoogleDirect(trimmedEmail, name);
-    } catch (err) {
-      console.warn('[AuthService] Direct SSO exchange fallback to persona:', err);
-    }
-
-    const isRoland = trimmedEmail.toLowerCase() === MASTER_ADMIN_EMAIL;
-
-    // Try resolving from directory API
-    try {
-      const res = await fetch('/api/auth/directory/test-match', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: trimmedEmail, name }),
-      });
-
-      if (res.ok) {
-        const identity = await res.json();
-        return await this.signInAsLocalPersona({
-          uid: isRoland ? 'usr-admin-roland' : identity.uid,
-          name: identity.name || name || (isRoland ? 'Dr. Roland / Clinical Director' : trimmedEmail.split('@')[0]),
-          email: identity.email || trimmedEmail,
-          role: isRoland ? 'OWNER' : (identity.role || 'STAFF'),
-          isManager: isRoland ? true : identity.isManager,
-          accessStatus: identity.accessStatus,
-          nurseCode: identity.nurseCode,
-          seniorityName: identity.seniorityLevel?.name,
-          privileges: identity.privileges,
-          matchedEntity: identity.matchedEntity,
-        });
-      }
-    } catch (e) {
-      console.warn('[AuthService] Could not match email in directory, using persona fallback:', e);
-    }
-
-    return await this.signInAsLocalPersona({
-      name: isRoland ? 'Dr. Roland / Clinical Director' : (name || trimmedEmail.split('@')[0]),
-      email: trimmedEmail,
-      role: isRoland ? 'OWNER' : 'STAFF',
-    });
-  }
-
-  /**
-   * Sign Out: Clears in-memory tokens strictly and resets profile to null
-   */
-  public async signOut(): Promise<void> {
-    const activeToken = this.inMemoryTokens.sessionToken;
-
-    // 1. Clear in-memory tokens strictly
-    this.inMemoryTokens = {
-      accessToken: null,
-      idToken: null,
-      sessionToken: null,
-      expiresAt: undefined,
-    };
-
-    // 2. Clear persisted storage
-    try {
-      localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
-      localStorage.removeItem(SESSION_TOKEN_KEY);
-    } catch {}
-
-    // 3. Notify backend /api/auth/logout if token was present
-    if (activeToken) {
-      try {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${activeToken}` },
-        });
-      } catch {
-        // Ignore backend logout error
-      }
-    }
-
-    // 4. Sign out from Firebase if connected
-    try {
-      if (getApps().length > 0) {
-        const auth = getAuth(getApp());
-        await firebaseSignOut(auth);
-      }
+      await firebaseSignOut(getAppAuth());
     } catch (e) {
       console.warn('[AuthService] Firebase sign out note:', e);
     }
+  }
 
-    // 5. Reset to null (unauthenticated)
+  public async signOut(): Promise<void> {
+    this.idToken = null;
+    try {
+      localStorage.removeItem('clinic_user_profile');
+      localStorage.removeItem('clinic_roster_session_token');
+    } catch {}
+    await this.signOutQuietly();
     this.currentUser = null;
     this.notify();
   }
 }
 
 export const authService = AuthService.getInstance();
+
+/**
+ * fetch() wrapper that attaches the signed in user's Firebase ID token.
+ */
+export async function authorizedFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const token = await authService.getFreshToken();
+  const headers = new Headers(init.headers || {});
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return fetch(input, { ...init, headers });
+}

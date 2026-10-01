@@ -56,6 +56,7 @@ import {
 } from '../../types';
 import { PublishModal } from '../modals/PublishModal';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
+import { escapeHtml } from '../../utils/escapeHtml';
 
 interface PublishViewProps {
   context: ClinicContextState;
@@ -219,7 +220,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
         scheduleId: activeSchedule.id,
         nurseId: nurse.id,
         versionId: `v${activeSchedule.activeVersionNumber || 1}`,
-        token: Math.random().toString(36).substring(2, 10),
+        token: `ack-${crypto.randomUUID()}`,
         sentAt: nowIso,
       };
 
@@ -238,7 +239,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
             nurseName: nurse.fullName,
             subject: `REMINDER: Please acknowledge your duty roster — ${activeSchedule.name}`,
             bodyPreview: `Reminder notification dispatched to ${nurse.fullName}.`,
-            fullBodyHtml: `<p>Dear ${nurse.fullName}, please confirm receipt of your roster.</p>`,
+            fullBodyHtml: `<p>Dear ${escapeHtml(nurse.fullName)}, please confirm receipt of your roster.</p>`,
             status: 'MOCK_SENT',
           },
         ],

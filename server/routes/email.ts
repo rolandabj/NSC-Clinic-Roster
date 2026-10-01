@@ -10,6 +10,7 @@
 import { Router, Request, Response } from 'express';
 import { getServerRepository } from '../db/index';
 import { requirePlanner } from '../middleware/auth';
+import { escapeHtml } from '../../src/utils/escapeHtml';
 import { EmailService, isGoogleAccountEmail } from '../services/email/emailService';
 import {
   renderBroadcastTemplate,
@@ -27,12 +28,13 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /**
  * POST /api/email/test
- * Dispatches a test email exclusively via Google (SMTP or Mock mode)
+ * Dispatches a test email, or a roster email built in the browser, via Google (SMTP or Mock mode).
+ * Guarded: Requires Planner or Owner role. SMTP settings always come from the server environment.
  */
-emailRouter.post('/email/test', async (req: Request, res: Response) => {
+emailRouter.post('/email/test', requirePlanner, async (req: Request, res: Response) => {
   try {
     const {
-      to = 'rolandabj@gmail.com',
+      to,
       provider = 'GOOGLE',
       config,
       subject: reqSubject,
@@ -59,7 +61,7 @@ emailRouter.post('/email/test', async (req: Request, res: Response) => {
         <p>This is an automated test verifying that transactional email dispatching is working as expected via Google.</p>
         <div style="background: #f8fafc; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 13px; margin: 16px 0;">
           <p style="margin: 4px 0;"><strong>Provider:</strong> Google (${effectiveProvider})</p>
-          <p style="margin: 4px 0;"><strong>Recipient:</strong> ${to}</p>
+          <p style="margin: 4px 0;"><strong>Recipient:</strong> ${escapeHtml(to)}</p>
           <p style="margin: 4px 0;"><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
         </div>
         <p style="color: #64748b; font-size: 12px;">ClinicRoster Operational Dispatch System</p>

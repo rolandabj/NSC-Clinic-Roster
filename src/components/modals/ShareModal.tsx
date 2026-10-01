@@ -108,7 +108,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       const newLink: ShareLink = {
         id: uuidv4(),
         scheduleId: schedule.id,
-        token: Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 8),
+        token: `sh_${crypto.randomUUID()}`,
         role: 'VIEWER',
         public: isPublic,
         allowedEmails: isPublic ? [] : emails,
@@ -128,7 +128,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   // --- REGENERATE TOKEN ---
   const handleRegenerateToken = async (link: ShareLink) => {
-    const newToken = Math.random().toString(36).substring(2, 12) + Math.random().toString(36).substring(2, 8);
+    const newToken = `sh_${crypto.randomUUID()}`;
     await repo.update('shareLinks', link.id, {
       token: newToken,
       revoked: false,

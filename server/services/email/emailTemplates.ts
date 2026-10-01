@@ -4,7 +4,25 @@
  * 
  * Responsive HTML Email Templates for Clinic Rostering
  * Gmail, Apple Mail, and Outlook compatible styling.
+ * Every parameter is HTML escaped before it is placed in the markup.
  */
+
+import { escapeHtml } from '../../../src/utils/escapeHtml';
+
+/**
+ * Returns a copy of the template parameters with every string HTML escaped
+ * (recursively through arrays and nested objects).
+ */
+function escapeParams<T>(value: T): T {
+  if (typeof value === 'string') return escapeHtml(value) as unknown as T;
+  if (Array.isArray(value)) return value.map((v) => escapeParams(v)) as unknown as T;
+  if (value && typeof value === 'object') {
+    const out: any = {};
+    for (const [k, v] of Object.entries(value as any)) out[k] = escapeParams(v);
+    return out;
+  }
+  return value;
+}
 
 export interface BroadcastTemplateParams {
   clinicName: string;
@@ -146,6 +164,7 @@ const BUTTON_SECONDARY = `
  */
 export function renderBroadcastTemplate(params: BroadcastTemplateParams): { subject: string; html: string } {
   const subject = `[Published] ${params.clinicName} — Roster: ${params.scheduleName} (v${params.versionNumber})`;
+  params = escapeParams(params);
 
   const html = `
     <!DOCTYPE html>
@@ -207,6 +226,7 @@ export function renderBroadcastTemplate(params: BroadcastTemplateParams): { subj
  */
 export function renderPersonalShiftNoticeTemplate(params: PersonalNoticeTemplateParams): { subject: string; html: string } {
   const subject = `Your Duty Roster: ${params.scheduleName} (v${params.versionNumber}) — ${params.nurseName}`;
+  params = escapeParams(params);
 
   const shiftRowsHtml = params.shifts
     .map((s, idx) => {
@@ -290,6 +310,7 @@ export function renderPersonalShiftNoticeTemplate(params: PersonalNoticeTemplate
  */
 export function renderShiftChangeAlertTemplate(params: ShiftChangeAlertTemplateParams): { subject: string; html: string } {
   const subject = `[Action Required] Shift Change Notice: ${params.scheduleName} (v${params.targetVersion})`;
+  params = escapeParams(params);
 
   const diffRowsHtml = params.diffRows
     .map((d, idx) => {
@@ -391,6 +412,7 @@ export function renderShiftChangeAlertTemplate(params: ShiftChangeAlertTemplateP
  */
 export function renderShiftSwapConfirmationTemplate(params: ShiftSwapConfirmationTemplateParams): { subject: string; html: string } {
   const subject = `[Approved] Peer Shift Swap Confirmation: ${params.nurseAName} & ${params.nurseBName}`;
+  params = escapeParams(params);
 
   const html = `
     <!DOCTYPE html>
@@ -451,6 +473,7 @@ export function renderAcknowledgmentReminderTemplate(
   params: AcknowledgmentReminderTemplateParams
 ): { subject: string; html: string } {
   const subject = `[Action Required] Shift Acknowledgment Reminder: ${params.scheduleName} — ${params.clinicName}`;
+  params = escapeParams(params);
 
   const html = `
     <!DOCTYPE html>

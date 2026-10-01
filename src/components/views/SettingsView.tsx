@@ -280,7 +280,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const loadDirectory = async () => {
     setIsLoadingDirectory(true);
     try {
-      const res = await fetch('/api/auth/directory');
+      const res = await fetch('/api/auth/directory', {
+        headers: { Authorization: `Bearer ${authService.getToken() || ''}` },
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.entries) {
@@ -326,7 +328,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       const res = await fetch('/api/auth/directory/test-match', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authService.getToken() || ''}` },
         body: JSON.stringify({ email: emailTestInput.trim() }),
       });
       if (res.ok) {
@@ -449,7 +451,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             method: 'PUT',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${token || 'local-owner'}`,
+              Authorization: `Bearer ${token || ''}`,
             },
             body: JSON.stringify(clinicToSave),
           });
@@ -588,7 +590,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('clinic_auth_token') || ''}`,
+          Authorization: `Bearer ${authService.getToken() || ''}`,
         },
         body: JSON.stringify({ endpoint }),
       });
@@ -1252,7 +1254,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${authService.getToken() || 'local-planner'}`,
+          Authorization: `Bearer ${authService.getToken() || ''}`,
         },
         body: JSON.stringify({
           to: sender,
@@ -1873,7 +1875,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       setTimeout(() => {
                         fetch('/api/auth/directory/test-match', {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authService.getToken() || ''}` },
                           body: JSON.stringify({ email: preset.email }),
                         })
                           .then((r) => r.json())

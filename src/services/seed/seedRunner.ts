@@ -35,6 +35,7 @@ import {
   CollectionName,
 } from '../../types';
 import { SchedulingEngine } from '../engine/SchedulingEngine';
+import { authService } from '../auth/authService';
 
 export const ALL_COLLECTIONS: CollectionName[] = [
   'clinics',
@@ -405,7 +406,7 @@ export async function clearDatabase(repo: IRepository): Promise<void> {
 
   // 4. Concurrently notify backend server to clear server-side store
   try {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('clinic_roster_auth_token') : null;
+    const token = authService.getToken();
     const res = await fetch('/api/admin/clear', {
       method: 'POST',
       headers: {

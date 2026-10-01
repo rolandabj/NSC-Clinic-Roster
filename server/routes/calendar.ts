@@ -93,27 +93,10 @@ const handleCalendarFeed = async (req: Request, res: Response) => {
       targetScheduleId = matchedAck.scheduleId;
     }
 
-    // Check nurse ID or email
+    // Check a nurse's dedicated calendar token. Nurse ids and email addresses are
+    // guessable, so they are never accepted as feed tokens.
     if (!targetNurse) {
-      targetNurse = allNurses.find(
-        (n) =>
-          n.id === token ||
-          n.gmail?.toLowerCase() === token.toLowerCase() ||
-          (n as any).calendarToken === token
-      );
-    }
-
-    // Check share link
-    if (!targetNurse) {
-      const share = allShareLinks.find((s) => s.token === token && !s.revoked);
-      if (share) {
-        targetScheduleId = share.scheduleId;
-        // If nurseId query passed: ?nurseId=...
-        const queryNurseId = req.query.nurseId as string;
-        if (queryNurseId) {
-          targetNurse = allNurses.find((n) => n.id === queryNurseId);
-        }
-      }
+      targetNurse = allNurses.find((n) => !!(n as any).calendarToken && (n as any).calendarToken === token);
     }
 
     if (!targetNurse) {
@@ -123,7 +106,7 @@ const handleCalendarFeed = async (req: Request, res: Response) => {
 
     // 3. Find published schedules and assignments for this nurse
     const publishedScheduleIds = new Set(
-      allSchedules.filter((s) => s.status === 'PUBLISHED' || s.id === targetScheduleId).map((s) => s.id)
+      allSchedules.filter((s) => s.status === 'PUBLISHED').map((s) => s.id)
     );
 
     // Filter assignments belonging to this nurse and published schedules

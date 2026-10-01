@@ -44,6 +44,34 @@ export interface SendEmailResult {
   error?: string;
 }
 
+// SMTP connection settings and credentials may only come from the server
+// environment (AI Studio Secrets). They are never taken from stored clinic
+// settings or from a request, so they cannot be redirected to another server.
+const SMTP_CONNECTION_KEYS = ['smtpHost', 'smtpPort', 'smtpUser', 'smtpPass', 'googleAppPassword', 'smtpSecure'] as const;
+
+// Fields a caller may override per request.
+const REQUEST_OVERRIDE_KEYS = ['provider', 'mockMode', 'senderName'] as const;
+
+function withoutConnectionSettings(config: any): Partial<EmailSettingsConfig> {
+  if (!config || typeof config !== 'object') return {};
+  const clean: any = { ...config };
+  for (const key of SMTP_CONNECTION_KEYS) delete clean[key];
+  return clean;
+}
+
+function pickRequestOverrides(config: any): Partial<EmailSettingsConfig> {
+  if (!config || typeof config !== 'object') return {};
+  const picked: any = {};
+  for (const key of REQUEST_OVERRIDE_KEYS) {
+    if (config[key] !== undefined) picked[key] = config[key];
+  }
+  if (picked.provider !== undefined && picked.provider !== 'MOCK' && picked.provider !== 'GOOGLE') {
+    delete picked.provider;
+  }
+  if (picked.senderName !== undefined) picked.senderName = String(picked.senderName).replace(/["<>\r\n]/g, '').slice(0, 100);
+  return picked;
+}
+
 export class EmailService {
   /**
    * Resolves effective email configuration from repository or environment
@@ -51,11 +79,12 @@ export class EmailService {
   public static async getConfig(repo: IRepository): Promise<EmailSettingsConfig> {
     const clinics = await repo.list('clinics');
     const clinic = clinics[0];
-    const storedConfig = (clinic as any)?.emailSettings;
+    const storedConfig = withoutConnectionSettings((clinic as any)?.emailSettings);
+    const defaults = withoutConnectionSettings(DEFAULT_EMAIL_SETTINGS);
 
-    return {
-      ...DEFAULT_EMAIL_SETTINGS,
-      ...(storedConfig || {}),
+    return <EmailSettingsConfig>{
+      ...defaults,
+      ...storedConfig,
       // Environment overrides if present
       ...(process.env.EMAIL_PROVIDER ? { provider: process.env.EMAIL_PROVIDER as any } : {}),
       ...(process.env.GOOGLE_SMTP_USER || process.env.SMTP_USER ? { smtpUser: process.env.GOOGLE_SMTP_USER || process.env.SMTP_USER } : {}),
@@ -75,7 +104,7 @@ export class EmailService {
     actor: string = 'System Dispatcher'
   ): Promise<SendEmailResult> {
     const baseConfig = await this.getConfig(repo);
-    const config: EmailSettingsConfig = { ...baseConfig, ...(payload.config || {}) };
+    const config: EmailSettingsConfig = { ...baseConfig, ...pickRequestOverrides(payload.config) } as EmailSettingsConfig;
 
     const rawList = Array.isArray(payload.to) ? payload.to : [payload.to];
     // Filter and normalize recipient emails
@@ -96,8 +125,9 @@ export class EmailService {
 
     const clinics = (await repo.list('clinics')) as any[];
     const clinicName = clinics[0]?.name || 'American Hospital Nad Al Sheba OutPatient clinic';
-    const fromName = payload.fromName || config.senderName || `${clinicName} Rostering`;
-    const fromEmail = payload.fromEmail || config.senderEmail || 'rolandabj@gmail.com';
+    const fromName = String(payload.fromName || config.senderName || `${clinicName} Rostering`).replace(/["<>\r\n]/g, '');
+    // Gmail SMTP only sends as the authenticated account, so the sender is the SMTP user when set.
+    const fromEmail = config.smtpUser || config.senderEmail || 'rolandabj@gmail.com';
     const fromAddress = `"${fromName}" <${fromEmail}>`;
 
     const now = new Date().toISOString();
@@ -121,8 +151,11 @@ export class EmailService {
       try {
         const smtpHost = config.smtpHost || 'smtp.gmail.com';
         const smtpPort = config.smtpPort || 587;
-        const smtpUser = config.smtpUser || config.senderEmail || process.env.GOOGLE_SMTP_USER || 'rolandabj@gmail.com';
-        const smtpPass = config.googleAppPassword || config.smtpPass || process.env.GOOGLE_APP_PASSWORD || '';
+        const smtpUser = config.smtpUser || '';
+        const smtpPass = config.googleAppPassword || config.smtpPass || '';
+        if (!smtpUser || !smtpPass) {
+          throw new Error('SMTP credentials are not configured. Add GOOGLE_SMTP_USER and GOOGLE_APP_PASSWORD in AI Studio Secrets.');
+        }
 
         const transporter = nodemailer.createTransport({
           host: smtpHost,

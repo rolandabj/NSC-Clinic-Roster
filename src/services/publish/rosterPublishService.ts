@@ -25,6 +25,8 @@ import {
 import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
 import { AssignmentDiffItem } from '../history/diffEngine';
 import { getRepository } from '../repository';
+import { authService } from '../auth/authService';
+import { escapeHtml, safeColor } from '../../utils/escapeHtml';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -124,8 +126,11 @@ export class RosterPublishService {
     const variance = totalEarnedHours - targetHours;
 
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://clinicroster.app';
-    const viewUrl = `${origin}/#published?token=${shareToken || 'active'}&nurse=${nurse.id}`;
-    const ackUrl = `${origin}/#ack?token=${ackToken}`;
+    const viewUrl = `${origin}/#published?token=${encodeURIComponent(shareToken || 'active')}&nurse=${encodeURIComponent(nurse.id)}`;
+    const ackUrl = `${origin}/#ack?token=${encodeURIComponent(ackToken)}`;
+
+    // Every user supplied value below is HTML escaped.
+    const h = escapeHtml;
 
     const subject = isChangeAlert
       ? `Schedule updated — ${clinicName} (${schedule.name} v${version.number})`
@@ -146,15 +151,16 @@ export class RosterPublishService {
         if (a.doctorId) target = docMap.get(a.doctorId)?.fullName || 'Doctor';
         else if (a.clinicalRoleId) target = roleMap.get(a.clinicalRoleId)?.name || 'Clinical Role';
         else if (a.specialtyId) target = spMap.get(a.specialtyId)?.name || 'Specialty';
+        target = h(target);
 
         return `
           <tr style="border-bottom: 1px solid #e2e8f0;">
-            <td style="padding: 8px 12px; font-family: monospace; font-size: 13px; color: #1e293b;">${a.date} (${weekday})</td>
+            <td style="padding: 8px 12px; font-family: monospace; font-size: 13px; color: #1e293b;">${h(a.date)} (${weekday})</td>
             <td style="padding: 8px 12px;">
-              <span style="display: inline-block; background-color: ${dw?.color || '#4f46e5'}; color: #ffffff; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; font-family: monospace;">
-                ${dw?.acronym || 'D'}
+              <span style="display: inline-block; background-color: ${safeColor(dw?.color, '#4f46e5')}; color: #ffffff; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; font-family: monospace;">
+                ${h(dw?.acronym || 'D')}
               </span>
-              <span style="font-size: 12px; color: #334155; margin-left: 6px;">${dw?.startTime}–${dw?.endTime}</span>
+              <span style="font-size: 12px; color: #334155; margin-left: 6px;">${h(dw?.startTime)}–${h(dw?.endTime)}</span>
             </td>
             <td style="padding: 8px 12px; font-size: 13px; color: #0f172a; font-weight: 500;">${target}</td>
           </tr>
@@ -169,7 +175,7 @@ export class RosterPublishService {
         .map(
           (c) => `
           <li style="margin-bottom: 6px; font-size: 13px; color: #991b1b;">
-            <strong>${c.date} (${c.weekday}):</strong> ${c.description}
+            <strong>${h(c.date)} (${h(c.weekday)}):</strong> ${h(c.description)}
           </li>`
         )
         .join('');
@@ -192,7 +198,7 @@ export class RosterPublishService {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${subject}</title>
+  <title>${h(subject)}</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #f8fafc; padding: 24px 0;">
@@ -205,7 +211,7 @@ export class RosterPublishService {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                 <tr>
                   <td>
-                    <h1 style="margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">${clinicName}</h1>
+                    <h1 style="margin: 0; font-size: 20px; font-weight: 700; color: #ffffff; letter-spacing: -0.5px;">${h(clinicName)}</h1>
                     <p style="margin: 4px 0 0 0; font-size: 13px; color: #c7d2fe;">Nursing Operations Department · Outpatient Services</p>
                   </td>
                   <td align="right">
@@ -221,19 +227,19 @@ export class RosterPublishService {
           <!-- Main Content -->
           <tr>
             <td style="padding: 24px 30px;">
-              <h2 style="margin: 0 0 12px 0; font-size: 16px; color: #0f172a;">Dear ${nurse.fullName},</h2>
+              <h2 style="margin: 0 0 12px 0; font-size: 16px; color: #0f172a;">Dear ${h(nurse.fullName)},</h2>
               <p style="margin: 0 0 16px 0; font-size: 14px; line-height: 1.6; color: #475569;">
                 ${
                   isChangeAlert
-                    ? `An updated revision of the nursing duty schedule (<strong>${schedule.name}</strong>) has been published. Please review your personalized shift breakdown below.`
-                    : `Your official nursing duty schedule for <strong>${schedule.name}</strong> (${schedule.startDate} to ${schedule.endDate}) has been finalized and published.`
+                    ? `An updated revision of the nursing duty schedule (<strong>${h(schedule.name)}</strong>) has been published. Please review your personalized shift breakdown below.`
+                    : `Your official nursing duty schedule for <strong>${h(schedule.name)}</strong> (${h(schedule.startDate)} to ${h(schedule.endDate)}) has been finalized and published.`
                 }
               </p>
 
               ${
                 generalNote
                   ? `<div style="background-color: #f1f5f9; border-left: 4px solid #6366f1; padding: 10px 14px; margin-bottom: 20px; font-size: 13px; color: #334155; font-style: italic;">
-                      "${generalNote}"
+                      "${h(generalNote)}"
                     </div>`
                   : ''
               }
@@ -307,8 +313,8 @@ export class RosterPublishService {
           <!-- Footer -->
           <tr>
             <td style="background-color: #f8fafc; padding: 20px 30px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5; text-align: center;">
-              <p style="margin: 0 0 6px 0;">This is an automated operational broadcast from ClinicRoster for <strong>${nurse.fullName}</strong> (${nurse.employeeCode}).</p>
-              <p style="margin: 0;">Clinic Operations Office · ${clinicName} · Published on ${new Date(version.timestamp).toLocaleString()}</p>
+              <p style="margin: 0 0 6px 0;">This is an automated operational broadcast from ClinicRoster for <strong>${h(nurse.fullName)}</strong> (${h(nurse.employeeCode)}).</p>
+              <p style="margin: 0;">Clinic Operations Office · ${h(clinicName)} · Published on ${new Date(version.timestamp).toLocaleString()}</p>
             </td>
           </tr>
         </table>
@@ -371,11 +377,14 @@ export class RosterPublishService {
 
     // 2. Live Google Provider Dispatch via Server API
     try {
+      const token = await authService.getFreshToken();
       const response = await fetch('/api/email/test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        // SMTP settings are configured on the server (AI Studio Secrets) and are never sent from the browser.
         body: JSON.stringify({
           to: recipientEmail,
           provider: 'GOOGLE',
@@ -385,9 +394,9 @@ export class RosterPublishService {
           nurseId: nurse.id,
           versionId,
           config: {
-            ...emailConfig,
             provider: 'GOOGLE',
             mockMode: false,
+            senderName: emailConfig.senderName,
           },
         }),
       });
@@ -419,7 +428,8 @@ export class RosterPublishService {
    */
   public static async acknowledgeByToken(token: string): Promise<boolean> {
     const repo = getRepository();
-    const acks = await repo.list('acknowledgments');
+    if (!token) return false;
+    const acks = await repo.list('acknowledgments', { field: 'token', operator: '==', value: token });
     const matched = acks.find((a) => a.token === token);
     if (!matched) return false;
 
