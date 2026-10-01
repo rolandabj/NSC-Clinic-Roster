@@ -1,0 +1,144 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Public Roster Snapshots
+ * A share link opens without signing in by reading ONE Firestore document,
+ * publicRosters/{token}. The document holds only what the read only roster
+ * page needs (no emails, dates of birth or notes). Firestore rules allow
+ * reading it by its token, never listing, and honour revocation and
+ * restricted email lists.
+ */
+
+import {
+  ShareLink,
+  Schedule,
+  ScheduleVersion,
+  Nurse,
+  DutyWindow,
+  LeaveType,
+  SeniorityLevel,
+  Doctor,
+  ClinicalRole,
+  Specialty,
+} from '../../types';
+import { getRepository } from '../repository';
+
+export interface PublicRosterDoc {
+  id: string;
+  token: string;
+  scheduleId: string;
+  versionId: string;
+  isPublic: boolean;
+  allowedEmails: string[];
+  revoked: boolean;
+  clinicName: string;
+  timezone: string;
+  updatedAt: string;
+  schedule: Pick<Schedule, 'id' | 'name' | 'startDate' | 'endDate' | 'blockWeeks' | 'status'>;
+  version: Pick<ScheduleVersion, 'id' | 'scheduleId' | 'number' | 'timestamp' | 'isPublished'> & {
+    snapshot: { assignments: any[]; leaveEntries: any[] };
+  };
+  nurses: Pick<Nurse, 'id' | 'fullName' | 'employeeCode' | 'seniorityLevelId' | 'active'>[];
+  dutyWindows: Pick<DutyWindow, 'id' | 'name' | 'acronym' | 'startTime' | 'endTime' | 'color'>[];
+  leaveTypes: Pick<LeaveType, 'id' | 'name' | 'acronym' | 'color'>[];
+  seniorityLevels: Pick<SeniorityLevel, 'id' | 'name' | 'rank' | 'color'>[];
+  doctors: Pick<Doctor, 'id' | 'fullName' | 'specialtyIds'>[];
+  clinicalRoles: Pick<ClinicalRole, 'id' | 'name' | 'acronym'>[];
+  specialties: Pick<Specialty, 'id' | 'name' | 'code'>[];
+}
+
+function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
+  const out = {} as Pick<T, K>;
+  for (const k of keys) {
+    if (obj[k] !== undefined) out[k] = obj[k];
+  }
+  return out;
+}
+
+/**
+ * Creates or refreshes the public snapshot for a share link.
+ * Revoked links have their snapshot removed.
+ */
+export async function syncPublicRoster(link: ShareLink): Promise<void> {
+  const repo = getRepository();
+
+  if (link.revoked) {
+    await removePublicRoster(link.token);
+    return;
+  }
+
+  const [version, schedule, nurses, dutyWindows, leaveTypes, seniorityLevels, doctors, clinicalRoles, specialties, clinics] =
+    await Promise.all([
+      repo.get('versions', link.pointsToVersionId),
+      repo.get('schedules', link.scheduleId),
+      repo.list('nurses'),
+      repo.list('dutyWindows'),
+      repo.list('leaveTypes'),
+      repo.list('seniorityLevels'),
+      repo.list('doctors'),
+      repo.list('clinicalRoles'),
+      repo.list('specialties'),
+      repo.list('clinics'),
+    ]);
+
+  if (!version || !schedule) {
+    throw new Error('The shared version or schedule no longer exists.');
+  }
+
+  const snapshotAssignments = (version.snapshot?.assignments || []).map((a) =>
+    pick(a, ['id', 'nurseId', 'date', 'dutyWindowId', 'kind', 'doctorId', 'specialtyId', 'clinicalRoleId'])
+  );
+  const snapshotLeave = (version.snapshot?.leaveEntries || [])
+    .filter((le) => le.approved)
+    .map((le) => pick(le, ['id', 'nurseId', 'leaveTypeId', 'startDate', 'endDate', 'approved']));
+
+  const doc: PublicRosterDoc = {
+    id: link.token,
+    token: link.token,
+    scheduleId: schedule.id,
+    versionId: version.id,
+    isPublic: link.public === true,
+    allowedEmails: link.public ? [] : (link.allowedEmails || []).map((e) => e.trim().toLowerCase()),
+    revoked: false,
+    clinicName: clinics[0]?.name || '',
+    timezone: clinics[0]?.timezone || 'Asia/Dubai',
+    updatedAt: new Date().toISOString(),
+    schedule: pick(schedule, ['id', 'name', 'startDate', 'endDate', 'blockWeeks', 'status']),
+    version: {
+      ...pick(version, ['id', 'scheduleId', 'number', 'timestamp', 'isPublished']),
+      snapshot: { assignments: snapshotAssignments, leaveEntries: snapshotLeave },
+    },
+    nurses: nurses.filter((n) => n.active).map((n) => pick(n, ['id', 'fullName', 'employeeCode', 'seniorityLevelId', 'active'])),
+    dutyWindows: dutyWindows.map((d) => pick(d, ['id', 'name', 'acronym', 'startTime', 'endTime', 'color'])),
+    leaveTypes: leaveTypes.map((l) => pick(l, ['id', 'name', 'acronym', 'color'])),
+    seniorityLevels: seniorityLevels.map((s) => pick(s, ['id', 'name', 'rank', 'color'])),
+    doctors: doctors.map((d) => pick(d, ['id', 'fullName', 'specialtyIds'])),
+    clinicalRoles: clinicalRoles.map((r) => pick(r, ['id', 'name', 'acronym'])),
+    specialties: specialties.map((s) => pick(s, ['id', 'name', 'code'])),
+  };
+
+  await repo.create('publicRosters', doc);
+}
+
+export async function removePublicRoster(token: string): Promise<void> {
+  try {
+    await getRepository().remove('publicRosters', token);
+  } catch (err) {
+    console.warn('[publicRosterService] Could not remove public roster snapshot:', err);
+  }
+}
+
+/**
+ * Reads a public roster snapshot by its share token (works without signing in).
+ * Returns null when the link does not exist, was revoked, or is restricted to
+ * other email addresses.
+ */
+export async function loadPublicRoster(token: string): Promise<PublicRosterDoc | null> {
+  try {
+    return (await getRepository().get('publicRosters', token)) as unknown as PublicRosterDoc | null;
+  } catch (err) {
+    // Firestore rules deny the read for revoked, restricted or unknown links.
+    return null;
+  }
+}

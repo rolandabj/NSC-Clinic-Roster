@@ -56,7 +56,7 @@ import {
 } from '../../types';
 import { PublishModal } from '../modals/PublishModal';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
-import { escapeHtml } from '../../utils/escapeHtml';
+import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
 
 interface PublishViewProps {
   context: ClinicContextState;
@@ -196,61 +196,114 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
     return acks[0];
   };
 
-  // Simulate / test acknowledging on behalf of nurse
-  const handleSimulateAcknowledge = async (nurseId: string) => {
-    const ack = getLatestAckForNurse(nurseId);
-    if (ack) {
-      await repo.update('acknowledgments', ack.id, {
-        ackAt: new Date().toISOString(),
-      });
-      triggerToast('Acknowledged successfully!');
-      loadData();
-    } else {
-      triggerToast('No active published transmission found for this nurse. Publish schedule first.');
+  // Email settings configured in Settings → Email (SMTP credentials live on the server)
+  const getEmailConfig = (): EmailSettingsConfig => {
+    try {
+      const raw = localStorage.getItem('clinic_roster_email_config');
+      return raw ? { ...DEFAULT_EMAIL_SETTINGS, ...JSON.parse(raw) } : DEFAULT_EMAIL_SETTINGS;
+    } catch {
+      return DEFAULT_EMAIL_SETTINGS;
     }
   };
 
-  // Send Reminder to unacknowledged nurse
+  const [isSendingReminders, setIsSendingReminders] = useState(false);
+
+  /**
+   * Sends a reminder for the nurse's latest unacknowledged roster, reusing the
+   * original confirmation link so the same token completes the acknowledgment.
+   * Returns the delivery status.
+   */
+  const sendReminder = async (nurse: Nurse): Promise<string> => {
+    if (!activeSchedule) throw new Error('No active schedule selected.');
+    const ack = getLatestAckForNurse(nurse.id);
+    if (!ack) throw new Error(`${nurse.fullName} has not been sent this roster yet. Publish it first.`);
+    if (ack.ackAt) return 'ALREADY_ACKNOWLEDGED';
+
+    const version = versions.find((v) => v.id === ack.versionId);
+    const link = shareLinks.find((l) => l.scheduleId === activeSchedule.id && !l.revoked && l.public);
+    const email = RosterPublishService.generateReminderEmailHtml({
+      clinicName: context.clinicName,
+      scheduleName: activeSchedule.name,
+      versionNumber: version?.number,
+      nurse,
+      ackToken: ack.token,
+      shareToken: link?.token,
+    });
+
+    const { recipientLog } = await RosterPublishService.dispatchEmail(
+      getEmailConfig(),
+      nurse.gmail,
+      nurse,
+      email.subject,
+      email.bodyPreview,
+      email.html,
+      activeSchedule.id,
+      ack.versionId,
+      ack.token
+    );
+
+    const nowIso = new Date().toISOString();
+    await repo.update('acknowledgments', ack.id, {
+      lastReminderSentAt: nowIso,
+      reminderCount: (ack.reminderCount || 0) + 1,
+    });
+    await repo.create('emailLog', {
+      id: `remind-${crypto.randomUUID()}`,
+      scheduleId: activeSchedule.id,
+      versionId: ack.versionId,
+      kind: 'CHANGE',
+      recipients: [recipientLog],
+      status: recipientLog.status === 'FAILED' ? 'FAILED' : recipientLog.status,
+      sentAt: nowIso,
+    });
+    if (recipientLog.status === 'FAILED') {
+      throw new Error(recipientLog.errorMessage || 'Email dispatch failed.');
+    }
+    return recipientLog.status;
+  };
+
+  // Send Reminder to one unacknowledged nurse
   const handleSendReminder = async (nurse: Nurse) => {
-    if (!activeSchedule) return;
     try {
-      const nowIso = new Date().toISOString();
-      const newAck: Acknowledgment = {
-        id: `ack-remind-${Date.now()}`,
-        scheduleId: activeSchedule.id,
-        nurseId: nurse.id,
-        versionId: `v${activeSchedule.activeVersionNumber || 1}`,
-        token: `ack-${crypto.randomUUID()}`,
-        sentAt: nowIso,
-      };
-
-      await repo.create('acknowledgments', newAck);
-
-      // Log in email log
-      await repo.create('emailLog', {
-        id: `remind-${Date.now()}`,
-        scheduleId: activeSchedule.id,
-        versionId: `v${activeSchedule.activeVersionNumber || 1}`,
-        kind: 'CHANGE',
-        recipients: [
-          {
-            email: nurse.gmail,
-            nurseId: nurse.id,
-            nurseName: nurse.fullName,
-            subject: `REMINDER: Please acknowledge your duty roster — ${activeSchedule.name}`,
-            bodyPreview: `Reminder notification dispatched to ${nurse.fullName}.`,
-            fullBodyHtml: `<p>Dear ${escapeHtml(nurse.fullName)}, please confirm receipt of your roster.</p>`,
-            status: 'MOCK_SENT',
-          },
-        ],
-        status: 'MOCK_SENT',
-        sentAt: nowIso,
-      });
-
-      triggerToast(`Reminder dispatched to ${nurse.fullName} (${nurse.gmail})`);
-      loadData();
+      const status = await sendReminder(nurse);
+      triggerToast(
+        status === 'MOCK_SENT'
+          ? `Reminder for ${nurse.fullName} logged (sandbox mode, no email sent).`
+          : `Reminder sent to ${nurse.fullName} (${nurse.gmail}).`
+      );
     } catch (err: any) {
       alert(`Reminder failed: ${err.message}`);
+    }
+    loadData();
+  };
+
+  // Send reminders to every nurse who has not yet acknowledged the latest roster
+  const handleRemindAllPending = async () => {
+    const pending = nurses.filter((n) => {
+      const ack = getLatestAckForNurse(n.id);
+      return ack && !ack.ackAt;
+    });
+    if (pending.length === 0) {
+      triggerToast('Everyone has acknowledged the latest roster.');
+      return;
+    }
+    if (!confirm(`Send a reminder to ${pending.length} staff member(s) who have not confirmed receipt?`)) return;
+
+    setIsSendingReminders(true);
+    const failures: string[] = [];
+    for (const nurse of pending) {
+      try {
+        await sendReminder(nurse);
+      } catch (err: any) {
+        failures.push(`${nurse.fullName}: ${err.message}`);
+      }
+    }
+    setIsSendingReminders(false);
+    loadData();
+    if (failures.length > 0) {
+      alert(`${pending.length - failures.length} reminder(s) sent, ${failures.length} failed:\n\n${failures.join('\n')}`);
+    } else {
+      triggerToast(`Reminders sent to ${pending.length} staff member(s).`);
     }
   };
 
@@ -467,6 +520,16 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
                 Live compliance grid tracking which nurses have opened and acknowledged their official duty timetable.
               </p>
             </div>
+            <div className="flex items-center gap-2">
+            <button
+              onClick={handleRemindAllPending}
+              disabled={isSendingReminders}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded text-xs font-semibold cursor-pointer disabled:opacity-50"
+              title="Email a reminder to every nurse who has not yet confirmed receipt"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span>{isSendingReminders ? 'Sending reminders...' : 'Send reminders to all pending'}</span>
+            </button>
 
             <button
               onClick={handleExportRecipientsCsv}
@@ -475,6 +538,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
               <Download className="w-3.5 h-3.5 text-slate-500" />
               <span>Export Receipts CSV</span>
             </button>
+            </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs text-xs">
@@ -548,14 +612,6 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
                                 <span>Remind</span>
                               </button>
 
-                              <button
-                                onClick={() => handleSimulateAcknowledge(nurse.id)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-800 rounded text-[11px] font-semibold cursor-pointer"
-                                title="Acknowledge receipt on behalf of staff (or test simulation)"
-                              >
-                                <Check className="w-3 h-3" />
-                                <span>Simulate Ack</span>
-                              </button>
                             </>
                           )}
 

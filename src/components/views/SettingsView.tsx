@@ -49,8 +49,10 @@ import {
   CalendarRange,
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
-import { getRepository, repositoryManager } from '../../services/repository';
+import { getRepository } from '../../services/repository';
 import { authService, UserProfile } from '../../services/auth/authService';
+import { defaultFirebaseConfig } from '../../services/firebase/firebaseConfig';
+import { RoleDirectoryService } from '../../services/auth/directoryService';
 import {
   ClinicProfile,
   DutyWindow,
@@ -200,13 +202,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     return raw ? JSON.parse(raw) : DEFAULT_EMAIL_SETTINGS;
   });
 
-  // Firebase config input string
-  const [firebaseConfigStr, setFirebaseConfigStr] = useState<string>(() => {
-    const current = repositoryManager.getStoredFirebaseConfig();
-    return current ? JSON.stringify(current, null, 2) : '';
-  });
-  const [firebaseStatusMsg, setFirebaseStatusMsg] = useState<{ text: string; error: boolean } | null>(null);
-
   // Test email status
   const [testEmailResult, setTestEmailResult] = useState<string | null>(null);
 
@@ -280,42 +275,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const loadDirectory = async () => {
     setIsLoadingDirectory(true);
     try {
-      const res = await fetch('/api/auth/directory', {
-        headers: { Authorization: `Bearer ${authService.getToken() || ''}` },
+      const entries = await RoleDirectoryService.getDirectoryStaff();
+      setDirectoryEntries(entries as any);
+      setDirectorySummary({
+        owners: entries.filter((e) => e.role === 'OWNER').length,
+        planners: entries.filter((e) => e.role === 'PLANNER' || (e.role === 'EDITOR' && e.isManager)).length,
+        staff: entries.filter((e) => e.type === 'NURSE' || e.type === 'DOCTOR' || e.role === 'STAFF').length,
+        viewers: entries.filter((e) => e.role === 'VIEWER' && e.type !== 'NURSE' && e.type !== 'DOCTOR').length,
       });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.entries) {
-          setDirectoryEntries(data.entries);
-          if (data.summary) {
-            setDirectorySummary({
-              owners: Number(data.summary.owners) || 0,
-              planners: Number(data.summary.planners) || 0,
-              staff: Number(data.summary.staff) || 0,
-              viewers: Number(data.summary.viewers) || 0,
-            });
-          }
-          return;
-        }
-      }
     } catch (err) {
-      console.warn('Could not fetch remote directory, generating from local store:', err);
-      try {
-        const [nurses, doctors, userAccessList] = await Promise.all([
-          repo.list('nurses'),
-          repo.list('doctors'),
-          repo.list('userAccess'),
-        ]);
-        const plannersCount = userAccessList.filter((u: any) => u.appRole === 'EDITOR' || u.isManager).length;
-        setDirectorySummary({
-          owners: 1,
-          planners: plannersCount,
-          staff: (nurses?.length || 0) + (doctors?.length || 0),
-          viewers: userAccessList.filter((u: any) => u.appRole === 'VIEWER').length,
-        });
-      } catch {
-        // ignore fallback errors
-      }
+      console.warn('Could not load the staff directory:', err);
     } finally {
       setIsLoadingDirectory(false);
     }
@@ -326,24 +295,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (!emailTestInput.trim()) return;
     setIsTestingEmail(true);
     try {
-      const res = await fetch('/api/auth/directory/test-match', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authService.getToken() || ''}` },
-        body: JSON.stringify({ email: emailTestInput.trim() }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setEmailTestResult(data);
-      } else {
-        setEmailTestResult({
-          status: 'error',
-          message: 'Simulation request failed.',
-        });
-      }
+      const identity = await RoleDirectoryService.resolveRoleFromEmail(emailTestInput.trim());
+      setEmailTestResult({ status: 'ok', ...identity });
     } catch (err: any) {
       setEmailTestResult({
         status: 'error',
-        message: err.message || 'Simulation network error.',
+        message: err.message || 'Simulation error.',
       });
     } finally {
       setIsTestingEmail(false);
@@ -443,21 +400,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         };
 
         await repo.bulkUpsert('clinics', [clinicToSave]);
-
-        // Dual-sync to server endpoint
-        try {
-          const token = authService.getToken();
-          await fetch('/api/clinic', {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token || ''}`,
-            },
-            body: JSON.stringify(clinicToSave),
-          });
-        } catch (serverErr) {
-          console.warn('[SettingsView] Dual-sync to /api/clinic notice:', serverErr);
-        }
 
         // Persist directly to localStorage for instantaneous recovery on refresh
         localStorage.setItem('clinic_roster_clinic_profile', JSON.stringify(clinicToSave));
@@ -1333,38 +1275,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  // --- 11. Firebase Integrations ---
-  const handleSaveFirebaseConfig = () => {
-    setFirebaseStatusMsg(null);
-    if (!firebaseConfigStr.trim()) {
-      repositoryManager.saveFirebaseConfig(null);
-      setFirebaseStatusMsg({
-        text: 'Firebase config cleared. Switched to offline Local Mode.',
-        error: false,
-      });
-      triggerSaveNotification('Switched to Local Mode.');
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(firebaseConfigStr);
-      if (!parsed.apiKey || !parsed.projectId) {
-        throw new Error('Config JSON must contain at least "apiKey" and "projectId".');
-      }
-      repositoryManager.saveFirebaseConfig(parsed);
-      setFirebaseStatusMsg({
-        text: '✓ Connection config verified. Switched to Firebase Cloud Mode.',
-        error: false,
-      });
-      triggerSaveNotification('Cloud mode active.');
-    } catch (err: any) {
-      setFirebaseStatusMsg({
-        text: `Invalid Firebase config JSON: ${err.message}`,
-        error: true,
-      });
-    }
-  };
-
   // --- 12. Database & Seed Data Management (Phase 15) ---
   const loadStats = async () => {
     setIsLoadingStats(true);
@@ -1873,13 +1783,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     onClick={() => {
                       setEmailTestInput(preset.email);
                       setTimeout(() => {
-                        fetch('/api/auth/directory/test-match', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authService.getToken() || ''}` },
-                          body: JSON.stringify({ email: preset.email }),
-                        })
-                          .then((r) => r.json())
-                          .then((data) => setEmailTestResult(data));
+                        RoleDirectoryService.resolveRoleFromEmail(preset.email)
+                          .then((identity) => setEmailTestResult({ status: 'ok', ...identity }))
+                          .catch((err) => setEmailTestResult({ status: 'error', message: err.message }));
                       }, 50);
                     }}
                     className="px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 text-slate-600 dark:text-slate-300 font-mono text-[10px] cursor-pointer transition-colors"
@@ -3764,70 +3670,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeTab === 'integrations' && (
           <div className="space-y-4 max-w-2xl text-xs">
             <div className="pb-3 border-b border-slate-100">
-              <h2 className="text-sm font-semibold text-slate-900">Database Storage &amp; Firebase Cloud Integration</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Database Storage</h2>
               <p className="text-slate-500 text-[11px] mt-0.5">
-                Toggle between offline LocalStorage repository mode and real Cloud Firestore persistence with Google Sign-in.
+                All clinic data is stored in Cloud Firestore and protected by the Firestore security rules.
               </p>
             </div>
 
             <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-2">
               <div className="flex items-center gap-2">
                 <Database className="w-4 h-4 text-emerald-600" />
-                <span className="font-semibold text-slate-800">Current Storage Backend:</span>
-                <span
-                  className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold ${
-                    repositoryManager.getIsCloudMode()
-                      ? 'bg-blue-100 text-blue-800'
-                      : 'bg-emerald-100 text-emerald-800'
-                  }`}
-                >
-                  {repositoryManager.getIsCloudMode()
-                    ? 'FIRESTORE CLOUD REPOSITORY'
-                    : 'LOCAL STORAGE REPOSITORY (Mandatory Fallback)'}
+                <span className="font-semibold text-slate-800">Storage Backend:</span>
+                <span className="px-2 py-0.5 rounded font-mono text-[10px] font-bold bg-blue-100 text-blue-800">
+                  CLOUD FIRESTORE
                 </span>
               </div>
               <p className="text-slate-600 text-[11px] leading-relaxed">
-                ClinicRoster operates with full scheduling fidelity in offline Local Mode. Adding Firebase credentials enables real Google Auth logins, editor invitations, and cross-browser synchronization.
+                Project <span className="font-mono">{defaultFirebaseConfig.projectId}</span>, database{' '}
+                <span className="font-mono">{defaultFirebaseConfig.firestoreDatabaseId || '(default)'}</span>. The
+                connection is provisioned by Google AI Studio (firebase-applet-config.json) and is not changed from
+                inside the app.
               </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="block font-medium text-slate-700">
-                Firebase Web Config JSON
-              </label>
-              <textarea
-                value={firebaseConfigStr}
-                onChange={(e) => setFirebaseConfigStr(e.target.value)}
-                placeholder='{\n  "apiKey": "AIzaSy...",\n  "authDomain": "my-clinic.firebaseapp.com",\n  "projectId": "my-clinic",\n  "storageBucket": "...",\n  "messagingSenderId": "...",\n  "appId": "..."\n}'
-                rows={7}
-                className="w-full p-2.5 border border-slate-300 rounded font-mono text-xs text-slate-800 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-              <span className="text-[10px] text-slate-400">
-                Clear the text and save to immediately switch back to LocalStorage mode.
-              </span>
-            </div>
-
-            {firebaseStatusMsg && (
-              <div
-                className={`p-3 rounded border text-[11px] ${
-                  firebaseStatusMsg.error
-                    ? 'bg-red-50 border-red-200 text-red-700'
-                    : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                }`}
-              >
-                {firebaseStatusMsg.text}
-              </div>
-            )}
-
-            <div className="pt-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleSaveFirebaseConfig}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors shadow-xs cursor-pointer"
-              >
-                <Save className="w-3.5 h-3.5" />
-                <span>Test Connection &amp; Switch Backend</span>
-              </button>
             </div>
           </div>
         )}

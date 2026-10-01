@@ -43,6 +43,8 @@ import {
 } from '../../types';
 import { getRepository } from '../../services/repository';
 import { authService, UserProfile } from '../../services/auth/authService';
+import { loadPublicRoster } from '../../services/publish/publicRosterService';
+import { buildNurseIcs, downloadIcsFile } from '../../services/export/icsExportService';
 
 interface PublishedRosterViewProps {
   shareToken?: string;
@@ -75,94 +77,90 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
   const [selectedNurseFilter, setSelectedNurseFilter] = useState<string>(nurseIdParam || 'ALL');
   const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [clinicTimezone, setClinicTimezone] = useState<string>(() => {
+    try {
+      return localStorage.getItem('clinic_roster_clinic_timezone') || 'Asia/Dubai';
+    } catch {
+      return 'Asia/Dubai';
+    }
+  });
+  const [clinicLabel, setClinicLabel] = useState<string>(() => {
+    try {
+      return localStorage.getItem('clinic_roster_clinic_name') || 'Clinic';
+    } catch {
+      return 'Clinic';
+    }
+  });
 
   const currentUser = authService.getCurrentUser();
-  const repo = getRepository();
 
   useEffect(() => {
     async function loadPublishedRoster() {
       setLoading(true);
+      setAccessDeniedMessage(null);
       try {
-        const [
-          schedList,
-          vList,
-          linkList,
-          nList,
-          dwList,
-          ltList,
-          sList,
-          dList,
-          rList,
-          spList,
-        ] = await Promise.all([
-          repo.list('schedules'),
-          repo.list('versions'),
-          repo.list('shareLinks'),
-          repo.list('nurses'),
-          repo.list('dutyWindows'),
-          repo.list('leaveTypes'),
-          repo.list('seniorityLevels'),
-          repo.list('doctors'),
-          repo.list('clinicalRoles'),
-          repo.list('specialties'),
-        ]);
-
-        setNurses(nList.filter((n) => n.active));
-        setDutyWindows(dwList);
-        setLeaveTypes(ltList);
-        setSeniorityLevels(sList);
-        setDoctors(dList);
-        setClinicalRoles(rList);
-        setSpecialties(spList);
-
-        // Find share link if token passed
-        let targetVersion: ScheduleVersion | null = null;
-        let targetSchedule: Schedule | null = null;
-
+        // A share link reads exactly one public snapshot document (works without signing in).
         if (shareToken) {
-          const matchedLink = linkList.find((l) => l.token === shareToken);
-          if (matchedLink) {
-            setShareLink(matchedLink);
-            if (matchedLink.revoked) {
-              setAccessDeniedMessage('This share link has been revoked by the schedule administrator.');
-              setLoading(false);
-              return;
-            }
-
-            // Check restricted allowed emails
-            if (!matchedLink.public && matchedLink.allowedEmails.length > 0) {
-              const userEmail = (currentUser?.email || '').toLowerCase();
-              const isAllowed = matchedLink.allowedEmails.some((e) => e.toLowerCase() === userEmail);
-              if (!isAllowed) {
-                setAccessDeniedMessage(
-                  `Access Restricted: This schedule is shared only with authorized staff. Current account (${userEmail || 'Guest'}) is not on the allowed list.`
-                );
-                setLoading(false);
-                return;
-              }
-            }
-
-            targetVersion = vList.find((v) => v.id === matchedLink.pointsToVersionId) || null;
-            targetSchedule = schedList.find((s) => s.id === matchedLink.scheduleId) || null;
+          const snap = await loadPublicRoster(shareToken);
+          if (!snap) {
+            setAccessDeniedMessage(
+              currentUser
+                ? 'This link is not valid for your account. It may have been revoked, replaced, or shared only with other staff.'
+                : 'This link is not valid. It may have been revoked or replaced, or it is shared only with signed in staff. Ask the clinic for a new link, or sign in with an authorized account.'
+            );
+            return;
           }
-        }
+          setNurses(snap.nurses as Nurse[]);
+          setDutyWindows(snap.dutyWindows as DutyWindow[]);
+          setLeaveTypes(snap.leaveTypes as LeaveType[]);
+          setSeniorityLevels(snap.seniorityLevels as SeniorityLevel[]);
+          setDoctors(snap.doctors as Doctor[]);
+          setClinicalRoles(snap.clinicalRoles as ClinicalRole[]);
+          setSpecialties(snap.specialties as Specialty[]);
+          setSchedule(snap.schedule as Schedule);
+          if (snap.timezone) setClinicTimezone(snap.timezone);
+          if (snap.clinicName) setClinicLabel(snap.clinicName);
+          setVersion(snap.version as unknown as ScheduleVersion);
+          setShareLink({
+            id: snap.token,
+            scheduleId: snap.scheduleId,
+            token: snap.token,
+            role: 'VIEWER',
+            public: snap.isPublic,
+            allowedEmails: snap.allowedEmails,
+            createdAt: snap.updatedAt,
+            revoked: false,
+            pointsToVersionId: snap.versionId,
+          });
+        } else if (currentUser) {
+          // Signed in preview without a token: latest published version.
+          const repo = getRepository();
+          const [schedList, vList, nList, dwList, ltList, sList, dList, rList, spList] = await Promise.all([
+            repo.list('schedules'),
+            repo.list('versions'),
+            repo.list('nurses'),
+            repo.list('dutyWindows'),
+            repo.list('leaveTypes'),
+            repo.list('seniorityLevels'),
+            repo.list('doctors'),
+            repo.list('clinicalRoles'),
+            repo.list('specialties'),
+          ]);
+          setNurses(nList.filter((n) => n.active));
+          setDutyWindows(dwList);
+          setLeaveTypes(ltList);
+          setSeniorityLevels(sList);
+          setDoctors(dList);
+          setClinicalRoles(rList);
+          setSpecialties(spList);
 
-        // Fallback: pick the latest published version across schedules
-        if (!targetVersion) {
-          const publishedVersions = vList.filter((v) => v.isPublished);
-          if (publishedVersions.length > 0) {
-            publishedVersions.sort((a, b) => b.number - a.number);
-            targetVersion = publishedVersions[0];
-            targetSchedule = schedList.find((s) => s.id === targetVersion?.scheduleId) || null;
-          } else if (vList.length > 0) {
-            targetVersion = vList[0];
-            targetSchedule = schedList.find((s) => s.id === targetVersion?.scheduleId) || null;
+          const published = vList.filter((v) => v.isPublished).sort((a, b) => b.number - a.number);
+          const targetVersion = published[0] || null;
+          const targetSchedule = targetVersion ? schedList.find((s) => s.id === targetVersion.scheduleId) || null : null;
+          if (targetSchedule && targetVersion) {
+            setSchedule(targetSchedule);
+            setVersion(targetVersion);
           }
-        }
-
-        if (targetSchedule && targetVersion) {
-          setSchedule(targetSchedule);
-          setVersion(targetVersion);
         }
 
         if (nurseIdParam) {
@@ -268,6 +266,23 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
       ? nurses
       : nurses.filter((n) => n.id === selectedNurseFilter);
 
+  // Download the selected nurse's shifts as a calendar file
+  const handleDownloadCalendar = (nurseId: string) => {
+    const nurse = nurseMap.get(nurseId);
+    const ics = buildNurseIcs({
+      calendarName: `${clinicLabel} roster: ${nurse?.fullName || 'My shifts'}`,
+      clinicName: clinicLabel,
+      timezone: clinicTimezone,
+      nurseId,
+      assignments,
+      dutyWindows,
+      doctors,
+      clinicalRoles: roles,
+      specialties,
+    });
+    downloadIcsFile(`${schedule.name} ${nurse?.fullName || nurseId}.ics`, ics);
+  };
+
   // Copy personal link for selected nurse
   const handleCopyPersonalNurseLink = (nurseId: string) => {
     const origin = window.location.origin;
@@ -360,6 +375,17 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
               >
                 {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copiedLink ? 'Link Copied!' : 'Personal Link'}</span>
+              </button>
+            )}
+
+            {selectedNurseFilter !== 'ALL' && (
+              <button
+                onClick={() => handleDownloadCalendar(selectedNurseFilter)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded text-xs transition-colors cursor-pointer"
+                title="Download these shifts as a calendar file for Google Calendar, Apple Calendar or Outlook"
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Add to Calendar (.ics)</span>
               </button>
             )}
 

@@ -8,9 +8,7 @@
 
 import nodemailer from 'nodemailer';
 import { v4 as uuidv4 } from 'uuid';
-import { IRepository } from '../../../src/services/repository/IRepository';
 import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../../src/types/settings';
-import { EmailRecipientLog } from '../../../src/types';
 
 /**
  * Validates that an email is a valid format and eligible Google / Google Workspace account
@@ -76,17 +74,14 @@ export class EmailService {
   /**
    * Resolves effective email configuration from repository or environment
    */
-  public static async getConfig(repo: IRepository): Promise<EmailSettingsConfig> {
-    const clinics = await repo.list('clinics');
-    const clinic = clinics[0];
-    const storedConfig = withoutConnectionSettings((clinic as any)?.emailSettings);
+  public static getConfig(): EmailSettingsConfig {
     const defaults = withoutConnectionSettings(DEFAULT_EMAIL_SETTINGS);
 
     return <EmailSettingsConfig>{
       ...defaults,
-      ...storedConfig,
-      // Environment overrides if present
+      // Environment (AI Studio Secrets) provides the provider and SMTP credentials
       ...(process.env.EMAIL_PROVIDER ? { provider: process.env.EMAIL_PROVIDER as any } : {}),
+      ...(process.env.EMAIL_SENDER_NAME ? { senderName: process.env.EMAIL_SENDER_NAME } : {}),
       ...(process.env.GOOGLE_SMTP_USER || process.env.SMTP_USER ? { smtpUser: process.env.GOOGLE_SMTP_USER || process.env.SMTP_USER } : {}),
       ...(process.env.GOOGLE_APP_PASSWORD || process.env.SMTP_PASS ? { smtpPass: process.env.GOOGLE_APP_PASSWORD || process.env.SMTP_PASS } : {}),
       ...(process.env.GOOGLE_APP_PASSWORD ? { googleAppPassword: process.env.GOOGLE_APP_PASSWORD } : {}),
@@ -98,12 +93,8 @@ export class EmailService {
   /**
    * Dispatches email exclusively via Google SMTP or Mock Safe Sandbox mode
    */
-  public static async send(
-    payload: SendEmailPayload,
-    repo: IRepository,
-    actor: string = 'System Dispatcher'
-  ): Promise<SendEmailResult> {
-    const baseConfig = await this.getConfig(repo);
+  public static async send(payload: SendEmailPayload): Promise<SendEmailResult> {
+    const baseConfig = this.getConfig();
     const config: EmailSettingsConfig = { ...baseConfig, ...pickRequestOverrides(payload.config) } as EmailSettingsConfig;
 
     const rawList = Array.isArray(payload.to) ? payload.to : [payload.to];
@@ -123,14 +114,11 @@ export class EmailService {
       };
     }
 
-    const clinics = (await repo.list('clinics')) as any[];
-    const clinicName = clinics[0]?.name || 'American Hospital Nad Al Sheba OutPatient clinic';
-    const fromName = String(payload.fromName || config.senderName || `${clinicName} Rostering`).replace(/["<>\r\n]/g, '');
+    const fromName = String(payload.fromName || config.senderName || 'Clinic Rostering').replace(/["<>\r\n]/g, '');
     // Gmail SMTP only sends as the authenticated account, so the sender is the SMTP user when set.
     const fromEmail = config.smtpUser || config.senderEmail || 'rolandabj@gmail.com';
     const fromAddress = `"${fromName}" <${fromEmail}>`;
 
-    const now = new Date().toISOString();
     let result: SendEmailResult;
 
     // 1. MOCK Provider / Safe Sandbox Mode
@@ -196,44 +184,8 @@ export class EmailService {
       }
     }
 
-    // Persist dispatch in emailLog collection
-    const recipientLogs: EmailRecipientLog[] = toList.map((recipient) => ({
-      nurseId: payload.nurseId || recipient,
-      nurseName: payload.nurseId || recipient,
-      email: recipient,
-      subject: payload.subject,
-      bodyPreview: payload.html.replace(/<[^>]*>/g, '').slice(0, 150),
-      fullBodyHtml: payload.html,
-      status: result.status,
-      errorMessage: result.error,
-    }));
-
-    const kind = payload.subject.includes('[Test]')
-      ? 'TEST'
-      : payload.subject.includes('Change')
-      ? 'CHANGE'
-      : 'PUBLISH';
-
-    await repo.create('emailLog', {
-      id: `elog-${uuidv4().slice(0, 8)}`,
-      scheduleId: payload.scheduleId || 'direct-dispatch',
-      versionId: payload.versionId || 'v1',
-      kind,
-      recipients: recipientLogs,
-      providerMessageId: result.messageId,
-      status: result.status,
-      sentAt: now,
-    });
-
-    // Record audit event
-    await repo.create('audit', {
-      actor,
-      action: 'UPDATE',
-      entity: 'EmailDispatch',
-      entityId: result.messageId,
-      note: `Google Email (${config.mockMode ? 'Safe Sandbox' : 'Live Google'}): "${payload.subject}" dispatched to ${toList.length} recipient(s) with status ${result.status} (Sender: ${fromEmail}).`,
-      timestamp: now,
-    });
+    // The browser records the dispatch in the Firestore email log.
+    console.log(`[EmailService] ${result.status} to ${toList.length} recipient(s): "${payload.subject}"`);
 
     return result;
   }

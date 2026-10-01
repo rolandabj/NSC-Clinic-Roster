@@ -68,16 +68,68 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------------
-    // Acknowledgments: any approved user may confirm receipt (set ackAt);
-    // everything else needs editor rights.
+    // Acknowledgments: the document id is the random token emailed to the
+    // nurse. Knowing the token is what allows reading that one record and
+    // confirming receipt (setting ackAt once), even without signing in.
     // ---------------------------------------------------------------------
     match /acknowledgments/{ackId} {
-      allow read: if isApproved();
+      allow get: if isApproved() || resource.data.token == ackId;
+      allow list: if isApproved();
       allow create, delete: if isEditor();
       allow update: if isEditor() || (
-        isApproved()
+        resource.data.token == ackId
+        && resource.data.get('ackAt', null) == null
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ackAt'])
+        && request.resource.data.ackAt is string
       );
+    }
+
+    // ---------------------------------------------------------------------
+    // Public roster snapshots: the document id is the random share token.
+    // Anyone holding the link can read that one snapshot (never list them).
+    // Restricted links only open for the listed, signed in email addresses.
+    // ---------------------------------------------------------------------
+    match /publicRosters/{token} {
+      allow get: if resource.data.revoked != true && (
+        resource.data.isPublic == true
+        || (signedIn() && myEmail() in resource.data.allowedEmails)
+        || isApproved()
+      );
+      allow list: if false;
+      allow write: if isEditor();
+    }
+
+    // ---------------------------------------------------------------------
+    // Staff self service: an approved user linked to a nurse profile may file
+    // and cancel their own PENDING leave and availability requests. Managers
+    // and editors decide them.
+    // ---------------------------------------------------------------------
+    function myNurseId() {
+      return hasAccessRecord() ? access().get('linkedNurseId', '') : '';
+    }
+
+    function isOwnPendingRequest(data) {
+      return isApproved()
+        && myNurseId() != ''
+        && data.nurseId == myNurseId()
+        && data.status == 'PENDING';
+    }
+
+    match /leaveEntries/{leaveId} {
+      allow read: if isApproved();
+      allow create: if isEditor() || (
+        isOwnPendingRequest(request.resource.data)
+        && request.resource.data.approved == false
+      );
+      allow update: if isEditor();
+      allow delete: if isEditor() || isOwnPendingRequest(resource.data);
+    }
+
+    match /availabilityRequests/{requestId} {
+      allow read: if isApproved();
+      allow create: if isEditor() || isOwnPendingRequest(request.resource.data);
+      allow update: if isEditor();
+      allow delete: if isEditor() || isOwnPendingRequest(resource.data);
     }
 
     // ---------------------------------------------------------------------
@@ -93,20 +145,17 @@ service cloud.firestore {
       allow update, delete: if isOwner();
     }
 
+    // Collections with their own rules above; the catch all below never applies to them.
+    function SPECIAL_COLLECTIONS() {
+      return ['userAccess', 'acknowledgments', 'emailLog', 'audit', 'publicRosters', 'leaveEntries', 'availabilityRequests'];
+    }
+
     // ---------------------------------------------------------------------
     // Every other clinic collection: approved users read, editors write.
     // ---------------------------------------------------------------------
     match /{collection}/{docId} {
-      allow read: if isApproved()
-        && collection != 'userAccess'
-        && collection != 'acknowledgments'
-        && collection != 'emailLog'
-        && collection != 'audit';
-      allow write: if isEditor()
-        && collection != 'userAccess'
-        && collection != 'acknowledgments'
-        && collection != 'emailLog'
-        && collection != 'audit';
+      allow read: if isApproved() && !(collection in SPECIAL_COLLECTIONS());
+      allow write: if isEditor() && !(collection in SPECIAL_COLLECTIONS());
     }
   }
 }

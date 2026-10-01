@@ -53,6 +53,8 @@ import { computeScheduleDiff, ScheduleVersionDiff } from '../../services/history
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
 import { getRepository } from '../../services/repository';
+import { syncPublicRoster } from '../../services/publish/publicRosterService';
+import { escapeHtml } from '../../utils/escapeHtml';
 
 interface PublishModalProps {
   context: ClinicContextState;
@@ -253,7 +255,10 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     const logs: string[] = [];
 
     try {
-      const newVersionNumber = (schedule.activeVersionNumber || 1) + 1;
+      // Next version number = highest existing version of this schedule + 1
+      const scheduleVersions = await repo.list('versions', { field: 'scheduleId', operator: '==', value: schedule.id });
+      const newVersionNumber =
+        Math.max(schedule.activeVersionNumber || 1, ...scheduleVersions.map((v) => v.number || 0)) + 1;
       const versionId = `v-${schedule.id}-${newVersionNumber}-${Date.now()}`;
       const nowIso = new Date().toISOString();
 
@@ -269,7 +274,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           schedule,
           assignments,
           leaveEntries,
-          locks: [],
+          locks: locks.filter((l) => l.date >= schedule.startDate && l.date <= schedule.endDate),
           rulesSnapshot: rules,
         },
         isPublished: true,
@@ -286,14 +291,11 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       });
 
       // 3. Ensure ShareLink exists pointing to this new published version
-      const existingLinks = await repo.list('shareLinks');
-      const schedLinks = existingLinks.filter((l) => l.scheduleId === schedule.id && !l.revoked);
-      if (schedLinks.length > 0) {
-        await repo.update('shareLinks', schedLinks[0].id, {
-          pointsToVersionId: versionId,
-        });
-      } else {
-        await repo.create('shareLinks', {
+      //    and refresh every active link's public snapshot.
+      const existingLinks = await repo.list('shareLinks', { field: 'scheduleId', operator: '==', value: schedule.id });
+      const schedLinks = existingLinks.filter((l) => !l.revoked);
+      if (schedLinks.length === 0) {
+        const newLink: ShareLink = {
           id: uuidv4(),
           scheduleId: schedule.id,
           token: `sh_${crypto.randomUUID()}`,
@@ -303,8 +305,18 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           createdAt: nowIso,
           revoked: false,
           pointsToVersionId: versionId,
-        });
+        };
+        await repo.create('shareLinks', newLink);
+        schedLinks.push(newLink);
       }
+      for (const link of schedLinks) {
+        if (link.pointsToVersionId !== versionId) {
+          await repo.update('shareLinks', link.id, { pointsToVersionId: versionId });
+        }
+        await syncPublicRoster({ ...link, pointsToVersionId: versionId });
+      }
+      // Personal email links use the clinic wide public link when there is one.
+      const emailShareToken = (schedLinks.find((l) => l.public) || schedLinks[0]).token;
 
       // 4. Dispatch Email to Selected Nurses
       const targetNurses = nurses.filter((n) => selectedNurseIds.has(n.id));
@@ -330,7 +342,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           leaveTypes,
           changes: nurseChanges,
           generalNote: generalBroadcastNote,
-          shareToken: schedLinks[0]?.token || 'preview',
+          shareToken: emailShareToken,
           ackToken,
           isChangeAlert: publishKind === 'CHANGE',
         });
@@ -367,7 +379,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           nurseName: context.currentUser.name,
           subject: `[ADMIN COPY] Published ${schedule.name} v${newVersionNumber}`,
           bodyPreview: `Official administrative copy of published schedule v${newVersionNumber}.`,
-          fullBodyHtml: `<h3>Administrative Copy: ${schedule.name} v${newVersionNumber}</h3><p>Published to ${targetNurses.length} nurses on ${nowIso}.</p>`,
+          fullBodyHtml: `<h3>Administrative Copy: ${escapeHtml(schedule.name)} v${newVersionNumber}</h3><p>Published to ${targetNurses.length} nurses on ${nowIso}.</p>`,
           status: 'MOCK_SENT',
         });
         logs.push(`✓ Sent administrative copy to ${context.currentUser.email}`);

@@ -430,6 +430,8 @@ export interface Acknowledgment {
   token: string;
   ackAt?: string;
   sentAt: string;
+  lastReminderSentAt?: string;
+  reminderCount?: number;
 }
 
 // 20. PublicHoliday
@@ -518,7 +520,8 @@ export type CollectionName =
   | 'userAccess'
   | 'availabilityRequests'
   | 'systemMetadata'
-  | 'workingHoursPeriods';
+  | 'workingHoursPeriods'
+  | 'publicRosters';
 
 // Type lookup helper for generic repository access
 export type EntityForCollection<T extends CollectionName> =

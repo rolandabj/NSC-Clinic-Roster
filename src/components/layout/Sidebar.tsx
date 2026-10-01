@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { AppRoute, NavItem } from '../../types/navigation';
 import { i18n, t, Language } from '../../services/i18n';
+import { authService, UserProfile } from '../../services/auth/authService';
+import { canAccessRoute } from '../../services/auth/access';
 
 interface SidebarProps {
   currentRoute: AppRoute;
@@ -44,10 +46,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
 }) => {
   const [, setLang] = useState<Language>(i18n.getLanguage());
+  const [user, setUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
 
   useEffect(() => {
     return i18n.subscribe((newLang) => setLang(newLang));
   }, []);
+
+  useEffect(() => authService.subscribe(setUser), []);
+
+  const visibleItems = NAV_ITEMS.filter((item) => canAccessRoute(user, item.id));
 
   return (
     <aside
@@ -95,7 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Nav List */}
       <nav className={`flex-1 ${isCollapsed ? 'px-1.5' : 'px-2'} py-3 space-y-1 overflow-y-auto`}>
-        {NAV_ITEMS.map((item) => {
+        {visibleItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentRoute === item.id;
           const label = t(item.labelKey, item.defaultLabel);

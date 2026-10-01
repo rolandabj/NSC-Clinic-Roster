@@ -35,7 +35,7 @@ import {
   CollectionName,
 } from '../../types';
 import { SchedulingEngine } from '../engine/SchedulingEngine';
-import { authService } from '../auth/authService';
+import { removePublicRoster } from '../publish/publicRosterService';
 
 export const ALL_COLLECTIONS: CollectionName[] = [
   'clinics',
@@ -355,11 +355,23 @@ export async function reseedDatabase(_repo: IRepository): Promise<void> {
  * Wipe all collections from the repository and coordinate with backend server
  */
 export async function clearDatabase(repo: IRepository): Promise<void> {
-  console.info('[ClinicRoster] Initiating dual-tier database wipe (client repository + server)...');
+  console.info('[ClinicRoster] Initiating database wipe...');
 
-  // 1. Wipe all collections in active repository (excluding systemMetadata for now)
+  // 1. Public roster snapshots cannot be listed (by design), so remove them
+  //    through the share links that point to them.
+  try {
+    const links = await repo.list('shareLinks');
+    for (const link of links) {
+      if (link.token) await removePublicRoster(link.token);
+    }
+  } catch (e) {
+    console.warn('[ClinicRoster] Could not remove public roster snapshots:', e);
+  }
+
+  // 2. Wipe all clinic data collections. The user access list is kept, so
+  //    approved staff keep their accounts.
   for (const col of ALL_COLLECTIONS) {
-    if (col === 'systemMetadata') continue;
+    if (col === 'systemMetadata' || col === 'userAccess') continue;
     try {
       await repo.clearCollection(col);
     } catch (e) {
@@ -367,7 +379,7 @@ export async function clearDatabase(repo: IRepository): Promise<void> {
     }
   }
 
-  // 2. Write persistent CLEARED tombstone in active repository
+  // 3. Write persistent CLEARED tombstone in active repository
   try {
     const existing = await repo.get('systemMetadata', 'initialization_state');
     const now = new Date().toISOString();
@@ -392,7 +404,7 @@ export async function clearDatabase(repo: IRepository): Promise<void> {
     console.warn('[ClinicRoster] Warning writing CLEARED tombstone to client repository:', tErr);
   }
 
-  // 3. Set localStorage tombstone flag & purge stale cache keys
+  // 4. Set localStorage tombstone flag & purge stale cache keys
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem('clinic_roster_database_cleared', 'true');
@@ -402,25 +414,6 @@ export async function clearDatabase(repo: IRepository): Promise<void> {
     } catch {
       // ignore
     }
-  }
-
-  // 4. Concurrently notify backend server to clear server-side store
-  try {
-    const token = authService.getToken();
-    const res = await fetch('/api/admin/clear', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
-    if (res.ok) {
-      console.info('[ClinicRoster] Coordinated backend server clear completed successfully.');
-    } else {
-      console.warn('[ClinicRoster] Backend clear responded with status:', res.status);
-    }
-  } catch (apiErr) {
-    console.info('[ClinicRoster] Backend server clear notification note (server may be offline/local-only):', apiErr);
   }
 }
 

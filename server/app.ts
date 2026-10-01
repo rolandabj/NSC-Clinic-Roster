@@ -1,56 +1,28 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
- * ClinicRoster Full-Stack Server
- * Express entry point mounting Vite middleware in development
- * and serving static assets with client-side routing fallback in production.
+ *
+ * ClinicRoster Server
+ * All clinic data lives in Cloud Firestore and is read and written by the
+ * browser, protected by the Firestore security rules. This server only:
+ *   - serves the web app (Vite middleware in development, the built bundle in production)
+ *   - sends email through Google SMTP (credentials from AI Studio Secrets)
+ *   - tests webhook endpoints configured in Settings
  */
 
 import express, { Request, Response } from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { serverRepo } from './db/index';
-import {
-  initializeServerDatabaseIfEmpty,
-  isServerDatabaseCleared,
-} from './services/seed/serverSeedRunner';
-import { adminRouter } from './routes/admin';
-import { authMiddleware, requireAuth, requireOwner } from './middleware/auth';
+import { authMiddleware, requireAuth } from './middleware/auth';
 import { authRouter } from './routes/auth';
-import { clinicRouter } from './routes/clinic';
-import { staffRouter } from './routes/staff';
-import { scheduleRouter } from './routes/schedules';
-import { rosterRouter } from './routes/roster';
-import { shareRouter } from './routes/share';
-import { calendarRouter } from './routes/calendar';
 import { emailRouter } from './routes/email';
-import { crudRouter } from './routes/crud';
 import { webhookRouter } from './routes/webhook';
-import { availabilityRouter } from './routes/availability';
-import { leaveRouter } from './routes/leave';
-import { approvalsRouter } from './routes/approvals';
-import { acknowledgmentChaser } from './services/jobs/acknowledgmentChaser';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export async function startServer() {
   const app = express();
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const isProduction = process.env.NODE_ENV === 'production';
-
-  // Active connections & metrics tracking
-  let activeRequestsCount = 0;
-  app.use((_req, res, next) => {
-    activeRequestsCount++;
-    res.on('finish', () => {
-      activeRequestsCount = Math.max(0, activeRequestsCount - 1);
-    });
-    next();
-  });
 
   // Security Headers via Helmet (configured to allow iframe rendering in AI Studio preview)
   app.use(
@@ -61,33 +33,8 @@ export async function startServer() {
     })
   );
 
-  // Rate Limiting Middlewares
-  // 1. Strict limit on public schedule share links (60 requests / minute)
-  const shareRateLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 60,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-      error: 'TooManyRequests',
-      message: 'Rate limit exceeded: maximum 60 requests per minute on public share links.',
-    },
-  });
-
-  // 2. Standard limit on dynamic iCalendar subscription feeds (120 requests / minute)
-  const calendarRateLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 120,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-      error: 'TooManyRequests',
-      message: 'Rate limit exceeded: maximum 120 requests per minute on calendar feeds.',
-    },
-  });
-
-  // 3. General limit on authentication, email and acknowledgment endpoints
-  const sensitiveRateLimiter = rateLimit({
+  // Limit on authentication, email and webhook endpoints
+  const apiRateLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 60,
     standardHeaders: true,
@@ -98,31 +45,17 @@ export async function startServer() {
     },
   });
 
-  // Middlewares
   // No CORS middleware: the browser app is served from this same origin, so
   // cross origin calls to the API are not needed and are not allowed.
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-  // Apply Rate Limiters to Targeted Public Endpoints (before token verification)
-  app.use('/api/share', shareRateLimiter);
-  app.use('/api/roster/calendar', calendarRateLimiter);
-  app.use('/api/auth', sensitiveRateLimiter);
-  app.use('/api/email', sensitiveRateLimiter);
-  app.use('/api/roster/acknowledge', sensitiveRateLimiter);
-
+  app.use(express.json({ limit: '5mb' }));
+  app.use('/api', apiRateLimiter);
   app.use(authMiddleware);
 
-  // Every API route requires a signed in, approved user, except this short list
-  // of public endpoints (each one checks its own token where relevant).
+  // Every API route requires a signed in, approved user, except these.
   const PUBLIC_API_ROUTES: Array<{ method: string; pattern: RegExp }> = [
     { method: 'GET', pattern: /^\/api\/health$/ },
-    { method: 'GET', pattern: /^\/api\/clinic$/ },
     { method: 'GET', pattern: /^\/api\/auth\/(me|verify)$/ },
     { method: 'POST', pattern: /^\/api\/auth\/logout$/ },
-    { method: 'GET', pattern: /^\/api\/share\/[^/]+$/ },
-    { method: 'GET', pattern: /^\/api\/roster\/calendar\/[^/]+$/ },
-    { method: 'POST', pattern: /^\/api\/roster\/acknowledge$/ },
   ];
   app.use('/api', (req: Request, res: Response, next) => {
     const fullPath = (req.baseUrl + req.path).replace(/\/+$/, '') || '/';
@@ -131,92 +64,19 @@ export async function startServer() {
     return requireAuth(req, res, next);
   });
 
-  // Verify database state on cold start (no auto-seeding of demo data)
-  try {
-    const isWiped = await isServerDatabaseCleared(serverRepo);
-    if (!isWiped) {
-      console.log('[Server] Cold start: Database is running in clean production mode.');
-    }
-  } catch (err) {
-    console.error('[Server] Cold start database check failed:', err);
-  }
-
   // Public liveness check: reveals nothing about the server.
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ status: 'healthy', timestamp: new Date().toISOString(), service: 'ClinicRoster API' });
   });
 
-  // Detailed health & observability (owner only)
-  app.get('/api/health/details', requireOwner, async (_req: Request, res: Response) => {
-    try {
-      const mem = process.memoryUsage();
-      const storageStats = await serverRepo.getStorageStats();
-      const uptimeSec = Math.floor(process.uptime());
-
-      res.json({
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        service: 'ClinicRoster API',
-        environment: isProduction ? 'production' : 'development',
-        system: {
-          uptimeSeconds: uptimeSec,
-          uptimeFormatted: `${Math.floor(uptimeSec / 3600)}h ${Math.floor((uptimeSec % 3600) / 60)}m ${uptimeSec % 60}s`,
-          memory: {
-            rssMb: +(mem.rss / 1024 / 1024).toFixed(2),
-            heapTotalMb: +(mem.heapTotal / 1024 / 1024).toFixed(2),
-            heapUsedMb: +(mem.heapUsed / 1024 / 1024).toFixed(2),
-            externalMb: +(mem.external / 1024 / 1024).toFixed(2),
-          },
-          nodeVersion: process.version,
-          platform: process.platform,
-          activeRequests: activeRequestsCount,
-        },
-        database: {
-          engine: 'JsonFileRepository',
-          totalSizeBytes: storageStats.totalSizeBytes,
-          totalSizeReadable: storageStats.totalSizeReadable,
-          collectionsCount: storageStats.collectionsCount,
-          totalDocuments: storageStats.totalDocuments,
-          collections: storageStats.collections,
-        },
-        security: {
-          helmet: {
-            enabled: true,
-            frameguard: 'disabled (iframe-compatible)',
-          },
-          rateLimiting: {
-            shareEndpointLimit: '60 requests / minute',
-            calendarFeedLimit: '120 requests / minute',
-          },
-        },
-        jobs: {
-          acknowledgmentChaser: acknowledgmentChaser.getStatus(),
-        },
-      });
-    } catch (err: any) {
-      res.status(500).json({ status: 'error', message: err.message });
-    }
-  });
-
-  // Authentication Routes
   app.use('/api/auth', authRouter);
-
-  // Clinic, Staff, Schedule, Roster, Share, Calendar, Email, Leave & Approvals Routes
-  app.use('/api', clinicRouter);
-  app.use('/api', staffRouter);
-  app.use('/api', scheduleRouter);
-  app.use('/api', rosterRouter);
-  app.use('/api', shareRouter);
-  app.use('/api', calendarRouter);
   app.use('/api', emailRouter);
-  app.use('/api', availabilityRouter);
-  app.use('/api', leaveRouter);
-  app.use('/api', approvalsRouter);
-  app.use('/api', crudRouter);
   app.use('/api', webhookRouter);
 
-  // Admin Routes
-  app.use('/api/admin', adminRouter);
+  // Unknown API routes
+  app.use('/api', (_req: Request, res: Response) => {
+    res.status(404).json({ error: 'NotFound', message: 'Unknown API endpoint.' });
+  });
 
   // Frontend Integration: Vite middleware in development, static bundle in production
   if (!isProduction) {
@@ -227,7 +87,6 @@ export async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Look for client dist either at process.cwd()/dist or relative
     const distPath = path.resolve(process.cwd(), 'dist');
     // The bundled server code lives in dist/ too; never serve it to browsers.
     app.use((req: Request, res: Response, next) => {
@@ -247,8 +106,6 @@ export async function startServer() {
     console.log(
       `ClinicRoster server listening on http://0.0.0.0:${PORT} [${isProduction ? 'production' : 'development'}]`
     );
-    // Start automated background jobs
-    acknowledgmentChaser.start();
   });
 }
 

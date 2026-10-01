@@ -126,14 +126,21 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
       alert('Please enter a valid email address.');
       return false;
     }
+    // Link the matching nurse profile automatically (by Gmail) so the user can
+    // file their own leave and availability requests.
+    const matchedNurse = !linkedNurseId
+      ? nurses.find((n) => n.gmail && n.gmail.trim().toLowerCase() === key)
+      : undefined;
+    const nurseLink = linkedNurseId || matchedNurse?.id || '';
+
     setIsBusy(true);
     try {
       await saveAccessRecord(key, {
-        name: name || key.split('@')[0],
+        name: name || matchedNurse?.fullName || key.split('@')[0],
         status: 'APPROVED',
         appRole: appRole === 'EDITOR' ? 'EDITOR' : 'VIEWER',
         isManager: Boolean(isManager),
-        linkedNurseId: linkedNurseId || '',
+        linkedNurseId: nurseLink,
         approvedBy: currentUser?.email || MASTER_EMAIL,
         approvedAt: new Date().toISOString(),
       });

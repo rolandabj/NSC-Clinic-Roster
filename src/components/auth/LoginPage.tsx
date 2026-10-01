@@ -38,17 +38,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, clinicName
       setDisplayName(clinicName);
       return;
     }
-    fetch('/api/clinic')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.data?.name) {
-          setDisplayName(data.data.name);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('clinic_roster_clinic_name', data.data.name);
-          }
-        }
-      })
-      .catch(() => {});
   }, [clinicName]);
 
   const handleGoogleSignIn = async () => {

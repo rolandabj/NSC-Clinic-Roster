@@ -40,6 +40,8 @@ import {
   LockMode,
 } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
+import { countPendingApprovals } from '../../services/requests/staffRequestService';
+import { canEditClinicData } from '../../services/auth/access';
 import { authService } from '../../services/auth/authService';
 import { ApprovalsQueuePanel } from './ApprovalsQueuePanel';
 import { NurseSelfServicePanel } from './NurseSelfServicePanel';
@@ -55,7 +57,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   const isMasterAdmin = currentUser?.email?.toLowerCase() === 'rolandabj@gmail.com' || currentUser?.role === 'OWNER';
   const isManager = Boolean(currentUser?.isManager) || isMasterAdmin;
 
-  const [activeTab, setActiveTab] = useState<'calendar' | 'self-service' | 'approvals'>('calendar');
+  const canEdit = canEditClinicData(currentUser);
+  const [activeTab, setActiveTab] = useState<'calendar' | 'self-service' | 'approvals'>(canEdit ? 'calendar' : 'self-service');
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
 
   const [nurses, setNurses] = useState<Nurse[]>([]);
@@ -129,14 +132,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       // If user is manager or admin, fetch pending approvals count
       if (isManager) {
         try {
-          const token = authService.getToken();
-          const res = await fetch('/api/approvals/pending', {
-            headers: { Authorization: `Bearer ${token || ''}` },
-          });
-          if (res.ok) {
-            const j = await res.json();
-            setPendingApprovalsCount(j.count || 0);
-          }
+          setPendingApprovalsCount(await countPendingApprovals());
         } catch {
           // ignore background count error
         }
@@ -674,6 +670,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           </p>
         </div>
 
+        {canEdit && (
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleGoToToday}
@@ -742,10 +739,12 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             <span>Record Leave</span>
           </button>
         </div>
+        )}
       </div>
 
       {/* Sub Navigation Ribbon */}
       <div className="flex border-b border-slate-200 overflow-x-auto gap-2 pb-px">
+        {canEdit && (
         <button
           onClick={() => setActiveTab('calendar')}
           className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
@@ -757,6 +756,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           <Calendar className="w-3.5 h-3.5" />
           <span>31-Day Master Grid</span>
         </button>
+        )}
 
         <button
           onClick={() => setActiveTab('self-service')}
@@ -807,7 +807,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       )}
 
       {/* VIEW PANEL 3: 31-DAY MASTER CALENDAR & LOCK GRID */}
-      {activeTab === 'calendar' && (
+      {activeTab === 'calendar' && canEdit && (
         <div className="space-y-6">
           {/* Month Navigator & Legend Bar */}
       <div className="bg-white border border-slate-200 rounded p-3 flex flex-wrap items-center justify-between gap-3 text-xs">

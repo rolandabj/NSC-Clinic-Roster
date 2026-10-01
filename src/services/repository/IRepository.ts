@@ -57,7 +57,8 @@ export interface IRepository {
    */
   bulkUpsert<T extends CollectionName>(
     collection: T,
-    items: EntityForCollection<T>[]
+    items: EntityForCollection<T>[],
+    options?: { replace?: boolean }
   ): Promise<void>;
 
   /**

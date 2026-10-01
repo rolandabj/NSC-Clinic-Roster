@@ -10,8 +10,22 @@
 import React, { useEffect, useState } from 'react';
 import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './components/auth/LoginPage';
+import { PublishedRosterView } from './components/views/PublishedRosterView';
+import { AcknowledgePage } from './components/views/AcknowledgePage';
 import { authService, UserProfile } from './services/auth/authService';
 import { Building2, Loader2 } from 'lucide-react';
+
+function parsePublicLink(): { kind: 'published' | 'ack'; token: string; nurse?: string } | null {
+  if (typeof window === 'undefined') return null;
+  const hash = window.location.hash.replace(/^#/, '');
+  const [route, query = ''] = hash.split('?');
+  const params = new URLSearchParams(query);
+  const token = params.get('token') || params.get('ackToken') || '';
+  if (!token) return null;
+  if (route === 'ack') return { kind: 'ack', token };
+  if (route === 'published') return { kind: 'published', token, nurse: params.get('nurse') || undefined };
+  return null;
+}
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
@@ -38,23 +52,8 @@ export default function App() {
       setCurrentUser(user);
     });
 
-    // 3. Fetch public clinic metadata
-    fetch('/api/clinic')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.data?.name) {
-          const resolved =
-            data.data.name === 'Hope Valley Polyclinic'
-              ? 'American Hospital Nad Al Sheba OutPatient clinic'
-              : data.data.name;
-          setClinicName(resolved);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('clinic_roster_clinic_name', resolved);
-            document.title = `${resolved} — Clinical Roster`;
-          }
-        }
-      })
-      .catch(() => {});
+    // The clinic name shown before sign in comes from the browser cache; it is
+    // refreshed from Firestore once a user signs in.
 
     const handleClinicNameUpdated = (e: any) => {
       if (e.detail) {
@@ -89,13 +88,33 @@ export default function App() {
     );
   }
 
-  // 2. Every view, including shared roster and acknowledgment links, requires sign in.
-  // The URL hash is kept, so the link opens once the user has signed in.
+  // 2. Links that work without signing in: shared rosters (#published?token=...)
+  // and roster receipt confirmations (#ack?token=...). Signed in users get the
+  // same links inside the full app below.
+  if (!currentUser) {
+    const publicLink = parsePublicLink();
+    if (publicLink?.kind === 'ack') {
+      return <AcknowledgePage token={publicLink.token} clinicName={clinicName} />;
+    }
+    if (publicLink?.kind === 'published') {
+      return (
+        <PublishedRosterView
+          shareToken={publicLink.token}
+          nurseIdParam={publicLink.nurse}
+          onExitPreview={() => {
+            window.location.href = window.location.origin;
+          }}
+        />
+      );
+    }
+  }
+
+  // 3. Everything else requires sign in.
   if (!currentUser) {
     return <LoginPage clinicName={clinicName} onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
 
-  // 3. Authenticated session: render AppShell
+  // 4. Authenticated session: render AppShell
   return <AppShell currentUser={currentUser} />;
 }
 

@@ -2,33 +2,21 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Enterprise Role Directory & Email Mapping Engine (Phase 2)
- * Master Admin Lock (rolandabj@gmail.com) & In-App User Whitelist Gatekeeper.
+ * Staff Directory & Email Role Preview (owner tools in Settings).
+ * Reads nurses, doctors and the userAccess whitelist from Firestore. This is an
+ * informational view; access itself is enforced by the Firestore security rules.
  */
 
-import { IRepository } from '../../../src/services/repository/IRepository';
-import { getServerRepository } from '../../db/index';
-import { BackendRole } from '../../middleware/auth';
-import { Nurse, SeniorityLevel, Doctor, ClinicProfile, UserAccessRecord } from '../../../src/types';
+import { IRepository } from '../repository/IRepository';
+import { getRepository } from '../repository';
+import { Nurse, SeniorityLevel, Doctor, UserAccessRecord, UserRole } from '../../types';
+import { UserPrivileges, computePrivileges as computeUserPrivileges } from './authService';
+
+type BackendRole = UserRole;
 
 export const MASTER_ADMIN_EMAIL = 'rolandabj@gmail.com';
 
-export interface RolePrivileges {
-  canEditClinicSettings: boolean;
-  canCreateSchedules: boolean;
-  canPublishSchedules: boolean;
-  canRunSolver: boolean;
-  canEditRosterAssignments: boolean;
-  canApproveSwaps: boolean;
-  canApproveLeave: boolean;
-  canApproveAvailability: boolean;
-  canRequestSwaps: boolean;
-  canAcknowledgeShifts: boolean;
-  canViewSchedules: boolean;
-  canExportReports: boolean;
-  canManageStaff: boolean;
-  canConfigureWebhooks: boolean;
-}
+export type RolePrivileges = UserPrivileges;
 
 export interface ResolvedDirectoryIdentity {
   email: string;
@@ -79,30 +67,8 @@ export interface DirectoryStaffEntry {
 }
 
 export class RoleDirectoryService {
-  /**
-   * Computes granular permissions matrix based on assigned role and Manager status
-   */
   public static computePrivileges(role: BackendRole, isManager: boolean = false): RolePrivileges {
-    const isOwner = role === 'OWNER';
-    const isEditorOrOwner = isOwner || role === 'EDITOR' || role === 'PLANNER';
-    const canApprove = isOwner || isManager;
-
-    return {
-      canEditClinicSettings: isOwner,
-      canCreateSchedules: isEditorOrOwner,
-      canPublishSchedules: isEditorOrOwner,
-      canRunSolver: isEditorOrOwner,
-      canEditRosterAssignments: isEditorOrOwner,
-      canApproveSwaps: canApprove,
-      canApproveLeave: canApprove,
-      canApproveAvailability: canApprove,
-      canRequestSwaps: true, // all authenticated staff can submit swap requests
-      canAcknowledgeShifts: true, // all authenticated staff can acknowledge shifts
-      canViewSchedules: true,
-      canExportReports: isEditorOrOwner || isManager,
-      canManageStaff: isOwner, // strictly reserved for the Master Admin (rolandabj@gmail.com)
-      canConfigureWebhooks: isOwner,
-    };
+    return computeUserPrivileges(role, isManager);
   }
 
   /**
@@ -113,7 +79,7 @@ export class RoleDirectoryService {
     displayName?: string,
     repoOverride?: IRepository
   ): Promise<ResolvedDirectoryIdentity> {
-    const repo = repoOverride || getServerRepository();
+    const repo = repoOverride || getRepository();
     const normalizedEmail = (email || '').trim().toLowerCase();
     const safeName = (displayName || '').trim() || normalizedEmail.split('@')[0] || 'User';
 
@@ -317,7 +283,7 @@ export class RoleDirectoryService {
    * Returns all active clinical personnel and whitelist records
    */
   public static async getDirectoryStaff(repoOverride?: IRepository): Promise<DirectoryStaffEntry[]> {
-    const repo = repoOverride || getServerRepository();
+    const repo = repoOverride || getRepository();
 
     const [userAccessList, nurses, doctors, seniorityLevels] = await Promise.all([
       (repo.list('userAccess') as Promise<UserAccessRecord[]>),

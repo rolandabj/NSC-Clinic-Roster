@@ -5,7 +5,6 @@
  * Roster Publishing, Personalized Email Generator & Dispatch Engine (Phase 13)
  */
 
-import { v4 as uuidv4 } from 'uuid';
 import {
   Schedule,
   ScheduleVersion,
@@ -329,6 +328,41 @@ export class RosterPublishService {
   }
 
   /**
+   * Short reminder email asking a nurse to confirm receipt of their roster.
+   * Every user supplied value is HTML escaped.
+   */
+  public static generateReminderEmailHtml(params: {
+    clinicName: string;
+    scheduleName: string;
+    versionNumber?: number;
+    nurse: Nurse;
+    ackToken: string;
+    shareToken?: string;
+  }): { subject: string; bodyPreview: string; html: string } {
+    const h = escapeHtml;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const ackUrl = `${origin}/#ack?token=${encodeURIComponent(params.ackToken)}`;
+    const viewUrl = params.shareToken
+      ? `${origin}/#published?token=${encodeURIComponent(params.shareToken)}&nurse=${encodeURIComponent(params.nurse.id)}`
+      : '';
+    const subject = `Reminder: please confirm your roster — ${params.scheduleName}`;
+    const bodyPreview = `Reminder for ${params.nurse.fullName} to confirm receipt of ${params.scheduleName}.`;
+    const html = `
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 8px;">
+  <p style="margin: 0 0 4px 0; font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">${h(params.clinicName)}</p>
+  <h2 style="margin: 0 0 12px 0; font-size: 16px;">Dear ${h(params.nurse.fullName)},</h2>
+  <p style="font-size: 14px; line-height: 1.6;">Your duty roster for <strong>${h(params.scheduleName)}</strong>${
+      params.versionNumber ? ` (version ${params.versionNumber})` : ''
+    } was published, but we have not yet received your confirmation. Please review it and confirm receipt.</p>
+  <p style="text-align: center; margin: 24px 0;">
+    <a href="${h(ackUrl)}" style="display: inline-block; background-color: #b45309; color: #ffffff; text-decoration: none; font-weight: 700; padding: 12px 22px; border-radius: 6px;">Confirm Receipt of My Roster</a>
+  </p>
+  ${viewUrl ? `<p style="text-align: center; font-size: 12px;"><a href="${h(viewUrl)}" style="color: #4f46e5;">View my roster</a></p>` : ''}
+</div>`;
+    return { subject, bodyPreview, html };
+  }
+
+  /**
    * Dispatches an individual nurse email payload using Google Email Dispatch (Mock Sandbox or Live Google SMTP)
    */
   public static async dispatchEmail(
@@ -342,8 +376,10 @@ export class RosterPublishService {
     versionId: string,
     ackToken: string
   ): Promise<DispatchResult> {
+    // The acknowledgment document id is the emailed token, so the nurse can
+    // confirm receipt from the link without signing in (see firestore.rules).
     const ack: Acknowledgment = {
-      id: uuidv4(),
+      id: ackToken,
       scheduleId,
       nurseId: nurse.id,
       versionId,
@@ -427,17 +463,32 @@ export class RosterPublishService {
    * Process receipt confirmation / acknowledgment by token
    */
   public static async acknowledgeByToken(token: string): Promise<boolean> {
-    const repo = getRepository();
     if (!token) return false;
-    const acks = await repo.list('acknowledgments', { field: 'token', operator: '==', value: token });
-    const matched = acks.find((a) => a.token === token);
-    if (!matched) return false;
-
-    if (!matched.ackAt) {
-      await repo.update('acknowledgments', matched.id, {
-        ackAt: new Date().toISOString(),
-      });
+    const repo = getRepository();
+    try {
+      // Current links: the document id is the token (readable without signing in).
+      const ack = await repo.get('acknowledgments', token);
+      if (ack && ack.token === token) {
+        if (!ack.ackAt) {
+          await repo.update('acknowledgments', ack.id, { ackAt: new Date().toISOString() });
+        }
+        return true;
+      }
+    } catch {
+      // Not readable by token: fall through to the signed in lookup below.
     }
-    return true;
+
+    try {
+      // Older links (document id differs from the token): needs a signed in user.
+      const acks = await repo.list('acknowledgments', { field: 'token', operator: '==', value: token });
+      const matched = acks.find((a) => a.token === token);
+      if (!matched) return false;
+      if (!matched.ackAt) {
+        await repo.update('acknowledgments', matched.id, { ackAt: new Date().toISOString() });
+      }
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

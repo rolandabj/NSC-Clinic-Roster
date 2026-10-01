@@ -27,7 +27,14 @@ import {
   Droplets,
   Plane,
 } from 'lucide-react';
-import { authService, UserProfile } from '../../services/auth/authService';
+import { UserProfile } from '../../services/auth/authService';
+import {
+  listMyRequests,
+  submitLeaveRequest,
+  submitAvailabilityRequest,
+  cancelLeaveRequest,
+  cancelAvailabilityRequest,
+} from '../../services/requests/staffRequestService';
 import { LeaveEntry, AvailabilityRequest, LeaveType, Nurse, DutyWindow } from '../../types';
 
 interface NurseSelfServicePanelProps {
@@ -75,26 +82,12 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
   const fetchMyData = async () => {
     setIsLoading(true);
     try {
-      const token = authService.getToken();
-      const [leaveRes, availRes] = await Promise.all([
-        fetch('/api/leave/my', {
-          headers: { Authorization: `Bearer ${token || ''}` },
-        }),
-        fetch('/api/availability/my', {
-          headers: { Authorization: `Bearer ${token || ''}` },
-        }),
-      ]);
-
-      if (leaveRes.ok) {
-        const json = await leaveRes.json();
-        setMyLeaves(json.data || []);
-      }
-      if (availRes.ok) {
-        const json = await availRes.json();
-        setMyAvailability(json.data || []);
-      }
+      const { leaves, availability } = await listMyRequests(currentUser);
+      setMyLeaves(leaves);
+      setMyAvailability(availability);
     } catch (err: any) {
       console.error('[NurseSelfService] fetch error:', err);
+      triggerToast(`Could not load your requests: ${err?.message || err}`);
     } finally {
       setIsLoading(false);
     }
@@ -109,23 +102,12 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
     if (!leaveStartDate || !leaveEndDate) return;
     setIsBusy(true);
     try {
-      const token = authService.getToken();
-      const res = await fetch('/api/leave/request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token || ''}`,
-        },
-        body: JSON.stringify({
-          leaveTypeId,
-          startDate: leaveStartDate,
-          endDate: leaveEndDate,
-          note: leaveNote.trim() || undefined,
-        }),
+      await submitLeaveRequest(currentUser, {
+        leaveTypeId,
+        startDate: leaveStartDate,
+        endDate: leaveEndDate,
+        note: leaveNote.trim() || undefined,
       });
-
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message || 'Failed to submit leave request.');
 
       triggerToast('Leave request submitted successfully and is pending manager review.');
       setIsLeaveModalOpen(false);
@@ -144,23 +126,12 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
     if (!availDate) return;
     setIsBusy(true);
     try {
-      const token = authService.getToken();
-      const res = await fetch('/api/availability/request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token || ''}`,
-        },
-        body: JSON.stringify({
-          date: availDate,
-          available: availIsAvailable,
-          preferredDutyWindowId: availPreferredDutyId || undefined,
-          note: availNote.trim() || undefined,
-        }),
+      await submitAvailabilityRequest(currentUser, {
+        date: availDate,
+        available: availIsAvailable,
+        preferredDutyWindowId: availPreferredDutyId || undefined,
+        note: availNote.trim() || undefined,
       });
-
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message || 'Failed to submit availability.');
 
       triggerToast(
         `${availIsAvailable ? 'Duty preference' : 'Day-off request'} submitted and pending review.`
@@ -180,12 +151,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
     if (!confirm('Are you sure you want to cancel this pending leave request?')) return;
     setIsBusy(true);
     try {
-      const token = authService.getToken();
-      const res = await fetch(`/api/leave/request/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token || ''}` },
-      });
-      if (!res.ok) throw new Error('Failed to cancel leave.');
+      await cancelLeaveRequest(id);
       triggerToast('Leave request cancelled.');
       await fetchMyData();
       if (onDataChanged) onDataChanged();
@@ -200,12 +166,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
     if (!confirm('Are you sure you want to cancel this pending availability request?')) return;
     setIsBusy(true);
     try {
-      const token = authService.getToken();
-      const res = await fetch(`/api/availability/request/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token || ''}` },
-      });
-      if (!res.ok) throw new Error('Failed to cancel request.');
+      await cancelAvailabilityRequest(id);
       triggerToast('Availability request cancelled.');
       await fetchMyData();
       if (onDataChanged) onDataChanged();

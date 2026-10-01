@@ -24,6 +24,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { syncPublicRoster, removePublicRoster } from '../../services/publish/publicRosterService';
 import {
   Schedule,
   ScheduleVersion,
@@ -118,6 +119,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       };
 
       await repo.create('shareLinks', newLink);
+      await syncPublicRoster(newLink);
       triggerToast('View-only link created.');
       setAllowedEmailsInput('');
       loadData();
@@ -129,27 +131,41 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   // --- REGENERATE TOKEN ---
   const handleRegenerateToken = async (link: ShareLink) => {
     const newToken = `sh_${crypto.randomUUID()}`;
-    await repo.update('shareLinks', link.id, {
-      token: newToken,
-      revoked: false,
-    });
-    triggerToast('Access token regenerated.');
+    try {
+      // Regenerating keeps the link's revoked state; the old token stops working.
+      await repo.update('shareLinks', link.id, { token: newToken });
+      await removePublicRoster(link.token);
+      await syncPublicRoster({ ...link, token: newToken });
+      triggerToast('Access token regenerated. The old link no longer works.');
+    } catch (err: any) {
+      alert(`Failed to regenerate the link: ${err.message}`);
+    }
     loadData();
   };
 
   // --- REVOKE / UNREVOKE LINK ---
   const handleToggleRevoke = async (link: ShareLink) => {
-    await repo.update('shareLinks', link.id, {
-      revoked: !link.revoked,
-    });
-    triggerToast(link.revoked ? 'Link restored.' : 'Link revoked.');
+    try {
+      const revoked = !link.revoked;
+      await repo.update('shareLinks', link.id, { revoked });
+      await syncPublicRoster({ ...link, revoked });
+      triggerToast(link.revoked ? 'Link restored.' : 'Link revoked.');
+    } catch (err: any) {
+      alert(`Failed to update the link: ${err.message}`);
+    }
     loadData();
   };
 
   // --- DELETE LINK ---
   const handleDeleteLink = async (linkId: string) => {
-    await repo.remove('shareLinks', linkId);
-    triggerToast('Share link removed.');
+    try {
+      const link = shareLinks.find((l) => l.id === linkId);
+      await repo.remove('shareLinks', linkId);
+      if (link) await removePublicRoster(link.token);
+      triggerToast('Share link removed.');
+    } catch (err: any) {
+      alert(`Failed to remove the link: ${err.message}`);
+    }
     loadData();
   };
 

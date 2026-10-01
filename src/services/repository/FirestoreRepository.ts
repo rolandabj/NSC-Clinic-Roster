@@ -24,6 +24,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { CollectionName, EntityForCollection } from '../../types';
 import { IRepository, SubscribeCallback, Unsubscribe } from './IRepository';
 
+// Firestore allows at most 500 writes in one batch; stay safely below it.
+const BATCH_LIMIT = 450;
+
 export interface FirebaseClientConfig {
   apiKey: string;
   authDomain: string;
@@ -120,16 +123,31 @@ export class FirestoreRepository implements IRepository {
     await deleteDoc(docRef);
   }
 
+  /**
+   * Writes many documents in batches (Firestore allows at most 500 writes per
+   * batch). By default fields are merged into existing documents; with
+   * { replace: true } each document is overwritten, so fields that were
+   * removed from the item are removed from the database too.
+   */
   async bulkUpsert<T extends CollectionName>(
     colName: T,
-    items: EntityForCollection<T>[]
+    items: EntityForCollection<T>[],
+    options?: { replace?: boolean }
   ): Promise<void> {
-    const batch = writeBatch(this.db);
-    for (const item of items) {
-      const docRef = doc(this.db, colName, (item as any).id);
-      batch.set(docRef, sanitizePayload(item), { merge: true });
+    if (!items || items.length === 0) return;
+    for (let i = 0; i < items.length; i += BATCH_LIMIT) {
+      const chunk = items.slice(i, i + BATCH_LIMIT);
+      const batch = writeBatch(this.db);
+      for (const item of chunk) {
+        const docRef = doc(this.db, colName, (item as any).id);
+        if (options?.replace) {
+          batch.set(docRef, sanitizePayload(item));
+        } else {
+          batch.set(docRef, sanitizePayload(item), { merge: true });
+        }
+      }
+      await batch.commit();
     }
-    await batch.commit();
   }
 
   async bulkRemove<T extends CollectionName>(
@@ -137,8 +155,8 @@ export class FirestoreRepository implements IRepository {
     ids: string[]
   ): Promise<void> {
     if (!ids || ids.length === 0) return;
-    for (let i = 0; i < ids.length; i += 400) {
-      const chunk = ids.slice(i, i + 400);
+    for (let i = 0; i < ids.length; i += BATCH_LIMIT) {
+      const chunk = ids.slice(i, i + BATCH_LIMIT);
       const batch = writeBatch(this.db);
       for (const id of chunk) {
         const docRef = doc(this.db, colName, id);
@@ -161,12 +179,18 @@ export class FirestoreRepository implements IRepository {
     callback: SubscribeCallback<EntityForCollection<T>>
   ): Unsubscribe {
     const colRef = collection(this.db, colName);
-    return onSnapshot(colRef, (snapshot) => {
-      const items = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as EntityForCollection<T>[];
-      callback(items);
-    });
+    return onSnapshot(
+      colRef,
+      (snapshot) => {
+        const items = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        })) as EntityForCollection<T>[];
+        callback(items);
+      },
+      (error) => {
+        console.error(`[FirestoreRepository] Live updates for "${colName}" stopped:`, error);
+      }
+    );
   }
 }

@@ -6,9 +6,20 @@
 import { IRepository } from './IRepository';
 import { Assignment } from '../../types';
 
+/** Stable JSON form of an assignment, ignoring undefined fields and key order. */
+function fingerprint(a: Assignment): string {
+  const clean: Record<string, unknown> = {};
+  for (const key of Object.keys(a).sort()) {
+    const value = (a as any)[key];
+    if (value !== undefined && value !== null) clean[key] = value;
+  }
+  return JSON.stringify(clean);
+}
+
 /**
- * Synchronizes the persisted assignments in the database for a specific schedule
- * so that deletions, clears, undo/redo, and updates are fully reflected in persistent storage.
+ * Synchronizes the persisted assignments of one schedule with the given list.
+ * Only cells that actually changed are written, and removed cells are deleted,
+ * so an edit to one cell costs one write instead of rewriting the whole month.
  */
 export async function syncScheduleAssignments(
   repo: IRepository,
@@ -16,20 +27,29 @@ export async function syncScheduleAssignments(
   newAssignments: Assignment[]
 ): Promise<void> {
   try {
-    const existing = await repo.list('assignments');
-    const existingForSchedule = existing.filter((a) => a.scheduleId === scheduleId);
+    const existingForSchedule = await repo.list('assignments', {
+      field: 'scheduleId',
+      operator: '==',
+      value: scheduleId,
+    });
+    const existingById = new Map(existingForSchedule.map((a) => [a.id, a]));
     const newIds = new Set(newAssignments.map((a) => a.id));
 
-    // Identify assignments previously saved that are no longer present
-    const idsToRemove = existingForSchedule
-      .filter((a) => !newIds.has(a.id))
-      .map((a) => a.id);
+    const idsToRemove = existingForSchedule.filter((a) => !newIds.has(a.id)).map((a) => a.id);
+
+    const changed = newAssignments
+      .map((a) => (a.scheduleId ? a : { ...a, scheduleId }))
+      .filter((a) => {
+        const before = existingById.get(a.id);
+        return !before || fingerprint(before) !== fingerprint(a);
+      });
 
     if (idsToRemove.length > 0) {
       await repo.bulkRemove('assignments', idsToRemove);
     }
-    if (newAssignments.length > 0) {
-      await repo.bulkUpsert('assignments', newAssignments);
+    if (changed.length > 0) {
+      // Replace whole documents so cleared fields (e.g. a removed doctor) are removed too.
+      await repo.bulkUpsert('assignments', changed, { replace: true });
     }
   } catch (err) {
     console.error(`[syncScheduleAssignments] Error synchronizing assignments for schedule ${scheduleId}:`, err);

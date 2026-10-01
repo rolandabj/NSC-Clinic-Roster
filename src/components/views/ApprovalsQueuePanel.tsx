@@ -24,7 +24,8 @@ import {
   Shield,
   FileText,
 } from 'lucide-react';
-import { authService, UserProfile } from '../../services/auth/authService';
+import { UserProfile } from '../../services/auth/authService';
+import { listPendingApprovals, decideRequest } from '../../services/requests/staffRequestService';
 import { LeaveEntry, AvailabilityRequest, Nurse, LeaveType } from '../../types';
 
 interface ApprovalsQueuePanelProps {
@@ -41,6 +42,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Decision Modal
   const [activeDecision, setActiveDecision] = useState<{
@@ -58,23 +60,14 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
 
   const fetchPendingApprovals = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
-      const token = authService.getToken();
-      const res = await fetch('/api/approvals/pending', {
-        headers: {
-          Authorization: `Bearer ${token || ''}`,
-        },
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to fetch pending approvals: HTTP ${res.status}`);
-      }
-
-      const json = await res.json();
-      setLeaves(json.data?.leaveRequests || []);
-      setAvailability(json.data?.availabilityRequests || []);
+      const data = await listPendingApprovals();
+      setLeaves(data.leaveRequests);
+      setAvailability(data.availabilityRequests);
     } catch (err: any) {
       console.error('[ApprovalsQueuePanel] fetch error:', err);
+      setLoadError(err?.message || 'Could not load pending requests.');
     } finally {
       setIsLoading(false);
     }
@@ -88,23 +81,13 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
     if (!activeDecision) return;
     setIsBusy(true);
     try {
-      const token = authService.getToken();
-      const res = await fetch('/api/approvals/decide', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token || ''}`,
-        },
-        body: JSON.stringify({
-          kind: activeDecision.kind,
-          requestId: activeDecision.requestId,
-          decision: activeDecision.decision,
-          notes: decisionNotes.trim() || undefined,
-        }),
-      });
-
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message || 'Failed to submit decision.');
+      await decideRequest(
+        currentUser,
+        activeDecision.kind,
+        activeDecision.requestId,
+        activeDecision.decision,
+        decisionNotes.trim() || undefined
+      );
 
       triggerToast(
         `${activeDecision.kind === 'LEAVE' ? 'Leave' : 'Availability'} request ${activeDecision.decision.toLowerCase()} successfully.`
@@ -161,7 +144,14 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
         </button>
       </div>
 
-      {totalCount === 0 && !isLoading ? (
+      {loadError && (
+        <div className="p-3 rounded border border-rose-200 bg-rose-50 text-rose-800 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>Could not load pending requests: {loadError}</span>
+        </div>
+      )}
+
+      {totalCount === 0 && !isLoading && !loadError ? (
         <div className="p-12 text-center bg-white border border-slate-200 rounded-lg space-y-3">
           <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-6 h-6" />

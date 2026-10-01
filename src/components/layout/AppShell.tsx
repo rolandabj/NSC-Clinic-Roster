@@ -25,6 +25,7 @@ import {
   ensureWorkingHoursPeriodsDefaults,
 } from '../../services/seed/seedRunner';
 import { testFirestoreConnection } from '../../services/firebase/firebaseConfig';
+import { canAccessRoute } from '../../services/auth/access';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { CheckCircle2, Check } from 'lucide-react';
@@ -206,8 +207,12 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
         await testFirestoreConnection();
         const repo = repositoryManager.getRepo();
 
-        // Ensure baseline working hours periods are seeded if empty
-        await ensureWorkingHoursPeriodsDefaults(repo);
+        // Ensure baseline working hours periods are seeded if empty (needs write access)
+        try {
+          await ensureWorkingHoursPeriodsDefaults(repo);
+        } catch (seedErr) {
+          console.warn('Working hours periods were not seeded:', seedErr);
+        }
 
         // Fetch active clinic profile if present
         const clinics = await repo.list('clinics');
@@ -226,6 +231,10 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
           if (typeof document !== 'undefined') {
             document.title = `${resolvedName} — Clinical Roster`;
           }
+          try {
+            // Cached so the login page and public links can show the clinic name.
+            localStorage.setItem('clinic_roster_clinic_name', resolvedName);
+          } catch {}
         }
 
         // Fetch active schedule if present
@@ -339,7 +348,9 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   }
 
   const renderCurrentView = () => {
-    switch (currentRoute) {
+    // Screens a role cannot use fall back to the dashboard.
+    const route: AppRoute = canAccessRoute(authService.getCurrentUser(), currentRoute) ? currentRoute : 'dashboard';
+    switch (route) {
       case 'dashboard':
         return (
           <DashboardView
