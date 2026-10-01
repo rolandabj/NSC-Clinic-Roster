@@ -162,6 +162,7 @@ export interface ClinicProfile {
   phone?: string;
   timezone: string; // default 'Asia/Dubai'
   workingDays: boolean[]; // index 0 = Sun, 1 = Mon ... 6 = Sat (default all true)
+  weekendDays?: number[]; // weekday numbers counted as the weekend (0 = Sun ... 6 = Sat); default Sat and Sun
   openTime: TimeString; // '09:00'
   closeTime: TimeString; // '21:00'
   defaultBlockWeeks: BlockWeeks; // default 2

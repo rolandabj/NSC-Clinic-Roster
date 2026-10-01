@@ -6,6 +6,7 @@
  * High-elegance dual-view (Roster Matrix & Shifts List) inspection studio with deletion and restore controls.
  */
 
+import { isWeekendDay } from '../../utils/weekend';
 import React, { useState } from 'react';
 import {
   X,
@@ -314,7 +315,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                         const dateObj = new Date(dateStr + 'T00:00:00Z');
                         const weekday = WEEKDAY_NAMES[dateObj.getUTCDay()];
                         const dayNum = dateStr.split('-')[2];
-                        const isWeekend = dateObj.getUTCDay() === 0 || dateObj.getUTCDay() === 6;
+                        const isWeekend = isWeekendDay(dateObj.getUTCDay());
 
                         return (
                           <th

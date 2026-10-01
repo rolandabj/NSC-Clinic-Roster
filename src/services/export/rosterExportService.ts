@@ -6,6 +6,7 @@
  * Supports Multi-Sheet Excel (.xlsx via SheetJS), Matrix/Long CSV, and Formatted Print Datasets.
  */
 
+import { isWeekendDay } from '../../utils/weekend';
 import * as XLSX from 'xlsx';
 import {
   Schedule,
@@ -273,7 +274,7 @@ export function exportRosterToExcel(options: RosterExportOptions) {
 
     const dateObj = new Date(a.date);
     const weekday = WEEKDAY_NAMES[dateObj.getUTCDay()];
-    const isWeekend = dateObj.getUTCDay() === 0 || dateObj.getUTCDay() === 6;
+    const isWeekend = isWeekendDay(dateObj.getUTCDay());
 
     let targetName = 'Specialty Pool';
     if (a.doctorId) {

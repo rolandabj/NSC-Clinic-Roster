@@ -36,6 +36,7 @@ import {
   SwapRequest,
 } from '../../types';
 import { getRepository } from '../../services/repository';
+import { checkAssignment } from '../../services/engine/assignmentChecks';
 
 interface SwapManagerModalProps {
   schedule: Schedule;
@@ -48,6 +49,7 @@ interface SwapManagerModalProps {
   specialties: Specialty[];
   leaveEntries: LeaveEntry[];
   locks: LockEntry[];
+  rules?: Rule[];
   isOpen: boolean;
   onClose: () => void;
   onApplySwap: (updated: Assignment[], note: string) => void;
@@ -64,6 +66,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
   specialties,
   leaveEntries,
   locks,
+  rules = [],
   isOpen,
   onClose,
   onApplySwap,
@@ -72,6 +75,12 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
   const [assignmentAId, setAssignmentAId] = useState<string>('');
 
   const [nurseBId, setNurseBId] = useState<string>(nurses[1]?.id || '');
+
+  // Pick default nurses once the staff list has loaded
+  React.useEffect(() => {
+    if (!nurseAId && nurses[0]) setNurseAId(nurses[0].id);
+    if (!nurseBId && nurses[1]) setNurseBId(nurses[1].id);
+  }, [nurses, nurseAId, nurseBId]);
   const [assignmentBId, setAssignmentBId] = useState<string>('');
 
   const [swapReason, setSwapReason] = useState<string>('');
@@ -126,67 +135,31 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
     const nurseB = nurseMap.get(nurseBId);
     if (!nurseA || !nurseB) return { isValid: false, issuesA: ['Invalid staff'], issuesB: [] };
 
-    // 1. Locked days check
-    const lockedA = locks.find((l) => l.nurseId === nurseAId && l.date === selectedAsgnB.date);
-    if (lockedA) {
-      issuesA.push(`Nurse ${nurseA.fullName} has a non-changeable lock on ${selectedAsgnB.date}`);
-    }
-    const lockedB = locks.find((l) => l.nurseId === nurseBId && l.date === selectedAsgnA.date);
-    if (lockedB) {
-      issuesB.push(`Nurse ${nurseB.fullName} has a non-changeable lock on ${selectedAsgnA.date}`);
-    }
+    // Pinned shifts cannot be given away
+    const isPinned = (asgn: Assignment) =>
+      asgn.locked ||
+      asgn.source === 'LOCK' ||
+      locks.some((l) => l.nurseId === asgn.nurseId && l.date === asgn.date && l.mode === 'ASSIGNMENT');
+    if (isPinned(selectedAsgnA)) issuesA.push(`${nurseA.fullName}'s shift on ${selectedAsgnA.date} is pinned and cannot be swapped`);
+    if (isPinned(selectedAsgnB)) issuesB.push(`${nurseB.fullName}'s shift on ${selectedAsgnB.date} is pinned and cannot be swapped`);
 
-    // 2. Approved leave check
-    const onLeaveA = leaveEntries.find(
-      (le) => le.nurseId === nurseAId && le.approved && selectedAsgnB.date >= le.startDate && selectedAsgnB.date <= le.endDate
+    // Check both moved cells against the roster as it would be after the swap
+    // (same hard rules as the scheduling engine).
+    const movedToA: Assignment = { ...selectedAsgnB, nurseId: nurseAId };
+    const movedToB: Assignment = { ...selectedAsgnA, nurseId: nurseBId };
+    const afterSwap = assignments.map((a) =>
+      a.id === selectedAsgnA.id ? movedToB : a.id === selectedAsgnB.id ? movedToA : a
     );
-    if (onLeaveA) {
-      issuesA.push(`Nurse ${nurseA.fullName} is on approved leave on ${selectedAsgnB.date}`);
-    }
-    const onLeaveB = leaveEntries.find(
-      (le) => le.nurseId === nurseBId && le.approved && selectedAsgnA.date >= le.startDate && selectedAsgnA.date <= le.endDate
-    );
-    if (onLeaveB) {
-      issuesB.push(`Nurse ${nurseB.fullName} is on approved leave on ${selectedAsgnA.date}`);
-    }
-
-    // 3. Clinical Role Capability check (e.g. Blood Collection & IV)
-    if (selectedAsgnB.clinicalRoleId) {
-      const hasCap = nurseA.capabilityIds?.includes(selectedAsgnB.clinicalRoleId);
-      if (!hasCap) {
-        issuesA.push(`Nurse ${nurseA.fullName} lacks the required qualification for this clinical role`);
-      }
-    }
-    if (selectedAsgnA.clinicalRoleId) {
-      const hasCap = nurseB.capabilityIds?.includes(selectedAsgnA.clinicalRoleId);
-      if (!hasCap) {
-        issuesB.push(`Nurse ${nurseB.fullName} lacks the required qualification for this clinical role`);
-      }
-    }
-
-    // 4. Double-duty on same date check (if different dates swapped)
-    if (selectedAsgnA.date !== selectedAsgnB.date) {
-      const aAlreadyWorkingOnDateB = assignments.some(
-        (a) => a.nurseId === nurseAId && a.date === selectedAsgnB.date && a.id !== selectedAsgnA.id
-      );
-      if (aAlreadyWorkingOnDateB) {
-        issuesA.push(`Nurse ${nurseA.fullName} is already assigned to another duty on ${selectedAsgnB.date}`);
-      }
-
-      const bAlreadyWorkingOnDateA = assignments.some(
-        (a) => a.nurseId === nurseBId && a.date === selectedAsgnA.date && a.id !== selectedAsgnB.id
-      );
-      if (bAlreadyWorkingOnDateA) {
-        issuesB.push(`Nurse ${nurseB.fullName} is already assigned to another duty on ${selectedAsgnA.date}`);
-      }
-    }
+    const ctx = { assignments: afterSwap, nurses, dutyWindows, leaveEntries, locks, roles, rules };
+    issuesA.push(...checkAssignment(ctx, movedToA));
+    issuesB.push(...checkAssignment(ctx, movedToB));
 
     return {
       isValid: issuesA.length === 0 && issuesB.length === 0,
       issuesA,
       issuesB,
     };
-  }, [selectedAsgnA, selectedAsgnB, nurseAId, nurseBId, nurseMap, locks, leaveEntries, assignments]);
+  }, [selectedAsgnA, selectedAsgnB, nurseAId, nurseBId, nurseMap, locks, leaveEntries, assignments, nurses, dutyWindows, roles, rules]);
 
   if (!isOpen) return null;
 

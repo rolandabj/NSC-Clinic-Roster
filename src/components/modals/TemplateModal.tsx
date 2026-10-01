@@ -151,7 +151,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
     try {
       const lockedNurseDates = new Set(locks.map((l) => `${l.nurseId}_${l.date}`));
       const leaveNurseDates = new Set(
-        leaveEntries.flatMap((le) => {
+        leaveEntries.filter((le) => le.approved).flatMap((le) => {
           const dates: string[] = [];
           const cur = new Date(le.startDate);
           const end = new Date(le.endDate);
@@ -164,7 +164,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
       );
 
       // Keep locked and manual assignments
-      const kept = assignments.filter((a) => a.source === 'LOCK' || a.locked);
+      const kept = assignments.filter((a) => a.source === 'LOCK' || a.source === 'MANUAL' || a.locked);
       const keptKeys = new Set(kept.map((a) => `${a.nurseId}_${a.date}`));
 
       const start = new Date(schedule.startDate);
@@ -177,6 +177,8 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
         const weekday = cur.getUTCDay();
 
         for (const pattern of template.patterns) {
+          // Each pattern belongs to one weekday
+          if (pattern.weekday !== weekday) continue;
           const key = `${pattern.nurseId}_${dateStr}`;
           if (keptKeys.has(key)) continue;
           if (lockedNurseDates.has(key)) continue;
@@ -242,7 +244,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
 
       const lockedNurseDates = new Set(locks.map((l) => `${l.nurseId}_${l.date}`));
       const leaveNurseDates = new Set(
-        leaveEntries.flatMap((le) => {
+        leaveEntries.filter((le) => le.approved).flatMap((le) => {
           const dates: string[] = [];
           const cur = new Date(le.startDate);
           const end = new Date(le.endDate);
@@ -254,7 +256,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
         })
       );
 
-      const kept = assignments.filter((a) => a.source === 'LOCK' || a.locked);
+      const kept = assignments.filter((a) => a.source === 'LOCK' || a.source === 'MANUAL' || a.locked);
       const keptKeys = new Set(kept.map((a) => `${a.nurseId}_${a.date}`));
 
       const start = new Date(schedule.startDate);

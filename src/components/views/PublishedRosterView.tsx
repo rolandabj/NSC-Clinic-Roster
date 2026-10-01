@@ -6,6 +6,7 @@
  * Mobile & Desktop Responsive, Block Navigation, Nurse Filters & Personal Link Support.
  */
 
+import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect } from 'react';
 import {
   Calendar,
@@ -436,7 +437,7 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
                     const dateObj = new Date(dateStr);
                     const weekday = WEEKDAY_NAMES[dateObj.getUTCDay()];
                     const dayNum = dateStr.split('-')[2];
-                    const isWeekend = dateObj.getUTCDay() === 0 || dateObj.getUTCDay() === 6;
+                    const isWeekend = isWeekendDay(dateObj.getUTCDay());
 
                     return (
                       <th

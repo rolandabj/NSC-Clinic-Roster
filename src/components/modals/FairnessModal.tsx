@@ -7,6 +7,7 @@
  * Balance spread score + Automated parity rebalancing with diff preview.
  */
 
+import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useMemo } from 'react';
 import {
   X,
@@ -33,8 +34,10 @@ import {
   Rule,
   LeaveEntry,
   LockEntry,
+  ClinicalRole,
 } from '../../types';
 import { getRepository } from '../../services/repository';
+import { checkAssignment } from '../../services/engine/assignmentChecks';
 
 interface FairnessModalProps {
   schedule: Schedule;
@@ -45,6 +48,8 @@ interface FairnessModalProps {
   seniorityLevels: SeniorityLevel[];
   leaveEntries: LeaveEntry[];
   locks: LockEntry[];
+  roles?: ClinicalRole[];
+  rules?: Rule[];
   isOpen: boolean;
   onClose: () => void;
   onApplyAssignments: (updated: Assignment[], note: string) => void;
@@ -81,6 +86,8 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
   seniorityLevels,
   leaveEntries,
   locks,
+  roles = [],
+  rules = [],
   isOpen,
   onClose,
   onApplyAssignments,
@@ -127,7 +134,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
         // Weekend duty (Sunday = 0, Saturday = 6)
         const dObj = new Date(a.date);
         const day = dObj.getUTCDay();
-        if (day === 0 || day === 6) {
+        if (isWeekendDay(day)) {
           weekendsWorked++;
         }
       }
@@ -139,7 +146,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
       const cur = new Date(start);
       while (cur <= end) {
         const day = cur.getUTCDay();
-        if (day === 0 || day === 6) totalWeekendDays++;
+        if (isWeekendDay(day)) totalWeekendDays++;
         cur.setUTCDate(cur.getUTCDate() + 1);
       }
 
@@ -167,7 +174,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
     const avgDelta = hourDeltas.reduce((a, b) => a + b, 0) / hourDeltas.length;
     const lateCounts = metrics.map((m) => m.lateEndsCount);
     const maxLate = Math.max(...lateCounts, 0);
-    const minLate = Math.min(...lateCounts, 0);
+    const minLate = lateCounts.length > 0 ? Math.min(...lateCounts) : 0;
     const lateSpread = maxLate - minLate;
 
     // Penalty based on hour variance and late spread
@@ -185,53 +192,45 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
     const underloaded = sorted.filter((m) => m.hoursDelta < -4 || m.lateEndsCount <= 1);
 
     const swaps: ProposedSwap[] = [];
-    const lockedDatesByNurse = new Set(locks.map((l) => `${l.nurseId}_${l.date}`));
-    const leaveDatesByNurse = new Set(
-      leaveEntries.flatMap((le) => {
-        const list: string[] = [];
-        const cur = new Date(le.startDate);
-        const end = new Date(le.endDate);
-        while (cur <= end) {
-          list.push(`${le.nurseId}_${cur.toISOString().split('T')[0]}`);
-          cur.setUTCDate(cur.getUTCDate() + 1);
-        }
-        return list;
-      })
-    );
+    // Each proposal is checked against the roster as it would be after the
+    // proposals before it, so two proposals never double book a nurse.
+    let working = [...assignments];
+    const usedAssignmentIds = new Set<string>();
 
     for (const over of overloaded) {
       for (const under of underloaded) {
         if (over.nurse.id === under.nurse.id) continue;
 
-        // Find an assignment belonging to 'over' where 'under' has no duty and no leave/lock
-        const candidates = assignments.filter(
-          (a) => a.nurseId === over.nurse.id && a.source !== 'LOCK' && !a.locked
+        const candidates = working.filter(
+          (a) => a.nurseId === over.nurse.id && a.source !== 'LOCK' && !a.locked && !usedAssignmentIds.has(a.id)
         );
 
         for (const asgn of candidates) {
-          const underHasDuty = assignments.some(
-            (a) => a.nurseId === under.nurse.id && a.date === asgn.date
+          const moved: Assignment = { ...asgn, nurseId: under.nurse.id };
+          const next = working.map((a) => (a.id === asgn.id ? moved : a));
+          const problems = checkAssignment(
+            { assignments: next, nurses, dutyWindows, leaveEntries, locks, roles, rules },
+            moved
           );
-          const underIsLocked = lockedDatesByNurse.has(`${under.nurse.id}_${asgn.date}`);
-          const underOnLeave = leaveDatesByNurse.has(`${under.nurse.id}_${asgn.date}`);
+          if (problems.length > 0) continue;
 
-          if (!underHasDuty && !underIsLocked && !underOnLeave) {
-            const dw = dutyMap.get(asgn.dutyWindowId);
-            swaps.push({
-              id: `swap-${asgn.id}-${under.nurse.id}`,
-              date: asgn.date,
-              dutyName: dw ? `${dw.name} (${dw.startTime}–${dw.endTime})` : 'Duty Shift',
-              overloadedNurse: over.nurse,
-              underloadedNurse: under.nurse,
-              assignmentA: asgn,
-              reason:
-                over.hoursDelta > 0
-                  ? `Reduces +${over.hoursDelta}h surplus for ${over.nurse.fullName}`
-                  : `Redistributes late-end duty from ${over.nurse.fullName}`,
-            });
+          working = next;
+          usedAssignmentIds.add(asgn.id);
+          const dw = dutyMap.get(asgn.dutyWindowId);
+          swaps.push({
+            id: `swap-${asgn.id}-${under.nurse.id}`,
+            date: asgn.date,
+            dutyName: dw ? `${dw.name} (${dw.startTime}–${dw.endTime})` : 'Duty Shift',
+            overloadedNurse: over.nurse,
+            underloadedNurse: under.nurse,
+            assignmentA: asgn,
+            reason:
+              over.hoursDelta > 0
+                ? `Reduces +${over.hoursDelta}h surplus for ${over.nurse.fullName}`
+                : `Redistributes late-end duty from ${over.nurse.fullName}`,
+          });
 
-            if (swaps.length >= 6) break;
-          }
+          if (swaps.length >= 6) break;
         }
         if (swaps.length >= 6) break;
       }
@@ -239,7 +238,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
     }
 
     return swaps;
-  }, [metrics, assignments, dutyMap, locks, leaveEntries]);
+  }, [metrics, assignments, dutyMap, locks, leaveEntries, nurses, dutyWindows, roles, rules]);
 
   if (!isOpen) return null;
 

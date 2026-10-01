@@ -21,32 +21,25 @@ interface ShortcutItem {
   category: 'Navigation' | 'Editing' | 'Clipboard & History' | 'Global';
 }
 
+// Only shortcuts the app really supports are listed here.
 const SHORTCUTS: ShortcutItem[] = [
   // Navigation
   { keys: ['↑', '↓', '←', '→'], action: 'Navigate between roster cells', category: 'Navigation' },
   { keys: ['Tab'], action: 'Move to next date in row', category: 'Navigation' },
   { keys: ['Shift', 'Tab'], action: 'Move to previous date in row', category: 'Navigation' },
-  { keys: ['Shift', 'Arrows'], action: 'Expand multi-cell range selection', category: 'Navigation' },
-  { keys: ['Alt', '1–6'], action: 'Switch workbook tabs (Roster, Coverage, etc.)', category: 'Navigation' },
 
   // Editing
-  { keys: ['Enter'], action: 'Open inline duty & pairing editor', category: 'Editing' },
-  { keys: ['Esc'], action: 'Close editor popover / exit expanded view', category: 'Editing' },
-  { keys: ['L'], action: 'Toggle cell lock / pinned status', category: 'Editing' },
-  { keys: ['Delete'], action: 'Clear selected cell assignment', category: 'Editing' },
-  { keys: ['Space'], action: 'Preview cell details tooltip', category: 'Editing' },
+  { keys: ['Enter'], action: 'Open the duty and pairing editor for the selected cell', category: 'Editing' },
+  { keys: ['Delete'], action: 'Clear the selected cell (asks first for pinned or leave days)', category: 'Editing' },
+  { keys: ['Esc'], action: 'Exit the expanded roster view', category: 'Editing' },
 
   // Clipboard & History
-  { keys: ['Ctrl / ⌘', 'C'], action: 'Copy selected cell or range', category: 'Clipboard & History' },
-  { keys: ['Ctrl / ⌘', 'V'], action: 'Paste (smart fill across staff/dates)', category: 'Clipboard & History' },
-  { keys: ['Ctrl / ⌘', 'Z'], action: 'Undo last change (50 steps history)', category: 'Clipboard & History' },
-  { keys: ['Ctrl / ⌘', 'Y'], action: 'Redo undone action', category: 'Clipboard & History' },
+  { keys: ['Ctrl / ⌘', 'C'], action: 'Copy the selected cell', category: 'Clipboard & History' },
+  { keys: ['Ctrl / ⌘', 'V'], action: 'Paste into the selected cell', category: 'Clipboard & History' },
 
   // Global
   { keys: ['?'], action: 'Open keyboard shortcut cheat-sheet', category: 'Global' },
   { keys: ['Ctrl / ⌘', '\\'], action: 'Collapse / expand sidebar to maximize workspace', category: 'Global' },
-  { keys: ['Alt', 'S'], action: 'Quick-save roster with version note', category: 'Global' },
-  { keys: ['Alt', 'D'], action: 'Open version diff comparison', category: 'Global' },
 ];
 
 export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose }) => {

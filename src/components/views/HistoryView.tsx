@@ -7,6 +7,7 @@
  * diff audit, non-destructive restore, and permanent deletion with verification prompt.
  */
 
+import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   History,
@@ -1135,7 +1136,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                               const dateObj = new Date(dateStr + 'T00:00:00Z');
                               const weekday = WEEKDAY_NAMES[dateObj.getUTCDay()];
                               const dayNum = dateStr.split('-')[2];
-                              const isWeekend = dateObj.getUTCDay() === 0 || dateObj.getUTCDay() === 6;
+                              const isWeekend = isWeekendDay(dateObj.getUTCDay());
 
                               return (
                                 <th

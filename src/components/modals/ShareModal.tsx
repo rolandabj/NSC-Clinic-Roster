@@ -204,16 +204,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       };
 
       await repo.create('invitations', newInvite);
-      triggerToast(`Invitation sent to ${newInvite.email}.`);
+      // No email is sent from here: the person signs in with Google and the owner approves them.
+      triggerToast(`Invitation recorded for ${newInvite.email}. Ask them to sign in to the app, then approve them in Settings, Access & Permissions.`);
       setInviteEmail('');
       loadData();
     } catch (err: any) {
       alert(`Failed to send invitation: ${err.message}`);
     }
-  };
-
-  const handleResendInvitation = (inv: Invitation) => {
-    triggerToast(`Invitation re-sent to ${inv.email}.`);
   };
 
   const handleRemoveInvitation = async (invId: string) => {
@@ -543,12 +540,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                         </div>
 
                         <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => handleResendInvitation(inv)}
-                            className="px-2 py-1 border border-slate-200 hover:bg-slate-100 rounded text-slate-700 text-[11px] font-medium cursor-pointer"
-                          >
-                            Resend
-                          </button>
                           <button
                             onClick={() => handleRemoveInvitation(inv.id)}
                             className="p-1 text-slate-400 hover:text-red-600 rounded cursor-pointer"

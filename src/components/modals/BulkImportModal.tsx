@@ -29,6 +29,8 @@ interface BulkImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   onImportComplete: () => void;
+  /** Which import tab opens first (Doctors page opens the doctors tab). */
+  initialTab?: 'NURSES' | 'DOCTORS';
 }
 
 export const BulkImportModal: React.FC<BulkImportModalProps> = ({
@@ -38,8 +40,12 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   isOpen,
   onClose,
   onImportComplete,
+  initialTab = 'NURSES',
 }) => {
-  const [activeTab, setActiveTab] = useState<'NURSES' | 'DOCTORS'>('NURSES');
+  const [activeTab, setActiveTab] = useState<'NURSES' | 'DOCTORS'>(initialTab);
+  React.useEffect(() => {
+    if (isOpen) setActiveTab(initialTab);
+  }, [isOpen, initialTab]);
   const [csvText, setCsvText] = useState('');
   const [parsedRows, setParsedRows] = useState<any[]>([]);
   const [errorCount, setErrorCount] = useState(0);

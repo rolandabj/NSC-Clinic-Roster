@@ -1,3 +1,4 @@
+import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   CalendarCheck2,
@@ -464,6 +465,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   // Override Lock (Executes lock removal protocol and records audit event)
   const handleExecuteLockOverride = async () => {
     if (!activeLockToOverride || isOverridingLock) return;
+    // The lock is only removed after the user typed OVERRIDE
+    if (overrideInput.trim().toUpperCase() !== 'OVERRIDE') return;
     setIsOverridingLock(true);
 
     try {
@@ -899,7 +902,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                   const isoDate = getIsoDate(day);
                   const dateObj = new Date(Date.UTC(currentYear, currentMonthIndex, day));
                   const weekday = dateObj.getUTCDay();
-                  const isWeekend = weekday === 5 || weekday === 6; // Fri/Sat or Sun
+                  const isWeekend = isWeekendDay(weekday);
                   const holiday = holidays.find((h) => h.date === isoDate);
                   const isToday = isViewingCurrentMonth && day === todayDateNumber;
 
@@ -1010,7 +1013,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
                       const dateObj = new Date(Date.UTC(currentYear, currentMonthIndex, day));
                       const weekday = dateObj.getUTCDay();
-                      const isWeekend = weekday === 5 || weekday === 6;
+                      const isWeekend = isWeekendDay(weekday);
                       const isToday = isViewingCurrentMonth && day === todayDateNumber;
 
                       // Check if inside active drag span
@@ -1608,7 +1611,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               </button>
               <button
                 type="button"
-                disabled={isOverridingLock}
+                disabled={isOverridingLock || overrideInput.trim().toUpperCase() !== 'OVERRIDE'}
                 onClick={handleExecuteLockOverride}
                 className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-bold cursor-pointer transition-colors shadow-xs disabled:opacity-50"
               >

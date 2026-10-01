@@ -53,6 +53,8 @@ import { getRepository } from '../../services/repository';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { defaultFirebaseConfig } from '../../services/firebase/firebaseConfig';
 import { RoleDirectoryService } from '../../services/auth/directoryService';
+import { getWeekendDays, setClinicWeekendDays } from '../../utils/weekend';
+import { escapeHtml } from '../../utils/escapeHtml';
 import {
   ClinicProfile,
   DutyWindow,
@@ -80,10 +82,6 @@ import {
   getDatabaseStatistics,
   DatabaseStats,
 } from '../../services/seed/seedRunner';
-import {
-  Phase16AcceptanceService,
-  AcceptanceSuiteReport,
-} from '../../services/verification/phase16AcceptanceService';
 import { SEED_CLINIC_PROFILE } from '../../services/seed/seedData';
 import { AccessManagementPanel } from './AccessManagementPanel';
 import { WorkingHoursPeriodsPanel } from './WorkingHoursPeriodsPanel';
@@ -111,8 +109,7 @@ type SettingsTab =
   | 'working-hours-periods'
   | 'email'
   | 'integrations'
-  | 'database'
-  | 'acceptance';
+  | 'database';
 
 const DUTY_COLOR_PALETTE = [
   '#3b82f6', // blue
@@ -157,7 +154,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
     try {
       const saved = localStorage.getItem('clinic_roster_settings_active_tab') as SettingsTab;
-      if (saved) return saved;
+      // 'acceptance' was a removed tab
+      if (saved && (saved as string) !== 'acceptance') return saved;
     } catch {
       // ignore
     }
@@ -191,11 +189,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     return raw ? JSON.parse(raw) : DEFAULT_HOURS_POLICY;
   });
 
-  // Phase 16 Acceptance Verification State
-  const [acceptanceReport, setAcceptanceReport] = useState<AcceptanceSuiteReport | null>(null);
-  const [isAcceptanceRunning, setIsAcceptanceRunning] = useState(false);
-  const [expandedCheckId, setExpandedCheckId] = useState<number | null>(null);
-  const [acceptanceProgress, setAcceptanceProgress] = useState<string | null>(null);
 
   const [emailConfig, setEmailConfig] = useState<EmailSettingsConfig>(() => {
     const raw = localStorage.getItem('clinic_roster_email_config');
@@ -240,9 +233,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   });
 
   // Auto apply public holidays toggle state
-  const [autoApplyPH, setAutoApplyPH] = useState<boolean>(() => {
-    return localStorage.getItem('clinic_roster_auto_apply_ph') === 'true';
-  });
 
   // Webhooks & ChatOps State
   const [testingWebhookId, setTestingWebhookId] = useState<string | null>(null);
@@ -261,14 +251,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [emailTestResult, setEmailTestResult] = useState<any | null>(null);
   const [isTestingEmail, setIsTestingEmail] = useState(false);
   const [directorySearchQuery, setDirectorySearchQuery] = useState('');
-  const [roleOverrides, setRoleOverrides] = useState<Record<string, UserRole>>(() => {
-    try {
-      const saved = localStorage.getItem('clinic_role_overrides');
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
 
   const repo = getRepository();
 
@@ -305,15 +287,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     } finally {
       setIsTestingEmail(false);
     }
-  };
-
-  const handleSetRoleOverride = (email: string, newRole: UserRole) => {
-    const next = { ...roleOverrides, [email.toLowerCase()]: newRole };
-    setRoleOverrides(next);
-    try {
-      localStorage.setItem('clinic_role_overrides', JSON.stringify(next));
-    } catch {}
-    triggerSaveNotification(`Role override applied for ${email}: ${newRole}`);
   };
 
   const loadData = async () => {
@@ -392,6 +365,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           address: targetClinic.address || '',
           phone: targetClinic.phone || '',
           workingDays: targetClinic.workingDays || [true, true, true, true, true, true, true],
+          weekendDays: targetClinic.weekendDays || getWeekendDays(),
           openTime: targetClinic.openTime || '09:00',
           closeTime: targetClinic.closeTime || '21:00',
           defaultBlockWeeks: targetClinic.defaultBlockWeeks || 2,
@@ -399,6 +373,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         };
 
         await repo.bulkUpsert('clinics', [clinicToSave]);
+        setClinicWeekendDays(clinicToSave.weekendDays);
 
         // Persist directly to localStorage for instantaneous recovery on refresh
         localStorage.setItem('clinic_roster_clinic_profile', JSON.stringify(clinicToSave));
@@ -972,17 +947,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const handleToggleAutoApplyPH = () => {
-    const nextVal = !autoApplyPH;
-    setAutoApplyPH(nextVal);
-    localStorage.setItem('clinic_roster_auto_apply_ph', String(nextVal));
-    triggerSaveNotification(
-      nextVal
-        ? 'Public holidays will auto-apply as PH leave during schedule generation.'
-        : 'Auto-apply PH leave disabled.'
-    );
-  };
-
   // --- 9. Hours Policy Auto-Save & Bidirectional Sync ---
   const [hoursPolicySaveStatus, setHoursPolicySaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('saved');
   const hoursPolicyDebounceTimerRef = useRef<any>(null);
@@ -1191,6 +1155,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTestEmailResult('Dispatching test email...');
     const sender = emailConfig.senderEmail || 'rolandabj@gmail.com';
     const isMock = emailConfig.mockMode || emailConfig.provider === 'MOCK';
+    const subject = `[Test] Clinic Roster Google Email Dispatch (${isMock ? 'MOCK' : 'GOOGLE'})`;
+
+    // Ask the server to send; report what really happened.
+    let status: 'SENT' | 'MOCK_SENT' | 'FAILED' = 'FAILED';
+    let errorMessage = '';
     try {
       const res = await fetch('/api/email/test', {
         method: 'POST',
@@ -1201,77 +1170,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         body: JSON.stringify({
           to: sender,
           provider: isMock ? 'MOCK' : 'GOOGLE',
-          config: emailConfig,
+          config: { provider: isMock ? 'MOCK' : 'GOOGLE', mockMode: isMock, senderName: emailConfig.senderName },
         }),
       });
-
-      // Also persist in active repo so Email Log view immediately shows the entry
-      try {
-        const nowIso = new Date().toISOString();
-        await repo.create('emailLog', {
-          id: `elog-test-${Date.now()}`,
-          scheduleId: 'test-dispatch',
-          versionId: 'test',
-          kind: 'TEST',
-          recipients: [{
-            email: sender,
-            nurseId: 'test-recipient',
-            nurseName: emailConfig.senderName || 'Clinical Director',
-            subject: `[Test] Clinic Roster Google Email Dispatch (${isMock ? 'MOCK' : 'GOOGLE'})`,
-            bodyPreview: `Test notification verifying Google transactional email dispatch to ${sender}.`,
-            fullBodyHtml: `<p>Test email to ${sender}</p>`,
-            status: isMock ? 'MOCK_SENT' : 'SENT',
-          }],
-          status: isMock ? 'MOCK_SENT' : 'SENT',
-          sentAt: nowIso,
-        });
-      } catch {
-        // ignore local write error
-      }
-
-      if (res.ok) {
-        if (isMock) {
-          setTestEmailResult(
-            `✓ Mock Sandbox Test Email successfully dispatched and recorded in Email Log (Recipient: ${sender}).`
-          );
-        } else {
-          setTestEmailResult(
-            `✓ Live Google Test Email successfully dispatched via Google SMTP to ${sender}.`
-          );
-        }
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && (json.data?.status === 'SENT' || json.data?.status === 'MOCK_SENT')) {
+        status = json.data.status;
       } else {
-        const errJson = await res.json().catch(() => ({}));
-        setTestEmailResult(
-          `✓ Test email dispatched in Safe Sandbox mode to ${sender}.`
-        );
+        errorMessage = json.data?.error || json.message || `Server returned ${res.status}`;
       }
+    } catch (err: any) {
+      errorMessage = err?.message || 'The server could not be reached';
+    }
+
+    try {
+      await repo.create('emailLog', {
+        id: `elog-test-${Date.now()}`,
+        scheduleId: 'test-dispatch',
+        versionId: 'test',
+        kind: 'TEST',
+        recipients: [{
+          email: sender,
+          nurseId: 'test-recipient',
+          nurseName: emailConfig.senderName || 'Clinical Director',
+          subject,
+          bodyPreview: `Test notification verifying Google transactional email dispatch to ${sender}.`,
+          fullBodyHtml: `<p>Test email to ${escapeHtml(sender)}</p>`,
+          status,
+          errorMessage: errorMessage || undefined,
+        }],
+        status,
+        sentAt: new Date().toISOString(),
+      });
     } catch {
-      // Standalone preview fallback
-      try {
-        const nowIso = new Date().toISOString();
-        await repo.create('emailLog', {
-          id: `elog-test-${Date.now()}`,
-          scheduleId: 'test-dispatch',
-          versionId: 'test',
-          kind: 'TEST',
-          recipients: [{
-            email: sender,
-            nurseId: 'test-recipient',
-            nurseName: emailConfig.senderName || 'Clinical Director',
-            subject: `[Test] Clinic Roster Google Email Dispatch (${isMock ? 'MOCK' : 'GOOGLE'})`,
-            bodyPreview: `Test notification verifying Google transactional email dispatch to ${sender}.`,
-            fullBodyHtml: `<p>Test email to ${sender}</p>`,
-            status: isMock ? 'MOCK_SENT' : 'SENT',
-          }],
-          status: isMock ? 'MOCK_SENT' : 'SENT',
-          sentAt: nowIso,
-        });
-      } catch {
-        // ignore
-      }
-      setTestEmailResult(
-        `✓ Mock Sandbox Test Email logged to Email Log: Sent to ${sender}`
-      );
+      // the result below is still shown
+    }
+
+    if (status === 'SENT') {
+      setTestEmailResult(`✓ Test email sent through Google SMTP to ${sender}.`);
+    } else if (status === 'MOCK_SENT') {
+      setTestEmailResult(`✓ Sandbox mode: the test email to ${sender} was logged but not sent.`);
+    } else {
+      setTestEmailResult(`✗ The test email was not sent: ${errorMessage}`);
     }
   };
 
@@ -1376,22 +1316,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     reader.readAsText(file);
   };
 
-  // --- 13. Phase 16 Acceptance Verification Handler ---
-  const handleRunAcceptance = async () => {
-    setIsAcceptanceRunning(true);
-    try {
-      const suiteReport = await Phase16AcceptanceService.runAllChecks((id, name) => {
-        setAcceptanceProgress(`Verifying Check #${id}: ${name}...`);
-      });
-      setAcceptanceReport(suiteReport);
-      triggerSaveNotification(`Acceptance Suite: ${suiteReport.passedCount} of ${suiteReport.totalCount} standards passed (100%).`);
-    } catch (err: any) {
-      alert(`Acceptance suite execution error: ${err.message}`);
-    } finally {
-      setIsAcceptanceRunning(false);
-      setAcceptanceProgress(null);
-    }
-  };
 
   const handleTabSwitch = (newTab: SettingsTab) => {
     flushAllSettings();
@@ -1434,7 +1358,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { id: 'email', label: 'Email', icon: Mail },
     { id: 'integrations', label: 'Integrations', icon: Cloud },
     { id: 'database', label: 'Database & Storage', icon: Database },
-    { id: 'acceptance', label: 'Acceptance Checklist', icon: ShieldCheck },
   ];
 
   return (
@@ -1613,6 +1536,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     );
                   })}
                 </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block font-medium text-slate-700 mb-1.5">Weekend Days</label>
+                <div className="flex flex-wrap gap-2">
+                  {WEEKDAY_NAMES.map((name, idx) => {
+                    const weekend = clinic.weekendDays || getWeekendDays();
+                    const isWeekend = weekend.includes(idx);
+                    return (
+                      <button
+                        type="button"
+                        key={`weekend-${name}`}
+                        aria-pressed={isWeekend}
+                        onClick={() => {
+                          const next = isWeekend ? weekend.filter((d) => d !== idx) : [...weekend, idx];
+                          updateClinicField({ weekendDays: next }, true);
+                        }}
+                        className={`px-3 py-1 rounded border text-xs font-medium cursor-pointer transition-colors ${
+                          isWeekend
+                            ? 'bg-amber-50 border-amber-300 text-amber-800 font-semibold'
+                            : 'bg-slate-50 border-slate-200 text-slate-400'
+                        }`}
+                      >
+                        {name} {isWeekend ? '✓' : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Used for weekend shading, weekend fairness and the scheduler's weekend balancing. UAE default: Saturday and Sunday.
+                </p>
               </div>
 
               <div>
@@ -1904,7 +1858,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <th className="py-2.5 px-3">Clinical Role &amp; Seniority</th>
                       <th className="py-2.5 px-3">Google Workspace Email</th>
                       <th className="py-2.5 px-3">Computed RBAC Role</th>
-                      <th className="py-2.5 px-3">Role Override</th>
+                      <th className="py-2.5 px-3">Change Role</th>
                       <th className="py-2.5 px-3 text-right">Account Status</th>
                     </tr>
                   </thead>
@@ -1921,7 +1875,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         );
                       })
                       .map((entry) => {
-                        const effectiveRole = roleOverrides[entry.email?.toLowerCase()] || entry.role;
+                        const effectiveRole = entry.role;
                         return (
                           <tr
                             key={entry.id || entry.email}
@@ -1977,27 +1931,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                             </td>
 
                             <td className="py-2.5 px-3">
-                              <select
-                                value={roleOverrides[entry.email?.toLowerCase()] || ''}
-                                onChange={(e) => {
-                                  if (!e.target.value) {
-                                    const next = { ...roleOverrides };
-                                    delete next[entry.email?.toLowerCase()];
-                                    setRoleOverrides(next);
-                                    localStorage.setItem('clinic_role_overrides', JSON.stringify(next));
-                                    triggerSaveNotification(`Cleared override for ${entry.name}`);
-                                  } else {
-                                    handleSetRoleOverride(entry.email, e.target.value as UserRole);
-                                  }
-                                }}
-                                className="px-2 py-1 border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-900 text-[11px] text-slate-700 dark:text-slate-300 font-medium"
-                              >
-                                <option value="">Auto (Default: {entry.role})</option>
-                                <option value="OWNER">Override: OWNER</option>
-                                <option value="PLANNER">Override: PLANNER</option>
-                                <option value="STAFF">Override: STAFF</option>
-                                <option value="VIEWER">Override: VIEWER</option>
-                              </select>
+                              <span className="text-[11px] text-slate-500">
+                                Roles are set in Access &amp; Permissions
+                              </span>
                             </td>
 
                             <td className="py-2.5 px-3 text-right">
@@ -3238,29 +3174,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </button>
             </div>
 
-            {/* Auto Apply PH Toggle */}
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded flex items-center justify-between">
-              <div>
-                <span className="font-semibold text-xs text-slate-800">
-                  Auto-apply PH leave to all active nurses on public holidays
-                </span>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  When enabled, creating or generating a schedule automatically grants an 8h PH leave credit for dates intersecting official holidays.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleToggleAutoApplyPH}
-                className={`px-3 py-1.5 rounded text-xs font-semibold cursor-pointer transition-colors ${
-                  autoApplyPH
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-white border border-slate-300 text-slate-600'
-                }`}
-              >
-                {autoApplyPH ? 'Enabled ✓' : 'Disabled'}
-              </button>
-            </div>
-
             <div className="border border-slate-200 rounded overflow-hidden">
               <table className="w-full text-xs text-left">
                 <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-medium">
@@ -3658,8 +3571,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
 
             {testEmailResult && (
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-md text-emerald-800 dark:text-emerald-300 text-[11px] flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div
+                role="status"
+                className={`p-3 border rounded-md text-[11px] flex items-center gap-2 ${
+                  testEmailResult.startsWith('✗')
+                    ? 'bg-rose-50 border-rose-200 text-rose-800'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                }`}
+              >
+                <CheckCircle2 className={`w-4 h-4 shrink-0 ${testEmailResult.startsWith('✗') ? 'text-rose-600' : 'text-emerald-600'}`} />
                 <span>{testEmailResult}</span>
               </div>
             )}
@@ -3833,207 +3753,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         )}
 
-        {/* 13. Phase 16 Acceptance Verification Panel */}
-        {activeTab === 'acceptance' && (
-          <div className="space-y-6 animate-in fade-in duration-150">
-            {/* Acceptance Overview Card */}
-            <div className="p-5 rounded-lg border border-emerald-200 dark:border-emerald-900/60 bg-gradient-to-r from-emerald-50/80 via-white to-teal-50/80 dark:from-emerald-950/30 dark:via-slate-900 dark:to-teal-950/30 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="p-2.5 rounded-lg bg-emerald-600 text-white shadow-xs shrink-0 mt-0.5">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                      Acceptance Checklist &amp; Verification Suite
-                    </h2>
-                    <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/70 dark:text-emerald-300">
-                      13 Standards
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-                    End-to-end self-verification suite testing generation determinism (&lt;5s), locked cell immutability, leave credits, H1 senior rules, evening tail coverage copy (&ldquo;...3 doctors still in session, only 2 nurses on duty&rdquo;), Blood Collection &amp; IV credentials, contracted proportion targets, SheetJS exports, and published notifications.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleRunAcceptance}
-                  disabled={isAcceptanceRunning}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded font-semibold text-xs shadow-xs transition-colors cursor-pointer"
-                >
-                  {isAcceptanceRunning ? (
-                    <>
-                      <Activity className="w-4 h-4 animate-spin" />
-                      <span>Running Checks...</span>
-                    </>
-                  ) : (
-                    <>
-                      <RotateCcw className="w-4 h-4" />
-                      <span>Execute Full Suite</span>
-                    </>
-                  )}
-                </button>
-
-                {onOpenAcceptance && (
-                  <button
-                    type="button"
-                    onClick={onOpenAcceptance}
-                    className="inline-flex items-center gap-1 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded font-medium text-xs transition-colors shadow-2xs cursor-pointer"
-                  >
-                    <span>Modal Runner</span>
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Live Progress Bar when executing */}
-            {isAcceptanceRunning && acceptanceProgress && (
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded flex items-center justify-between text-xs text-emerald-900 dark:text-emerald-200">
-                <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-emerald-600 animate-spin" />
-                  <span className="font-semibold">{acceptanceProgress}</span>
-                </div>
-                <span className="font-mono text-emerald-700 dark:text-emerald-300 text-[11px]">In Progress</span>
-              </div>
-            )}
-
-            {/* Results Summary Scorecard */}
-            {acceptanceReport ? (
-              <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-4 shadow-2xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold text-xs border border-emerald-300 dark:border-emerald-800">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span>{acceptanceReport.passedCount} of {acceptanceReport.totalCount} Standards Passed (100%)</span>
-                    </div>
-                    <span className="text-xs text-slate-500 font-mono">
-                      Completed in {acceptanceReport.totalDurationMs}ms
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const blob = new Blob([JSON.stringify(acceptanceReport, null, 2)], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `acceptance_report.json`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded text-slate-700 dark:text-slate-300 cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Export JSON</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* 13 Checklist Items Accordion List */}
-                <div className="space-y-2">
-                  {acceptanceReport.results.map((check) => {
-                    const isExpanded = expandedCheckId === check.id;
-                    return (
-                      <div
-                        key={check.id}
-                        className="rounded border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/60 overflow-hidden"
-                      >
-                        <div
-                          onClick={() => setExpandedCheckId(isExpanded ? null : check.id)}
-                          className="px-4 py-3 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-100/60 dark:hover:bg-slate-800/80 transition-colors"
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                              <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="font-mono text-xs font-bold text-slate-400">
-                                  #{check.id}
-                                </span>
-                                <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                                  {check.title}
-                                </h4>
-                                <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                                  {check.category}
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                                {check.details}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-[11px] font-mono text-slate-400 hidden sm:inline">
-                              {check.durationMs}ms
-                            </span>
-                            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300">
-                              {check.assertionsPassed}/{check.totalAssertions} Passed
-                            </span>
-                            {isExpanded ? (
-                              <ChevronDown className="w-4 h-4 text-slate-400" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4 text-slate-400" />
-                            )}
-                          </div>
-                        </div>
-
-                        {isExpanded && (
-                          <div className="px-4 py-3 border-t border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2 text-xs">
-                            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                              Subcheck Assertions:
-                            </div>
-                            {check.subchecks.map((sub, sIdx) => (
-                              <div key={sIdx} className="flex items-start gap-2.5">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
-                                <div>
-                                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                    {sub.name}:
-                                  </span>{' '}
-                                  <span className="text-slate-600 dark:text-slate-400">
-                                    {sub.message}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="p-8 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-center space-y-3">
-                <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
-                  <ShieldCheck className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Verification Suite Ready
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md mx-auto">
-                    Click &ldquo;Execute Full Suite&rdquo; above to run automated regression checks against all 13 checklist criteria in real time.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleRunAcceptance}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold text-xs shadow-xs transition-colors cursor-pointer"
-                >
-                  <Play className="w-3.5 h-3.5" />
-                  <span>Execute Verification Suite Now</span>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* --- MODALS --- */}

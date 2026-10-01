@@ -1,3 +1,4 @@
+import { isWeekendDay } from '../../utils/weekend';
 import { leaveCreditInRange, leaveCreditPerDay } from '../../services/hours/hoursPolicy';
 import React, { useState, useEffect, useRef } from 'react';
 import {
@@ -349,10 +350,32 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       if (isEditorOpen) return;
       if (!selectedCell) return;
 
+      // Never take over keys while the user is typing somewhere else (search boxes,
+      // other sheets, dialogs) or while a button or link has keyboard focus.
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        target?.isContentEditable ||
+        (e.key === 'Tab' && target && target !== document.body)
+      ) {
+        return;
+      }
+
       const currentNurseIndex = displayNurses.findIndex((n) => n.id === selectedCell.nurseId);
       const currentDateIndex = blockDates.indexOf(selectedCell.date);
 
-      if (e.key === 'ArrowRight' || e.key === 'Tab') {
+      if (e.key === 'Tab' && e.shiftKey) {
+        e.preventDefault();
+        if (currentDateIndex > 0) {
+          setSelectedCell({
+            nurseId: selectedCell.nurseId,
+            date: blockDates[currentDateIndex - 1],
+          });
+        }
+      } else if (e.key === 'ArrowRight' || e.key === 'Tab') {
         e.preventDefault();
         if (currentDateIndex < blockDates.length - 1) {
           setSelectedCell({
@@ -390,12 +413,12 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         handleDeleteCellAssignment(selectedCell.nurseId, selectedCell.date);
-      } else if (e.ctrlKey && e.key === 'c') {
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
         const asgn = assignments.find(
           (a) => a.nurseId === selectedCell.nurseId && a.date === selectedCell.date
         );
         if (asgn) setClipboardAssignment(asgn);
-      } else if (e.ctrlKey && e.key === 'v') {
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
         if (clipboardAssignment) {
           handlePasteAssignment(selectedCell.nurseId, selectedCell.date);
         }
@@ -587,6 +610,15 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   };
 
   const handleDeleteCellAssignment = (nurseId: string, date: string) => {
+    // Clearing a pinned shift or approved leave needs a confirmation
+    const hasLock = locks.some((l) => l.nurseId === nurseId && l.date === date);
+    const hasApprovedLeave = leaveEntries.some(
+      (le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate
+    );
+    if (hasLock || hasApprovedLeave) {
+      const what = hasLock && hasApprovedLeave ? 'a pinned lock and approved leave' : hasLock ? 'a pinned lock' : 'approved leave';
+      if (!confirm(`This day has ${what}. Clear it anyway?`)) return;
+    }
     const nextAssignments = assignments.filter((a) => !(a.nurseId === nurseId && a.date === date));
     const nextLocks = locks.filter((l) => !(l.nurseId === nurseId && l.date === date));
     // Remove ONLY the selected date from leave entries, preserving all other days/leaves
@@ -603,6 +635,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     if (!clipboardAssignment) return;
     const isLocked = locks.some((l) => l.nurseId === nurseId && l.date === date);
     if (isLocked) return;
+    const onLeave = leaveEntries.some(
+      (le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate
+    );
+    if (onLeave) return;
 
     const filtered = assignments.filter((a) => !(a.nurseId === nurseId && a.date === date));
     const pasted: Assignment = {
@@ -610,6 +646,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       id: `asgn-manual-${nurseId}-${date}-${Date.now()}`,
       nurseId,
       date,
+      // A pasted copy is never pinned: pins come with a lock entry
+      locked: false,
       source: 'MANUAL',
     };
     onAssignmentsChange([...filtered, pasted]);
@@ -822,7 +860,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                   const dateObj = new Date(dateStr);
                   const day = dateObj.getUTCDate();
                   const weekday = dateObj.getUTCDay();
-                  const isWeekend = weekday === 5 || weekday === 6;
+                  const isWeekend = isWeekendDay(weekday);
                   const holiday = holidays.find((h) => h.date === dateStr);
 
                   return (

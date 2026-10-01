@@ -5,6 +5,7 @@
  * Hours Accounting, Contract Proportions & Payroll Ledger Service (Phase 9)
  */
 
+import { isWeekendDay } from '../../utils/weekend';
 import {
   Schedule,
   Assignment,
@@ -233,7 +234,7 @@ export function calculateNurseHoursAccounting(
   while (cur <= end) {
     const dateStr = cur.toISOString().split('T')[0];
     const weekday = cur.getUTCDay();
-    const isWeekend = weekday === 0 || weekday === 6;
+    const isWeekend = isWeekendDay(weekday);
 
     const asgn = asgnByDate.get(dateStr);
     const leave = nurseLeaves.find((le) => dateStr >= le.startDate && dateStr <= le.endDate);

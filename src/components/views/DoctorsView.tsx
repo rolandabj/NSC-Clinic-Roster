@@ -1219,6 +1219,20 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
           </div>
         </div>
       )}
+
+      {/* Bulk CSV Import Modal (opens on the doctors tab) */}
+      <BulkImportModal
+        seniorityLevels={seniorityLevels}
+        specialties={specialties}
+        roles={clinicalRoles}
+        initialTab="DOCTORS"
+        isOpen={isBulkImportOpen}
+        onClose={() => setIsBulkImportOpen(false)}
+        onImportComplete={() => {
+          setIsBulkImportOpen(false);
+          loadData();
+        }}
+      />
     </div>
   );
 };

@@ -252,20 +252,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       const sortedWhp = [...whpList].sort((a, b) => a.startDate.localeCompare(b.startDate));
       setWorkingHoursPeriods(sortedWhp);
 
-      // Clean up any legacy pre-seeded automatic leaves (Annual, Sick, Birthday, PH)
-      const seedLeaveIds = new Set(['leave-1', 'leave-2', 'leave-3', 'leave-4', 'leave-5']);
-      const autoLeavesToDelete = leList.filter(
-        (le) =>
-          seedLeaveIds.has(le.id) ||
-          le.note?.toLowerCase().includes('auto-entitlement') ||
-          le.note?.toLowerCase().includes('birthday leave auto') ||
-          le.note?.toLowerCase().includes('public holiday entitlement')
-      );
-      let activeLeaveList = leList;
-      if (autoLeavesToDelete.length > 0) {
-        await repo.bulkRemove('leaveEntries', autoLeavesToDelete.map((l) => l.id));
-        activeLeaveList = leList.filter((le) => !autoLeavesToDelete.some((del) => del.id === le.id));
-      }
+      // Leave records are never deleted while loading (an older clean up here removed
+      // real public holiday leave every time the page opened).
+      const activeLeaveList = leList;
 
       const uniqueSchedules = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
       setSchedules(uniqueSchedules);
@@ -1008,6 +997,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // --- LOCK OVERRIDE PROTOCOL ---
   const handleExecuteLockOverride = async () => {
     if (!activeLockToOverride) return;
+    // The lock is only removed after the user typed OVERRIDE
+    if (overrideInput.trim().toUpperCase() !== 'OVERRIDE') return;
 
     try {
       await repo.remove('locks', activeLockToOverride.id);
@@ -1369,7 +1360,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             disabled={undoStack.length === 0}
             onClick={handleUndo}
             className="px-2 py-1 border border-slate-200 rounded disabled:opacity-30 hover:bg-slate-50 text-slate-700 cursor-pointer font-mono"
-            title="Undo (Ctrl+Z)"
+            title="Undo the last roster change"
           >
             Undo ({undoStack.length})
           </button>
@@ -1377,7 +1368,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             disabled={redoStack.length === 0}
             onClick={handleRedo}
             className="px-2 py-1 border border-slate-200 rounded disabled:opacity-30 hover:bg-slate-50 text-slate-700 cursor-pointer font-mono"
-            title="Redo (Ctrl+Y)"
+            title="Redo the change you undid"
           >
             Redo
           </button>
@@ -1740,7 +1731,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               <button
                 type="button"
                 onClick={handleExecuteLockOverride}
-                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-bold cursor-pointer transition-colors shadow-xs"
+                disabled={overrideInput.trim().toUpperCase() !== 'OVERRIDE'}
+                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-bold cursor-pointer transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Confirm OVERRIDE &amp; Unlock
               </button>
@@ -2351,6 +2343,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           seniorityLevels={seniorityLevels}
           leaveEntries={leaveEntries}
           locks={locks}
+          roles={roles}
+          rules={rules}
           isOpen={isFairnessModalOpen}
           onClose={() => setIsFairnessModalOpen(false)}
           onApplyAssignments={(updated, note) => {
@@ -2392,6 +2386,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           specialties={specialties}
           leaveEntries={leaveEntries}
           locks={locks}
+          rules={rules}
           isOpen={isSwapModalOpen}
           onClose={() => setIsSwapModalOpen(false)}
           onApplySwap={(updated, note) => {

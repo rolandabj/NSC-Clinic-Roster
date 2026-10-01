@@ -7,6 +7,7 @@
  * and progressive chunked generation to never freeze the UI.
  */
 
+import { isWeekendDate, isWeekendDay } from '../../utils/weekend';
 import { v4 as uuidv4 } from 'uuid';
 import {
   Schedule,
@@ -552,7 +553,7 @@ export class SchedulingEngine {
           const shiftH = calculateDutyDurationHours(duty);
           initialPreservedDutyHours += shiftH;
           const dayOfWeek = new Date(asgn.date + 'T00:00:00Z').getUTCDay();
-          if (dayOfWeek === 0 || dayOfWeek === 6) initialWeekendsWorked++;
+          if (isWeekendDay(dayOfWeek)) initialWeekendsWorked++;
         }
       });
 
@@ -722,7 +723,7 @@ export class SchedulingEngine {
     // 4. Iterate Days with Chunking (Yielding to Event Loop every 5 days)
     for (let dayIdx = 0; dayIdx < datesList.length; dayIdx++) {
       const date = datesList[dayIdx];
-      const isWeekend = new Date(date).getUTCDay() === 0 || new Date(date).getUTCDay() === 6;
+      const isWeekend = isWeekendDate(date);
 
       if (onProgress && dayIdx % 5 === 0) {
         onProgress({

@@ -1,3 +1,4 @@
+import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useMemo } from 'react';
 import {
   Stethoscope,
@@ -356,7 +357,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                 const dateObj = new Date(dateStr + 'T00:00:00Z');
                 const day = dateObj.getUTCDate();
                 const weekday = dateObj.getUTCDay();
-                const isWeekend = weekday === 5 || weekday === 6;
+                const isWeekend = isWeekendDay(weekday);
 
                 return (
                   <th

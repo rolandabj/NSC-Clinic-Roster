@@ -14,10 +14,8 @@ import { ReportsView } from '../views/ReportsView';
 import { SettingsView } from '../views/SettingsView';
 import { PublishedRosterView } from '../views/PublishedRosterView';
 import { AuditTrailView } from '../views/AuditTrailView';
-import { WarningsModal } from '../modals/WarningsModal';
 import { AuthModal } from '../modals/AuthModal';
 import { ShortcutsModal } from '../modals/ShortcutsModal';
-import { AcceptanceModal } from '../modals/AcceptanceModal';
 import { repositoryManager } from '../../services/repository';
 import {
   initializeDatabaseIfEmpty,
@@ -26,6 +24,7 @@ import {
 } from '../../services/seed/seedRunner';
 import { testFirestoreConnection } from '../../services/firebase/firebaseConfig';
 import { canAccessRoute } from '../../services/auth/access';
+import { setClinicWeekendDays } from '../../utils/weekend';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { quotaTracker } from '../../services/firebase/quotaTracker';
@@ -108,10 +107,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     },
   });
 
-  const [isWarningsModalOpen, setIsWarningsModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
-  const [isAcceptanceOpen, setIsAcceptanceOpen] = useState(false);
   const [openCreateInSchedules, setOpenCreateInSchedules] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(() => quotaTracker.isQuotaExceeded());
@@ -230,6 +227,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
             clinicName: resolvedName,
             timezone: mainClinic.timezone || 'Asia/Dubai',
           }));
+          setClinicWeekendDays(mainClinic.weekendDays);
           if (typeof document !== 'undefined') {
             document.title = `${resolvedName} — Clinical Roster`;
           }
@@ -358,7 +356,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
           <DashboardView
             context={clinicContext}
             onNavigate={navigateTo}
-            onOpenAcceptance={() => setIsAcceptanceOpen(true)}
             onOpenCreateSchedule={() => {
               setOpenCreateInSchedules(true);
               navigateTo('schedules');
@@ -393,7 +390,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
             context={clinicContext}
             onUpdateClinicProfile={handleUpdateClinicProfile}
             onUpdateClinicName={handleUpdateClinicName}
-            onOpenAcceptance={() => setIsAcceptanceOpen(true)}
           />
         );
       default:
@@ -401,7 +397,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
           <DashboardView
             context={clinicContext}
             onNavigate={navigateTo}
-            onOpenAcceptance={() => setIsAcceptanceOpen(true)}
           />
         );
     }
@@ -465,10 +460,9 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
           <TopBar
             context={clinicContext}
             onNavigateToSchedules={() => navigateTo('schedules')}
-            onOpenWarnings={() => setIsWarningsModalOpen(true)}
+            onOpenWarnings={() => navigateTo('schedules')}
             onOpenAuthModal={() => setIsAuthModalOpen(true)}
             onOpenShortcuts={() => setIsShortcutsOpen(true)}
-            onOpenAcceptance={() => setIsAcceptanceOpen(true)}
           />
 
           <main className="flex-1 min-h-0 overflow-y-auto">
@@ -478,12 +472,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       </div>
 
       {/* Global Modals */}
-      <WarningsModal
-        isOpen={isWarningsModalOpen}
-        onClose={() => setIsWarningsModalOpen(false)}
-        onNavigateToTab={navigateTo}
-      />
-
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
@@ -494,12 +482,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       <ShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
-      />
-
-      <AcceptanceModal
-        isOpen={isAcceptanceOpen}
-        onClose={() => setIsAcceptanceOpen(false)}
-        onNavigateToSchedules={() => navigateTo('schedules')}
       />
 
       {/* Digital Acknowledgment Receipt Modal (Phase 13) */}
