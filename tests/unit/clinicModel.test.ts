@@ -242,3 +242,40 @@ test('a doctor\'s ranked nurse who would go over her hours gives way to a lower 
   const result = await SchedulingEngine.generate(ONE, 'GENERATE_ALL', [], staff, LEVELS, [D], ROLES, [], LONG_SESSION, [], [], [], undefined, [], [DR_X] as any, [], {});
   assert.equal(result.assignments.find((a) => a.kind === 'DOCTOR')?.nurseId, 'second');
 });
+
+test('a nurse goes to the doctor who ranks her higher when two doctors want her the same day', async () => {
+  // Like Dr Semon (ranks Noveline 1st) and Dr Rayya (ranks her 3rd), both 09:00 to 21:00.
+  // Rayya's session comes first in the day; Roselle (no allocations) could take either.
+  const RAYYA = { id: 'docR', fullName: 'Dr Rayya', specialtyIds: [], weeklyPattern: [], active: true };
+  const SEMON = { id: 'docS', fullName: 'Dr Semon', specialtyIds: [], weeklyPattern: [], active: true };
+  const sessions = [RAYYA, SEMON].map((d) => ({ id: 's-' + d.id, doctorId: d.id, date: '2026-11-02', startTime: '09:00', endTime: '21:00', specialtyId: 'spec', source: 'PATTERN', cancelled: false } as DoctorSession));
+  const staff = [
+    freeNurse,
+    makeNurse('noveline', { preferences: [{ kind: 'DOCTOR', refId: 'docR', rank: 3 }, { kind: 'DOCTOR', refId: 'docS', rank: 1 }] as any }),
+    makeNurse('roselle'),
+  ];
+  const result = await SchedulingEngine.generate(ONE_DAY, 'GENERATE_ALL', [], staff, LEVELS, [D], ROLES, [], sessions, [], [], [], undefined, [], [RAYYA, SEMON] as any, [], {});
+  const nurseFor = (doc: string) => result.assignments.find((a) => a.kind === 'DOCTOR' && a.doctorId === doc)?.nurseId;
+  assert.equal(nurseFor('docS'), 'noveline');
+  assert.equal(nurseFor('docR'), 'roselle');
+});
+
+test('a nurse keeps enough hours for her first choice doctor\'s later sessions', async () => {
+  // Like Zeinab: Dr Sana's only nurse (rank 1) and Dr Hanaa's rank 2. Hanaa works on the
+  // first day, Sana on the next five; Zeinab's 40h goal covers exactly Sana's sessions.
+  const WEEK = makeSchedule({ startDate: '2026-11-02', endDate: '2026-11-07', hoursTargetFullTime: 40 });
+  const SANA = { id: 'docSana', fullName: 'Dr Sana', specialtyIds: [], weeklyPattern: [], active: true };
+  const HANAA = { id: 'docHanaa', fullName: 'Dr Hanaa', specialtyIds: [], weeklyPattern: [], active: true };
+  const sessions: DoctorSession[] = ['03', '04', '05', '06', '07'].map((d) => ({ id: 'sana' + d, doctorId: 'docSana', date: `2026-11-${d}`, startTime: '09:00', endTime: '17:00', specialtyId: 'spec', source: 'PATTERN', cancelled: false } as DoctorSession));
+  sessions.push({ id: 'hanaa', doctorId: 'docHanaa', date: '2026-11-02', startTime: '09:00', endTime: '17:00', specialtyId: 'spec', source: 'PATTERN', cancelled: false } as DoctorSession);
+  const staff = [
+    makeNurse('free', { capabilityIds: [PHL.id, NC.id], seniorityLevelId: SENIOR.id }),
+    makeNurse('free2', { capabilityIds: [PHL.id, NC.id], seniorityLevelId: SENIOR.id }),
+    makeNurse('zeinab', { preferences: [{ kind: 'DOCTOR', refId: 'docSana', rank: 1 }, { kind: 'DOCTOR', refId: 'docHanaa', rank: 2 }] as any }),
+    makeNurse('other', { preferences: [{ kind: 'DOCTOR', refId: 'docHanaa', rank: 4 }] as any }),
+  ];
+  const h7 = { id: 'rule-h7-max-hours', name: 'hours', templateKey: 'MAX_WORKING_HOURS_PER_PERIOD', enabled: true, severity: 'HARD', value: 100 } as any;
+  const result = await SchedulingEngine.generate(WEEK, 'GENERATE_ALL', [], staff, LEVELS, [E, D], ROLES, [], sessions, [], [], [h7], undefined, [], [SANA, HANAA] as any, [], {});
+  assert.equal(result.assignments.find((a) => a.doctorId === 'docHanaa')?.nurseId, 'other');
+  assert.equal(result.assignments.filter((a) => a.doctorId === 'docSana' && a.nurseId === 'zeinab').length, 5, 'Zeinab works every Sana session');
+});

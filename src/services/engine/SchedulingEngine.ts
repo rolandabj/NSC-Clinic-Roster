@@ -878,6 +878,29 @@ export class SchedulingEngine {
     });
 
     /**
+     * Hours each nurse should keep for the later sessions of doctors who rank her first:
+     * she is their nurse, so other work must leave room for them (one session a day at
+     * most, and none on her leave, day off locks or public holidays).
+     */
+    const firstChoiceHoursFrom = new Map<string, number[]>();
+    sortedNurses.forEach((n) => {
+      const firstChoiceDoctors = new Set((n.preferences || []).filter((p) => p.kind === 'DOCTOR' && p.rank === 1).map((p) => p.refId));
+      const perDay = datesList.map((d) => {
+        if (firstChoiceDoctors.size === 0 || clinic.holidays.has(d)) return 0;
+        if (isOnApprovedLeave(n.id, d) || hasDayOffLock(n.id, d)) return 0;
+        const sess = sessions.find((x) => !x.cancelled && x.date === d && firstChoiceDoctors.has(x.doctorId));
+        return sess ? shortestCoverHours(sess.startTime, sess.endTime) : 0;
+      });
+      // suffix sums: hours needed from day k (inclusive) to the end
+      const fromDay = new Array(datesList.length + 1).fill(0);
+      for (let k = datesList.length - 1; k >= 0; k--) fromDay[k] = fromDay[k + 1] + perDay[k];
+      firstChoiceHoursFrom.set(n.id, fromDay);
+    });
+    /** Hours to keep for her first choice doctors after today. */
+    const keepForFirstChoiceAfter = (nurseId: string, dayIdx: number): number =>
+      firstChoiceHoursFrom.get(nurseId)?.[dayIdx + 1] ?? 0;
+
+    /**
      * Spare hours that may go on extra shifts today. The nurses' remaining hours are
      * compared with what all later days still need (plus a 10% safety margin); only
      * the surplus is spare. It is shared over today and the later days by how busy
@@ -1128,7 +1151,8 @@ export class SchedulingEngine {
         const bestInCohort = (
           cohort: { nurses: Nurse[] },
           tier: DutyWindow[],
-          withinGoalOnly = false
+          withinGoalOnly = false,
+          respectOtherDoctors = false
         ): { nurse: Nurse; duty: DutyWindow } | null => {
             let tierBestScore = -Infinity;
             let tierBest: { nurse: Nurse; duty: DutyWindow } | null = null;
@@ -1146,7 +1170,28 @@ export class SchedulingEngine {
                   if (role?.acronym === 'PHL' && !nurse.capabilityIds.includes(role.id)) continue; // H6
                 }
                 const shiftHours = calculateDutyDurationHours(candidateDuty);
-                if (withinGoalOnly && hoursOverGoal(nurse.id, shiftHours) > 0) continue;
+                if (withinGoalOnly) {
+                  // Within her hours, keeping enough for her first choice doctors' later sessions
+                  // (unless this job is one of them).
+                  const isFirstChoiceJob =
+                    slot.kind === 'DOCTOR' && !!nurse.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId && p.rank === 1);
+                  const keep = isFirstChoiceJob ? 0 : keepForFirstChoiceAfter(nurse.id, dayIdx);
+                  if (hoursOverGoal(nurse.id, shiftHours + keep) > 0) continue;
+                }
+                if (respectOtherDoctors && slot.kind === 'DOCTOR') {
+                  // Leave her for another doctor today who ranks her higher and still needs a nurse
+                  const myRank = Math.min(Infinity, ...(nurse.preferences || []).filter((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId).map((p) => p.rank));
+                  const filledToday = new Set(existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId).map((a) => a.doctorId!));
+                  const wantedElsewhere = (nurse.preferences || []).some(
+                    (p) =>
+                      p.kind === 'DOCTOR' &&
+                      p.refId !== slot.targetId &&
+                      p.rank < myRank &&
+                      !filledToday.has(p.refId) &&
+                      daySessions.some((x) => x.doctorId === p.refId)
+                  );
+                  if (wantedElsewhere) continue;
+                }
                 if (!fitsHardRules(nurse, date, candidateDuty, shiftHours)) continue;
 
                 const state = nurseStates.get(nurse.id)!;
@@ -1260,11 +1305,12 @@ export class SchedulingEngine {
           // Nurses who stay within their hours come first, in rank order (a lower ranked nurse
           // who lists this doctor before anyone unlisted); someone goes over her hours only
           // when nobody else can take the doctor.
-          coverage: for (const withinGoalOnly of [true, false]) for (const cohortsToTry of cohortSets) for (const duties of [fullCover, partialCover]) {
+          // A nurse another doctor today ranks higher is left for that doctor at first.
+          coverage: for (const withinGoalOnly of [true, false]) for (const respectOtherDoctors of [true, false]) for (const cohortsToTry of cohortSets) for (const duties of [fullCover, partialCover]) {
             if (duties.length === 0) continue;
             for (const cohort of cohortsToTry) {
               if (cohort.nurses.length === 0) continue;
-              const found = bestInCohort(cohort, duties, withinGoalOnly);
+              const found = bestInCohort(cohort, duties, withinGoalOnly, respectOtherDoctors);
               if (found) {
                 bestNurse = found.nurse;
                 chosenDuty = found.duty;
@@ -1602,7 +1648,7 @@ export class SchedulingEngine {
             if (needsPhlReserve && canBeFreeNurse(nurse, roles) && hours > phlFloatBudget) continue;
             if (isSenior(nurse) && hours > seniorFloatBudget) continue; // keep seniors' hours for later days
             if (hoursBehindPace(nurse.id, dayIdx) <= 0) continue; // ahead of her pace: no extra shift today
-            if (hoursOverGoal(nurse.id, hours) > 0) continue;
+            if (hoursOverGoal(nurse.id, hours + keepForFirstChoiceAfter(nurse.id, dayIdx)) > 0) continue;
             if (!fitsHardRules(nurse, date, cand, hours)) continue;
             selected = cand;
             break;

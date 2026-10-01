@@ -98,6 +98,14 @@ export class ScheduleValidator {
     const clinic = resolveClinicSetup(clinicSetup);
     const openHours = openingHourSlots(clinic);
     const phlRole = bloodCollectionRole(roles);
+    /** "Dr name (Specialty)" for messages about a session. */
+    const doctorLabel = (sess: DoctorSession): string => {
+      const doctor = doctors.find((d) => d.id === sess.doctorId);
+      const specialty =
+        specialties.find((sp) => sp.id === sess.specialtyId) || specialties.find((sp) => doctor?.specialtyIds?.includes(sp.id));
+      const name = doctor?.fullName || 'A doctor';
+      return specialty ? `${name} (${specialty.name})` : name;
+    };
     const seniorRule = resolveRule(rules, 'SENIOR_ON_DUTY', 'rule-h1', ['senior nurse', 'senior on duty']);
     const seniorRuleEnabled = seniorRule ? seniorRule.enabled !== false : true;
     const seniorSeverity: FindingSeverity = seniorRule?.severity === 'SOFT' ? 'WARN' : 'ERROR';
@@ -417,12 +425,11 @@ export class ScheduleValidator {
         if (linkedDuties.length > 0) {
           const missing = uncoveredParts(sess.startTime, sess.endTime, linkedDuties);
           if (missing.length > 0) {
-            const doctorName = doctors.find((d) => d.id === sess.doctorId)?.fullName || 'A doctor';
             findings.push({
               id: `session-partial-${sess.id}`,
               category: 'COVERAGE_GAP',
               severity: 'WARN',
-              message: `${doctorName} on ${formatDate(date)} has no nurse for ${missing.map((m) => `${m.start}–${m.end}`).join(' and ')}.`,
+              message: `${doctorLabel(sess)} on ${formatDate(date)} has no nurse for ${missing.map((m) => `${m.start}–${m.end}`).join(' and ')}.`,
               affectedNurseIds: [],
               cellRefs: [],
               date,
@@ -444,9 +451,9 @@ export class ScheduleValidator {
         if (!pairedNurse) {
           findings.push({
             id: `unassigned-session-${sess.id}`,
-            category: 'DATA_ISSUE',
+            category: 'COVERAGE_GAP',
             severity: 'WARN',
-            message: `Doctor clinic session (${sess.startTime}–${sess.endTime}) on ${formatDate(date)} has no nurse assigned.`,
+            message: `${doctorLabel(sess)} on ${formatDate(date)} (${sess.startTime}–${sess.endTime}) has no nurse assigned.`,
             affectedNurseIds: [],
             cellRefs: [],
             date,
