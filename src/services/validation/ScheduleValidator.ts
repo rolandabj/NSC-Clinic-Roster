@@ -226,7 +226,7 @@ export class ScheduleValidator {
             id: `cov-gap-${date}-${h.start}`,
             category: 'COVERAGE_GAP',
             severity: plusOneSeverity,
-            message: `${dayName} ${formatDate(date)}, ${h.start}: no free nurse on duty (one nurse not with a doctor${phlRole ? ' and qualified for blood collection' : ''} is needed at every opening hour).`,
+            message: `${dayName} ${formatDate(date)}, ${h.start}: no Nurse Clinic nurse on duty (one nurse not with a doctor, with the Nurse Clinic option${phlRole ? ' and qualified for blood collection' : ''}, is needed at every opening hour).`,
             affectedNurseIds: dayAssignments.map((a) => a.nurseId),
             cellRefs: dayAssignments.map((a) => ({ nurseId: a.nurseId, date })),
             date,
@@ -318,7 +318,11 @@ export class ScheduleValidator {
               id: `nc-not-qualified-${asgn.nurseId}-${date}`,
               category: 'RULE_VIOLATION',
               severity: 'ERROR',
-              message: `${ncNurse.fullName} runs Nurse Clinic on ${formatDate(date)} but is not qualified for blood collection.`,
+              message: `${ncNurse.fullName} runs Nurse Clinic on ${formatDate(date)} but ${
+                !ncRole || ncNurse.capabilityIds.includes(ncRole.id) || ncNurse.capabilityIds.includes('role-nurse-clinic')
+                  ? 'is not qualified for blood collection'
+                  : 'does not have the Nurse Clinic option in her profile'
+              }.`,
               affectedNurseIds: [asgn.nurseId],
               cellRefs: [{ nurseId: asgn.nurseId, date }],
               date,

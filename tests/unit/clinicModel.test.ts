@@ -24,7 +24,7 @@ function nurses(count: number, seniors = 3) {
     makeNurse('n' + i, {
       fullName: 'Nurse ' + String.fromCharCode(65 + i),
       seniorityLevelId: i < seniors ? SENIOR.id : JUNIOR.id,
-      capabilityIds: i % 2 === 0 ? [PHL.id] : [],
+      capabilityIds: i % 2 === 0 ? [PHL.id, NC.id] : [],
     })
   );
 }
@@ -129,7 +129,7 @@ const DR_X = { id: 'docX', fullName: 'Dr X', specialtyIds: [], weeklyPattern: []
 const LONG_SESSION = [{ id: 's-x', doctorId: 'docX', date: '2026-11-02', startTime: '09:00', endTime: '21:00', specialtyId: 'spec', source: 'PATTERN', cancelled: false } as DoctorSession];
 const NINE_TO_SEVEN = { id: 'x97', name: '9-7', acronym: '9-7', startTime: '09:00', endTime: '19:00', color: '#000', active: true };
 const prefers = (rank: number) => [{ kind: 'DOCTOR', refId: 'docX', rank }] as any;
-const freeNurse = makeNurse('free', { capabilityIds: [PHL.id], seniorityLevelId: SENIOR.id });
+const freeNurse = makeNurse('free', { capabilityIds: [PHL.id, NC.id], seniorityLevelId: SENIOR.id });
 
 async function oneDay(staff: any[], duties: any[], rules: any[] = [], prior: Assignment[] = []) {
   const result = await SchedulingEngine.generate(
@@ -196,7 +196,7 @@ test('doctors can\'t use up the blood collection nurses: a free nurse is kept ev
   // Only four qualified nurses, and each is a doctor's first choice
   const staff = nurses(12).map((n, i) => ({
     ...n,
-    capabilityIds: i < 4 ? [PHL.id] : [],
+    capabilityIds: i < 4 ? [PHL.id, NC.id] : [],
     preferences: i < 4 ? ([{ kind: 'DOCTOR', refId: DOCTORS[i].id, rank: 1 }] as any) : [],
   }));
   const { report } = await generate(staff);
@@ -219,4 +219,26 @@ test('the checker reports a shift on a day off lock', async () => {
   const lock = [{ id: 'k', nurseId: 'n1', date: '2026-11-03', mode: 'OFF', createdAt: '' } as any];
   const report = ScheduleValidator.validate(SCHEDULE, shift, staff, LEVELS, DUTIES, [], [], lock, ROLES, [], [], [], DOCTORS, [], {});
   assert.equal(errorsOf(report, 'dayoff-lock-').length, 1);
+});
+
+test('only a nurse with the Nurse Clinic option runs Nurse Clinic; others may still float', async () => {
+  // Every other nurse can do blood collection, but only n0 has the Nurse Clinic option.
+  const staff = nurses(10).map((n, i) => ({ ...n, capabilityIds: i === 0 ? [PHL.id, NC.id] : i % 2 === 0 ? [PHL.id] : [] }));
+  const { result } = await generate(staff);
+  const nc = result.assignments.filter((a) => a.clinicalRoleId === NC.id);
+  assert.ok(nc.length > 0);
+  nc.forEach((a) => assert.equal(a.nurseId, 'n0', `${a.date} ${a.nurseId}`));
+  assert.ok(result.assignments.some((a) => a.nurseId !== 'n0' && a.clinicalRoleId === 'role-float'));
+});
+
+test('a doctor\'s ranked nurse who would go over her hours gives way to a lower ranked nurse', async () => {
+  // The first choice nurse has a 6 hour goal, so the only shift (12h) would take her over.
+  const ONE = makeSchedule({ startDate: '2026-11-02', endDate: '2026-11-02', hoursTargetFullTime: 12 });
+  const staff = [
+    freeNurse,
+    makeNurse('first', { contractPercent: 50, preferences: prefers(1) }), // 6h goal: a 12h shift goes over
+    makeNurse('second', { preferences: prefers(2) }),
+  ];
+  const result = await SchedulingEngine.generate(ONE, 'GENERATE_ALL', [], staff, LEVELS, [D], ROLES, [], LONG_SESSION, [], [], [], undefined, [], [DR_X] as any, [], {});
+  assert.equal(result.assignments.find((a) => a.kind === 'DOCTOR')?.nurseId, 'second');
 });

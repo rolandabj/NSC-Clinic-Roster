@@ -986,6 +986,7 @@ export class SchedulingEngine {
               locked: false,
               source: 'GENERATED',
               note: 'Public holiday cover (on call doctor)',
+              ...(canBeFreeNurse(best.nurse, roles) ? {} : { clinicalRoleId: 'role-float' }),
             },
             isWeekend,
             true,
@@ -1124,7 +1125,11 @@ export class SchedulingEngine {
         let matchedPairingTier = 0;
 
         /** The best nurse in one group for one set of duties (null when nobody fits). */
-        const bestInCohort = (cohort: { nurses: Nurse[] }, tier: DutyWindow[]): { nurse: Nurse; duty: DutyWindow } | null => {
+        const bestInCohort = (
+          cohort: { nurses: Nurse[] },
+          tier: DutyWindow[],
+          withinGoalOnly = false
+        ): { nurse: Nurse; duty: DutyWindow } | null => {
             let tierBestScore = -Infinity;
             let tierBest: { nurse: Nurse; duty: DutyWindow } | null = null;
 
@@ -1141,6 +1146,7 @@ export class SchedulingEngine {
                   if (role?.acronym === 'PHL' && !nurse.capabilityIds.includes(role.id)) continue; // H6
                 }
                 const shiftHours = calculateDutyDurationHours(candidateDuty);
+                if (withinGoalOnly && hoursOverGoal(nurse.id, shiftHours) > 0) continue;
                 if (!fitsHardRules(nurse, date, candidateDuty, shiftHours)) continue;
 
                 const state = nurseStates.get(nurse.id)!;
@@ -1251,11 +1257,14 @@ export class SchedulingEngine {
           const overlapping = activeDuties.filter((d) => overlaps(d.startTime, d.endTime, slot.startTime, slot.endTime));
           const fullCover = overlapping.filter((d) => d.startTime <= slot.startTime && d.endTime >= slot.endTime);
           const partialCover = overlapping.filter((d) => !fullCover.includes(d));
-          coverage: for (const cohortsToTry of cohortSets) for (const duties of [fullCover, partialCover]) {
+          // Nurses who stay within their hours come first, in rank order (a lower ranked nurse
+          // who lists this doctor before anyone unlisted); someone goes over her hours only
+          // when nobody else can take the doctor.
+          coverage: for (const withinGoalOnly of [true, false]) for (const cohortsToTry of cohortSets) for (const duties of [fullCover, partialCover]) {
             if (duties.length === 0) continue;
             for (const cohort of cohortsToTry) {
               if (cohort.nurses.length === 0) continue;
-              const found = bestInCohort(cohort, duties);
+              const found = bestInCohort(cohort, duties, withinGoalOnly);
               if (found) {
                 bestNurse = found.nurse;
                 chosenDuty = found.duty;

@@ -86,9 +86,20 @@ export function bloodCollectionRole(roles: ClinicalRole[]): ClinicalRole | undef
   return roles.find((r) => r.acronym === 'PHL');
 }
 
-/** Can this nurse be the free nurse? She must be qualified for blood collection when that role exists. */
+/** The Nurse Clinic role, if the clinic has one set up. */
+export function nurseClinicRoleOf(roles: ClinicalRole[]): ClinicalRole | undefined {
+  return roles.find((r) => r.id === 'role-nurse-clinic' || r.acronym === 'NC' || r.name.toLowerCase().includes('nurse clinic'));
+}
+
+/**
+ * Can this nurse be the free nurse (Nurse Clinic and blood collection)? She needs the
+ * Nurse Clinic option ticked in her profile, and the blood collection skill, whenever
+ * the clinic has those roles set up. A nurse without them can still float.
+ */
 export function canBeFreeNurse(nurse: Nurse | undefined, roles: ClinicalRole[]): boolean {
   if (!nurse) return false;
+  const nc = nurseClinicRoleOf(roles);
+  if (nc && !nurse.capabilityIds.includes(nc.id) && !nurse.capabilityIds.includes('role-nurse-clinic')) return false;
   const phl = bloodCollectionRole(roles);
   return !phl || nurse.capabilityIds.includes(phl.id);
 }
