@@ -6,7 +6,7 @@
  * Filterable operational ledger with before/after state diff inspector and CSV export.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   ShieldCheck,
   Search,
@@ -24,6 +24,8 @@ import {
 import { ClinicContextState } from '../../types/navigation';
 import { AuditEvent, AuditAction } from '../../types';
 import { getRepository } from '../../services/repository';
+import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
+import { useDialogA11y } from '../common/useDialogA11y';
 
 interface AuditTrailViewProps {
   context: ClinicContextState;
@@ -34,6 +36,8 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ context }) => {
   const [filterAction, setFilterAction] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
+  const inspectorTitleId = useId();
+  const inspectorRef = useDialogA11y<HTMLDivElement>(!!selectedEvent, () => setSelectedEvent(null));
 
   const repo = getRepository();
 
@@ -65,23 +69,16 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ context }) => {
 
   const handleExportCsv = () => {
     const headers = ['Timestamp', 'Actor', 'Action', 'Entity', 'Entity ID', 'Note'];
-    const rows = filteredEvents.map((ev) => [
+    const rows: CsvValue[][] = filteredEvents.map((ev) => [
       ev.timestamp,
-      `"${ev.actor}"`,
+      ev.actor,
       ev.action,
       ev.entity,
       ev.entityId,
-      `"${ev.note || ''}"`,
+      ev.note || '',
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.href = encodedUri;
-    link.download = `audit_trail_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsv(`audit_trail_${new Date().toISOString().split('T')[0]}.csv`, toCsv([headers, ...rows]));
   };
 
   const getActionBadgeColor = (action: AuditAction) => {
@@ -122,7 +119,7 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ context }) => {
           onClick={handleExportCsv}
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 rounded text-xs font-semibold text-slate-700 cursor-pointer shadow-2xs"
         >
-          <Download className="w-3.5 h-3.5 text-slate-500" />
+          <Download className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
           <span>Export Audit CSV</span>
         </button>
       </div>
@@ -133,7 +130,7 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ context }) => {
           <div className="flex items-center gap-1.5">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
             <span className="font-semibold text-slate-700">Action:</span>
-            <select
+            <select aria-label="Filter by action"
               value={filterAction}
               onChange={(e) => setFilterAction(e.target.value)}
               className="px-2.5 py-1 border border-slate-300 rounded bg-white font-medium"
@@ -152,7 +149,7 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ context }) => {
 
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
-            <input
+            <input aria-label="Search audit events"
               type="text"
               placeholder="Search actor, entity or note..."
               value={searchQuery}
@@ -210,7 +207,7 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ context }) => {
                       onClick={() => setSelectedEvent(ev)}
                       className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold cursor-pointer"
                     >
-                      <Eye className="w-3 h-3 text-slate-500" />
+                      <Eye className="w-3 h-3 text-slate-500" aria-hidden="true" />
                       <span>Inspect Diff</span>
                     </button>
                   )}
@@ -232,10 +229,16 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ context }) => {
       {/* State Diff Modal */}
       {selectedEvent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden text-xs">
+          <div
+            ref={inspectorRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={inspectorTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden text-xs"
+          >
             <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">Audit Snapshot Inspector</h3>
+                <h3 id={inspectorTitleId} className="font-bold text-slate-900 text-sm">Audit Snapshot Inspector</h3>
                 <p className="text-[11px] text-slate-500 font-mono mt-0.5">
                   Action: {selectedEvent.action} · Actor: {selectedEvent.actor}
                 </p>
@@ -244,8 +247,10 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ context }) => {
               <button
                 onClick={() => setSelectedEvent(null)}
                 className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 

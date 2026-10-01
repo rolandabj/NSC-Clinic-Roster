@@ -65,13 +65,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* App Branding & Collapse Toggle */}
       <div className={`h-14 ${isCollapsed ? 'px-2' : 'px-3'} flex items-center justify-between border-b border-slate-800`}>
         <div className="flex items-center gap-2.5 overflow-hidden">
-          <div
+          <button
+            type="button"
             className="w-7 h-7 rounded bg-indigo-600 flex items-center justify-center text-white shrink-0 cursor-pointer"
             onClick={onToggleCollapse}
             title={isCollapsed ? 'Expand sidebar' : 'ClinicRoster'}
+            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
-            <Activity className="w-4 h-4" />
-          </div>
+            <Activity className="w-4 h-4" aria-hidden="true" />
+          </button>
           {!isCollapsed && (
             <div className="flex flex-col min-w-0">
               <span className="font-semibold text-white text-sm tracking-tight leading-tight truncate">
@@ -92,16 +94,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             {isCollapsed ? (
-              <PanelLeftOpen className="w-4 h-4" />
+              <PanelLeftOpen className="w-4 h-4" aria-hidden="true" />
             ) : (
-              <PanelLeftClose className="w-4 h-4" />
+              <PanelLeftClose className="w-4 h-4" aria-hidden="true" />
             )}
           </button>
         )}
       </div>
 
       {/* Nav List */}
-      <nav className={`flex-1 ${isCollapsed ? 'px-1.5' : 'px-2'} py-3 space-y-1 overflow-y-auto`}>
+      <nav aria-label="Main" className={`flex-1 ${isCollapsed ? 'px-1.5' : 'px-2'} py-3 space-y-1 overflow-y-auto`}>
         {visibleItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentRoute === item.id;
@@ -109,8 +111,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <button
               key={item.id}
+              type="button"
               onClick={() => onNavigate(item.id)}
               title={isCollapsed ? `${label}${item.badge ? ` (${item.badge})` : ''}` : undefined}
+              aria-label={isCollapsed ? label : undefined}
+              aria-current={isActive ? 'page' : undefined}
               className={`w-full flex items-center ${
                 isCollapsed ? 'justify-center p-2' : 'justify-between px-3 py-2'
               } rounded text-xs font-medium transition-colors cursor-pointer text-left ${
@@ -120,7 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                 {!isCollapsed && <span className="truncate">{label}</span>}
               </div>
               {!isCollapsed && item.badge && (

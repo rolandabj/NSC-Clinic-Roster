@@ -7,7 +7,7 @@
  * Accessible by rolandabj@gmail.com and designated Clinical Managers / Charge Nurses.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   CheckCircle2,
   XCircle,
@@ -27,6 +27,8 @@ import {
 import { UserProfile } from '../../services/auth/authService';
 import { listPendingApprovals, decideRequest } from '../../services/requests/staffRequestService';
 import { LeaveEntry, AvailabilityRequest, Nurse, LeaveType } from '../../types';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify } from '../common/dialogs';
 
 interface ApprovalsQueuePanelProps {
   currentUser?: UserProfile;
@@ -52,6 +54,8 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
     title: string;
   } | null>(null);
   const [decisionNotes, setDecisionNotes] = useState('');
+  const decisionTitleId = useId();
+  const decisionDialogRef = useDialogA11y<HTMLDivElement>(!!activeDecision, () => setActiveDecision(null));
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -97,7 +101,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
       await fetchPendingApprovals();
       if (onRequestDecided) onRequestDecided();
     } catch (err: any) {
-      alert(`Decision error: ${err.message}`);
+      notify(`Decision error: ${err.message}`, 'error');
     } finally {
       setIsBusy(false);
     }
@@ -139,7 +143,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
           disabled={isLoading || isBusy}
           className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium border border-slate-700 flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
           <span>Refresh Queue</span>
         </button>
       </div>
@@ -231,7 +235,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
                             disabled={isBusy}
                             className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
                           >
-                            <Check className="w-3.5 h-3.5" />
+                            <Check className="w-3.5 h-3.5" aria-hidden="true" />
                             <span>Approve</span>
                           </button>
                           <button
@@ -246,7 +250,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
                             disabled={isBusy}
                             className="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-3.5 h-3.5" aria-hidden="true" />
                             <span>Decline</span>
                           </button>
                         </td>
@@ -325,7 +329,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
                             disabled={isBusy}
                             className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
                           >
-                            <Check className="w-3.5 h-3.5" />
+                            <Check className="w-3.5 h-3.5" aria-hidden="true" />
                             <span>Approve</span>
                           </button>
                           <button
@@ -340,7 +344,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
                             disabled={isBusy}
                             className="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-3.5 h-3.5" aria-hidden="true" />
                             <span>Decline</span>
                           </button>
                         </td>
@@ -357,23 +361,31 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
       {/* Decision Modal */}
       {activeDecision && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden text-xs">
+          <div
+            ref={decisionDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={decisionTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden text-xs"
+          >
             <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">
                 {activeDecision.decision === 'APPROVED' ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" aria-hidden="true" />
                 ) : (
-                  <XCircle className="w-4 h-4 text-rose-600" />
+                  <XCircle className="w-4 h-4 text-rose-600" aria-hidden="true" />
                 )}
-                <h3 className="font-bold text-slate-900 text-sm">
+                <h3 id={decisionTitleId} className="font-bold text-slate-900 text-sm">
                   Confirm Decision: {activeDecision.decision}
                 </h3>
               </div>
               <button
                 onClick={() => setActiveDecision(null)}
                 className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -384,7 +396,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
                 <label className="block font-medium text-slate-700 mb-1">
                   Manager Review Note (Optional)
                 </label>
-                <textarea
+                <textarea aria-label="Manager Review Note (Optional)"
                   rows={3}
                   value={decisionNotes}
                   onChange={(e) => setDecisionNotes(e.target.value)}
@@ -411,7 +423,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
                       : 'bg-rose-600 hover:bg-rose-700'
                   }`}
                 >
-                  <Check className="w-3.5 h-3.5" />
+                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Confirm {activeDecision.decision}</span>
                 </button>
               </div>

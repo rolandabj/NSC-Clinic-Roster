@@ -120,7 +120,7 @@ export const CoverageSheet: React.FC<CoverageSheetProps> = ({
 
         <div className="flex items-center gap-1.5">
           <span className="text-slate-500 font-medium">Inspect Date Timeline:</span>
-          <select
+          <select aria-label="Inspect Date Timeline"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
             className="px-2.5 py-1 border border-slate-300 rounded font-mono font-bold text-xs bg-white text-slate-800 cursor-pointer"

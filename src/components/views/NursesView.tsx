@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   Users,
   Plus,
@@ -21,6 +21,8 @@ import {
   X,
   Upload,
   Stethoscope,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
@@ -35,6 +37,8 @@ import {
   LeaveType,
 } from '../../types';
 import { BulkImportModal } from '../modals/BulkImportModal';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify, confirmDialog } from '../common/dialogs';
 
 interface NursesViewProps {
   context: ClinicContextState;
@@ -106,6 +110,10 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
   // Drag and drop state for preferences priority
   const [draggedPrefIdx, setDraggedPrefIdx] = useState<number | null>(null);
   const [dragOverPrefIdx, setDragOverPrefIdx] = useState<number | null>(null);
+
+  // Nurse profile dialog keyboard and screen reader support
+  const nurseTitleId = useId();
+  const nurseDialogRef = useDialogA11y<HTMLDivElement>(isModalOpen, () => setIsModalOpen(false));
 
   const repo = getRepository();
 
@@ -312,12 +320,18 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
       setIsModalOpen(false);
       loadAllData();
     } catch (err: any) {
-      alert(`Error saving nurse: ${err.message}`);
+      notify(`Error saving nurse: ${err.message}`, 'error');
     }
   };
 
   const handleDeleteNurse = async (id: string, name: string) => {
-    if (confirm(`Remove nurse "${name}" from roster database?`)) {
+    const ok = await confirmDialog({
+      title: 'Remove nurse?',
+      message: `Remove nurse "${name}" from roster database?`,
+      confirmLabel: 'Remove nurse',
+      danger: true,
+    });
+    if (ok) {
       await repo.remove('nurses', id);
       triggerNotification(`Nurse ${name} removed.`);
       loadAllData();
@@ -328,7 +342,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
   const handleAddPreference = (kind: 'DOCTOR' | 'SPECIALTY', refId: string) => {
     if (!refId) return;
     if (formData.preferences.some((p) => p.kind === kind && p.refId === refId)) {
-      alert('This doctor or specialty preference has already been added.');
+      notify('This doctor or specialty preference has already been added.', 'warning');
       return;
     }
     const newPref: NursePreference = {
@@ -413,7 +427,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
             title="Bulk import nurses from CSV"
           >
-            <Upload className="w-3.5 h-3.5 text-slate-500" />
+            <Upload className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
             <span>Bulk CSV Import</span>
           </button>
 
@@ -421,7 +435,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
             onClick={handleOpenAdd}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition-colors shadow-xs cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Add Nurse</span>
           </button>
         </div>
@@ -432,7 +446,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
         <div className="flex flex-1 items-center gap-2 min-w-[240px] max-w-md">
           <div className="relative w-full">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-            <input
+            <input aria-label="Search nurses"
               type="text"
               placeholder="Search by nurse name, employee code or Gmail..."
               value={searchQuery}
@@ -445,7 +459,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
         <div className="flex items-center gap-2.5">
           <div className="flex items-center gap-1">
             <span className="text-slate-500">Seniority:</span>
-            <select
+            <select aria-label="Seniority"
               value={selectedSeniorityFilter}
               onChange={(e) => setSelectedSeniorityFilter(e.target.value)}
               className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
@@ -461,7 +475,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
 
           <div className="flex items-center gap-1">
             <span className="text-slate-500">Status:</span>
-            <select
+            <select aria-label="Status"
               value={activeStatusFilter}
               onChange={(e) => setActiveStatusFilter(e.target.value as any)}
               className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
@@ -644,15 +658,17 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                         onClick={() => handleOpenEdit(nurse)}
                         className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
                         title="Edit profile"
+                        aria-label={`Edit ${nurse.fullName}`}
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
+                        <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>
                       <button
                         onClick={() => handleDeleteNurse(nurse.id, nurse.fullName)}
                         className="p-1 hover:bg-red-50 rounded text-red-600 cursor-pointer"
                         title="Delete nurse"
+                        aria-label={`Delete ${nurse.fullName}`}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>
                     </div>
                   </td>
@@ -679,7 +695,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                         onClick={handleOpenAdd}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold cursor-pointer shadow-xs"
                       >
-                        <Plus className="w-3.5 h-3.5" />
+                        <Plus className="w-3.5 h-3.5" aria-hidden="true" />
                         <span>Add First Nurse</span>
                       </button>
                     )}
@@ -694,20 +710,28 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
       {/* NURSE PROFILE MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs">
+          <div
+            ref={nurseDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={nurseTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs"
+          >
             {/* Modal Header */}
             <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-indigo-600" />
-                <h2 className="text-sm font-bold text-slate-800">
+                <Users className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                <h2 id={nurseTitleId} className="text-sm font-bold text-slate-800">
                   {editingNurse ? `Edit Profile: ${editingNurse.fullName}` : 'Add New Nurse'}
                 </h2>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -736,7 +760,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                     <label className="block font-medium text-slate-700 mb-1">
                       Full Name <span className="text-red-500">*</span>
                     </label>
-                    <input
+                    <input aria-label="Full Name"
                       type="text"
                       required
                       value={formData.fullName}
@@ -759,7 +783,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                     <label className="block font-medium text-slate-700 mb-1">
                       Gmail Address <span className="text-red-500">*</span>
                     </label>
-                    <input
+                    <input aria-label="Gmail Address"
                       type="email"
                       required
                       value={formData.gmail}
@@ -786,7 +810,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                     <label className="block font-medium text-slate-700 mb-1">
                       Employee Code
                     </label>
-                    <input
+                    <input aria-label="Employee Code"
                       type="text"
                       value={formData.employeeCode}
                       onChange={(e) => setFormData({ ...formData, employeeCode: e.target.value })}
@@ -799,7 +823,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                     <label className="block font-medium text-slate-700 mb-1">
                       Date of Birth
                     </label>
-                    <input
+                    <input aria-label="Date of Birth"
                       type="date"
                       value={formData.dateOfBirth}
                       onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
@@ -823,7 +847,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                     <label className="block font-medium text-slate-700 mb-1">
                       Seniority Level (Designates H1 Senior Rule)
                     </label>
-                    <select
+                    <select aria-label="Seniority Level (Designates H1 Senior Rule)"
                       value={formData.seniorityLevelId}
                       onChange={(e) =>
                         setFormData({ ...formData, seniorityLevelId: e.target.value })
@@ -843,7 +867,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                       Contract Percentage (%)
                     </label>
                     <div className="flex items-center gap-2">
-                      <input
+                      <input aria-label="Contract Percentage (%)"
                         type="number"
                         min={10}
                         max={100}
@@ -1107,6 +1131,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                           <div
                             className="p-1 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing"
                             title="Drag to change priority rank"
+                            aria-hidden="true"
                           >
                             <GripVertical className="w-4 h-4" />
                           </div>
@@ -1120,13 +1145,35 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                         </div>
 
                         <div className="flex items-center gap-1">
+                          {/* Keyboard and click alternative to dragging */}
+                          <button
+                            type="button"
+                            onClick={() => handleReorderPreference(idx, idx - 1)}
+                            disabled={idx === 0}
+                            className="p-1 hover:bg-slate-100 rounded text-slate-500 cursor-pointer disabled:opacity-30 disabled:cursor-default"
+                            title="Move up"
+                            aria-label={`Move ${title} up`}
+                          >
+                            <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleReorderPreference(idx, idx + 1)}
+                            disabled={idx === formData.preferences.length - 1}
+                            className="p-1 hover:bg-slate-100 rounded text-slate-500 cursor-pointer disabled:opacity-30 disabled:cursor-default"
+                            title="Move down"
+                            aria-label={`Move ${title} down`}
+                          >
+                            <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleRemovePreference(idx)}
                             className="p-1 hover:bg-red-50 rounded text-red-500 cursor-pointer ml-1"
                             title="Remove preference"
+                            aria-label={`Remove ${title}`}
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <X className="w-3.5 h-3.5" aria-hidden="true" />
                           </button>
                         </div>
                       </div>
@@ -1168,7 +1215,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                           {lt.name} ({lt.acronym})
                         </label>
                         <div className="relative mt-1">
-                          <input
+                          <input aria-label={`${lt.name} (${lt.acronym})`}
                             type="number"
                             min="0"
                             step="1"
@@ -1212,7 +1259,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
 
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">Notes</label>
-                  <textarea
+                  <textarea aria-label="Notes"
                     rows={2}
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -1235,7 +1282,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                   type="submit"
                   className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors shadow-xs cursor-pointer"
                 >
-                  <Save className="w-3.5 h-3.5" />
+                  <Save className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Save Nurse Profile</span>
                 </button>
               </div>

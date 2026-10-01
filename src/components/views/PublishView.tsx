@@ -6,7 +6,7 @@
  * Status Grid, Acknowledgment Tracking, Email Audit Log with HTML Viewer & CSV Export.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   Send,
   MailCheck,
@@ -25,7 +25,6 @@ import {
   Info,
   Check,
   Eye,
-  RotateCcw,
   Bell,
   Search,
   Filter,
@@ -50,7 +49,6 @@ import {
   LeaveEntry,
   LeaveType,
   PublishLog,
-  EmailRecipientLog,
   Acknowledgment,
   ShareLink,
 } from '../../types';
@@ -60,6 +58,10 @@ import { ensurePublicRosters } from '../../services/publish/publicRosterService'
 import { canEditClinicData } from '../../services/auth/access';
 import { authService } from '../../services/auth/authService';
 import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
+import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify, confirmDialog } from '../common/dialogs';
+import { EmailHtmlPreview } from '../common/EmailHtmlPreview';
 
 interface PublishViewProps {
   context: ClinicContextState;
@@ -98,6 +100,8 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
     recipientEmail: string;
     html: string;
   } | null>(null);
+  const emailViewerTitleId = useId();
+  const emailViewerRef = useDialogA11y<HTMLDivElement>(!!viewingEmailHtml, () => setViewingEmailHtml(null));
 
   // Filters for Email Log
   const [logFilterKind, setLogFilterKind] = useState<string>('ALL');
@@ -277,7 +281,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
           : `Reminder sent to ${nurse.fullName} (${nurse.gmail}).`
       );
     } catch (err: any) {
-      alert(`Reminder failed: ${err.message}`);
+      notify(`Reminder failed: ${err.message}`, 'error');
     }
     loadData();
   };
@@ -292,7 +296,12 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       triggerToast('Everyone has acknowledged the latest roster.');
       return;
     }
-    if (!confirm(`Send a reminder to ${pending.length} staff member(s) who have not confirmed receipt?`)) return;
+    const ok = await confirmDialog({
+      title: 'Send reminders?',
+      message: `Send a reminder to ${pending.length} staff member(s) who have not confirmed receipt?`,
+      confirmLabel: 'Send reminders',
+    });
+    if (!ok) return;
 
     setIsSendingReminders(true);
     const failures: string[] = [];
@@ -306,7 +315,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
     setIsSendingReminders(false);
     loadData();
     if (failures.length > 0) {
-      alert(`${pending.length - failures.length} reminder(s) sent, ${failures.length} failed:\n\n${failures.join('\n')}`);
+      notify(`${pending.length - failures.length} reminder(s) sent, ${failures.length} failed:\n\n${failures.join('\n')}`, 'warning');
     } else {
       triggerToast(`Reminders sent to ${pending.length} staff member(s).`);
     }
@@ -326,7 +335,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
   // Export Recipients CSV
   const handleExportRecipientsCsv = () => {
     if (!activeSchedule) return;
-    const rows = [
+    const rows: CsvValue[][] = [
       ['Nurse Name', 'Employee Code', 'Gmail', 'Delivery Status', 'Dispatch Timestamp', 'Acknowledged Timestamp'],
     ];
 
@@ -342,19 +351,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       ]);
     });
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + rows.map((e) => e.join(',')).join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `${activeSchedule.name}_acknowledgments.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Resend specific recipient email
-  const handleResendRecipient = async (rec: EmailRecipientLog) => {
-    triggerToast(`Email re-sent to ${rec.nurseName} (${rec.email}).`);
+    downloadCsv(`${activeSchedule.name}_acknowledgments.csv`, toCsv(rows));
   };
 
   // Flat transmissions list for Email Log
@@ -420,7 +417,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
             title="Send change alerts highlighting individual shift modifications"
           >
-            <History className="w-3.5 h-3.5 text-indigo-600" />
+            <History className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
             <span>Send Change Alerts</span>
           </button>
 
@@ -431,7 +428,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
             }}
             className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold transition-colors shadow-xs cursor-pointer"
           >
-            <Send className="w-3.5 h-3.5" />
+            <Send className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Publish Official Roster</span>
           </button>
         </div>
@@ -486,7 +483,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <MailCheck className="w-4 h-4" />
+          <MailCheck className="w-4 h-4" aria-hidden="true" />
           <span>Staff Acknowledgment Grid ({acknowledgedCount}/{totalNurses})</span>
         </button>
 
@@ -498,7 +495,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <Mail className="w-4 h-4" />
+          <Mail className="w-4 h-4" aria-hidden="true" />
           <span>Email Audit Ledger ({allTransmissions.length})</span>
         </button>
 
@@ -510,7 +507,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
-          <ExternalLink className="w-4 h-4" />
+          <ExternalLink className="w-4 h-4" aria-hidden="true" />
           <span>Personal Read-Only Links</span>
         </button>
       </div>
@@ -532,7 +529,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded text-xs font-semibold cursor-pointer disabled:opacity-50"
               title="Email a reminder to every nurse who has not yet confirmed receipt"
             >
-              <Bell className="w-3.5 h-3.5" />
+              <Bell className="w-3.5 h-3.5" aria-hidden="true" />
               <span>{isSendingReminders ? 'Sending reminders...' : 'Send reminders to all pending'}</span>
             </button>
 
@@ -540,7 +537,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
               onClick={handleExportRecipientsCsv}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 rounded text-slate-700 text-xs font-semibold cursor-pointer shadow-2xs"
             >
-              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <Download className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
               <span>Export Receipts CSV</span>
             </button>
             </div>
@@ -613,7 +610,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
                                 className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-[11px] font-semibold cursor-pointer"
                                 title="Send reminder notification to this staff member"
                               >
-                                <Bell className="w-3 h-3 text-amber-600" />
+                                <Bell className="w-3 h-3 text-amber-600" aria-hidden="true" />
                                 <span>Remind</span>
                               </button>
 
@@ -645,7 +642,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
               <div className="flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5 text-slate-400" />
                 <span className="font-semibold text-slate-700">Kind:</span>
-                <select
+                <select aria-label="Kind"
                   value={logFilterKind}
                   onChange={(e) => setLogFilterKind(e.target.value)}
                   className="px-2 py-1 border border-slate-300 rounded bg-white font-medium"
@@ -658,7 +655,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
 
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
-                <input
+                <input aria-label="Search recipient or email"
                   type="text"
                   placeholder="Search recipient or email..."
                   value={logSearchQuery}
@@ -733,16 +730,8 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
                           className="inline-flex items-center gap-1 px-2 py-1 border border-slate-300 hover:bg-slate-50 text-indigo-700 rounded text-[11px] font-semibold cursor-pointer"
                           title="View exact HTML payload sent to staff"
                         >
-                          <Eye className="w-3 h-3" />
+                          <Eye className="w-3 h-3" aria-hidden="true" />
                           <span>View HTML</span>
-                        </button>
-
-                        <button
-                          onClick={() => handleResendRecipient(log)}
-                          className="p-1 border border-slate-300 hover:bg-slate-50 text-slate-600 rounded cursor-pointer"
-                          title="Resend this transmission"
-                        >
-                          <RotateCcw className="w-3 h-3" />
                         </button>
                       </div>
                     </td>
@@ -775,7 +764,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
-            <select
+            <select aria-label="Nurse for personal link"
               value={selectedNurseForLink?.id || ''}
               onChange={(e) => {
                 const n = nurses.find((x) => x.id === e.target.value);
@@ -811,7 +800,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
                 }}
                 className="inline-flex items-center gap-1 px-3 py-1 bg-white border border-slate-300 rounded text-slate-700 hover:bg-slate-50 shrink-0 cursor-pointer text-xs font-semibold"
               >
-                <Copy className="w-3 h-3 text-slate-500" />
+                <Copy className="w-3 h-3 text-slate-500" aria-hidden="true" />
                 <span>Copy</span>
               </button>
             </div>
@@ -849,10 +838,16 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       {/* --- HTML EMAIL VIEWER MODAL --- */}
       {viewingEmailHtml && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs">
+          <div
+            ref={emailViewerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={emailViewerTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs"
+          >
             <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">Dispatched HTML Email Snapshot</h3>
+                <h3 id={emailViewerTitleId} className="font-bold text-slate-900 text-sm">Dispatched HTML Email Snapshot</h3>
                 <p className="text-[11px] text-slate-500 font-mono mt-0.5">
                   To: {viewingEmailHtml.recipientName} ({viewingEmailHtml.recipientEmail})
                 </p>
@@ -861,16 +856,15 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
               <button
                 onClick={() => setViewingEmailHtml(null)}
                 className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
             <div className="p-4 bg-slate-100 flex-1 overflow-y-auto">
-              <div
-                className="bg-white border border-slate-200 rounded shadow-xs max-w-xl mx-auto overflow-hidden pointer-events-none select-text"
-                dangerouslySetInnerHTML={{ __html: viewingEmailHtml.html }}
-              />
+              <EmailHtmlPreview html={viewingEmailHtml.html} />
             </div>
 
             <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end">

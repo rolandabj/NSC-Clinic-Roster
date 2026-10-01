@@ -94,7 +94,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               onClick={onOpenAcceptance}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
               <span>Acceptance Verification</span>
             </button>
           )}
@@ -103,14 +103,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold transition-colors shadow-xs cursor-pointer"
             title="Create a new schedule with custom date range"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
             <span>New Schedule</span>
           </button>
           <button
             onClick={() => onNavigate('schedules')}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-medium transition-colors cursor-pointer"
           >
-            <CalendarRange className="w-3.5 h-3.5 text-indigo-600" />
+            <CalendarRange className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
             <span>Open Schedule Workbook</span>
           </button>
         </div>
@@ -137,14 +137,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               onClick={() => onNavigate('nurses')}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold transition-colors cursor-pointer shadow-xs"
             >
-              <Users className="w-3.5 h-3.5 text-indigo-600" />
+              <Users className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
               <span>Add Nurses</span>
             </button>
             <button
               onClick={onOpenCreateSchedule || (() => onNavigate('schedules'))}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold transition-colors shadow-xs cursor-pointer"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Create Schedule</span>
             </button>
           </div>
@@ -182,7 +182,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 rounded text-xs font-semibold transition-colors cursor-pointer"
               title="Create a new schedule period"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Create New Period</span>
             </button>
             <button
@@ -190,7 +190,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-700 rounded text-xs font-medium transition-colors cursor-pointer"
             >
               <span>View Roster Grid</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -243,15 +243,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Navigation Quick Access Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div
+        <button
+          type="button"
           onClick={() => onNavigate('availability')}
-          className="bg-white border border-slate-200 hover:border-indigo-300 rounded p-4 transition-colors cursor-pointer group shadow-2xs"
+          className="w-full text-left bg-white border border-slate-200 hover:border-indigo-300 rounded p-4 transition-colors cursor-pointer group shadow-2xs"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="p-2 rounded bg-indigo-50 text-indigo-700">
-              <CalendarRange className="w-4 h-4" />
+              <CalendarRange className="w-4 h-4" aria-hidden="true" />
             </div>
-            <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+            <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" aria-hidden="true" />
           </div>
           <h3 className="text-sm font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
             Availability &amp; Locks
@@ -259,17 +260,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xs text-slate-500 mt-1">
             Manage leave entries (Annual, Sick, Birthday, Public Holidays) and pinned non-changeable locks.
           </p>
-        </div>
+        </button>
 
-        <div
+        <button
+          type="button"
           onClick={() => onNavigate('nurses')}
-          className="bg-white border border-slate-200 hover:border-indigo-300 rounded p-4 transition-colors cursor-pointer group shadow-2xs"
+          className="w-full text-left bg-white border border-slate-200 hover:border-indigo-300 rounded p-4 transition-colors cursor-pointer group shadow-2xs"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="p-2 rounded bg-indigo-50 text-indigo-700">
-              <Users className="w-4 h-4" />
+              <Users className="w-4 h-4" aria-hidden="true" />
             </div>
-            <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+            <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" aria-hidden="true" />
           </div>
           <h3 className="text-sm font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
             Nurse Staff &amp; Preferences
@@ -277,17 +279,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xs text-slate-500 mt-1">
             Configure senior status, contract percentages, phlebotomy capabilities, and doctor pairing rankings.
           </p>
-        </div>
+        </button>
 
-        <div
+        <button
+          type="button"
           onClick={() => onNavigate('doctors')}
-          className="bg-white border border-slate-200 hover:border-indigo-300 rounded p-4 transition-colors cursor-pointer group shadow-2xs"
+          className="w-full text-left bg-white border border-slate-200 hover:border-indigo-300 rounded p-4 transition-colors cursor-pointer group shadow-2xs"
         >
           <div className="flex items-center justify-between mb-2">
             <div className="p-2 rounded bg-indigo-50 text-indigo-700">
-              <Stethoscope className="w-4 h-4" />
+              <Stethoscope className="w-4 h-4" aria-hidden="true" />
             </div>
-            <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" />
+            <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-600 transition-colors" aria-hidden="true" />
           </div>
           <h3 className="text-sm font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
             Doctors' Clinic Schedule
@@ -295,7 +298,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <p className="text-xs text-slate-500 mt-1">
             Weekly session patterns and ad-hoc doctor room bookings for shift nurse demand matching.
           </p>
-        </div>
+        </button>
       </div>
 
       {/* Rules & Architecture Principles */}

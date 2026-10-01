@@ -31,7 +31,7 @@ export const LocalModeBanner: React.FC<LocalModeBannerProps> = ({ onNavigateToSe
           className="inline-flex items-center gap-1 font-medium text-indigo-400 hover:text-indigo-300 transition-colors text-xs cursor-pointer"
         >
           <span>Open Integrations</span>
-          <ArrowRight className="w-3.5 h-3.5" />
+          <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
         <button
           onClick={handleDismiss}
@@ -39,7 +39,7 @@ export const LocalModeBanner: React.FC<LocalModeBannerProps> = ({ onNavigateToSe
           className="text-slate-400 hover:text-slate-200 transition-colors p-1 rounded hover:bg-slate-800 cursor-pointer"
           aria-label="Dismiss banner"
         >
-          <X className="w-3.5 h-3.5" />
+          <X className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
       </div>
     </div>

@@ -46,7 +46,7 @@ export const WarningsSheet: React.FC<WarningsSheetProps> = ({
           {/* Filters */}
           <div className="flex items-center gap-1.5">
             <span className="text-slate-500 text-[11px]">Category:</span>
-            <select
+            <select aria-label="Category"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value as any)}
               className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
@@ -62,7 +62,7 @@ export const WarningsSheet: React.FC<WarningsSheetProps> = ({
 
           <div className="flex items-center gap-1.5">
             <span className="text-slate-500 text-[11px]">Severity:</span>
-            <select
+            <select aria-label="Severity"
               value={severityFilter}
               onChange={(e) => setSeverityFilter(e.target.value as any)}
               className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
@@ -155,7 +155,7 @@ export const WarningsSheet: React.FC<WarningsSheetProps> = ({
                   className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold rounded shrink-0 cursor-pointer text-xs transition-colors"
                 >
                   <span>Go to cell</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
               )}
             </div>

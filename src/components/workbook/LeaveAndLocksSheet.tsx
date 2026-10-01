@@ -60,7 +60,7 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <select
+          <select aria-label="Filter by type"
             value={filterType}
             onChange={(e) => setFilterType(e.target.value as any)}
             className="px-2.5 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"

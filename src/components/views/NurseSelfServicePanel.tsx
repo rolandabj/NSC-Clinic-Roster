@@ -7,7 +7,7 @@
  * and monitor live approval statuses from clinical managers.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   Calendar,
   CalendarCheck,
@@ -36,6 +36,8 @@ import {
   cancelAvailabilityRequest,
 } from '../../services/requests/staffRequestService';
 import { LeaveEntry, AvailabilityRequest, LeaveType, Nurse, DutyWindow } from '../../types';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify, confirmDialog } from '../common/dialogs';
 
 interface NurseSelfServicePanelProps {
   currentUser?: UserProfile;
@@ -61,6 +63,10 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
   // Submit Request Modals
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const [isAvailModalOpen, setIsAvailModalOpen] = useState(false);
+  const leaveTitleId = useId();
+  const availTitleId = useId();
+  const leaveDialogRef = useDialogA11y<HTMLDivElement>(isLeaveModalOpen, () => setIsLeaveModalOpen(false));
+  const availDialogRef = useDialogA11y<HTMLDivElement>(isAvailModalOpen, () => setIsAvailModalOpen(false));
 
   // Leave Form
   const [leaveTypeId, setLeaveTypeId] = useState(leaveTypes[0]?.id || 'leave-annual');
@@ -115,7 +121,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
       await fetchMyData();
       if (onDataChanged) onDataChanged();
     } catch (err: any) {
-      alert(`Leave submission error: ${err.message}`);
+      notify(`Leave submission error: ${err.message}`, 'error');
     } finally {
       setIsBusy(false);
     }
@@ -141,14 +147,21 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
       await fetchMyData();
       if (onDataChanged) onDataChanged();
     } catch (err: any) {
-      alert(`Availability submission error: ${err.message}`);
+      notify(`Availability submission error: ${err.message}`, 'error');
     } finally {
       setIsBusy(false);
     }
   };
 
   const handleCancelLeave = async (id: string) => {
-    if (!confirm('Are you sure you want to cancel this pending leave request?')) return;
+    const ok = await confirmDialog({
+      title: 'Cancel leave request?',
+      message: 'Are you sure you want to cancel this pending leave request?',
+      confirmLabel: 'Cancel request',
+      cancelLabel: 'Keep request',
+      danger: true,
+    });
+    if (!ok) return;
     setIsBusy(true);
     try {
       await cancelLeaveRequest(id);
@@ -156,14 +169,21 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
       await fetchMyData();
       if (onDataChanged) onDataChanged();
     } catch (err: any) {
-      alert(`Cancel error: ${err.message}`);
+      notify(`Cancel error: ${err.message}`, 'error');
     } finally {
       setIsBusy(false);
     }
   };
 
   const handleCancelAvailability = async (id: string) => {
-    if (!confirm('Are you sure you want to cancel this pending availability request?')) return;
+    const ok = await confirmDialog({
+      title: 'Cancel availability request?',
+      message: 'Are you sure you want to cancel this pending availability request?',
+      confirmLabel: 'Cancel request',
+      cancelLabel: 'Keep request',
+      danger: true,
+    });
+    if (!ok) return;
     setIsBusy(true);
     try {
       await cancelAvailabilityRequest(id);
@@ -171,7 +191,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
       await fetchMyData();
       if (onDataChanged) onDataChanged();
     } catch (err: any) {
-      alert(`Cancel error: ${err.message}`);
+      notify(`Cancel error: ${err.message}`, 'error');
     } finally {
       setIsBusy(false);
     }
@@ -215,14 +235,14 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
             onClick={() => setIsAvailModalOpen(true)}
             className="px-3 py-1.5 rounded border border-indigo-300 bg-white hover:bg-indigo-50 text-indigo-700 font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
           >
-            <Clock className="w-3.5 h-3.5" />
+            <Clock className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Request Day Off</span>
           </button>
           <button
             onClick={() => setIsLeaveModalOpen(true)}
             className="px-3.5 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Request Leave</span>
           </button>
         </div>
@@ -439,17 +459,25 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
       {/* 3. REQUEST LEAVE MODAL */}
       {isLeaveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden text-xs">
+          <div
+            ref={leaveDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={leaveTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden text-xs"
+          >
             <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">
-                <Plane className="w-4 h-4 text-indigo-600" />
-                <h3 className="font-bold text-slate-900 text-sm">Request Time Off / Leave</h3>
+                <Plane className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                <h3 id={leaveTitleId} className="font-bold text-slate-900 text-sm">Request Time Off / Leave</h3>
               </div>
               <button
                 onClick={() => setIsLeaveModalOpen(false)}
                 className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -458,7 +486,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                 <label className="block font-medium text-slate-700 mb-1">
                   Leave Category <span className="text-rose-500">*</span>
                 </label>
-                <select
+                <select aria-label="Leave Category"
                   value={leaveTypeId}
                   onChange={(e) => setLeaveTypeId(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white text-xs"
@@ -476,7 +504,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                   <label className="block font-medium text-slate-700 mb-1">
                     Start Date <span className="text-rose-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="Start Date"
                     type="date"
                     value={leaveStartDate}
                     onChange={(e) => setLeaveStartDate(e.target.value)}
@@ -489,7 +517,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                   <label className="block font-medium text-slate-700 mb-1">
                     End Date <span className="text-rose-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="End Date"
                     type="date"
                     value={leaveEndDate}
                     onChange={(e) => setLeaveEndDate(e.target.value)}
@@ -503,7 +531,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                 <label className="block font-medium text-slate-700 mb-1">
                   Reason / Submission Note
                 </label>
-                <textarea
+                <textarea aria-label="Reason / Submission Note"
                   rows={3}
                   value={leaveNote}
                   onChange={(e) => setLeaveNote(e.target.value)}
@@ -525,7 +553,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                   disabled={isBusy}
                   className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
-                  <Check className="w-3.5 h-3.5" />
+                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Submit Leave Request</span>
                 </button>
               </div>
@@ -537,17 +565,25 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
       {/* 4. REQUEST DAY OFF / AVAILABILITY MODAL */}
       {isAvailModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden text-xs">
+          <div
+            ref={availDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={availTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden text-xs"
+          >
             <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-indigo-600" />
-                <h3 className="font-bold text-slate-900 text-sm">Shift Preference / Day-Off Request</h3>
+                <Clock className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                <h3 id={availTitleId} className="font-bold text-slate-900 text-sm">Shift Preference / Day-Off Request</h3>
               </div>
               <button
                 onClick={() => setIsAvailModalOpen(false)}
                 className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -556,7 +592,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                 <label className="block font-medium text-slate-700 mb-1">
                   Target Date <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <input aria-label="Target Date"
                   type="date"
                   value={availDate}
                   onChange={(e) => setAvailDate(e.target.value)}
@@ -601,7 +637,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                   <label className="block font-medium text-slate-700 mb-1">
                     Preferred Duty Window (Optional)
                   </label>
-                  <select
+                  <select aria-label="Preferred Duty Window (Optional)"
                     value={availPreferredDutyId}
                     onChange={(e) => setAvailPreferredDutyId(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white text-xs"
@@ -618,7 +654,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Reason / Note</label>
-                <textarea
+                <textarea aria-label="Reason / Note"
                   rows={3}
                   value={availNote}
                   onChange={(e) => setAvailNote(e.target.value)}
@@ -640,7 +676,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                   disabled={isBusy}
                   className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
-                  <Check className="w-3.5 h-3.5" />
+                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Submit Preference</span>
                 </button>
               </div>

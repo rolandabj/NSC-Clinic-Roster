@@ -279,7 +279,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
           {/* Search Doctor */}
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" />
-            <input
+            <input aria-label="Search doctor"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -291,7 +291,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
           {/* Specialty Filter */}
           <div className="flex items-center gap-1.5">
             <span className="text-slate-500 text-[11px]">Specialty:</span>
-            <select
+            <select aria-label="Specialty"
               value={selectedSpecialty}
               onChange={(e) => setSelectedSpecialty(e.target.value)}
               className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -320,7 +320,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                 : 'Expand doctors schedule to view all days in the entire schedule period'
             }
           >
-            <Calendar className="w-3.5 h-3.5" />
+            <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
             <span>{isExpanded ? `All Days (${displayedDates.length}d) ✓` : 'Expand All Days'}</span>
           </button>
 
@@ -333,7 +333,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
               title="Populate and refresh all active doctors' recurring weekly clinic sessions across the schedule duration"
             >
-              <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isSyncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isSyncing ? 'animate-spin' : ''}`} aria-hidden="true" />
               <span>{isSyncing ? 'Syncing...' : 'Sync Recurring Patterns'}</span>
             </button>
           )}
@@ -455,6 +455,15 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                         {sess ? (
                           <div
                             onClick={() => handleCellClick(doc, dateStr)}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Edit shift for ${doc.fullName} on ${formatDate(dateStr)}: ${sess.startTime}–${sess.endTime}${pairedNurse ? `, paired nurse ${pairedNurse.fullName}` : ''}`}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleCellClick(doc, dateStr);
+                              }
+                            }}
                             className={`w-full h-full rounded p-1 flex flex-col justify-center text-[10px] leading-tight cursor-pointer transition-all shadow-2xs group relative ${
                               isAllocationMismatch
                                 ? 'bg-rose-50 border border-rose-300 text-rose-950 hover:bg-rose-100'
@@ -510,6 +519,15 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                         ) : (
                           <div
                             onClick={() => handleCellClick(doc, dateStr)}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Schedule shift for ${doc.fullName} on ${formatDate(dateStr)}`}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                handleCellClick(doc, dateStr);
+                              }
+                            }}
                             className="w-full h-full flex items-center justify-center text-slate-300 hover:text-indigo-600 hover:bg-indigo-50/70 rounded cursor-pointer transition-colors group"
                             title={`Click to schedule shift for ${doc.fullName} on ${formatDate(dateStr)}`}
                           >

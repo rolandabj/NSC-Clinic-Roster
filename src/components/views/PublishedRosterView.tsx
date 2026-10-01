@@ -305,7 +305,7 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
                 onClick={onExitPreview}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold transition-colors cursor-pointer"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
+                <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Exit Preview</span>
               </button>
             )}
@@ -330,7 +330,7 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
             {/* Filter by Nurse */}
             <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 border border-slate-200 rounded">
               <User className="w-3.5 h-3.5 text-slate-400" />
-              <select
+              <select aria-label="Filter by nurse"
                 value={selectedNurseFilter}
                 onChange={(e) => setSelectedNurseFilter(e.target.value)}
                 className="bg-transparent font-medium text-slate-800 focus:outline-none cursor-pointer"
@@ -351,8 +351,10 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
                   disabled={selectedBlockIndex === 0}
                   onClick={() => setSelectedBlockIndex((p) => p - 1)}
                   className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                  aria-label="Previous block"
+                  title="Previous block"
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <ChevronLeft className="w-4 h-4" aria-hidden="true" />
                 </button>
                 <span className="px-2 font-mono font-bold text-[11px] text-slate-700">
                   Block {selectedBlockIndex + 1}/{totalBlocks}
@@ -361,8 +363,10 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
                   disabled={selectedBlockIndex >= totalBlocks - 1}
                   onClick={() => setSelectedBlockIndex((p) => p + 1)}
                   className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
+                  aria-label="Next block"
+                  title="Next block"
                 >
-                  <ChevronRight className="w-4 h-4" />
+                  <ChevronRight className="w-4 h-4" aria-hidden="true" />
                 </button>
               </div>
             )}
@@ -374,7 +378,7 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-semibold rounded text-xs transition-colors cursor-pointer"
                 title="Copy direct link to this nurse's personal roster"
               >
-                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> : <Copy className="w-3.5 h-3.5" aria-hidden="true" />}
                 <span>{copiedLink ? 'Link Copied!' : 'Personal Link'}</span>
               </button>
             )}
@@ -385,7 +389,7 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded text-xs transition-colors cursor-pointer"
                 title="Download these shifts as a calendar file for Google Calendar, Apple Calendar or Outlook"
               >
-                <Calendar className="w-3.5 h-3.5" />
+                <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Add to Calendar (.ics)</span>
               </button>
             )}
@@ -394,7 +398,7 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
               onClick={() => window.print()}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium cursor-pointer"
             >
-              <Printer className="w-3.5 h-3.5" />
+              <Printer className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Print</span>
             </button>
           </div>

@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify } from '../common/dialogs';
 import {
   CalendarRange,
   Plus,
@@ -193,6 +195,21 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // Expanded View & All Days Mode
   const [isExpandedView, setIsExpandedView] = useState(false);
   const [isAllDaysExpanded, setIsAllDaysExpanded] = useState(false);
+
+  // Dialog keyboard and screen reader support
+  const saveTitleId = useId();
+  const overrideTitleId = useId();
+  const preflightTitleId = useId();
+  const pickerTitleId = useId();
+  const saveDialogRef = useDialogA11y<HTMLDivElement>(isSaveModalOpen, () => setIsSaveModalOpen(false));
+  const overrideDialogRef = useDialogA11y<HTMLDivElement>(isOverrideModalOpen && !!activeLockToOverride, () =>
+    setIsOverrideModalOpen(false)
+  );
+  const preflightDialogRef = useDialogA11y<HTMLDivElement>(isPreflightModalOpen && !!preflightSummary, () => {
+    // Can't be closed while a generation run is in progress (same as the Cancel button)
+    if (!isGenerating) setIsPreflightModalOpen(false);
+  });
+  const pickerDialogRef = useDialogA11y<HTMLDivElement>(isSchedulePickerOpen, () => setIsSchedulePickerOpen(false));
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -616,7 +633,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       }
     } catch (err: any) {
       console.error('Delete schedule failed:', err);
-      alert(`Delete schedule failed: ${err.message || 'Unknown error'}`);
+      notify(`Delete schedule failed: ${err.message || 'Unknown error'}`, 'error');
     }
   };
 
@@ -990,7 +1007,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setSaveNote('');
       loadData();
     } catch (err: any) {
-      alert(`Save failed: ${err.message}`);
+      notify(`Save failed: ${err.message}`, 'error');
     }
   };
 
@@ -1107,7 +1124,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-300 hover:border-indigo-400 hover:bg-slate-50 rounded text-slate-800 font-bold transition-colors cursor-pointer"
             title="Open or switch schedules (My Schedules & Shared with me)"
           >
-            <FolderOpen className="w-3.5 h-3.5 text-indigo-600" />
+            <FolderOpen className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
             <span className="truncate max-w-[180px]">
               {activeSchedule ? activeSchedule.name : 'Select Schedule'}
             </span>
@@ -1120,7 +1137,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-semibold rounded cursor-pointer transition-colors shadow-2xs"
             title="Create a new schedule with custom start and end dates"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
             <span>New Schedule</span>
           </button>
 
@@ -1167,7 +1184,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-50 rounded text-slate-700 font-medium cursor-pointer ml-1 shadow-2xs"
             title="Save version with note"
           >
-            <Save className="w-3 h-3 text-indigo-600" />
+            <Save className="w-3 h-3 text-indigo-600" aria-hidden="true" />
             <span>Save</span>
           </button>
 
@@ -1176,7 +1193,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium cursor-pointer shadow-2xs"
             title="Compare versions & audit cell diffs"
           >
-            <Diff className="w-3 h-3 text-indigo-600" />
+            <Diff className="w-3 h-3 text-indigo-600" aria-hidden="true" />
             <span>Diff History</span>
           </button>
 
@@ -1185,7 +1202,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-semibold rounded cursor-pointer shadow-2xs"
             title="Export Excel (.xlsx), CSV, A3 Landscape Print, or Per-Nurse Packets"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Export ▾</span>
           </button>
 
@@ -1196,7 +1213,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded cursor-pointer shadow-2xs transition-colors"
               title="Publish official schedule or send change alerts to nurses"
             >
-              <Send className="w-3.5 h-3.5" />
+              <Send className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Publish ▾</span>
             </button>
 
@@ -1213,7 +1230,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   }}
                   className="w-full text-left px-3 py-2 text-slate-800 hover:bg-indigo-50 hover:text-indigo-900 flex items-center gap-2.5 cursor-pointer"
                 >
-                  <Send className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                  <Send className="w-3.5 h-3.5 text-indigo-600 shrink-0" aria-hidden="true" />
                   <div>
                     <div className="font-bold">Publish Official Roster</div>
                     <div className="text-[10px] text-slate-500">Official release &amp; email dispatch</div>
@@ -1228,7 +1245,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   }}
                   className="w-full text-left px-3 py-2 text-slate-800 hover:bg-amber-50 hover:text-amber-900 flex items-center gap-2.5 cursor-pointer border-t border-slate-100"
                 >
-                  <History className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <History className="w-3.5 h-3.5 text-amber-600 shrink-0" aria-hidden="true" />
                   <div>
                     <div className="font-bold">Send Change Alerts</div>
                     <div className="text-[10px] text-slate-500">Notify staff of shift modifications</div>
@@ -1243,7 +1260,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded cursor-pointer shadow-2xs"
             title="Share view-only links & invite editors"
           >
-            <Share2 className="w-3.5 h-3.5 text-indigo-600" />
+            <Share2 className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
             <span>Share</span>
           </button>
 
@@ -1252,7 +1269,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 hover:bg-amber-100 text-amber-900 font-semibold rounded cursor-pointer shadow-2xs"
             title="Fairness dashboard & automated parity rebalancing"
           >
-            <Scale className="w-3.5 h-3.5 text-amber-700" />
+            <Scale className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
             <span>Fairness</span>
           </button>
 
@@ -1261,7 +1278,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded cursor-pointer shadow-2xs"
             title="Manage weekly roster templates & copy previous period"
           >
-            <Layers className="w-3.5 h-3.5 text-indigo-600" />
+            <Layers className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
             <span>Templates</span>
           </button>
 
@@ -1270,7 +1287,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded cursor-pointer shadow-2xs"
             title="Exchange shifts between two nurses with live safety validation"
           >
-            <ArrowLeftRight className="w-3.5 h-3.5 text-slate-600" />
+            <ArrowLeftRight className="w-3.5 h-3.5 text-slate-600" aria-hidden="true" />
             <span>Swap</span>
           </button>
 
@@ -1322,7 +1339,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors shadow-xs cursor-pointer"
             title="Wipes generated cells and places deterministic nurse assignments"
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Generate All</span>
           </button>
 
@@ -1331,7 +1348,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium transition-colors cursor-pointer"
             title="Fill only empty unassigned cells"
           >
-            <Plus className="w-3 h-3 text-slate-500" />
+            <Plus className="w-3 h-3 text-slate-500" aria-hidden="true" />
             <span>Fill Empty</span>
           </button>
 
@@ -1340,7 +1357,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium transition-colors cursor-pointer"
             title="Re-optimize soft rules while preserving manual cells & locks"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+            <RotateCcw className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
             <span>Rebalance</span>
           </button>
 
@@ -1349,7 +1366,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             className="inline-flex items-center gap-1 px-2 py-1.5 border border-slate-200 hover:bg-red-50 text-red-600 rounded font-medium transition-colors cursor-pointer"
             title="Remove generated cells (keeps pinned locks & manual edits)"
           >
-            <Trash2 className="w-3 h-3" />
+            <Trash2 className="w-3 h-3" aria-hidden="true" />
             <span>Clear</span>
           </button>
 
@@ -1387,12 +1404,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           >
             {isExpandedView ? (
               <>
-                <Minimize2 className="w-3.5 h-3.5" />
+                <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Exit Expand</span>
               </>
             ) : (
               <>
-                <Maximize2 className="w-3.5 h-3.5 text-indigo-600" />
+                <Maximize2 className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
                 <span>Expand View</span>
               </>
             )}
@@ -1402,9 +1419,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
       {/* Top Validation Alert Banner (Total findings count + Top 3 Plain Language Findings) */}
       {(validationReport.errorCount > 0 || validationReport.warnCount > 0) && (
-        <div
+        <button
+          type="button"
           onClick={() => setActiveTab('warnings')}
-          className={`px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-3 border-b cursor-pointer transition-colors shrink-0 ${
+          className={`w-full text-left px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-3 border-b cursor-pointer transition-colors shrink-0 ${
             validationReport.errorCount > 0
               ? 'bg-rose-50 text-rose-900 border-rose-200 hover:bg-rose-100/80'
               : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100/80'
@@ -1412,7 +1430,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           title="Click to view all findings in the Warnings sheet"
         >
           <div className="flex items-center gap-2 overflow-hidden">
-            <AlertTriangle className={`w-4 h-4 shrink-0 ${validationReport.errorCount > 0 ? 'text-rose-600' : 'text-amber-600'}`} />
+            <AlertTriangle className={`w-4 h-4 shrink-0 ${validationReport.errorCount > 0 ? 'text-rose-600' : 'text-amber-600'}`} aria-hidden="true" />
             <span className="font-bold">
               {validationReport.errorCount > 0
                 ? `${validationReport.errorCount} Error${validationReport.errorCount === 1 ? '' : 's'}, ${validationReport.warnCount} Warning${validationReport.warnCount === 1 ? '' : 's'}`
@@ -1435,9 +1453,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
           <div className="flex items-center gap-1 font-semibold text-indigo-700 hover:text-indigo-900 text-xs shrink-0">
             <span>Open Warnings Sheet</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
           </div>
-        </div>
+        </button>
       )}
 
       {/* Main Viewport: Swappable Workbook Sheets */}
@@ -1459,7 +1477,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   onClick={() => setIsNewModalOpen(true)}
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold transition-colors shadow-xs cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-4 h-4" aria-hidden="true" />
                   <span>Create First Schedule</span>
                 </button>
               </div>
@@ -1645,8 +1663,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       {/* --- SAVE VERSION WITH NOTE MODAL --- */}
       {isSaveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-sm w-full p-4 space-y-3 text-xs">
-            <h3 className="font-bold text-slate-900 text-sm">Save Roster Version</h3>
+          <div
+            ref={saveDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={saveTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-sm w-full p-4 space-y-3 text-xs"
+          >
+            <h3 id={saveTitleId} className="font-bold text-slate-900 text-sm">Save Roster Version</h3>
             <p className="text-[11px] text-slate-500">
               Creates an immutable version checkpoint with a snapshot of all assignments, locks, and leave.
             </p>
@@ -1654,6 +1678,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               type="text"
               value={saveNote}
               onChange={(e) => setSaveNote(e.target.value)}
+              aria-label="Version note"
               placeholder="e.g. Swapped Dr. Ali's Thursday session"
               className="w-full px-3 py-1.5 border border-slate-300 rounded font-medium"
             />
@@ -1680,10 +1705,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       {/* --- LOCK OVERRIDE MODAL --- */}
       {isOverrideModalOpen && activeLockToOverride && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-lg border border-red-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-150">
+          <div
+            ref={overrideDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={overrideTitleId}
+            className="bg-white rounded-lg border border-red-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-150"
+          >
             <div className="flex items-center gap-2 text-red-600">
-              <Shield className="w-5 h-5 shrink-0" />
-              <h3 className="text-sm font-bold text-slate-900">
+              <Shield className="w-5 h-5 shrink-0" aria-hidden="true" />
+              <h3 id={overrideTitleId} className="text-sm font-bold text-slate-900">
                 Non-Changeable Day Override Protocol
               </h3>
             </div>
@@ -1707,7 +1738,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   Quick-fill OVERRIDE
                 </button>
               </div>
-              <input
+              <input aria-label="Type OVERRIDE to confirm"
                 type="text"
                 value={overrideInput}
                 onChange={(e) => setOverrideInput(e.target.value.toUpperCase())}
@@ -1746,11 +1777,17 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       {/* --- PRE-FLIGHT GENERATION MODAL --- */}
       {isPreflightModalOpen && preflightSummary && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-xl w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-150">
+          <div
+            ref={preflightDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={preflightTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-xl w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-150"
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-sm font-bold text-slate-900">
+                <Sparkles className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                <h3 id={preflightTitleId} className="text-sm font-bold text-slate-900">
                   Generation Pre-flight: {preflightSummary.scheduleName}
                 </h3>
               </div>
@@ -1758,8 +1795,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 <button
                   onClick={() => setIsPreflightModalOpen(false)}
                   className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  aria-label="Close"
+                  title="Close"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-4 h-4" aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -2054,9 +2093,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 } rounded font-medium cursor-pointer shadow-xs disabled:opacity-50 transition-colors`}
               >
                 {activeGenerationMode === 'CLEAR_GENERATED' ? (
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                 ) : (
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
                 )}
                 <span>
                   {isGenerating
@@ -2158,17 +2197,25 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       {/* --- SCHEDULE PICKER & "SHARED WITH ME" MODAL (Phase 12) --- */}
       {isSchedulePickerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none animate-in fade-in duration-150">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-lg w-full p-5 space-y-4 text-xs">
+          <div
+            ref={pickerDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={pickerTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-lg w-full p-5 space-y-4 text-xs"
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-sm font-bold text-slate-900">Manage &amp; Switch Schedules</h3>
+                <FolderOpen className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                <h3 id={pickerTitleId} className="text-sm font-bold text-slate-900">Manage &amp; Switch Schedules</h3>
               </div>
               <button
                 onClick={() => setIsSchedulePickerOpen(false)}
                 className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -2178,18 +2225,29 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               <div className="space-y-1.5 max-h-48 overflow-y-auto">
                 {schedules.map((s) => {
                   const isActive = s.id === activeSchedule?.id;
+                  const pickSchedule = () => {
+                    setActiveSchedule(s);
+                    repo.list('assignments').then((asgns) => {
+                      setAssignments(asgns.filter((a) => a.scheduleId === s.id));
+                    });
+                    repo.list('versions').then((vList) => {
+                      setVersions(vList.filter((v) => v.scheduleId === s.id).sort((a, b) => b.number - a.number));
+                    });
+                    setIsSchedulePickerOpen(false);
+                  };
                   return (
+                    // Not a <button>: it holds the delete button
                     <div
                       key={s.id}
-                      onClick={() => {
-                        setActiveSchedule(s);
-                        repo.list('assignments').then((asgns) => {
-                          setAssignments(asgns.filter((a) => a.scheduleId === s.id));
-                        });
-                        repo.list('versions').then((vList) => {
-                          setVersions(vList.filter((v) => v.scheduleId === s.id).sort((a, b) => b.number - a.number));
-                        });
-                        setIsSchedulePickerOpen(false);
+                      onClick={pickSchedule}
+                      role="button"
+                      tabIndex={0}
+                      aria-current={isActive ? 'true' : undefined}
+                      onKeyDown={(e) => {
+                        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault();
+                          pickSchedule();
+                        }
                       }}
                       className={`p-3 rounded border cursor-pointer transition-colors flex items-center justify-between ${
                         isActive
@@ -2241,10 +2299,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                           }}
                           className="p-1.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                           title={`Permanently delete schedule "${s.name}"`}
+                          aria-label={`Permanently delete schedule "${s.name}"`}
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                          <Trash2 className="w-3.5 h-3.5 text-rose-500" aria-hidden="true" />
                         </button>
-                        <ChevronRight className="w-4 h-4 text-slate-400" />
+                        <ChevronRight className="w-4 h-4 text-slate-400" aria-hidden="true" />
                       </div>
                     </div>
                   );
@@ -2268,7 +2327,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   {invitations.map((inv) => {
                     const linkedSched = schedules.find((s) => s.id === inv.scheduleId);
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={inv.id}
                         onClick={() => {
                           if (linkedSched) {
@@ -2276,7 +2336,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                             setIsSchedulePickerOpen(false);
                           }
                         }}
-                        className="p-2.5 rounded border border-purple-200 bg-purple-50/40 hover:bg-purple-100/50 cursor-pointer transition-colors flex items-center justify-between"
+                        className="w-full text-left p-2.5 rounded border border-purple-200 bg-purple-50/40 hover:bg-purple-100/50 cursor-pointer transition-colors flex items-center justify-between"
                       >
                         <div>
                           <div className="flex items-center gap-2">
@@ -2297,8 +2357,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                             Invited: {inv.email} · {inv.status}
                           </p>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-purple-400" />
-                      </div>
+                        <ChevronRight className="w-4 h-4 text-purple-400" aria-hidden="true" />
+                      </button>
                     );
                   })}
                 </div>
@@ -2319,7 +2379,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold cursor-pointer shadow-xs"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Create New Schedule</span>
               </button>
 

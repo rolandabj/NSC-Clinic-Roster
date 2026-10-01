@@ -8,7 +8,7 @@
  * per roster period and verifies prorated hours calculations for short-range schedules.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useId } from 'react';
 import {
   CalendarRange,
   Clock,
@@ -30,6 +30,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { WorkingHoursPeriod } from '../../types';
+import { useDialogA11y } from '../common/useDialogA11y';
 import { getRepository } from '../../services/repository';
 import { SEED_WORKING_HOURS_PERIODS } from '../../services/seed/seedData';
 import {
@@ -66,6 +67,14 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
 
   // Restore Baseline Confirmation
   const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState<boolean>(false);
+
+  // Dialog keyboard and screen reader support
+  const periodTitleId = useId();
+  const deleteTitleId = useId();
+  const restoreTitleId = useId();
+  const periodDialogRef = useDialogA11y<HTMLDivElement>(isModalOpen, () => setIsModalOpen(false));
+  const deleteDialogRef = useDialogA11y<HTMLDivElement>(!!deletingPeriod, () => setDeletingPeriod(null));
+  const restoreDialogRef = useDialogA11y<HTMLDivElement>(isRestoreConfirmOpen, () => setIsRestoreConfirmOpen(false));
 
   // Interactive Prorating Tester State
   const [testStartDate, setTestStartDate] = useState<string>('2026-01-19');
@@ -300,8 +309,8 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
             <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
             <span className="font-medium">{toastMessage}</span>
           </div>
-          <button onClick={() => setToastMessage(null)} className="text-indigo-400 hover:text-indigo-700">
-            <X className="w-4 h-4" />
+          <button onClick={() => setToastMessage(null)} className="text-indigo-400 hover:text-indigo-700" aria-label="Dismiss message" title="Dismiss message">
+            <X className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       )}
@@ -329,7 +338,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
             className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Load all 12 standard periods from 2025-2026 clinic roster baseline"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+            <RotateCcw className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
             <span>Load 2025–2026 Baseline</span>
           </button>
 
@@ -338,7 +347,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
             onClick={handleOpenCreateModal}
             className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Add Dedicated Period</span>
           </button>
         </div>
@@ -379,7 +388,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200">
             <div className="relative w-full sm:w-64">
               <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-              <input
+              <input aria-label="Search periods"
                 type="text"
                 placeholder="Search periods or dates..."
                 value={searchQuery}
@@ -390,8 +399,10 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
                 <button
                   onClick={() => setSearchQuery('')}
                   className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
+                  aria-label="Clear search"
+                  title="Clear search"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-3 h-3" aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -499,16 +510,18 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
                                 onClick={() => handleOpenEditModal(period)}
                                 className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-colors cursor-pointer"
                                 title="Edit dedicated period"
+                                aria-label={`Edit ${period.name}`}
                               >
-                                <Edit2 className="w-3.5 h-3.5" />
+                                <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => setDeletingPeriod(period)}
                                 className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-slate-100 transition-colors cursor-pointer"
                                 title="Delete dedicated period"
+                                aria-label={`Delete ${period.name}`}
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                               </button>
                             </div>
                           </td>
@@ -579,7 +592,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 mb-1">Start Date</label>
-              <input
+              <input aria-label="Start Date"
                 type="date"
                 value={testStartDate}
                 onChange={(e) => setTestStartDate(e.target.value)}
@@ -588,7 +601,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
             </div>
             <div>
               <label className="block text-[11px] font-semibold text-slate-600 mb-1">End Date</label>
-              <input
+              <input aria-label="End Date"
                 type="date"
                 value={testEndDate}
                 onChange={(e) => setTestEndDate(e.target.value)}
@@ -669,14 +682,20 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
       {/* Add / Edit Period Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-2xs animate-in fade-in duration-100">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150">
+          <div
+            ref={periodDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={periodTitleId}
+            className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150"
+          >
             <div className="flex items-center justify-between p-4 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
                   <CalendarRange className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">
+                  <h3 id={periodTitleId} className="text-sm font-bold text-slate-900">
                     {editingPeriodId ? 'Edit Dedicated Time Period' : 'New Dedicated Time Period'}
                   </h3>
                   <span className="text-[11px] text-slate-500">
@@ -688,8 +707,10 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
                 type="button"
                 onClick={() => setIsModalOpen(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -706,7 +727,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     Year / Cycle <span className="text-rose-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="Year / Cycle"
                     type="text"
                     required
                     placeholder="e.g. 2026 or 2025-2026"
@@ -720,7 +741,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     Period Name <span className="text-rose-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="Period Name"
                     type="text"
                     required
                     placeholder="e.g. Jan19-Feb18"
@@ -736,7 +757,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     Start Date <span className="text-rose-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="Start Date"
                     type="date"
                     required
                     value={formStartDate}
@@ -749,7 +770,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                     End Date <span className="text-rose-500">*</span>
                   </label>
-                  <input
+                  <input aria-label="End Date"
                     type="date"
                     required
                     value={formEndDate}
@@ -764,7 +785,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
                   Full-Time Working Hours (Target) <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
-                  <input
+                  <input aria-label="Full-Time Working Hours (Target)"
                     type="number"
                     required
                     min={1}
@@ -793,7 +814,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
                 <label className="block text-[11px] font-semibold text-slate-700 mb-1">
                   Notes / Description (Optional)
                 </label>
-                <input
+                <input aria-label="Notes / Description (Optional)"
                   type="text"
                   placeholder="e.g. Ramadan hours adjustments, standard 210h cycle"
                   value={formNote}
@@ -815,7 +836,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
                   disabled={isSaving}
                   className="px-4 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-2xs disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Check className="w-3.5 h-3.5" aria-hidden="true" />}
                   <span>{editingPeriodId ? 'Update Period' : 'Create Period'}</span>
                 </button>
               </div>
@@ -827,10 +848,16 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
       {/* Delete Confirmation Modal */}
       {deletingPeriod && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-2xs animate-in fade-in duration-100">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-4 text-xs space-y-3">
+          <div
+            ref={deleteDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={deleteTitleId}
+            className="bg-white rounded-xl shadow-xl w-full max-w-sm p-4 text-xs space-y-3"
+          >
             <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
-              <AlertTriangle className="w-5 h-5 shrink-0" />
-              <span>Delete Dedicated Period?</span>
+              <AlertTriangle className="w-5 h-5 shrink-0" aria-hidden="true" />
+              <span id={deleteTitleId}>Delete Dedicated Period?</span>
             </div>
             <p className="text-slate-600 text-xs">
               Are you sure you want to delete <b>{deletingPeriod.name} ({deletingPeriod.year})</b> with {deletingPeriod.workingHours}h target? Future schedule generations spanning this range will fall back to default hours policy.
@@ -858,10 +885,16 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
       {/* Restore Standard 2025-2026 Confirmation Modal */}
       {isRestoreConfirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-2xs animate-in fade-in duration-100">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-4 text-xs space-y-3">
+          <div
+            ref={restoreDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={restoreTitleId}
+            className="bg-white rounded-xl shadow-xl w-full max-w-md p-4 text-xs space-y-3"
+          >
             <div className="flex items-center gap-2 text-indigo-700 font-bold text-sm">
-              <RotateCcw className="w-5 h-5 shrink-0" />
-              <span>Load 2025–2026 Baseline Periods?</span>
+              <RotateCcw className="w-5 h-5 shrink-0" aria-hidden="true" />
+              <span id={restoreTitleId}>Load 2025–2026 Baseline Periods?</span>
             </div>
             <p className="text-slate-600 text-xs leading-relaxed">
               This will restore all 12 standard dedicated time periods from your clinic roster table:

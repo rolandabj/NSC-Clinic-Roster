@@ -57,6 +57,7 @@ import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/setting
 import { getRepository } from '../../services/repository';
 import { syncPublicRoster } from '../../services/publish/publicRosterService';
 import { escapeHtml } from '../../utils/escapeHtml';
+import { EmailHtmlPreview } from '../common/EmailHtmlPreview';
 
 interface PublishModalProps {
   context: ClinicContextState;
@@ -768,10 +769,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                   </div>
 
                   <div className="p-4 max-h-[360px] overflow-y-auto bg-slate-50">
-                    <div
-                      className="bg-white border border-slate-200 rounded shadow-xs max-w-xl mx-auto overflow-hidden pointer-events-none select-text"
-                      dangerouslySetInnerHTML={{ __html: previewPayload.html }}
-                    />
+                    <EmailHtmlPreview html={previewPayload.html} className="h-[320px]" />
                   </div>
                 </div>
               )}

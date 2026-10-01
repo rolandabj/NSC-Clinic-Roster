@@ -1,5 +1,6 @@
 import { isWeekendDay } from '../../utils/weekend';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useId } from 'react';
+import { useDialogA11y } from '../common/useDialogA11y';
 import {
   CalendarCheck2,
   Lock,
@@ -103,6 +104,25 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   const [notification, setNotification] = useState<string | null>(null);
   const [isDeletingLeave, setIsDeletingLeave] = useState(false);
   const [isOverridingLock, setIsOverridingLock] = useState(false);
+
+  // Dialog keyboard and screen reader support
+  const leaveTitleId = useId();
+  const lockTitleId = useId();
+  const overrideTitleId = useId();
+  const csvTitleId = useId();
+  const leaveDialogRef = useDialogA11y<HTMLDivElement>(isLeaveModalOpen && !!editingLeaveEntry, () => {
+    setIsLeaveModalOpen(false);
+    setEditingLeaveEntry(null);
+  });
+  const lockDialogRef = useDialogA11y<HTMLDivElement>(isLockModalOpen && !!editingLockEntry, () => setIsLockModalOpen(false));
+  const overrideDialogRef = useDialogA11y<HTMLDivElement>(isOverrideModalOpen && !!activeLockToOverride, () => {
+    // Same as "Keep Pinned", which is disabled while the override is saving
+    if (isOverridingLock) return;
+    setIsOverrideModalOpen(false);
+    setActiveLockToOverride(null);
+    setOverrideInput('');
+  });
+  const csvDialogRef = useDialogA11y<HTMLDivElement>(isCsvModalOpen, () => setIsCsvModalOpen(false));
 
   const repo = getRepository();
 
@@ -680,7 +700,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
             title="Jump calendar view to today"
           >
-            <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+            <Calendar className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
             <span>Go to Today</span>
           </button>
 
@@ -689,7 +709,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-medium transition-colors cursor-pointer"
             title="Auto-grant 8h PH leave on holidays to all active staff"
           >
-            <Flag className="w-3.5 h-3.5 text-cyan-600" />
+            <Flag className="w-3.5 h-3.5 text-cyan-600" aria-hidden="true" />
             <span>Apply Public Holidays as PH</span>
           </button>
 
@@ -700,7 +720,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-medium transition-colors cursor-pointer"
           >
-            <Upload className="w-3.5 h-3.5 text-slate-500" />
+            <Upload className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
             <span>Import Leave CSV</span>
           </button>
 
@@ -719,7 +739,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded text-xs font-medium transition-colors cursor-pointer"
           >
-            <Lock className="w-3.5 h-3.5 text-amber-700" />
+            <Lock className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
             <span>Pin Shift Lock</span>
           </button>
 
@@ -738,7 +758,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             }}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition-colors shadow-xs cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Record Leave</span>
           </button>
         </div>
@@ -756,7 +776,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
           }`}
         >
-          <Calendar className="w-3.5 h-3.5" />
+          <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
           <span>31-Day Master Grid</span>
         </button>
         )}
@@ -769,7 +789,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
           }`}
         >
-          <Clock className="w-3.5 h-3.5" />
+          <Clock className="w-3.5 h-3.5" aria-hidden="true" />
           <span>My Availability &amp; Leave Requests</span>
         </button>
 
@@ -782,7 +802,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                 : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
             }`}
           >
-            <CalendarCheck2 className="w-3.5 h-3.5" />
+            <CalendarCheck2 className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Pending Approvals</span>
             {pendingApprovalsCount > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white font-bold text-[10px] animate-pulse">
@@ -827,8 +847,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               }}
               className="p-1 rounded hover:bg-slate-100 text-slate-600 cursor-pointer"
               title="Previous Month"
+              aria-label="Previous Month"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" aria-hidden="true" />
             </button>
             <span className="font-bold text-slate-800 text-sm font-mono tabular-nums">
               {monthName} {currentYear}
@@ -844,8 +865,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               }}
               className="p-1 rounded hover:bg-slate-100 text-slate-600 cursor-pointer"
               title="Next Month"
+              aria-label="Next Month"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4" aria-hidden="true" />
             </button>
             <button
               onClick={handleGoToToday}
@@ -856,7 +878,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               }`}
               title="Jump to today's date"
             >
-              <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+              <Calendar className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
               <span>Today</span>
             </button>
           </div>
@@ -1044,7 +1066,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                         >
                           {/* 1. Render Lock (padlock + hatched border) */}
                           {lock ? (
-                            <div
+                            <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setActiveLockToOverride(lock);
@@ -1054,12 +1077,13 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                               className="w-full h-7 rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center gap-0.5 text-amber-900 shadow-2xs font-mono font-bold text-[10px]"
                               title={`Locked day: ${lock.mode === 'OFF' ? 'PINNED OFF' : 'PINNED DUTY'}. Click to manage/override.`}
                             >
-                              <Lock className="w-3 h-3 text-amber-600 shrink-0" />
+                              <Lock className="w-3 h-3 text-amber-600 shrink-0" aria-hidden="true" />
                               <span>{lock.mode === 'OFF' ? 'OFF' : 'PIN'}</span>
-                            </div>
+                            </button>
                           ) : leave ? (
                             // 2. Render Leave Entry (acronym + color)
-                            <div
+                            <button
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setEditingLeaveEntry(leave);
@@ -1075,7 +1099,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                               title={`${leaveTypes.find((l) => l.id === leave.leaveTypeId)?.name} (${leave.hoursCredited}h credited). Click to edit.`}
                             >
                               {leaveTypes.find((l) => l.id === leave.leaveTypeId)?.acronym || 'L'}
-                            </div>
+                            </button>
                           ) : (
                             // Empty Cell
                             <div className="h-7 w-full flex items-center justify-center text-slate-300 hover:bg-slate-100/80 rounded">
@@ -1111,11 +1135,17 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       {/* --- MODAL 1: RECORD / EDIT LEAVE ENTRY --- */}
       {isLeaveModalOpen && editingLeaveEntry && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs">
+          <div
+            ref={leaveDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={leaveTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="flex items-center gap-2">
-                <CalendarCheck2 className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-sm font-bold text-slate-900">
+                <CalendarCheck2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                <h3 id={leaveTitleId} className="text-sm font-bold text-slate-900">
                   {editingLeaveEntry.id ? 'Edit Leave Entry' : 'Record Staff Leave'}
                 </h3>
               </div>
@@ -1125,15 +1155,17 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                   setEditingLeaveEntry(null);
                 }}
                 className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
             <form onSubmit={handleSaveLeaveEntry} className="space-y-3">
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Nurse</label>
-                <select
+                <select aria-label="Nurse"
                   value={editingLeaveEntry.nurseId}
                   onChange={(e) =>
                     setEditingLeaveEntry({ ...editingLeaveEntry, nurseId: e.target.value })
@@ -1150,7 +1182,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Leave Type</label>
-                <select
+                <select aria-label="Leave Type"
                   value={editingLeaveEntry.leaveTypeId}
                   onChange={(e) =>
                     setEditingLeaveEntry({ ...editingLeaveEntry, leaveTypeId: e.target.value })
@@ -1170,7 +1202,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">Start Date</label>
-                  <input
+                  <input aria-label="Start Date"
                     type="date"
                     required
                     value={editingLeaveEntry.startDate}
@@ -1182,7 +1214,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                 </div>
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">End Date</label>
-                  <input
+                  <input aria-label="End Date"
                     type="date"
                     required
                     value={editingLeaveEntry.endDate}
@@ -1248,7 +1280,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Notes / Reason</label>
-                <input
+                <input aria-label="Notes / Reason"
                   type="text"
                   value={editingLeaveEntry.note || ''}
                   onChange={(e) =>
@@ -1305,7 +1337,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                           className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2.5 py-1.5 rounded font-semibold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors border border-red-200 text-xs"
                           title="Deletes ONLY this selected day, keeping all other days of this leave intact"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                           <span>Delete Only {formatDate(selectedCellDate)}</span>
                         </button>
                         <button
@@ -1325,7 +1357,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                         onClick={() => handleDeleteLeave(editingLeaveEntry as LeaveEntry)}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2.5 py-1.5 rounded font-semibold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors border border-red-200 text-xs"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                         <span>{isDeletingLeave ? 'Deleting...' : 'Delete Leave Entry'}</span>
                       </button>
                     )}
@@ -1361,17 +1393,25 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       {/* --- MODAL 2: PIN SHIFT LOCK --- */}
       {isLockModalOpen && editingLockEntry && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs">
+          <div
+            ref={lockDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={lockTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-amber-600" />
-                <h3 className="text-sm font-bold text-slate-900">Pin Non-Changeable Lock</h3>
+                <Lock className="w-4 h-4 text-amber-600" aria-hidden="true" />
+                <h3 id={lockTitleId} className="text-sm font-bold text-slate-900">Pin Non-Changeable Lock</h3>
               </div>
               <button
                 onClick={() => setIsLockModalOpen(false)}
                 className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -1382,7 +1422,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             <form onSubmit={handleSaveLockEntry} className="space-y-3">
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Nurse</label>
-                <select
+                <select aria-label="Nurse"
                   value={editingLockEntry.nurseId}
                   onChange={(e) =>
                     setEditingLockEntry({ ...editingLockEntry, nurseId: e.target.value })
@@ -1399,7 +1439,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Date</label>
-                <input
+                <input aria-label="Date"
                   type="date"
                   required
                   value={editingLockEntry.date}
@@ -1444,7 +1484,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                 <div className="space-y-3 p-3 bg-slate-50 border border-slate-200 rounded">
                   <div>
                     <label className="block font-medium text-slate-700 mb-1">Duty Window</label>
-                    <select
+                    <select aria-label="Duty Window"
                       value={editingLockEntry.dutyWindowId}
                       onChange={(e) =>
                         setEditingLockEntry({
@@ -1466,7 +1506,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                     <label className="block font-medium text-slate-700 mb-1">
                       Target Assignment Pairing
                     </label>
-                    <select
+                    <select aria-label="Target Assignment Pairing"
                       value={editingLockEntry.targetRefId}
                       onChange={(e) => {
                         const targetId = e.target.value;
@@ -1508,7 +1548,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Lock Note / Reason</label>
-                <input
+                <input aria-label="Lock Note / Reason"
                   type="text"
                   value={editingLockEntry.note || ''}
                   onChange={(e) =>
@@ -1542,10 +1582,16 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       {/* --- MODAL 3: LOCK OVERRIDE PROTOCOL --- */}
       {isOverrideModalOpen && activeLockToOverride && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-lg border border-red-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-150">
+          <div
+            ref={overrideDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={overrideTitleId}
+            className="bg-white rounded-lg border border-red-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-150"
+          >
             <div className="flex items-center gap-2 text-red-600">
-              <ShieldAlert className="w-5 h-5 shrink-0" />
-              <h3 className="text-sm font-bold text-slate-900">
+              <ShieldAlert className="w-5 h-5 shrink-0" aria-hidden="true" />
+              <h3 id={overrideTitleId} className="text-sm font-bold text-slate-900">
                 Non-Changeable Day Override Protocol
               </h3>
             </div>
@@ -1581,7 +1627,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                   Quick-fill OVERRIDE
                 </button>
               </div>
-              <input
+              <input aria-label="Type OVERRIDE to confirm"
                 type="text"
                 value={overrideInput}
                 onChange={(e) => setOverrideInput(e.target.value.toUpperCase())}
@@ -1625,17 +1671,25 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       {/* --- MODAL 4: CSV LEAVE IMPORT --- */}
       {isCsvModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-lg w-full p-5 space-y-4 text-xs">
+          <div
+            ref={csvDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={csvTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-lg w-full p-5 space-y-4 text-xs"
+          >
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="flex items-center gap-2">
-                <Upload className="w-4 h-4 text-indigo-600" />
-                <h3 className="text-sm font-bold text-slate-900">Import Leave via CSV</h3>
+                <Upload className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                <h3 id={csvTitleId} className="text-sm font-bold text-slate-900">Import Leave via CSV</h3>
               </div>
               <button
                 onClick={() => setIsCsvModalOpen(false)}
                 className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -1647,7 +1701,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                   gmail, leaveType acronym, startDate, endDate
                 </code>
               </p>
-              <textarea
+              <textarea aria-label="CSV leave rows"
                 rows={6}
                 value={csvContent}
                 onChange={(e) => setCsvContent(e.target.value)}

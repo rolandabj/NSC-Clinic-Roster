@@ -1,6 +1,6 @@
 import { isWeekendDay } from '../../utils/weekend';
 import { leaveCreditInRange, leaveCreditPerDay, resolveFullTimeTarget } from '../../services/hours/hoursPolicy';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
 import {
   FileSpreadsheet,
   Undo2,
@@ -60,6 +60,8 @@ import { ValidationReport, ValidationFinding } from '../../services/validation/S
 import { calculateDutyDurationHours } from '../../services/reports/hoursAccounting';
 import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { confirmDialog } from '../common/dialogs';
 
 interface WorkbookGridProps {
   schedule: Schedule;
@@ -160,6 +162,15 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
   // Clipboard buffer
   const [clipboardAssignment, setClipboardAssignment] = useState<Assignment | null>(null);
+
+  // Cell editor dialog: Esc, focus trap and focus restore
+  const editorTitleId = useId();
+  const editorDialogRef = useDialogA11y<HTMLDivElement>(isEditorOpen && !!editorTarget, () => setIsEditorOpen(false));
+
+  // Latest roster data, read after an awaited confirmation so a clear never
+  // writes back data that changed while the dialog was open.
+  const latestDataRef = useRef({ assignments, locks, leaveEntries });
+  latestDataRef.current = { assignments, locks, leaveEntries };
 
   // Compute Active Block Dates
   const start = new Date(schedule.startDate);
@@ -352,6 +363,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isEditorOpen) return;
       if (!selectedCell) return;
+      // A dialog (e.g. the clear cell confirmation) is open: its keys are its own.
+      if (document.querySelector('[aria-modal="true"]')) return;
 
       // Never take over keys while the user is typing somewhere else (search boxes,
       // other sheets, dialogs) or while a button or link has keyboard focus.
@@ -612,7 +625,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     setIsEditorOpen(false);
   };
 
-  const handleDeleteCellAssignment = (nurseId: string, date: string) => {
+  const handleDeleteCellAssignment = async (nurseId: string, date: string) => {
     // Clearing a pinned shift or approved leave needs a confirmation
     const hasLock = locks.some((l) => l.nurseId === nurseId && l.date === date);
     const hasApprovedLeave = leaveEntries.some(
@@ -620,12 +633,19 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     );
     if (hasLock || hasApprovedLeave) {
       const what = hasLock && hasApprovedLeave ? 'a pinned lock and approved leave' : hasLock ? 'a pinned lock' : 'approved leave';
-      if (!confirm(`This day has ${what}. Clear it anyway?`)) return;
+      const ok = await confirmDialog({
+        title: 'Clear this cell?',
+        message: `This day has ${what}. Clear it anyway?`,
+        confirmLabel: 'Clear cell',
+        danger: true,
+      });
+      if (!ok) return;
     }
-    const nextAssignments = assignments.filter((a) => !(a.nurseId === nurseId && a.date === date));
-    const nextLocks = locks.filter((l) => !(l.nurseId === nurseId && l.date === date));
+    const latest = latestDataRef.current;
+    const nextAssignments = latest.assignments.filter((a) => !(a.nurseId === nurseId && a.date === date));
+    const nextLocks = latest.locks.filter((l) => !(l.nurseId === nurseId && l.date === date));
     // Remove ONLY the selected date from leave entries, preserving all other days/leaves
-    const nextLeaves = removeDateFromLeaves(leaveEntries, nurseId, date);
+    const nextLeaves = removeDateFromLeaves(latest.leaveEntries, nurseId, date);
 
     onAssignmentsChange(nextAssignments);
     if (onLocksChange) onLocksChange(nextLocks);
@@ -672,8 +692,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               onClick={() => onBlockChange(currentBlockIndex - 1)}
               className="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 cursor-pointer"
               title="Previous Block"
+              aria-label="Previous Block"
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
             <span className="font-mono font-bold text-slate-800 px-2 tabular-nums">
               {isAllDaysExpanded
@@ -685,8 +706,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               onClick={() => onBlockChange(currentBlockIndex + 1)}
               className="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 cursor-pointer"
               title="Next Block"
+              aria-label="Next Block"
             >
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
 
@@ -700,7 +722,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               }`}
               title={isAllDaysExpanded ? 'Switch to block view (14 days)' : 'Expand view to all days (full month continuous)'}
             >
-              <Calendar className="w-3.5 h-3.5" />
+              <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
               <span>{isAllDaysExpanded ? 'All Days (31d) ✓' : 'Expand All Days'}</span>
             </button>
           )}
@@ -718,6 +740,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
           <div className="flex items-center gap-1 text-slate-600">
             <span className="text-[11px] text-slate-400">Group:</span>
             <select
+              aria-label="Group nurses"
               value={groupBy}
               onChange={(e) => setGroupBy(e.target.value as any)}
               className="px-1.5 py-1 border border-slate-200 rounded bg-white text-xs"
@@ -779,6 +802,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
           <button
             onClick={() => setIsLegendDrawerOpen(!isLegendDrawerOpen)}
+            aria-expanded={isLegendDrawerOpen}
             className="px-2.5 py-1 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium cursor-pointer"
           >
             Legend ▾
@@ -796,12 +820,12 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             >
               {isExpandedView ? (
                 <>
-                  <Minimize2 className="w-3.5 h-3.5" />
+                  <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Collapse View</span>
                 </>
               ) : (
                 <>
-                  <Maximize2 className="w-3.5 h-3.5 text-indigo-600" />
+                  <Maximize2 className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
                   <span>Expand View</span>
                 </>
               )}
@@ -813,7 +837,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       {/* 6.2 ROSTER SHEET MAIN GRID VIEWPORT */}
       <div className="flex-1 flex overflow-hidden relative">
         <div className="flex-1 overflow-auto bg-slate-200 p-px">
-          <table className="border-collapse bg-white text-xs w-max">
+          <table className="border-collapse bg-white text-xs w-max" role="grid" aria-label="Nurse roster">
             {/* Sticky Header Row 1: Week Spans */}
             <thead className="sticky top-0 z-30 bg-slate-100 border-b border-slate-300">
               <tr className="border-b border-slate-200">
@@ -1141,6 +1165,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                           onClick={() => handleCellClick(nurse.id, dateStr)}
                           onDoubleClick={() => handleCellDoubleClick(nurse.id, dateStr)}
                           onContextMenu={(e) => handleContextMenu(e, nurse.id, dateStr)}
+                          aria-selected={isSelected}
                           className={`border-r border-b border-slate-200 p-0.5 text-center cursor-pointer relative transition-all ${cellHeightClass} ${
                             isSelected
                               ? 'ring-2 ring-indigo-600 z-10 bg-indigo-50/50'
@@ -1286,8 +1311,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               <button
                 onClick={() => setIsLegendDrawerOpen(false)}
                 className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close legend"
+                title="Close legend"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -1399,7 +1426,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             if (hourData) {
               const { nurses: nActive, doctors: dActive, deficit } = hourData;
               return (
-                <div
+                <button
+                  type="button"
                   onClick={() => onNavigateTab && onNavigateTab('coverage')}
                   className={`flex items-center gap-1 font-mono cursor-pointer px-1.5 py-0.5 rounded ${
                     deficit > 0
@@ -1413,7 +1441,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                     {nActive} {nActive === 1 ? 'nurse' : 'nurses'} / {dActive} {dActive === 1 ? 'doctor' : 'doctors'}
                   </span>
                   {deficit > 0 && <span className="text-rose-600 font-bold">⚠</span>}
-                </div>
+                </button>
               );
             }
             return (
@@ -1446,12 +1474,18 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       {/* --- INLINE CELL SHIFT & LEAVE EDITOR MODAL --- */}
       {isEditorOpen && editorTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-2xs animate-in fade-in duration-100">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-lg w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-100 max-h-[90vh] overflow-y-auto">
+          <div
+            ref={editorDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={editorTitleId}
+            className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-lg w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-100 max-h-[90vh] overflow-y-auto"
+          >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-slate-900 text-sm">
+                  <span id={editorTitleId} className="font-bold text-slate-900 text-sm">
                     {nurseMap.get(editorTarget.nurseId)?.fullName}
                   </span>
                   <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-medium">
@@ -1465,8 +1499,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               <button
                 onClick={() => setIsEditorOpen(false)}
                 className="p-1.5 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100 cursor-pointer"
+                aria-label="Close editor"
+                title="Close editor"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -1481,7 +1517,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Stethoscope className="w-3.5 h-3.5" />
+                <Stethoscope className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Assign Duty Shift</span>
               </button>
               <button
@@ -1493,7 +1529,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <Calendar className="w-3.5 h-3.5" />
+                <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Leave / Day Off</span>
               </button>
             </div>
@@ -1528,7 +1564,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                             </span>
                             {dw.isPriority ? (
                               <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700 bg-amber-100/80 border border-amber-200 px-1.5 py-0.2 rounded">
-                                <Star className="w-2 h-2 fill-amber-500 text-amber-500" />
+                                <Star className="w-2 h-2 fill-amber-500 text-amber-500" aria-hidden="true" />
                                 Priority
                               </span>
                             ) : (
@@ -1673,6 +1709,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                   })()}
 
                   <select
+                    aria-label="Assignment target"
                     value={editorTargetRefId}
                     onChange={(e) => setEditorTargetRefId(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium text-slate-800"
@@ -1781,7 +1818,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                       : 'border-slate-200 hover:bg-slate-50 opacity-70'
                   }`}
                 >
-                  <Lock className={`w-4 h-4 shrink-0 mt-0.5 ${!editorAllowOverwrite ? 'text-amber-600' : 'text-slate-400'}`} />
+                  <Lock className={`w-4 h-4 shrink-0 mt-0.5 ${!editorAllowOverwrite ? 'text-amber-600' : 'text-slate-400'}`} aria-hidden="true" />
                   <div>
                     <span className="font-bold text-slate-900 block text-xs">
                       🔒 Pinned (Protected)
@@ -1801,7 +1838,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                       : 'border-slate-200 hover:bg-slate-50 opacity-70'
                   }`}
                 >
-                  <Unlock className={`w-4 h-4 shrink-0 mt-0.5 ${editorAllowOverwrite ? 'text-indigo-600' : 'text-slate-400'}`} />
+                  <Unlock className={`w-4 h-4 shrink-0 mt-0.5 ${editorAllowOverwrite ? 'text-indigo-600' : 'text-slate-400'}`} aria-hidden="true" />
                   <div>
                     <span className="font-bold text-slate-900 block text-xs">
                       ⚡ Flexible (Allow Overwrite)
@@ -1823,6 +1860,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                 type="text"
                 value={editorNote}
                 onChange={(e) => setEditorNote(e.target.value)}
+                aria-label="Note (Optional)"
                 placeholder="e.g. Birthday celebration, swapped shift, or specific doctor assignment"
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
               />
@@ -1839,7 +1877,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                 }}
                 className="text-red-600 hover:text-red-700 font-semibold cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded hover:bg-red-50 transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>Clear Cell</span>
               </button>
 
@@ -1856,7 +1894,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                   onClick={handleSaveEditorAssignment}
                   className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer shadow-xs transition-colors"
                 >
-                  <Check className="w-3.5 h-3.5" />
+                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Save Cell</span>
                 </button>
               </div>
@@ -1879,7 +1917,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             }}
             className="w-full text-left px-3 py-1.5 hover:bg-slate-100 text-slate-700 cursor-pointer flex items-center gap-2"
           >
-            <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+            <Edit2 className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
             <span>Edit Assignment...</span>
           </button>
           <button
@@ -1892,7 +1930,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             }}
             className="w-full text-left px-3 py-1.5 hover:bg-slate-100 text-slate-700 cursor-pointer flex items-center gap-2"
           >
-            <Copy className="w-3.5 h-3.5 text-slate-400" />
+            <Copy className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
             <span>Copy Cell</span>
           </button>
           <button
@@ -1903,7 +1941,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             }}
             className="w-full text-left px-3 py-1.5 hover:bg-slate-100 text-slate-700 disabled:opacity-40 cursor-pointer flex items-center gap-2"
           >
-            <ClipboardPaste className="w-3.5 h-3.5 text-slate-400" />
+            <ClipboardPaste className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
             <span>Paste Cell</span>
           </button>
           <div className="h-px bg-slate-100 my-1" />
@@ -1914,7 +1952,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             }}
             className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 cursor-pointer flex items-center gap-2"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Clear Cell</span>
           </button>
         </div>

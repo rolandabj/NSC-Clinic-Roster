@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy, useId } from 'react';
 import { AppRoute, ClinicContextState } from '../../types/navigation';
 import { LocalModeBanner } from './LocalModeBanner';
 import { Sidebar } from './Sidebar';
@@ -20,6 +20,7 @@ import { authService, UserProfile } from '../../services/auth/authService';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { quotaTracker } from '../../services/firebase/quotaTracker';
 import { CheckCircle2, Check, AlertTriangle, X } from 'lucide-react';
+import { useDialogA11y } from '../common/useDialogA11y';
 
 // Screens load on demand, so the first page does not download the whole app.
 const SchedulesView = lazy(() => import('../views/SchedulesView').then((m) => ({ default: m.SchedulesView })));
@@ -32,6 +33,41 @@ const ReportsView = lazy(() => import('../views/ReportsView').then((m) => ({ def
 const SettingsView = lazy(() => import('../views/SettingsView').then((m) => ({ default: m.SettingsView })));
 const PublishedRosterView = lazy(() => import('../views/PublishedRosterView').then((m) => ({ default: m.PublishedRosterView })));
 const AuditTrailView = lazy(() => import('../views/AuditTrailView').then((m) => ({ default: m.AuditTrailView })));
+
+/** "Schedule receipt confirmed" dialog shown after a nurse acknowledges a roster. */
+const AckNoticeDialog: React.FC<{ message: string; onDismiss: () => void; onContinue: () => void }> = ({
+  message,
+  onDismiss,
+  onContinue,
+}) => {
+  const titleId = useId();
+  const ref = useDialogA11y<HTMLDivElement>(true, onDismiss);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+      <div
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-sm w-full p-5 text-center space-y-4 text-xs"
+      >
+        <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+          <CheckCircle2 className="w-6 h-6" aria-hidden="true" />
+        </div>
+        <div>
+          <h3 id={titleId} className="font-bold text-slate-900 text-sm">Schedule Receipt Confirmed!</h3>
+          <p className="text-slate-600 text-xs mt-1 leading-relaxed">{message}</p>
+        </div>
+        <button
+          onClick={onContinue}
+          className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer transition-colors shadow-xs"
+        >
+          Continue to Workspace
+        </button>
+      </div>
+    </div>
+  );
+};
 
 interface AppShellProps {
   currentUser?: UserProfile | null;
@@ -414,7 +450,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
         <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-xs flex items-center justify-between shrink-0 z-50">
           <div className="flex items-center gap-2.5 min-w-0 pr-4">
             <span className="p-1 rounded-md bg-amber-200/60 dark:bg-amber-800/60 text-amber-800 dark:text-amber-200 shrink-0">
-              <AlertTriangle className="w-4 h-4" />
+              <AlertTriangle className="w-4 h-4" aria-hidden="true" />
             </span>
             <div className="leading-tight">
               <strong className="font-semibold mr-1">Firestore Free Daily Quota Reached:</strong>
@@ -438,8 +474,9 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
               onClick={() => setIsQuotaBannerDismissed(true)}
               className="p-1 text-amber-700 dark:text-amber-400 hover:text-amber-950 dark:hover:text-white rounded transition-colors"
               title="Dismiss notice"
+              aria-label="Dismiss notice"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -491,26 +528,14 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
 
       {/* Digital Acknowledgment Receipt Modal (Phase 13) */}
       {ackNotice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-sm w-full p-5 text-center space-y-4 text-xs">
-            <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm">Schedule Receipt Confirmed!</h3>
-              <p className="text-slate-600 text-xs mt-1 leading-relaxed">{ackNotice}</p>
-            </div>
-            <button
-              onClick={() => {
-                setAckNotice(null);
-                navigateTo('schedules');
-              }}
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer transition-colors shadow-xs"
-            >
-              Continue to Workspace
-            </button>
-          </div>
-        </div>
+        <AckNoticeDialog
+          message={ackNotice}
+          onDismiss={() => setAckNotice(null)}
+          onContinue={() => {
+            setAckNotice(null);
+            navigateTo('schedules');
+          }}
+        />
       )}
     </div>
   );

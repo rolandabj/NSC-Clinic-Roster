@@ -8,7 +8,9 @@
  */
 
 import { isWeekendDay } from '../../utils/weekend';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useId } from 'react';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify } from '../common/dialogs';
 import {
   History,
   RotateCcw,
@@ -119,6 +121,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
 
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
   const [versionToRestore, setVersionToRestore] = useState<ScheduleVersion | null>(null);
+  const restoreTitleId = useId();
+  const restoreDialogRef = useDialogA11y<HTMLDivElement>(isRestoreModalOpen && !!versionToRestore, () => {
+    setIsRestoreModalOpen(false);
+    setVersionToRestore(null);
+  });
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [versionToDelete, setVersionToDelete] = useState<ScheduleVersion | null>(null);
@@ -284,7 +291,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
       setVersionToRestore(null);
       await loadData();
     } catch (err: any) {
-      alert(`Restore failed: ${err.message}`);
+      notify(`Restore failed: ${err.message}`, 'error');
     }
   };
 
@@ -320,7 +327,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
       triggerToast(`Version v${deletedNumber} permanently deleted.`);
     } catch (err: any) {
       console.error('Delete failed:', err);
-      alert(`Delete failed: ${err.message || 'Unknown error'}`);
+      notify(`Delete failed: ${err.message || 'Unknown error'}`, 'error');
     }
   };
 
@@ -348,7 +355,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
       }
     } catch (err: any) {
       console.error('Delete schedule failed:', err);
-      alert(`Delete schedule failed: ${err.message || 'Unknown error'}`);
+      notify(`Delete schedule failed: ${err.message || 'Unknown error'}`, 'error');
     }
   };
 
@@ -549,7 +556,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
           <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs shadow-2xs hover:border-slate-300 transition-colors">
             <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span className="text-slate-500 font-medium text-[11px]">Year:</span>
-            <select
+            <select aria-label="Year"
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
               className="bg-transparent font-semibold text-slate-800 focus:outline-none cursor-pointer text-xs"
@@ -575,7 +582,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                 : 'Sorted Latest to Earliest. Click to sort Earliest to Latest.'
             }
           >
-            <ArrowUpDown className="w-3.5 h-3.5 text-indigo-600" />
+            <ArrowUpDown className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
             <span>{sortOrder === 'asc' ? 'Earliest to Latest' : 'Latest to Earliest'}</span>
           </button>
 
@@ -588,7 +595,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
             }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
           >
-            <Diff className="w-3.5 h-3.5" />
+            <Diff className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Compare Any Versions</span>
           </button>
         </div>
@@ -614,7 +621,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
               {/* Search input */}
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                <input
+                <input aria-label="Filter versions"
                   type="text"
                   placeholder="Filter by note, author, v#..."
                   value={versionSearch}
@@ -664,7 +671,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
               <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
                 <div className="flex items-center gap-1.5 text-[11px]">
                   <span className="text-slate-500 font-semibold text-[10px] uppercase tracking-wider">Year:</span>
-                  <select
+                  <select aria-label="Year"
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(e.target.value)}
                     className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -688,7 +695,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                       : 'Currently sorted Latest to Earliest (Click for Earliest to Latest)'
                   }
                 >
-                  <ArrowUpDown className="w-3 h-3 text-indigo-600" />
+                  <ArrowUpDown className="w-3 h-3 text-indigo-600" aria-hidden="true" />
                   <span>{sortOrder === 'asc' ? 'Earliest → Latest' : 'Latest → Earliest'}</span>
                 </button>
               </div>
@@ -710,6 +717,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                   <div
                     key={ver.id}
                     onClick={() => setSelectedVersion(ver)}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isSelected}
+                    aria-label={`Version ${ver.number}${ver.note ? `: ${ver.note}` : ''}`}
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedVersion(ver);
+                      }
+                    }}
                     className={`p-3.5 transition-all cursor-pointer relative group ${
                       isSelected
                         ? 'bg-indigo-50/70 border-l-4 border-l-indigo-600 shadow-2xs'
@@ -791,7 +809,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                         className="inline-flex items-center gap-1 px-2 py-0.8 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-[10px] cursor-pointer shadow-2xs"
                         title="Inspect snapshot in calendar matrix"
                       >
-                        <LayoutGrid className="w-2.5 h-2.5 text-indigo-600" />
+                        <LayoutGrid className="w-2.5 h-2.5 text-indigo-600" aria-hidden="true" />
                         <span>Inspect</span>
                       </button>
 
@@ -804,7 +822,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                         className="inline-flex items-center gap-1 px-2 py-0.8 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-medium text-[10px] cursor-pointer shadow-2xs"
                         title="Compare with active draft"
                       >
-                        <Diff className="w-2.5 h-2.5 text-indigo-600" />
+                        <Diff className="w-2.5 h-2.5 text-indigo-600" aria-hidden="true" />
                         <span>Diff</span>
                       </button>
 
@@ -818,7 +836,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                         className="inline-flex items-center gap-1 px-2 py-0.8 rounded bg-white border border-slate-200 hover:bg-slate-100 text-amber-800 font-medium text-[10px] cursor-pointer shadow-2xs"
                         title="Restore this version as a new draft"
                       >
-                        <RotateCcw className="w-2.5 h-2.5 text-amber-600" />
+                        <RotateCcw className="w-2.5 h-2.5 text-amber-600" aria-hidden="true" />
                         <span>Restore</span>
                       </button>
 
@@ -833,7 +851,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                         className="ml-auto inline-flex items-center gap-1 px-2 py-0.8 rounded bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 font-medium text-[10px] cursor-pointer shadow-2xs transition-colors"
                         title="Delete this version checkpoint (with confirmation prompt)"
                       >
-                        <Trash2 className="w-2.5 h-2.5 text-rose-600" />
+                        <Trash2 className="w-2.5 h-2.5 text-rose-600" aria-hidden="true" />
                         <span>Delete</span>
                       </button>
                     </div>
@@ -892,7 +910,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                       className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-100 text-slate-700 text-[11px] disabled:opacity-30 cursor-pointer font-medium"
                       title={prevVersion ? `Go to previous version v${prevVersion.number}` : 'No previous version in current view'}
                     >
-                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>v{prevVersion?.number || '—'}</span>
                     </button>
                     <div className="h-4 w-px bg-slate-200 mx-0.5" />
@@ -904,7 +922,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                       title={nextVersion ? `Go to next version v${nextVersion.number}` : 'No next version in current view'}
                     >
                       <span>v{nextVersion?.number || '—'}</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
+                      <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                   </div>
 
@@ -915,7 +933,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
                     title="Export this historical version as Excel, CSV, or Print packet"
                   >
-                    <Download className="w-3.5 h-3.5 text-indigo-600" />
+                    <Download className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
                     <span className="hidden sm:inline">Export</span>
                   </button>
 
@@ -926,7 +944,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium cursor-pointer shadow-2xs transition-colors"
                     title="Open snapshot in expanded modal view"
                   >
-                    <Maximize2 className="w-3.5 h-3.5 text-slate-500" />
+                    <Maximize2 className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
                     <span className="hidden sm:inline">Popout</span>
                   </button>
 
@@ -940,7 +958,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
                     title="Restore this version as new draft"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
+                    <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Restore Draft</span>
                   </button>
 
@@ -954,7 +972,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
                     title="Permanently delete version checkpoint with verification prompt"
                   >
-                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" aria-hidden="true" />
                     <span>Delete Version</span>
                   </button>
 
@@ -969,7 +987,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                       className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-rose-300 hover:bg-rose-100 text-rose-800 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
                       title={`Permanently delete schedule "${activeSchedule.name}" and all versions`}
                     >
-                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600" aria-hidden="true" />
                       <span>Delete Schedule</span>
                     </button>
                   )}
@@ -988,7 +1006,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                         : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
                     }`}
                   >
-                    <LayoutGrid className="w-3.5 h-3.5" />
+                    <LayoutGrid className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Roster Matrix</span>
                   </button>
 
@@ -1001,7 +1019,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                         : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
                     }`}
                   >
-                    <Diff className="w-3.5 h-3.5" />
+                    <Diff className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Diff vs Active Draft</span>
                     {selectedVsDraftDiff && (
                       <span className="ml-1 px-1.5 py-0.2 rounded-full font-mono text-[10px] bg-indigo-100 text-indigo-800">
@@ -1019,7 +1037,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                         : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
                     }`}
                   >
-                    <List className="w-3.5 h-3.5" />
+                    <List className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Shifts Table</span>
                     <span className="ml-1 px-1.5 py-0.2 rounded-full font-mono text-[10px] bg-slate-200 text-slate-700">
                       {selectedVersion.snapshot.assignments?.length || 0}
@@ -1035,7 +1053,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                         : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
                     }`}
                   >
-                    <Info className="w-3.5 h-3.5" />
+                    <Info className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Snapshot Metadata</span>
                   </button>
                 </div>
@@ -1064,8 +1082,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                             onClick={() => setMatrixBlockIndex((p) => Math.max(0, p - 1))}
                             className="p-1 rounded hover:bg-slate-200 disabled:opacity-30 cursor-pointer"
                             title="Previous block"
+                            aria-label="Previous block"
                           >
-                            <ChevronLeft className="w-3.5 h-3.5" />
+                            <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
                           </button>
                           <span className="px-2 font-mono font-bold text-[11px] text-slate-700">
                             Block {matrixBlockIndex + 1} of {totalBlocks}
@@ -1076,8 +1095,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                             onClick={() => setMatrixBlockIndex((p) => Math.min(totalBlocks - 1, p + 1))}
                             className="p-1 rounded hover:bg-slate-200 disabled:opacity-30 cursor-pointer"
                             title="Next block"
+                            aria-label="Next block"
                           >
-                            <ChevronRight className="w-3.5 h-3.5" />
+                            <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
                           </button>
                         </div>
                       )}
@@ -1099,7 +1119,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="relative w-48">
                         <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                        <input
+                        <input aria-label="Filter nurse"
                           type="text"
                           placeholder="Filter nurse..."
                           value={matrixSearchQuery}
@@ -1108,7 +1128,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                         />
                       </div>
 
-                      <select
+                      <select aria-label="Nurse"
                         value={matrixNurseFilter}
                         onChange={(e) => setMatrixNurseFilter(e.target.value)}
                         className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-700 text-xs cursor-pointer"
@@ -1372,7 +1392,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                       onClick={() => handleOpenCompareWithDraft(selectedVersion)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-xs cursor-pointer transition-colors"
                     >
-                      <Diff className="w-3.5 h-3.5" />
+                      <Diff className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Open Full Side-by-Side Diff Modal</span>
                     </button>
                   </div>
@@ -1531,10 +1551,16 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
       {/* --- RESTORE CONFIRMATION MODAL --- */}
       {isRestoreModalOpen && versionToRestore && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none animate-in fade-in duration-150">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs">
+          <div
+            ref={restoreDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={restoreTitleId}
+            className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs"
+          >
             <div className="flex items-center gap-2 text-indigo-600">
-              <RotateCcw className="w-5 h-5 shrink-0" />
-              <h3 className="text-sm font-bold text-slate-900">
+              <RotateCcw className="w-5 h-5 shrink-0" aria-hidden="true" />
+              <h3 id={restoreTitleId} className="text-sm font-bold text-slate-900">
                 Safe Non-Destructive Restore
               </h3>
             </div>

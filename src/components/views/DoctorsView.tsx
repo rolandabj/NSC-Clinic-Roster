@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify, confirmDialog } from '../common/dialogs';
 import {
   Stethoscope,
   Plus,
@@ -107,6 +109,14 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
   const [editingSession, setEditingSession] = useState<Partial<DoctorSession> | null>(null);
 
   const [notification, setNotification] = useState<string | null>(null);
+
+  // Dialog keyboard and screen reader support
+  const doctorTitleId = useId();
+  const expandTitleId = useId();
+  const sessionTitleId = useId();
+  const doctorDialogRef = useDialogA11y<HTMLDivElement>(isDoctorModalOpen, () => setIsDoctorModalOpen(false));
+  const expandDialogRef = useDialogA11y<HTMLDivElement>(isExpandModalOpen, () => setIsExpandModalOpen(false));
+  const sessionDialogRef = useDialogA11y<HTMLDivElement>(isSessionModalOpen && !!editingSession, () => setIsSessionModalOpen(false));
 
   const repo = getRepository();
 
@@ -268,7 +278,13 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
   };
 
   const handleDeleteDoctor = async (id: string, name: string) => {
-    if (confirm(`Remove doctor "${name}" and their sessions?`)) {
+    const ok = await confirmDialog({
+      title: 'Remove doctor?',
+      message: `Remove doctor "${name}" and their sessions?`,
+      confirmLabel: 'Remove doctor',
+      danger: true,
+    });
+    if (ok) {
       await repo.remove('doctors', id);
       // Remove associated sessions
       const docSessions = await repo.list('doctorSessions', {
@@ -322,7 +338,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
           : doctors.filter((d) => d.id === expandRange.targetDoctorId);
 
       if (expandRange.startDate > expandRange.endDate) {
-        alert('Start date must be before or equal to end date.');
+        notify('Start date must be before or equal to end date.', 'warning');
         return;
       }
 
@@ -340,7 +356,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       setIsExpandModalOpen(false);
       loadData();
     } catch (err: any) {
-      alert(`Error expanding sessions: ${err.message}`);
+      notify(`Error expanding sessions: ${err.message}`, 'error');
     }
   };
 
@@ -388,7 +404,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       setEditingSession(null);
       loadData();
     } catch (err: any) {
-      alert(`Failed to save session: ${err.message}`);
+      notify(`Failed to save session: ${err.message}`, 'error');
     }
   };
 
@@ -421,7 +437,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
             title="Bulk import doctors from CSV"
           >
-            <Upload className="w-3.5 h-3.5 text-slate-500" />
+            <Upload className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
             <span>Bulk CSV Import</span>
           </button>
 
@@ -429,14 +445,14 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
             onClick={() => setIsExpandModalOpen(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-medium transition-colors cursor-pointer"
           >
-            <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+            <RefreshCw className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
             <span>Expand Pattern to Dates...</span>
           </button>
           <button
             onClick={handleOpenAddDoctor}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition-colors shadow-xs cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Add Doctor</span>
           </button>
         </div>
@@ -490,6 +506,13 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                     <tr
                       key={doc.id}
                       onClick={() => setSelectedDoctorId(doc.id)}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault();
+                          setSelectedDoctorId(doc.id);
+                        }
+                      }}
                       className={`cursor-pointer transition-colors ${
                         isSelected
                           ? 'bg-indigo-50/70 border-l-4 border-indigo-600'
@@ -564,15 +587,17 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                             onClick={() => handleOpenEditDoctor(doc)}
                             className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
                             title="Edit Doctor & Patterns"
+                            aria-label={`Edit ${doc.fullName}`}
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
                           </button>
                           <button
                             onClick={() => handleDeleteDoctor(doc.id, doc.fullName)}
                             className="p-1 hover:bg-red-50 rounded text-red-600 cursor-pointer"
                             title="Delete Doctor"
+                            aria-label={`Delete ${doc.fullName}`}
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                           </button>
                         </div>
                       </td>
@@ -596,7 +621,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                           onClick={handleOpenAddDoctor}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold cursor-pointer shadow-xs"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-3.5 h-3.5" aria-hidden="true" />
                           <span>Add First Doctor</span>
                         </button>
                       </div>
@@ -643,7 +668,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                   }}
                   className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium text-[11px] cursor-pointer"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-3 h-3" aria-hidden="true" />
                   <span>Add Ad-hoc Session</span>
                 </button>
               </div>
@@ -728,8 +753,9 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                           }}
                           className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
                           title="Edit Session Times"
+                          aria-label={`Edit session times for ${sess.date}`}
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
+                          <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>
                       </div>
                     </div>
@@ -760,19 +786,27 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       {/* DOCTOR ADD / EDIT MODAL */}
       {isDoctorModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs">
+          <div
+            ref={doctorDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={doctorTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs"
+          >
             <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">
-                <Stethoscope className="w-4 h-4 text-indigo-600" />
-                <h2 className="text-sm font-bold text-slate-800">
+                <Stethoscope className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                <h2 id={doctorTitleId} className="text-sm font-bold text-slate-800">
                   {editingDoctor ? `Edit Doctor: ${editingDoctor.fullName}` : 'Add New Doctor'}
                 </h2>
               </div>
               <button
                 onClick={() => setIsDoctorModalOpen(false)}
                 className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -786,8 +820,10 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                     type="button"
                     onClick={() => setInlineError(null)}
                     className="text-rose-400 hover:text-rose-600 font-bold px-1 cursor-pointer"
+                    aria-label="Dismiss error"
+                    title="Dismiss error"
                   >
-                    ✕
+                    <span aria-hidden="true">✕</span>
                   </button>
                 </div>
               )}
@@ -796,7 +832,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                 <label className="block font-medium text-slate-700 mb-1">
                   Full Name (e.g. Dr. Ali Hassan) <span className="text-red-500">*</span>
                 </label>
-                <input
+                <input aria-label="Full Name (e.g. Dr. Ali Hassan)"
                   type="text"
                   required
                   value={formData.fullName}
@@ -811,7 +847,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                   <label className="block font-medium text-slate-700 mb-1">
                     Gmail Address (Optional)
                   </label>
-                  <input
+                  <input aria-label="Gmail Address (Optional)"
                     type="email"
                     value={formData.gmail}
                     onChange={(e) => setFormData({ ...formData, gmail: e.target.value })}
@@ -837,7 +873,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                   {/* Inline quick-add specialty box */}
                   {isAddingSpecialty && (
                     <div className="p-2 mb-2 bg-indigo-50/70 border border-indigo-200 rounded flex gap-1.5 items-center animate-in fade-in">
-                      <input
+                      <input aria-label="New specialty name"
                         type="text"
                         placeholder="e.g. Dermatology"
                         value={newSpecialtyName}
@@ -857,7 +893,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
 
                   {specialties.length > 0 ? (
                     <div>
-                      <select
+                      <select aria-label="Specialties"
                         multiple
                         value={formData.specialtyIds}
                         onChange={(e) => {
@@ -942,7 +978,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                       key={idx}
                       className="p-2 border border-slate-200 rounded bg-slate-50 flex items-center gap-2"
                     >
-                      <select
+                      <select aria-label="Weekday"
                         value={pat.weekday}
                         onChange={(e) =>
                           handlePatternChange(idx, 'weekday', Number(e.target.value))
@@ -956,21 +992,21 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                         ))}
                       </select>
 
-                      <input
+                      <input aria-label="Start time"
                         type="time"
                         value={pat.startTime}
                         onChange={(e) => handlePatternChange(idx, 'startTime', e.target.value)}
                         className="w-24 px-1.5 py-1 border border-slate-300 rounded font-mono text-center bg-white"
                       />
                       <span className="text-slate-400">to</span>
-                      <input
+                      <input aria-label="End time"
                         type="time"
                         value={pat.endTime}
                         onChange={(e) => handlePatternChange(idx, 'endTime', e.target.value)}
                         className="w-24 px-1.5 py-1 border border-slate-300 rounded font-mono text-center bg-white"
                       />
 
-                      <input
+                      <input aria-label="Room"
                         type="text"
                         placeholder="Suite 101"
                         value={pat.room || ''}
@@ -982,8 +1018,10 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                         type="button"
                         onClick={() => handleRemovePatternRow(idx)}
                         className="p-1 text-slate-400 hover:text-red-600 rounded cursor-pointer"
+                        aria-label="Remove pattern row"
+                        title="Remove pattern row"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>
                     </div>
                   ))}
@@ -997,7 +1035,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Notes / Bio</label>
-                <input
+                <input aria-label="Notes / Bio"
                   type="text"
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -1035,12 +1073,12 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                 >
                   {isSaving ? (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
                       <span>Saving Doctor...</span>
                     </>
                   ) : (
                     <>
-                      <Save className="w-3.5 h-3.5" />
+                      <Save className="w-3.5 h-3.5" aria-hidden="true" />
                       <span>Save Doctor</span>
                     </>
                   )}
@@ -1054,8 +1092,14 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       {/* EXPAND PATTERN MODAL */}
       {isExpandModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs">
-            <h3 className="text-sm font-bold text-slate-900">
+          <div
+            ref={expandDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={expandTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
+          >
+            <h3 id={expandTitleId} className="text-sm font-bold text-slate-900">
               Expand Weekly Patterns to Concrete Sessions
             </h3>
             <p className="text-[11px] text-slate-500">
@@ -1065,7 +1109,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
             <div className="space-y-3">
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Target Doctor</label>
-                <select
+                <select aria-label="Target Doctor"
                   value={expandRange.targetDoctorId}
                   onChange={(e) =>
                     setExpandRange({ ...expandRange, targetDoctorId: e.target.value })
@@ -1092,7 +1136,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">Start Date</label>
-                  <input
+                  <input aria-label="Start Date"
                     type="date"
                     value={expandRange.startDate}
                     onChange={(e) =>
@@ -1103,7 +1147,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                 </div>
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">End Date</label>
-                  <input
+                  <input aria-label="End Date"
                     type="date"
                     value={expandRange.endDate}
                     onChange={(e) =>
@@ -1138,15 +1182,21 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       {/* AD-HOC SESSION OVERRIDE MODAL */}
       {isSessionModalOpen && editingSession && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-sm w-full p-5 space-y-4 text-xs">
-            <h3 className="text-sm font-bold text-slate-900">
+          <div
+            ref={sessionDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={sessionTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-sm w-full p-5 space-y-4 text-xs"
+          >
+            <h3 id={sessionTitleId} className="text-sm font-bold text-slate-900">
               {editingSession.id ? 'Edit Clinic Session' : 'Add Ad-hoc Session'}
             </h3>
 
             <form onSubmit={handleSaveAdHocSession} className="space-y-3">
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Date</label>
-                <input
+                <input aria-label="Date"
                   type="date"
                   required
                   value={editingSession.date}
@@ -1160,7 +1210,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">Start Time</label>
-                  <input
+                  <input aria-label="Start Time"
                     type="time"
                     required
                     value={editingSession.startTime}
@@ -1172,7 +1222,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                 </div>
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">End Time</label>
-                  <input
+                  <input aria-label="End Time"
                     type="time"
                     required
                     value={editingSession.endTime}
@@ -1186,7 +1236,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Room / Suite</label>
-                <input
+                <input aria-label="Room / Suite"
                   type="text"
                   value={editingSession.room || ''}
                   onChange={(e) =>

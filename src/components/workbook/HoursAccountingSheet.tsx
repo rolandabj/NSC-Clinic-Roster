@@ -163,7 +163,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
 
         {/* Search & Filter */}
         <div className="flex items-center gap-2">
-          <input
+          <input aria-label="Search nurse"
             type="text"
             placeholder="Search nurse..."
             value={searchQuery}
@@ -171,7 +171,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
             className="px-2.5 py-1 border border-slate-200 rounded text-xs w-44 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           />
 
-          <select
+          <select aria-label="Filter by status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as any)}
             className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
@@ -212,6 +212,13 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
                   <tr
                     key={r.nurse.id}
                     onClick={() => handleOpenTimesheet(r)}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault();
+                        handleOpenTimesheet(r);
+                      }
+                    }}
                     className="hover:bg-indigo-50/40 cursor-pointer transition-colors"
                   >
                     <td className="py-2 px-3">

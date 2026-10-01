@@ -68,7 +68,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate max-w-[200px]">
                 {context.activeScheduleName || 'No Active Schedule'}
               </span>
-              <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600" />
+              <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-600" aria-hidden="true" />
             </div>
             {context.activeSchedulePeriod ? (
               <span className="text-[11px] text-slate-500 dark:text-slate-400 tabular-nums leading-none">
@@ -91,8 +91,9 @@ export const TopBar: React.FC<TopBarProps> = ({
             onClick={onOpenShortcuts}
             className="p-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
             title="Keyboard Shortcuts Cheat-sheet (?)"
+            aria-label="Keyboard shortcuts"
           >
-            <Keyboard className="w-4 h-4 text-slate-500" />
+            <Keyboard className="w-4 h-4 text-slate-500" aria-hidden="true" />
           </button>
         )}
 
@@ -103,7 +104,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             className="px-2 py-1 rounded border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100/80 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold shadow-2xs"
             title="System Acceptance Checklist & Verification Suite"
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
             <span className="text-[11px]">Verification</span>
           </button>
         )}
@@ -117,11 +118,12 @@ export const TopBar: React.FC<TopBarProps> = ({
               : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
           }`}
           title="Open the schedule and its Warnings tab"
+          aria-label={`${context.warningCount} warnings`}
         >
           {context.warningCount > 0 ? (
-            <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
           ) : (
-            <Bell className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            <Bell className="w-4 h-4 text-slate-500 dark:text-slate-400" aria-hidden="true" />
           )}
           <span className="tabular-nums font-semibold">
             {context.warningCount}
@@ -136,6 +138,8 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div className="relative">
             <button
               onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+              aria-expanded={isProfileMenuOpen}
+              aria-haspopup="menu"
               className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-slate-50 dark:bg-slate-800 transition-colors cursor-pointer text-left shadow-2xs"
             >
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${
@@ -153,7 +157,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                   {isMasterAdmin ? 'Administrator' : 'Clinic Staff'}
                 </span>
               </div>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
+              <ChevronDown className="w-3 h-3 text-slate-400" aria-hidden="true" />
             </button>
 
             {isProfileMenuOpen && (
@@ -184,7 +188,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                   }}
                   className="w-full text-left px-3.5 py-2 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors cursor-pointer flex items-center gap-2"
                 >
-                  <Shield className="w-3.5 h-3.5 text-indigo-500" />
+                  <Shield className="w-3.5 h-3.5 text-indigo-500" aria-hidden="true" />
                   <span>Clinical Access &amp; Permissions</span>
                 </button>
 
@@ -194,7 +198,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                     onClick={handleSignOut}
                     className="w-full text-left px-3.5 py-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer flex items-center gap-2 font-medium"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
+                    <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
                     <span>Sign Out</span>
                   </button>
                 </div>
@@ -206,7 +210,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             onClick={handleSignOut}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors cursor-pointer shadow-xs"
           >
-            <LogOut className="w-3.5 h-3.5" />
+            <LogOut className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Sign In</span>
           </button>
         )}

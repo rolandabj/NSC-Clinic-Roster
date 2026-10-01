@@ -58,6 +58,7 @@ import {
   HoursAccountingStatus,
 } from '../../services/reports/hoursAccounting';
 import { NurseTimesheetModal } from '../modals/NurseTimesheetModal';
+import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
 
 interface ReportsViewProps {
   context: ClinicContextState;
@@ -353,36 +354,29 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
       'Payroll Status',
     ];
 
-    const lines = [headers.join(',')];
+    const rows: CsvValue[][] = [headers];
 
     nurseAccountingRows.forEach((r) => {
-      lines.push(
-        [
-          `"${r.nurse.employeeCode}"`,
-          `"${r.nurse.fullName}"`,
-          `"${r.seniority?.name || 'Staff'}"`,
-          `${r.contractPercent}%`,
-          r.targetHours,
-          r.dutyHours,
-          r.leaveHours,
-          r.totalEarnedHours,
-          r.varianceHours > 0 ? `+${r.varianceHours}` : r.varianceHours,
-          `${r.pacePercent}%`,
-          r.weekendShiftsCount,
-          r.lateDutiesCount,
-          r.status,
-        ].join(',')
-      );
+      rows.push([
+        r.nurse.employeeCode,
+        r.nurse.fullName,
+        r.seniority?.name || 'Staff',
+        `${r.contractPercent}%`,
+        r.targetHours,
+        r.dutyHours,
+        r.leaveHours,
+        r.totalEarnedHours,
+        // A real number: a "+12" text cell would be quoted as text by the CSV
+        // formula guard, while spreadsheets already read the old +12 as 12.
+        r.varianceHours,
+        `${r.pacePercent}%`,
+        r.weekendShiftsCount,
+        r.lateDutiesCount,
+        r.status,
+      ]);
     });
 
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `payroll-hours-${activeSchedule?.name || 'clinic'}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsv(`payroll-hours-${activeSchedule?.name || 'clinic'}.csv`, toCsv(rows));
     triggerToast('Payroll Ledger CSV exported successfully.');
   };
 
@@ -402,7 +396,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
       'Notes',
     ];
 
-    const lines = [headers.join(',')];
+    const rows: CsvValue[][] = [headers];
 
     nurseAccountingRows.forEach((r) => {
       r.timeline.forEach((item) => {
@@ -414,35 +408,23 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
           ? `${item.specialty.name} Pool`
           : '';
 
-        lines.push(
-          [
-            `"${r.nurse.employeeCode}"`,
-            `"${r.nurse.fullName}"`,
-            item.date,
-            item.weekdayName,
-            item.isWeekend ? 'YES' : 'NO',
-            item.type,
-            item.dutyWindow?.acronym || item.leaveType?.acronym || 'OFF',
-            item.hoursEarned,
-            `"${doctorOrRole}"`,
-            `"${item.source || ''}"`,
-            `"${item.notes || ''}"`,
-          ].join(',')
-        );
+        rows.push([
+          r.nurse.employeeCode,
+          r.nurse.fullName,
+          item.date,
+          item.weekdayName,
+          item.isWeekend ? 'YES' : 'NO',
+          item.type,
+          item.dutyWindow?.acronym || item.leaveType?.acronym || 'OFF',
+          item.hoursEarned,
+          doctorOrRole,
+          item.source || '',
+          item.notes || '',
+        ]);
       });
     });
 
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute(
-      'download',
-      `all-shifts-timesheet-${activeSchedule?.name || 'clinic'}.csv`
-    );
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsv(`all-shifts-timesheet-${activeSchedule?.name || 'clinic'}.csv`, toCsv(rows));
     triggerToast('All-shift clinical timesheets CSV exported.');
   };
 
@@ -480,7 +462,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
         <div className="flex flex-wrap items-center gap-2 print:hidden">
           <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded px-2.5 py-1 text-xs">
             <Calendar className="w-3.5 h-3.5 text-slate-400" />
-            <select
+            <select aria-label="Schedule"
               value={activeSchedule?.id || ''}
               onChange={(e) => handleScheduleChange(e.target.value)}
               className="bg-transparent font-medium text-slate-800 focus:outline-none cursor-pointer"
@@ -497,7 +479,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
             onClick={handleExportPayrollCsv}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition-colors shadow-xs cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Export Payroll CSV</span>
           </button>
 
@@ -505,7 +487,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
             onClick={handleExportAllTimesheetsCsv}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded text-xs font-medium transition-colors cursor-pointer"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" />
+            <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
             <span>Export Timesheets CSV</span>
           </button>
 
@@ -513,8 +495,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
             onClick={handlePrint}
             className="p-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded transition-colors cursor-pointer"
             title="Print Ledger Report"
+            aria-label="Print Ledger Report"
           >
-            <Printer className="w-4 h-4" />
+            <Printer className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -620,7 +603,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Users className="w-4 h-4" />
+            <Users className="w-4 h-4" aria-hidden="true" />
             <span>Staff Hours &amp; Payroll Ledger</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-mono">
               {nurseAccountingRows.length}
@@ -635,7 +618,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Scale className="w-4 h-4" />
+            <Scale className="w-4 h-4" aria-hidden="true" />
             <span>Equity &amp; Shift Distribution Analytics</span>
           </button>
 
@@ -647,7 +630,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Award className="w-4 h-4" />
+            <Award className="w-4 h-4" aria-hidden="true" />
             <span>Leave Quotas &amp; Accrual Balances</span>
           </button>
         </div>
@@ -661,7 +644,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
             <div className="flex flex-1 items-center gap-2 min-w-[240px] max-w-md">
               <div className="relative w-full">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                <input
+                <input aria-label="Search staff"
                   type="text"
                   placeholder="Search staff by name or employee code..."
                   value={searchQuery}
@@ -675,7 +658,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
               {/* Seniority Filter */}
               <div className="flex items-center gap-1.5">
                 <span className="text-slate-500 text-[11px]">Seniority:</span>
-                <select
+                <select aria-label="Seniority"
                   value={seniorityFilter}
                   onChange={(e) => setSeniorityFilter(e.target.value)}
                   className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
@@ -692,7 +675,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
               {/* Contract Filter */}
               <div className="flex items-center gap-1.5">
                 <span className="text-slate-500 text-[11px]">Contract:</span>
-                <select
+                <select aria-label="Contract"
                   value={contractFilter}
                   onChange={(e) => setContractFilter(e.target.value as any)}
                   className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
@@ -706,7 +689,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
               {/* Status Filter */}
               <div className="flex items-center gap-1.5">
                 <span className="text-slate-500 text-[11px]">Status:</span>
-                <select
+                <select aria-label="Status"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as any)}
                   className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
@@ -915,6 +898,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
                       <tr
                         key={r.nurse.id}
                         onClick={() => handleOpenTimesheet(r)}
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+                            e.preventDefault();
+                            handleOpenTimesheet(r);
+                          }
+                        }}
                         className="hover:bg-indigo-50/40 cursor-pointer transition-colors group"
                       >
                         <td className="py-2.5 px-3">

@@ -8,7 +8,7 @@
  * and Manager Approver designations.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   Shield,
   ShieldCheck,
@@ -33,6 +33,8 @@ import {
 import { UserProfile } from '../../services/auth/authService';
 import { getRepository } from '../../services/repository';
 import { UserAccessRecord, Nurse, Doctor, UserAccessRole, UserAccessStatus } from '../../types';
+import { useDialogA11y } from '../common/useDialogA11y';
+import { notify, confirmDialog } from '../common/dialogs';
 
 interface AccessManagementPanelProps {
   currentUser?: UserProfile;
@@ -50,6 +52,8 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
 
   // New Whitelist User Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const addTitleId = useId();
+  const addDialogRef = useDialogA11y<HTMLDivElement>(isAddModalOpen, () => setIsAddModalOpen(false));
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<UserAccessRole>('VIEWER');
@@ -123,7 +127,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
   ) => {
     const key = email.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) {
-      alert('Please enter a valid email address.');
+      notify('Please enter a valid email address.', 'warning');
       return false;
     }
     // Link the matching nurse profile automatically (by Gmail) so the user can
@@ -149,7 +153,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
       await fetchDirectory();
       return true;
     } catch (err: any) {
-      alert(`Approval error: ${err.message}`);
+      notify(`Approval error: ${err.message}`, 'error');
       return false;
     } finally {
       setIsBusy(false);
@@ -163,7 +167,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
     const existing = users.find((u) => u.id === userId);
     if (!existing) return;
     if (existing.email.trim().toLowerCase() === MASTER_EMAIL) {
-      alert('The Master Administrator account cannot be modified or degraded.');
+      notify('The Master Administrator account cannot be modified or degraded.', 'warning');
       return;
     }
     setIsBusy(true);
@@ -176,7 +180,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
       triggerToast('User access and privileges updated successfully.');
       await fetchDirectory();
     } catch (err: any) {
-      alert(`Update error: ${err.message}`);
+      notify(`Update error: ${err.message}`, 'error');
     } finally {
       setIsBusy(false);
     }
@@ -184,10 +188,16 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
 
   const handleRevokeUser = async (userId: string, email: string) => {
     if (email.trim().toLowerCase() === MASTER_EMAIL) {
-      alert('The Master Administrator account cannot be revoked.');
+      notify('The Master Administrator account cannot be revoked.', 'warning');
       return;
     }
-    if (!confirm(`Are you sure you want to revoke access for ${email}?`)) return;
+    const ok = await confirmDialog({
+      title: 'Revoke access?',
+      message: `Are you sure you want to revoke access for ${email}?`,
+      confirmLabel: 'Revoke access',
+      danger: true,
+    });
+    if (!ok) return;
     setIsBusy(true);
     try {
       await saveAccessRecord(email, { status: 'REVOKED' });
@@ -195,7 +205,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
       triggerToast(`Access revoked for ${email}.`);
       await fetchDirectory();
     } catch (err: any) {
-      alert(`Revocation error: ${err.message}`);
+      notify(`Revocation error: ${err.message}`, 'error');
     } finally {
       setIsBusy(false);
     }
@@ -269,14 +279,14 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
             disabled={isLoading || isBusy}
             className="px-3 py-1.5 rounded bg-indigo-800 hover:bg-indigo-700 text-indigo-100 font-medium border border-indigo-700 flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
             <span>Refresh</span>
           </button>
           <button
             onClick={() => setIsAddModalOpen(true)}
             className="px-3.5 py-1.5 rounded bg-white text-indigo-900 hover:bg-indigo-50 font-bold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
           >
-            <UserPlus className="w-3.5 h-3.5 text-indigo-700" />
+            <UserPlus className="w-3.5 h-3.5 text-indigo-700" aria-hidden="true" />
             <span>Pre-Approve User</span>
           </button>
         </div>
@@ -379,7 +389,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                           disabled={isBusy}
                           className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-bold inline-flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
                         >
-                          <Check className="w-3.5 h-3.5" />
+                          <Check className="w-3.5 h-3.5" aria-hidden="true" />
                           <span>Approve Access</span>
                         </button>
                         <button
@@ -387,7 +397,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                           disabled={isBusy}
                           className="px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-semibold inline-flex items-center gap-1 transition-colors cursor-pointer"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <X className="w-3.5 h-3.5" aria-hidden="true" />
                           <span>Reject</span>
                         </button>
                       </td>
@@ -416,7 +426,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
           <div className="flex items-center gap-2">
             <div className="relative">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
-              <input
+              <input aria-label="Search staff"
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -424,7 +434,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                 className="pl-8 pr-3 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none w-56 text-[11px]"
               />
             </div>
-            <select
+            <select aria-label="Filter by status"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
               className="px-2.5 py-1.5 border border-slate-300 rounded bg-white text-slate-700 font-medium text-[11px]"
@@ -503,7 +513,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                       {isMasterAdmin ? (
                         <span className="font-bold text-indigo-700 font-mono text-[11px]">OWNER / EDITOR</span>
                       ) : (
-                        <select
+                        <select aria-label={`Roster role for ${user.email}`}
                           value={user.appRole || 'VIEWER'}
                           onChange={(e) =>
                             handleUpdateRole(user.id, { appRole: e.target.value as UserAccessRole })
@@ -544,7 +554,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                       {isMasterAdmin ? (
                         <span className="text-slate-400 italic">N/A (Clinical Director)</span>
                       ) : (
-                        <select
+                        <select aria-label={`Linked nurse profile for ${user.email}`}
                           value={user.linkedNurseId || ''}
                           onChange={(e) =>
                             handleUpdateRole(user.id, { linkedNurseId: e.target.value || undefined })
@@ -574,7 +584,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                               disabled={isBusy}
                               className="px-2.5 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
                             >
-                              <UserCheck className="w-3.5 h-3.5" />
+                              <UserCheck className="w-3.5 h-3.5" aria-hidden="true" />
                               <span>Restore Access</span>
                             </button>
                           ) : (
@@ -583,7 +593,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                               disabled={isBusy}
                               className="px-2.5 py-1 rounded bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 font-medium inline-flex items-center gap-1 transition-colors cursor-pointer"
                             >
-                              <UserX className="w-3.5 h-3.5" />
+                              <UserX className="w-3.5 h-3.5" aria-hidden="true" />
                               <span>Revoke</span>
                             </button>
                           )}
@@ -601,17 +611,25 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
       {/* 3. PRE-APPROVE USER MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none">
-          <div className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden text-xs">
+          <div
+            ref={addDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={addTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden text-xs"
+          >
             <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-indigo-600" />
-                <h3 className="font-bold text-slate-900 text-sm">Pre-Approve Institutional User</h3>
+                <UserPlus className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                <h3 id={addTitleId} className="font-bold text-slate-900 text-sm">Pre-Approve Institutional User</h3>
               </div>
               <button
                 onClick={() => setIsAddModalOpen(false)}
                 className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
+                aria-label="Close"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
@@ -620,7 +638,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                 <label className="block font-medium text-slate-700 mb-1">
                   Google Workspace / Gmail Address <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <input aria-label="Google Workspace / Gmail Address"
                   type="email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
@@ -632,7 +650,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
 
               <div>
                 <label className="block font-medium text-slate-700 mb-1">Staff Member Full Name</label>
-                <input
+                <input aria-label="Staff Member Full Name"
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
@@ -644,7 +662,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">Roster Role</label>
-                  <select
+                  <select aria-label="Roster Role"
                     value={newRole}
                     onChange={(e) => setNewRole(e.target.value as UserAccessRole)}
                     className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white text-xs"
@@ -656,7 +674,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
 
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">Link Nurse Profile</label>
-                  <select
+                  <select aria-label="Link Nurse Profile"
                     value={newLinkedNurseId}
                     onChange={(e) => setNewLinkedNurseId(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white text-xs"
@@ -701,7 +719,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                   disabled={isBusy}
                   className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
-                  <Check className="w-3.5 h-3.5" />
+                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
                   <span>Pre-Approve &amp; Save</span>
                 </button>
               </div>
