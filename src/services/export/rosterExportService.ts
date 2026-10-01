@@ -227,7 +227,10 @@ export function exportRosterToExcel(options: RosterExportOptions) {
   legendAoa.push(['4. CLINICAL SUPPORT ROLES']);
   legendAoa.push(['Acronym', 'Role Name', 'Description', 'Default Daily Quota']);
   roles.forEach((r) => {
-    legendAoa.push([r.acronym, r.name, r.description, `${r.defaultDailyQuota}/day`]);
+    // On-demand pool/system roles (e.g. Float Pool) declare a 0 quota and are never
+    // expanded into a fixed daily slot — they are listed without a quota column value.
+    const quotaLabel = (r.defaultDailyQuota ?? 0) > 0 ? `${r.defaultDailyQuota}/day` : 'on demand';
+    legendAoa.push([r.acronym, r.name, r.description, quotaLabel]);
   });
   legendAoa.push([]);
 

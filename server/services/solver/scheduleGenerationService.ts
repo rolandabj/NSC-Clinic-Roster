@@ -13,6 +13,7 @@ import { RegenerateMode } from '../../../src/services/engine/types';
 import { validateScheduleById } from '../validation/scheduleValidator';
 import { SolverOptions, SolverResult, SolverMode } from './types';
 import { Assignment, LockEntry } from '../../../src/types';
+import { filterLocksForSchedule } from '../../../src/services/schedule/lockScope';
 
 export class ScheduleGenerationService {
   public static async execute(
@@ -64,11 +65,8 @@ export class ScheduleGenerationService {
     // Filter locks: if preserveManualLocks is false, exclude them
     let scheduleLocks: LockEntry[] = [];
     if (preserveManualLocks) {
-      scheduleLocks = allLocks.filter(
-        (l) =>
-          (l as any).scheduleId === scheduleId ||
-          (l.date >= schedule.startDate && l.date <= schedule.endDate)
-      );
+      // Schedule-scoped locks (tagged by scheduleId; legacy locks by date window)
+      scheduleLocks = filterLocksForSchedule(allLocks, schedule);
     }
 
     const scheduleLeaves = allLeaves.filter(

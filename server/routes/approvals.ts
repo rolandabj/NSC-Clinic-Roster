@@ -19,6 +19,7 @@ import {
   AuditEvent,
 } from '../../src/types';
 import { MASTER_ADMIN_EMAIL } from '../services/auth/roleDirectoryService';
+import { resolveScheduleIdForLockDate } from '../../src/services/schedule/lockScope';
 
 export const approvalsRouter = Router();
 
@@ -190,7 +191,10 @@ approvalsRouter.post('/approvals/decide', requireAuth, requireManagerOrAdmin, as
 
       // If approved and nurse requested DAY OFF (available === false), sync with Locks collection
       if (decision === 'APPROVED' && existing.available === false) {
-        const locks = (await repo.list('locks')) as LockEntry[];
+        const [locks, schedules] = await Promise.all([
+          repo.list('locks') as Promise<LockEntry[]>,
+          repo.list('schedules'),
+        ]);
         const alreadyLocked = locks.some(
           (l) => l.nurseId === existing.nurseId && l.date === existing.date
         );
@@ -201,6 +205,8 @@ approvalsRouter.post('/approvals/decide', requireAuth, requireManagerOrAdmin, as
             nurseId: existing.nurseId,
             date: existing.date,
             mode: 'OFF',
+            // Tag the owning schedule so the pin is only honoured by that roster.
+            scheduleId: resolveScheduleIdForLockDate(schedules, existing.date),
             note: `Approved Day-Off request: ${existing.note || 'Rest day'}`,
             createdAt: now,
           };

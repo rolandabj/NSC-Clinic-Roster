@@ -26,6 +26,7 @@ import {
   SEED_AUDIT_EVENTS,
   SEED_USER_ACCESS_RECORDS,
   SEED_AVAILABILITY_REQUESTS,
+  SEED_WORKING_HOURS_PERIODS,
 } from '../../../src/services/seed/seedData';
 import {
   DoctorSession,
@@ -35,6 +36,12 @@ import {
 } from '../../../src/types';
 import { SchedulingEngine } from '../../../src/services/engine/SchedulingEngine';
 import { ALL_COLLECTIONS } from '../../db/jsonStore';
+import {
+  ensureCanonicalRules,
+  ensureSystemClinicalRoles,
+  ensureConfigurationDefaults,
+  type ConfigurationBootstrapSummary,
+} from '../../../src/services/seed/configDefaults';
 
 /**
  * Expand weekly patterns into concrete DoctorSession records for October 2026
@@ -72,63 +79,28 @@ export function buildOctober2026DoctorSessions(): DoctorSession[] {
 }
 
 /**
- * Ensures critical default roles and rules exist
+ * Ensures critical system roles and rules exist (Nurse Clinic + Float Pool roles and the
+ * canonical rule catalogue), using the shared configuration bootstrap.
  */
 async function ensureNurseClinicDefaults(repo: IRepository): Promise<void> {
   try {
-    const existingRoles = await repo.list('clinicalRoles');
-    const hasNcRole = existingRoles.some(
-      (r) => r.id === 'role-nurse-clinic' || r.acronym === 'NC' || r.name.toLowerCase().includes('nurse clinic')
-    );
-    if (!hasNcRole) {
-      await repo.create('clinicalRoles', {
-        id: 'role-nurse-clinic',
-        name: 'Nurse Clinic',
-        acronym: 'NC',
-        description: 'Dedicated nurse-led clinic (triage, dressings, vitals & injections) — independent of doctor sessions',
-        defaultDailyQuota: 1,
-        defaultStartTime: '09:00',
-        defaultEndTime: '17:00',
-      });
-    }
-
-    const existingRules = await repo.list('rules');
-    const hasNcRule = existingRules.some(
-      (r) => r.templateKey === 'DEDICATED_NURSE_CLINIC' || r.id === 'rule-nurse-clinic'
-    );
-    if (!hasNcRule) {
-      await repo.create('rules', {
-        id: 'rule-nurse-clinic',
-        name: 'Dedicated nurse clinic coverage (not assigned to doctor)',
-        templateKey: 'DEDICATED_NURSE_CLINIC',
-        scope: 'PER_DAY',
-        metric: 'DUTIES_WITH_END_TIME_X_COUNT',
-        operator: 'MIN',
-        value: 1,
-        severity: 'HARD',
-        enabled: true,
-      });
-    }
-
-    const hasPlusOneRule = existingRules.some(
-      (r) => r.templateKey === 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS' || r.id === 'rule-nurse-plus-one'
-    );
-    if (!hasPlusOneRule) {
-      await repo.create('rules', {
-        id: 'rule-nurse-plus-one',
-        name: 'At least one additional nurse above doctors during clinic operating hours',
-        templateKey: 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS',
-        scope: 'PER_DUTY_WINDOW',
-        metric: 'DUTIES_WITH_END_TIME_X_COUNT',
-        operator: 'MIN',
-        value: 1,
-        severity: 'HARD',
-        enabled: true,
-      });
-    }
+    await ensureSystemClinicalRoles(repo);
+    await ensureCanonicalRules(repo, { onlyWhenEmpty: false });
   } catch (err) {
     console.warn('[ServerSeed] ensureNurseClinicDefaults warning:', err);
   }
+}
+
+/**
+ * Server-side configuration bootstrap: guarantees the engine's configuration inputs exist
+ * (system clinical roles, canonical rules when the catalogue is empty, and the dedicated
+ * working-hours periods that define the authoritative full-time hours targets).
+ * Skipped when the database carries the explicit CLEARED tombstone.
+ */
+export async function ensureServerConfigurationDefaults(
+  repo: IRepository
+): Promise<ConfigurationBootstrapSummary> {
+  return ensureConfigurationDefaults(repo, { logPrefix: '[ServerSeed]' });
 }
 
 /**
@@ -194,6 +166,9 @@ export async function populateServerSeedData(repo: IRepository): Promise<void> {
 
   // 19. Initial Availability Requests
   await repo.bulkUpsert('availabilityRequests', SEED_AVAILABILITY_REQUESTS);
+
+  // 19b. Dedicated Working Hours Periods (authoritative full-time targets)
+  await repo.bulkUpsert('workingHoursPeriods', SEED_WORKING_HOURS_PERIODS);
 
   // 20. Generate Initial 31-Day Shift Assignments
   try {

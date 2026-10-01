@@ -17,6 +17,7 @@ import { serverRepo } from './db/index';
 import {
   initializeServerDatabaseIfEmpty,
   isServerDatabaseCleared,
+  ensureServerConfigurationDefaults,
 } from './services/seed/serverSeedRunner';
 import { adminRouter } from './routes/admin';
 import { authMiddleware } from './middleware/auth';
@@ -102,6 +103,10 @@ export async function startServer() {
     const isWiped = await isServerDatabaseCleared(serverRepo);
     if (!isWiped) {
       console.log('[Server] Cold start: Database is running in clean production mode.');
+      // Configuration-only bootstrap: system clinical roles (NC/FLT), the canonical rule
+      // catalogue when empty, and the dedicated working-hours periods the engine uses to
+      // resolve the authoritative full-time hours target. Never seeds business/demo data.
+      await ensureServerConfigurationDefaults(serverRepo);
     }
   } catch (err) {
     console.error('[Server] Cold start database check failed:', err);

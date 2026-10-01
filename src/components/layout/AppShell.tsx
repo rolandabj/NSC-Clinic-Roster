@@ -22,8 +22,8 @@ import { repositoryManager } from '../../services/repository';
 import {
   initializeDatabaseIfEmpty,
   isDatabaseMarkedCleared,
-  ensureWorkingHoursPeriodsDefaults,
 } from '../../services/seed/seedRunner';
+import { ensureConfigurationDefaults } from '../../services/seed/configDefaults';
 import { testFirestoreConnection } from '../../services/firebase/firebaseConfig';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
@@ -206,8 +206,10 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
         await testFirestoreConnection();
         const repo = repositoryManager.getRepo();
 
-        // Ensure baseline working hours periods are seeded if empty
-        await ensureWorkingHoursPeriodsDefaults(repo);
+        // Ensure baseline configuration is present: system clinical roles (Nurse Clinic,
+        // Float Pool), the canonical rule catalogue, and the dedicated working-hours
+        // periods that define the authoritative full-time hours targets.
+        await ensureConfigurationDefaults(repo, { logPrefix: '[ClinicRoster]' });
 
         // Fetch active clinic profile if present
         const clinics = await repo.list('clinics');

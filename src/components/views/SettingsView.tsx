@@ -86,6 +86,7 @@ import { SEED_CLINIC_PROFILE } from '../../services/seed/seedData';
 import { AccessManagementPanel } from './AccessManagementPanel';
 import { WorkingHoursPeriodsPanel } from './WorkingHoursPeriodsPanel';
 import { RuleSyncService } from '../../services/rules/ruleSyncService';
+import { ensureSystemClinicalRoles } from '../../services/seed/configDefaults';
 
 interface SettingsViewProps {
   context: ClinicContextState;
@@ -849,7 +850,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         name: role.name || 'New Role',
         acronym: acronymClean,
         description: role.description || '',
-        defaultDailyQuota: role.defaultDailyQuota || 1,
+        // Nullish (not ||) so an explicit 0 daily quota — e.g. the Float Pool system role
+        // that the engine fills on demand — survives a save.
+        defaultDailyQuota: role.defaultDailyQuota ?? 1,
         defaultStartTime: startTime,
         defaultEndTime: endTime,
       });
@@ -941,22 +944,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setIsSyncingRules(true);
     try {
       const syncResult = await RuleSyncService.syncStandardRules();
-      // Ensure dedicated nurse clinic clinical role also exists
-      const roles = await repo.list('clinicalRoles');
-      const hasNcRole = roles.some(
-        (r) => r.id === 'role-nurse-clinic' || r.acronym === 'NC' || r.name.toLowerCase().includes('nurse clinic')
-      );
-      if (!hasNcRole) {
-        await repo.create('clinicalRoles', {
-          id: 'role-nurse-clinic',
-          name: 'Nurse Clinic',
-          acronym: 'NC',
-          description: 'Dedicated nurse-led clinic (triage, dressings, vitals & injections) — independent of doctor sessions',
-          defaultDailyQuota: 1,
-          defaultStartTime: '09:00',
-          defaultEndTime: '17:00',
-        });
-      }
+      // Ensure the engine's system clinical roles exist (Nurse Clinic + Float Pool)
+      await ensureSystemClinicalRoles(repo);
       setRules(syncResult.rules);
       triggerSaveNotification(`All standard clinical rules synchronized (${syncResult.total} rules verified).`);
       loadData();

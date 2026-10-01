@@ -539,6 +539,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
           nurseId,
           date,
           mode: 'ASSIGNMENT',
+          scheduleId: schedule.id,
           dutyWindowId: editorDutyId,
           assignmentKind: editorKind,
           targetRefId: editorTargetRefId,
@@ -571,6 +572,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
           nurseId,
           date,
           mode: 'OFF',
+          scheduleId: schedule.id,
           note: `Pinned ${lt?.name || 'Leave'}`,
           createdAt: new Date().toISOString(),
         };

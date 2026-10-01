@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
+import { resolveScheduleIdForLockDate } from '../../services/schedule/lockScope';
 import {
   Nurse,
   LeaveType,
@@ -435,6 +436,10 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     if (!editingLockEntry || !editingLockEntry.nurseId || !editingLockEntry.date) return;
 
     try {
+      // Resolve which schedule owns this date so the pin stays scoped to one roster.
+      const schedules = await repo.list('schedules');
+      const scheduleId = resolveScheduleIdForLockDate(schedules, editingLockEntry.date);
+
       if (editingLockEntry.id) {
         await repo.update('locks', editingLockEntry.id, {
           mode: editingLockEntry.mode || 'ASSIGNMENT',
@@ -442,6 +447,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           assignmentKind: editingLockEntry.assignmentKind,
           targetRefId: editingLockEntry.targetRefId,
           note: editingLockEntry.note,
+          ...(scheduleId ? { scheduleId } : {}),
         });
         triggerToast('Lock entry updated.');
       } else {
@@ -449,6 +455,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           nurseId: editingLockEntry.nurseId,
           date: editingLockEntry.date,
           mode: editingLockEntry.mode || 'ASSIGNMENT',
+          scheduleId,
           dutyWindowId: editingLockEntry.dutyWindowId,
           assignmentKind: editingLockEntry.assignmentKind,
           targetRefId: editingLockEntry.targetRefId,

@@ -1,0 +1,134 @@
+[
+  {
+    "id": "whp-2025-2026-dec19-jan18",
+    "year": "2025-2026",
+    "name": "Dec19-Jan18",
+    "startDate": "2025-12-19",
+    "endDate": "2026-01-18",
+    "workingHours": 210,
+    "note": "December 19 to January 18 cycle (210 hours full-time target)",
+    "createdAt": "2025-12-01T00:00:00Z",
+    "updatedAt": "2025-12-01T00:00:00Z"
+  },
+  {
+    "id": "whp-2026-jan19-feb18",
+    "year": "2026",
+    "name": "Jan19-Feb18",
+    "startDate": "2026-01-19",
+    "endDate": "2026-02-18",
+    "workingHours": 227,
+    "note": "January 19 to February 18 cycle (227 hours full-time target)",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-01-01T00:00:00Z"
+  },
+  {
+    "id": "whp-2026-feb19-mar18",
+    "year": "2026",
+    "name": "Feb19-Mar18",
+    "startDate": "2026-02-19",
+    "endDate": "2026-03-18",
+    "workingHours": 145,
+    "note": "February 19 to March 18 cycle (145 hours full-time target)",
+    "createdAt": "2026-02-01T00:00:00Z",
+    "updatedAt": "2026-02-01T00:00:00Z"
+  },
+  {
+    "id": "whp-2026-mar19-apr18",
+    "year": "2026",
+    "name": "Mar19-Apr18",
+    "startDate": "2026-03-19",
+    "endDate": "2026-04-18",
+    "workingHours": 207,
+    "note": "March 19 to April 18 cycle (207 hours full-time target)",
+    "createdAt": "2026-03-01T00:00:00Z",
+    "updatedAt": "2026-03-01T00:00:00Z"
+  },
+  {
+    "id": "whp-2026-apr19-may18",
+    "year": "2026",
+    "name": "Apr19-May18",
+    "startDate": "2026-04-19",
+    "endDate": "2026-05-18",
+    "workingHours": 220,
+    "note": "April 19 to May 18 cycle (220 hours full-time target)",
+    "createdAt": "2026-04-01T00:00:00Z",
+    "updatedAt": "2026-04-01T00:00:00Z"
+  },
+  {
+    "id": "whp-2026-may19-jun18",
+    "year": "2026",
+    "name": "May19-Jun18",
+    "startDate": "2026-05-19",
+    "endDate": "2026-06-18",
+    "workingHours": 230,
+    "note": "May 19 to June 18 cycle (230 hours full-time target)",
+    "createdAt": "2026-05-01T00:00:00Z",
+    "updatedAt": "2026-05-01T00:00:00Z"
+  },
+  {
+    "id": "whp-2026-jun19-jul18",
+    "year": "2026",
+    "name": "Jun19-Jul18",
+    "startDate": "2026-06-19",
+    "endDate": "2026-07-18",
+    "workingHours": 200,
+    "note": "June 19 to July 18 cycle (200 hours full-time target)",
+    "createdAt": "2026-06-01T00:00:00Z",
+    "updatedAt": "2026-06-01T00:00:00Z"
+  },
+  {
+    "id": "whp-2026-jul19-aug18",
+    "year": "2026",
+    "name": "Jul19-Aug18",
+    "startDate": "2026-07-19",
+    "endDate": "2026-08-18",
+    "workingHours": 230,
+    "note": "July 19 to August 18 cycle (230 hours full-time target)",
+    "createdAt": "2026-07-01T00:00:00Z",
+    "updatedAt": "2026-07-01T00:00:00Z"
+  },
+  {
+    "id": "whp-2026-aug19-sep18",
+    "year": "2026",
+    "name": "Aug19-Sep18",
+    "startDate": "2026-08-19",
+    "endDate": "2026-09-18",
+    "workingHours": 220,
+    "note": "August 19 to September 18 cycle (220 hours full-time target)",
+    "createdAt": "2026-08-01T00:00:00Z",
+    "updatedAt": "2026-08-01T00:00:00Z"
+  },
+  {
+    "id": "whp-2026-sep19-oct18",
+    "year": "2026",
+    "name": "Sep19-Oct18",
+    "startDate": "2026-09-19",
+    "endDate": "2026-10-18",
+    "workingHours": 210,
+    "note": "September 19 to October 18 cycle (210 hours full-time target)",
+    "createdAt": "2026-09-01T00:00:00Z",
+    "updatedAt": "2026-09-01T00:00:00Z"
+  },
+  {
+    "id": "whp-2026-oct19-nov18",
+    "year": "2026",
+    "name": "Oct19-Nov18",
+    "startDate": "2026-10-19",
+    "endDate": "2026-11-18",
+    "workingHours": 230,
+    "note": "October 19 to November 18 cycle (230 hours full-time target)",
+    "createdAt": "2026-10-01T00:00:00Z",
+    "updatedAt": "2026-10-01T00:00:00Z"
+  },
+  {
+    "id": "whp-2026-nov19-dec18",
+    "year": "2026",
+    "name": "Nov19-Dec18",
+    "startDate": "2026-11-19",
+    "endDate": "2026-12-18",
+    "workingHours": 210,
+    "note": "November 19 to December 18 cycle (210 hours full-time target)",
+    "createdAt": "2026-11-01T00:00:00Z",
+    "updatedAt": "2026-11-01T00:00:00Z"
+  }
+]

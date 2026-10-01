@@ -29,6 +29,7 @@ import {
   Doctor,
 } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
+import { filterLocksForSchedule } from '../schedule/lockScope';
 import { isExclusiveNurseClinic } from '../engine/nurseClinicUtils';
 import { calculateWorkingHoursForDateRange } from '../periods/workingHoursPeriodService';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
@@ -84,6 +85,10 @@ export class ScheduleValidator {
     const seniorLevelIds = new Set((seniorityLevels || []).filter((s) => s.isSenior).map((s) => s.id));
     const dutyMap = new Map((dutyWindows || []).map((d) => [d.id, d]));
     const nurseMap = new Map((nurses || []).map((n) => [n.id, n]));
+
+    // Locks are scoped to this schedule: tagged locks match by scheduleId, legacy untagged
+    // locks fall back to the date-window rule (see lockScope.ts).
+    const scopedLocks = filterLocksForSchedule(locks, schedule);
 
     const start = new Date(schedule.startDate);
     const end = new Date(schedule.endDate);
@@ -290,7 +295,10 @@ export class ScheduleValidator {
         const assignedRoleNurses = dayAssignments.filter(
           (a) => a.kind === 'CLINICAL_ROLE' && a.clinicalRoleId === role.id
         );
-        const quota = role.defaultDailyQuota || 1;
+        // Pool/system roles (e.g. Float Pool) declare a 0 daily quota: they are filled by the
+        // engine's float pass on demand and must never be reported as an unmet daily quota.
+        const quota = role.defaultDailyQuota ?? 0;
+        if (quota <= 0) return;
         if (assignedRoleNurses.length < quota) {
           findings.push({
             id: `role-quota-${date}-${role.acronym}`,
@@ -332,6 +340,19 @@ export class ScheduleValidator {
 
       // CATEGORY 5: DATA ISSUE — Doctor sessions with no nurse assigned
       daySessions.forEach((sess) => {
+        // DATA ISSUE: session without a specialty cannot be matched against nurse preferences
+        if (!sess.specialtyId) {
+          findings.push({
+            id: `session-missing-specialty-${sess.id}`,
+            category: 'DATA_ISSUE',
+            severity: 'WARN',
+            message: `Doctor clinic session (${sess.startTime}–${sess.endTime}) on ${formatDate(date)} has no specialty assigned — the engine cannot match specialty preferences for it.`,
+            affectedNurseIds: [],
+            cellRefs: [],
+            date,
+          });
+        }
+
         const pairedNurse = dayAssignments.find(
           (a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId
         );
@@ -437,6 +458,26 @@ export class ScheduleValidator {
             category: 'DATA_ISSUE',
             severity: 'ERROR',
             message: `${nurse.fullName} is assigned to a shift on ${date} while having approved leave.`,
+            affectedNurseIds: [nurse.id],
+            cellRefs: [{ nurseId: nurse.id, date }],
+            date,
+          });
+        }
+
+        // DATA ISSUE: Nurse pinned OFF (LockEntry mode OFF) but still assigned a duty.
+        // Leave days also create an OFF lock, so only genuine OFF-lock breaches are reported here.
+        const offLocked = scopedLocks.some(
+          (l) => l.nurseId === nurse.id && l.date === date && l.mode === 'OFF'
+        );
+        if (offLocked && !onLeave && asgnsToday.length > 0) {
+          const offLock = scopedLocks.find(
+            (l) => l.nurseId === nurse.id && l.date === date && l.mode === 'OFF'
+          );
+          findings.push({
+            id: `lock-off-conflict-${nurse.id}-${date}`,
+            category: 'DATA_ISSUE',
+            severity: 'ERROR',
+            message: `${nurse.fullName} is pinned OFF on ${date}${offLock?.note ? ` (${offLock.note})` : ''} but still has an assigned shift.`,
             affectedNurseIds: [nurse.id],
             cellRefs: [{ nurseId: nurse.id, date }],
             date,

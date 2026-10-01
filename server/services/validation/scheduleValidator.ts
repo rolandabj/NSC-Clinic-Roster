@@ -13,6 +13,8 @@ import {
   type ValidationReport,
 } from '../../../src/services/validation/ScheduleValidator';
 
+import { filterLocksForSchedule } from '../../../src/services/schedule/lockScope';
+
 export { ScheduleValidator };
 export type { ValidationReport };
 
@@ -59,10 +61,10 @@ export async function validateScheduleById(
     (s) => s.date >= schedule.startDate && s.date <= schedule.endDate
   );
 
-  // Filter locks and leave entries that fall within the schedule date range
-  const scheduleLocks = locks.filter(
-    (l) => l.date >= schedule.startDate && l.date <= schedule.endDate
-  );
+  // Filter locks and leave entries that fall within the schedule date range.
+  // Locks are schedule-scoped: tagged locks match by scheduleId, legacy untagged locks
+  // fall back to the date window (see src/services/schedule/lockScope.ts).
+  const scheduleLocks = filterLocksForSchedule(locks, schedule);
   const scheduleLeaves = leaveEntries.filter(
     (le) => le.startDate <= schedule.endDate && le.endDate >= schedule.startDate
   );

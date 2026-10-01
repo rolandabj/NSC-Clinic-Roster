@@ -191,6 +191,14 @@ export const SEED_CLINICAL_ROLES: ClinicalRole[] = [
     defaultStartTime: '09:00',
     defaultEndTime: '17:00',
   },
+  {
+    id: 'role-float',
+    name: 'Float Pool (Additional Nurse)',
+    acronym: 'FLT',
+    description:
+      'System pool role: the engine places unassigned nurses here for general clinic / float coverage and the hourly "+1 nurse above doctors" duty. It has no fixed daily quota and is never expanded into daily quota slots.',
+    defaultDailyQuota: 0,
+  },
 ];
 
 export const SEED_SPECIALTIES: Specialty[] = [

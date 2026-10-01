@@ -18,6 +18,7 @@ import {
 } from '../../src/types';
 import { computeScheduleDiff } from '../../src/services/history/diffEngine';
 import { WebhookService } from '../services/notifications/webhookService';
+import { filterLocksForSchedule } from '../../src/services/schedule/lockScope';
 
 export const rosterRouter = Router();
 
@@ -356,12 +357,18 @@ rosterRouter.post('/roster/swap', async (req: Request, res: Response) => {
     const repo = getServerRepository();
 
     // 1. Fetch relevant relational data
-    const [allAssignments, allLeaves, allLocks, nurses] = await Promise.all([
+    const [allAssignments, allLeaves, allLocks, allSchedules, nurses] = await Promise.all([
       repo.list('assignments'),
       repo.list('leaveEntries'),
       repo.list('locks'),
+      repo.list('schedules'),
       repo.list('nurses'),
     ]);
+
+    // Locks are schedule-scoped: a pin made in another (overlapping) schedule must not
+    // block a swap in this one.
+    const swapSchedule = allSchedules.find((s) => s.id === scheduleId);
+    const scopedLocks = filterLocksForSchedule(allLocks, swapSchedule);
 
     const nurseA = nurses.find((n) => n.id === nurseAId);
     const nurseB = nurses.find((n) => n.id === nurseBId);
@@ -420,7 +427,7 @@ rosterRouter.post('/roster/swap', async (req: Request, res: Response) => {
     }
 
     // 5. Validate lock 'OFF' conflicts
-    const nurseALockedOffOnDateB = allLocks.some(
+    const nurseALockedOffOnDateB = scopedLocks.some(
       (l) => l.nurseId === nurseAId && l.date === dateB && l.mode === 'OFF'
     );
     if (nurseALockedOffOnDateB) {
@@ -431,7 +438,7 @@ rosterRouter.post('/roster/swap', async (req: Request, res: Response) => {
       return;
     }
 
-    const nurseBLockedOffOnDateA = allLocks.some(
+    const nurseBLockedOffOnDateA = scopedLocks.some(
       (l) => l.nurseId === nurseBId && l.date === dateA && l.mode === 'OFF'
     );
     if (nurseBLockedOffOnDateA) {
@@ -495,13 +502,11 @@ rosterRouter.post('/roster/swap', async (req: Request, res: Response) => {
     });
 
     // Trigger ChatOps Webhooks
-    const [schedules, dutyWindows, clinics] = await Promise.all([
-      repo.list('schedules'),
+    const [dutyWindows, clinics] = await Promise.all([
       repo.list('dutyWindows'),
       repo.list('clinics'),
     ]);
-    const schedule = schedules.find((s) => s.id === scheduleId);
-    const scheduleName = schedule ? schedule.name : 'Outpatient Clinic Roster';
+    const scheduleName = swapSchedule ? swapSchedule.name : 'Outpatient Clinic Roster';
     const clinicName = (clinics[0] as ClinicProfile)?.name || 'American Hospital Nad Al Sheba OutPatient clinic';
     const dutyA = dutyWindows.find((d) => d.id === asgnA.dutyWindowId)?.name || 'Duty Window';
     const dutyB = dutyWindows.find((d) => d.id === asgnB.dutyWindowId)?.name || 'Duty Window';

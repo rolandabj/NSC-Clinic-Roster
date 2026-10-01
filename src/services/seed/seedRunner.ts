@@ -35,6 +35,11 @@ import {
   CollectionName,
 } from '../../types';
 import { SchedulingEngine } from '../engine/SchedulingEngine';
+import {
+  ensureCanonicalRules,
+  ensureSystemClinicalRoles,
+  ensureWorkingHoursPeriods,
+} from './configDefaults';
 
 export const ALL_COLLECTIONS: CollectionName[] = [
   'clinics',
@@ -266,77 +271,31 @@ export async function initializeDatabaseIfEmpty(repo: IRepository): Promise<bool
 }
 
 /**
- * Ensures that the Dedicated Nurse Clinic role and rule are present in repository
+ * Ensures the system clinical roles (Nurse Clinic + Float Pool) and the canonical rule
+ * catalogue exist. Delegates to the shared configuration bootstrap so the client and the
+ * server guarantee the exact same engine configuration.
  */
 export async function ensureNurseClinicDefaults(repo: IRepository): Promise<void> {
   try {
-    const existingRoles = await repo.list('clinicalRoles');
-    const hasNcRole = existingRoles.some(
-      (r) => r.id === 'role-nurse-clinic' || r.acronym === 'NC' || r.name.toLowerCase().includes('nurse clinic')
-    );
-    if (!hasNcRole) {
-      await repo.create('clinicalRoles', {
-        id: 'role-nurse-clinic',
-        name: 'Nurse Clinic',
-        acronym: 'NC',
-        description: 'Dedicated nurse-led clinic (triage, dressings, vitals & injections) — independent of doctor sessions',
-        defaultDailyQuota: 1,
-        defaultStartTime: '09:00',
-        defaultEndTime: '17:00',
-      });
-    }
-
-    const existingRules = await repo.list('rules');
-    const hasNcRule = existingRules.some(
-      (r) => r.templateKey === 'DEDICATED_NURSE_CLINIC' || r.id === 'rule-nurse-clinic'
-    );
-    if (!hasNcRule) {
-      await repo.create('rules', {
-        id: 'rule-nurse-clinic',
-        name: 'Dedicated nurse clinic coverage (not assigned to doctor)',
-        templateKey: 'DEDICATED_NURSE_CLINIC',
-        scope: 'PER_DAY',
-        metric: 'DUTIES_WITH_END_TIME_X_COUNT',
-        operator: 'MIN',
-        value: 1,
-        severity: 'HARD',
-        enabled: true,
-      });
-    }
-
-    const hasPlusOneRule = existingRules.some(
-      (r) => r.templateKey === 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS' || r.id === 'rule-nurse-plus-one'
-    );
-    if (!hasPlusOneRule) {
-      await repo.create('rules', {
-        id: 'rule-nurse-plus-one',
-        name: 'At least one additional nurse above doctors during clinic operating hours',
-        templateKey: 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS',
-        scope: 'PER_DUTY_WINDOW',
-        metric: 'DUTIES_WITH_END_TIME_X_COUNT',
-        operator: 'MIN',
-        value: 1,
-        severity: 'HARD',
-        enabled: true,
-      });
-    }
+    await ensureSystemClinicalRoles(repo);
+    await ensureCanonicalRules(repo, { onlyWhenEmpty: false });
   } catch (err) {
     console.warn('[ClinicRoster] ensureNurseClinicDefaults warning:', err);
   }
 }
 
 /**
- * Ensures that the standard Dedicated Working Hours Periods are seeded if empty
+ * Ensures that the standard Dedicated Working Hours Periods are seeded if empty.
+ * These periods are the authoritative full-time hours targets for a schedule (Q1).
  */
 export async function ensureWorkingHoursPeriodsDefaults(repo: IRepository): Promise<void> {
   try {
     const isCleared = await isClientDatabaseCleared(repo);
     if (isCleared) return;
 
-    const existing = await repo.list('workingHoursPeriods');
-    if (existing.length === 0) {
-      await repo.bulkUpsert('workingHoursPeriods', SEED_WORKING_HOURS_PERIODS);
-      console.info('[ClinicRoster] Seeded 12 standard dedicated working hours periods (2025-2026).');
+    const added = await ensureWorkingHoursPeriods(repo);
+    if (added > 0) {
+      console.info(`[ClinicRoster] Seeded ${added} standard dedicated working hours periods (2025-2026).`);
     }
   } catch (err) {
     console.warn('[ClinicRoster] ensureWorkingHoursPeriodsDefaults warning:', err);

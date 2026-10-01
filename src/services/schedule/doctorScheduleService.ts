@@ -301,7 +301,10 @@ export function generateDoctorSessionsForDateRange(
             date: curIsoDate,
             startTime: pat.startTime,
             endTime: pat.endTime,
-            specialtyId: (doc.specialtyIds && doc.specialtyIds[0]) ? doc.specialtyIds[0] : 'spec-gp',
+            // Sessions without a specialty are kept (the clinic still needs coverage) but the
+            // specialty is left empty so the validator can raise a DATA_ISSUE instead of the
+            // engine silently pairing nurses against a non-existent specialty id.
+            specialtyId: doc.specialtyIds?.[0] || '',
             room: pat.room || 'Suite 101',
             source: 'PATTERN',
             cancelled: false,

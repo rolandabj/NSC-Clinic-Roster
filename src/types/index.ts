@@ -304,6 +304,7 @@ export interface LockEntry {
   dutyWindowId?: string; // required if mode === 'ASSIGNMENT'
   assignmentKind?: AssignmentKind;
   targetRefId?: string; // doctorId, specialtyId, or clinicalRoleId
+  scheduleId?: string; // owning schedule; absent on legacy locks (date-window fallback applies)
   note?: string;
   createdAt: string;
 }

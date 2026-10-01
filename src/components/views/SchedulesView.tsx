@@ -86,6 +86,7 @@ import { CreateScheduleModal } from '../modals/CreateScheduleModal';
 import { DeleteScheduleModal } from '../modals/DeleteScheduleModal';
 import { deleteEntireSchedule } from '../../services/schedule/scheduleDeletionService';
 import { populateRecurringDoctorSessionsForSchedule } from '../../services/schedule/doctorScheduleService';
+import { filterLocksForSchedule } from '../../services/schedule/lockScope';
 import { formatDate } from '../../utils/dateUtils';
 
 interface SchedulesViewProps {
@@ -262,7 +263,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setNurses(nList.filter((n) => n.active));
       setDoctors(dList.filter((d) => d.active));
       setSessions(sessList);
-      setLocks(lkList);
       setLeaveEntries(activeLeaveList);
       setLeaveTypes(ltList);
       setClinicalRoles(crList);
@@ -279,6 +279,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         const schedAssignments = asgnList.filter((a) => a.scheduleId === current.id);
         setAssignments(schedAssignments);
 
+        // Locks are schedule-scoped: tagged locks match by scheduleId, legacy untagged
+        // locks fall back to the date window (see lockScope.ts).
+        const scopedLocks = filterLocksForSchedule(lkList, current);
+        setLocks(scopedLocks);
+
         const schedVersions = vList
           .filter((v) => v.scheduleId === current.id)
           .sort((a, b) => b.number - a.number);
@@ -293,7 +298,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           dwList,
           sessList,
           leList,
-          lkList,
+          scopedLocks,
           crList,
           rList,
           sortedWhp,
@@ -301,6 +306,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           dList
         );
         setValidationReport(report);
+      } else {
+        setLocks([]);
       }
     } catch (err) {
       console.error('Error loading schedule workspace:', err);
@@ -379,16 +386,24 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   };
 
   const handleLocksChange = async (nextLocks: LockEntry[]) => {
-    setLocks(nextLocks);
+    // Tag every lock with the active schedule so pins never leak into other schedules.
+    const preparedLocks = activeSchedule
+      ? nextLocks.map((l) => (l.scheduleId ? l : { ...l, scheduleId: activeSchedule.id }))
+      : nextLocks;
+    setLocks(preparedLocks);
     try {
       const existing = await repo.list('locks');
-      const nextIds = new Set(nextLocks.map((l) => l.id));
-      const toDelete = existing.filter((l) => !nextIds.has(l.id)).map((l) => l.id);
+      const nextIds = new Set(preparedLocks.map((l) => l.id));
+      // Only locks owned by this schedule are eligible for deletion.
+      const scopedExisting = activeSchedule
+        ? filterLocksForSchedule(existing, activeSchedule)
+        : existing;
+      const toDelete = scopedExisting.filter((l) => !nextIds.has(l.id)).map((l) => l.id);
       if (toDelete.length > 0) {
         await repo.bulkRemove('locks', toDelete);
       }
-      if (nextLocks.length > 0) {
-        await repo.bulkUpsert('locks', nextLocks);
+      if (preparedLocks.length > 0) {
+        await repo.bulkUpsert('locks', preparedLocks);
       }
 
       if (activeSchedule) {

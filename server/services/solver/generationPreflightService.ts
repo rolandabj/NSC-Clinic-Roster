@@ -9,6 +9,7 @@
 import { IRepository } from '../../../src/services/repository/IRepository';
 import { PreflightReport } from './types';
 import { IsoDateString } from '../../../src/types';
+import { filterLocksForSchedule } from '../../../src/services/schedule/lockScope';
 
 export class GenerationPreflightService {
   public static async evaluate(
@@ -57,11 +58,8 @@ export class GenerationPreflightService {
       (s) => !s.cancelled && s.date >= schedule.startDate && s.date <= schedule.endDate
     );
 
-    const scheduleLocks = allLocks.filter(
-      (l) =>
-        (l as any).scheduleId === scheduleId ||
-        (l.date >= schedule.startDate && l.date <= schedule.endDate)
-    );
+    // Schedule-scoped locks (tagged by scheduleId; legacy locks by date window)
+    const scheduleLocks = filterLocksForSchedule(allLocks, schedule);
 
     const approvedLeaves = allLeaves.filter(
       (le) =>

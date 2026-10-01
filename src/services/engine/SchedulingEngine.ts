@@ -33,6 +33,7 @@ import {
   GenerationPreflightSummary,
 } from './types';
 import { isExclusiveNurseClinic } from './nurseClinicUtils';
+import { filterLocksForSchedule } from '../schedule/lockScope';
 import { calculateWorkingHoursForDateRange } from '../periods/workingHoursPeriodService';
 import { generateDoctorSessionsForDateRange } from '../schedule/doctorScheduleService';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
@@ -184,9 +185,9 @@ export class SchedulingEngine {
       }
     }
 
-    const scheduleLocks = locks.filter(
-      (l) => l.date >= schedule.startDate && l.date <= schedule.endDate
-    );
+    // Locks belong to a single schedule: tagged locks match by scheduleId, legacy untagged
+    // locks fall back to the date window (see lockScope.ts).
+    const scheduleLocks = filterLocksForSchedule(locks, schedule);
 
     const scheduleLeave = leaveEntries.filter(
       (le) =>
@@ -494,9 +495,10 @@ export class SchedulingEngine {
     }
 
     // 2. Lock Pass: Materialize all LockEntry(ASSIGNMENT)
-    const activeLocks = locks.filter(
-      (l) => l.date >= schedule.startDate && l.date <= schedule.endDate
-    );
+    // Locks are scoped to this schedule so pinned days from a different (overlapping)
+    // schedule can never leak into this roster.
+    const scopedLocks = filterLocksForSchedule(locks, schedule);
+    const activeLocks = scopedLocks;
     activeLocks.forEach((lock) => {
       const key = `${lock.nurseId}_${lock.date}`;
       if (lock.mode === 'ASSIGNMENT' && lock.dutyWindowId) {
@@ -799,7 +801,9 @@ export class SchedulingEngine {
           }
         } else {
           const roleCovered = coveredRoleCounts.get(role.id) || 0;
-          const quota = Math.max(0, (role.defaultDailyQuota || 1) - roleCovered);
+          // Nullish (not ||) so a role with an explicit 0 quota — e.g. the Float Pool system
+          // role that the float pass fills on demand — is never expanded into daily slots.
+          const quota = Math.max(0, (role.defaultDailyQuota ?? 1) - roleCovered);
           const hasRoleP1Nurse = sortedNurses.some((n) =>
             n.preferences?.some(
               (p) =>
@@ -1606,6 +1610,10 @@ export class SchedulingEngine {
             if (worstHour >= 16) {
               const eligibleAssigned = Array.from(resultAssignmentsMap.values()).filter((a) => {
                 if (a.date !== date || a.locked) return false;
+                // Never extend the duty of a nurse pinned OFF for this schedule.
+                if (scopedLocks.some((lk) => lk.nurseId === a.nurseId && lk.date === date && lk.mode === 'OFF')) {
+                  return false;
+                }
                 const duty = dutyMapLocal.get(a.dutyWindowId);
                 return duty && duty.endTime < '21:00';
               });
@@ -1698,7 +1706,8 @@ export class SchedulingEngine {
                     date <= le.endDate
                 );
                 if (onLeave) return false;
-                const offLock = locks.some(
+                // Schedule-scoped OFF locks (enforced in the slot, +1 and float passes).
+                const offLock = scopedLocks.some(
                   (lk) =>
                     lk.nurseId === nurse.id &&
                     lk.date === date &&
@@ -1845,6 +1854,12 @@ export class SchedulingEngine {
                 date <= le.endDate
             );
             if (onLeave) return;
+
+            // HARD CONSTRAINT H5: never place a nurse who is pinned OFF for this schedule.
+            const offLockedForPool = scopedLocks.some(
+              (lk) => lk.nurseId === nurse.id && lk.date === date && lk.mode === 'OFF'
+            );
+            if (offLockedForPool) return;
 
             // Prioritize priority duty windows first; fallback to standard duties for pool
             const activePoolDuties = dutyWindows.filter((d) => d.active !== false);

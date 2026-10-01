@@ -13,6 +13,7 @@ import { getServerRepository } from '../db/index';
 import { requirePlanner } from '../middleware/auth';
 import { Schedule, Assignment, LockEntry, BlockWeeks, ClinicProfile } from '../../src/types';
 import { validateScheduleById } from '../services/validation/scheduleValidator';
+import { filterLocksForSchedule } from '../../src/services/schedule/lockScope';
 import { GenerationPreflightService } from '../services/solver/generationPreflightService';
 import { ScheduleGenerationService } from '../services/solver/scheduleGenerationService';
 import { SolverOptions } from '../services/solver/types';
@@ -131,13 +132,9 @@ scheduleRouter.delete('/schedules/:id', requirePlanner, async (req: Request, res
       await repo.bulkRemove('versions', versionIds);
     }
 
-    // 3. Find and remove matching locks (by scheduleId or date within schedule range)
+    // 3. Find and remove matching locks (schedule-scoped: tagged by scheduleId, legacy by date window)
     const locks = await repo.list('locks');
-    const lockIds = locks
-      .filter(
-        (l) => (l as any).scheduleId === id || (l.date >= schedule.startDate && l.date <= schedule.endDate)
-      )
-      .map((l) => l.id);
+    const lockIds = filterLocksForSchedule(locks, schedule).map((l) => l.id);
     if (lockIds.length > 0) {
       await repo.bulkRemove('locks', lockIds);
     }
@@ -318,9 +315,7 @@ scheduleRouter.get('/schedules/:id/locks', async (req: Request, res: Response) =
     }
 
     const allLocks = await repo.list('locks');
-    const scheduleLocks = allLocks.filter(
-      (l) => (l as any).scheduleId === id || (l.date >= schedule.startDate && l.date <= schedule.endDate)
-    );
+    const scheduleLocks = filterLocksForSchedule(allLocks, schedule);
 
     res.json({
       status: 'ok',
@@ -358,17 +353,27 @@ scheduleRouter.put('/schedules/:id/locks', requirePlanner, async (req: Request, 
       return;
     }
 
-    // 1. Fetch current locks for this schedule date window
+    // 1. Fetch current locks for this schedule (schedule-scoped)
     const allLocks = await repo.list('locks');
-    const oldIds = allLocks
-      .filter(
-        (l) => (l as any).scheduleId === id || (l.date >= schedule.startDate && l.date <= schedule.endDate)
-      )
-      .map((l) => l.id);
+    const oldIds = filterLocksForSchedule(allLocks, schedule).map((l) => l.id);
 
-    // 2. Prepare new locks
+    // 2. Prepare new locks. This endpoint owns one schedule's locks, so every lock it
+    //    writes is tagged with that scheduleId; payloads claiming a different schedule
+    //    are rejected instead of silently re-scoped.
+    const foreignLock = rawList.find(
+      (item: any) => item.scheduleId && item.scheduleId !== id
+    );
+    if (foreignLock) {
+      res.status(400).json({
+        error: 'BadRequest',
+        message: `Lock ${foreignLock.id || '(new)'} belongs to schedule '${foreignLock.scheduleId}' and cannot be saved through the endpoint of schedule '${id}'.`,
+      });
+      return;
+    }
+
     const preparedLocks: LockEntry[] = rawList.map((item: any) => ({
       ...item,
+      scheduleId: id,
       id: item.id || `lock-${uuidv4().slice(0, 8)}`,
       createdAt: item.createdAt || new Date().toISOString(),
     }));
