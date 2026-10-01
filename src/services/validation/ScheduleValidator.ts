@@ -17,6 +17,7 @@ import {
   Schedule,
   Assignment,
   LeaveEntry,
+  LeaveType,
   LockEntry,
   DoctorSession,
   Nurse,
@@ -30,9 +31,9 @@ import {
 } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../engine/nurseClinicUtils';
-import { calculateWorkingHoursForDateRange } from '../periods/workingHoursPeriodService';
+import { resolveFullTimeTarget, leaveCreditInRange } from '../hours/hoursPolicy';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
-import { resolveRule } from '../engine/SchedulingEngine';
+import { resolveRule, LATE_DUTY_RULE_WORDS } from '../engine/SchedulingEngine';
 
 export type FindingSeverity = 'ERROR' | 'WARN' | 'INFO';
 
@@ -78,7 +79,8 @@ export class ScheduleValidator {
     rules: Rule[],
     workingHoursPeriods: WorkingHoursPeriod[] = [],
     specialties: Specialty[] = [],
-    doctors: Doctor[] = []
+    doctors: Doctor[] = [],
+    leaveTypes: LeaveType[] = []
   ): ValidationReport {
     const findings: ValidationFinding[] = [];
     const seniorLevelIds = new Set((seniorityLevels || []).filter((s) => s.isSenior).map((s) => s.id));
@@ -357,14 +359,18 @@ export class ScheduleValidator {
       'late duties',
     ]);
     const maxLateAllowed = (s1Rule?.enabled !== false && s1Rule?.value) ? s1Rule.value : 3;
-    const s1Severity: FindingSeverity = s1Rule?.severity === 'HARD' ? 'ERROR' : 'WARN';
+    // Same default as the canonical rule (HARD) and the engine
+    const s1Severity: FindingSeverity = s1Rule?.severity === 'SOFT' ? 'WARN' : 'ERROR';
     const s1Enabled = s1Rule ? s1Rule.enabled : true;
+    const s1LateThreshold: string = (s1Rule?.params as any)?.thresholdTime || '21:00';
 
-    const h2Rule = resolveRule(rules, 'MAX_CONSECUTIVE_DAYS', 'rule-h2', [
-      'consecutive duties',
-      'consecutive working days',
-      'consecutive days',
-    ]);
+    const h2Rule = resolveRule(
+      rules,
+      'MAX_CONSECUTIVE_DAYS',
+      'rule-h2',
+      ['consecutive duties', 'consecutive working days', 'consecutive days'],
+      LATE_DUTY_RULE_WORDS
+    );
     const maxConsecutiveDaysAllowed = (h2Rule?.enabled !== false && h2Rule?.value) ? h2Rule.value : 6;
     const h2Severity: FindingSeverity = h2Rule?.severity === 'SOFT' ? 'WARN' : 'ERROR';
     const h2Enabled = h2Rule ? h2Rule.enabled : true;
@@ -548,8 +554,8 @@ export class ScheduleValidator {
             }
           }
 
-          // Rule S1: Consecutive late duties ending at 21:00
-          if (duty && duty.endTime >= '21:00') {
+          // Rule S1: Consecutive late duties ending at or after the rule's threshold time
+          if (duty && duty.endTime >= s1LateThreshold) {
             if (consecutiveLateDuties === 0) {
               consecutiveLateStartDay = date;
             }
@@ -626,21 +632,15 @@ export class ScheduleValidator {
           le.approved &&
           !(le.endDate < schedule.startDate || le.startDate > schedule.endDate)
       );
+      // Only leave days inside the schedule count (shared hours rule)
+      const leaveTypeMap = new Map(leaveTypes.map((t) => [t.id, t]));
       nurseLeave.forEach((le) => {
-        totalHours += le.hoursCredited || 8;
+        totalHours += leaveCreditInRange(le, leaveTypeMap.get(le.leaveTypeId), schedule.startDate, schedule.endDate);
       });
+      totalHours = Math.round(totalHours * 10) / 10;
 
-      // Resolve authoritative full-time target hours
-      let effectiveFullTimeTarget = 0;
-      if (workingHoursPeriods && workingHoursPeriods.length > 0 && schedule.startDate && schedule.endDate) {
-        const calc = calculateWorkingHoursForDateRange(schedule.startDate, schedule.endDate, workingHoursPeriods);
-        if (calc.targetHours > 0) {
-          effectiveFullTimeTarget = calc.targetHours;
-        }
-      }
-      if (!effectiveFullTimeTarget || effectiveFullTimeTarget <= 0) {
-        effectiveFullTimeTarget = schedule.hoursTargetFullTime || 160;
-      }
+      // Full time target hours (shared rule, same as the engine and reports)
+      const effectiveFullTimeTarget = resolveFullTimeTarget(schedule, workingHoursPeriods).hours;
 
       // CATEGORY 4: HOURS IMBALANCE CHECKS & RULE H7 (Maximum Working Hours Limit)
       const target = Math.round(effectiveFullTimeTarget * (nurse.contractPercent / 100));
@@ -657,7 +657,7 @@ export class ScheduleValidator {
           affectedNurseIds: [nurse.id],
           cellRefs: [],
         });
-      } else if (h7Enabled && (totalHours > maxAllowed || paceRatio > 1.05)) {
+      } else if (h7Enabled && totalHours > maxAllowed) {
         const delta = totalHours - target;
         findings.push({
           id: `h7-hours-over-${nurse.id}`,
@@ -667,7 +667,7 @@ export class ScheduleValidator {
           affectedNurseIds: [nurse.id],
           cellRefs: nurseAssignments.map((a) => ({ nurseId: a.nurseId, date: a.date })),
         });
-      } else if (paceRatio > 1.05) {
+      } else if (paceRatio > h7TolerancePct) {
         const delta = totalHours - target;
         findings.push({
           id: `hours-over-${nurse.id}`,

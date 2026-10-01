@@ -7,12 +7,13 @@
 
 import { Rule, RuleTemplateKey } from '../../types';
 import { getRepository } from '../repository';
-import { resolveRule } from '../engine/SchedulingEngine';
+import { resolveRule, LATE_DUTY_RULE_WORDS } from '../engine/SchedulingEngine';
 
 export interface CanonicalRuleDef extends Omit<Rule, 'id'> {
   canonicalId: string;
   templateKey: RuleTemplateKey;
   semanticKeywords: string[];
+  excludeKeywords?: string[];
 }
 
 export const CANONICAL_RULES_SPEC: CanonicalRuleDef[] = [
@@ -39,6 +40,7 @@ export const CANONICAL_RULES_SPEC: CanonicalRuleDef[] = [
     severity: 'HARD',
     enabled: true,
     semanticKeywords: ['consecutive working days', 'consecutive days', 'consecutive duties', 'max consecutive'],
+    excludeKeywords: LATE_DUTY_RULE_WORDS,
   },
   {
     canonicalId: 'rule-h3',
@@ -157,7 +159,8 @@ export class RuleSyncService {
         existingRules,
         spec.templateKey,
         spec.canonicalId,
-        spec.semanticKeywords
+        spec.semanticKeywords,
+        spec.excludeKeywords
       );
 
       if (matched) {
@@ -211,6 +214,7 @@ export class RuleSyncService {
         // If an untemplated rule semantically matches a canonical rule, assign templateKey
         for (const spec of CANONICAL_RULES_SPEC) {
           const lowerName = (r.name || '').toLowerCase();
+          if ((spec.excludeKeywords || []).some((k) => lowerName.includes(k.toLowerCase()))) continue;
           if (spec.semanticKeywords.some((k) => lowerName.includes(k.toLowerCase()))) {
             r.templateKey = spec.templateKey;
             await repo.update('rules', r.id, { templateKey: spec.templateKey });

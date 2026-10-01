@@ -166,7 +166,8 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         rules,
         workingHoursPeriods,
         specialties,
-        doctors
+        doctors,
+        leaveTypes
       );
       setValidationReport(report);
 

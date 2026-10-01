@@ -17,7 +17,9 @@ import {
   ClinicalRole,
   Specialty,
   NurseHoursQuota,
+  WorkingHoursPeriod,
 } from '../../types';
+import { resolveFullTimeTarget, leaveCreditPerDay } from '../hours/hoursPolicy';
 
 export type HoursAccountingStatus =
   | 'OPTIMAL'        // 90% - 110%
@@ -177,7 +179,8 @@ export function calculateNurseHoursAccounting(
   doctors: Doctor[],
   roles: ClinicalRole[],
   specialties: Specialty[],
-  quotas: NurseHoursQuota[] = []
+  quotas: NurseHoursQuota[] = [],
+  workingHoursPeriods: WorkingHoursPeriod[] = []
 ): NurseHoursAccounting {
   const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
   const leaveTypeMap = new Map(leaveTypes.map((l) => [l.id, l]));
@@ -187,7 +190,8 @@ export function calculateNurseHoursAccounting(
   const specialtyMap = new Map(specialties.map((s) => [s.id, s]));
 
   const seniority = seniorityMap.get(nurse.seniorityLevelId);
-  const fullTimeTargetHours = schedule.hoursTargetFullTime || 160;
+  // Shared rule, same as the engine and validator
+  const fullTimeTargetHours = resolveFullTimeTarget(schedule, workingHoursPeriods).hours;
   const targetHours = Math.round(fullTimeTargetHours * (nurse.contractPercent / 100));
 
   // Filter nurse assignments in schedule period
@@ -205,31 +209,14 @@ export function calculateNurseHoursAccounting(
       !(le.endDate < schedule.startDate || le.startDate > schedule.endDate)
   );
 
+  // Duty totals are counted from the day timeline below, so they always match
+  // what the timeline shows (a leave day is not also a duty day, and a day
+  // counts one duty even if it has duplicate assignments).
   let dutyHours = 0;
   let totalShiftsCount = 0;
   let weekendShiftsCount = 0;
   let lateDutiesCount = 0;
   const dutyCountsByAcronym: Record<string, number> = {};
-
-  nurseAssignments.forEach((a) => {
-    const duty = dutyMap.get(a.dutyWindowId);
-    const duration = calculateDutyDurationHours(duty);
-    dutyHours += duration;
-    totalShiftsCount += 1;
-
-    const dateObj = new Date(a.date);
-    const dayOfWeek = dateObj.getUTCDay();
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      weekendShiftsCount += 1;
-    }
-
-    if (duty && duty.endTime >= '21:00') {
-      lateDutiesCount += 1;
-    }
-
-    const acronym = duty?.acronym || 'D';
-    dutyCountsByAcronym[acronym] = (dutyCountsByAcronym[acronym] || 0) + 1;
-  });
 
   // Calculate leave hours and leave breakdown
   let leaveHours = 0;
@@ -264,7 +251,8 @@ export function calculateNurseHoursAccounting(
     if (leave) {
       type = 'LEAVE';
       leaveType = leaveTypeMap.get(leave.leaveTypeId);
-      const credits = leave.hoursCredited || (leaveType?.creditedHours === 8 ? 8 : 0);
+      // Hours this one day credits (an entry's hoursCredited is its total, spread over its days)
+      const credits = Math.round(leaveCreditPerDay(leave, leaveType) * 100) / 100;
 
       if (leaveType?.countsTowardHoursTarget !== false) {
         hoursEarned = credits;
@@ -296,6 +284,13 @@ export function calculateNurseHoursAccounting(
       hoursEarned = calculateDutyDurationHours(dutyWindow);
       isCredited = true;
 
+      dutyHours += hoursEarned;
+      totalShiftsCount += 1;
+      if (isWeekend) weekendShiftsCount += 1;
+      if (dutyWindow && dutyWindow.endTime >= '21:00') lateDutiesCount += 1;
+      const acronym = dutyWindow?.acronym || 'D';
+      dutyCountsByAcronym[acronym] = (dutyCountsByAcronym[acronym] || 0) + 1;
+
       if (asgn.doctorId) doctor = doctorMap.get(asgn.doctorId);
       if (asgn.clinicalRoleId) clinicalRole = roleMap.get(asgn.clinicalRoleId);
       if (asgn.specialtyId) specialty = specialtyMap.get(asgn.specialtyId);
@@ -326,7 +321,8 @@ export function calculateNurseHoursAccounting(
     dayIndex++;
   }
 
-  const totalEarnedHours = dutyHours + leaveHours;
+  leaveHours = Math.round(leaveHours * 10) / 10;
+  const totalEarnedHours = Math.round((dutyHours + leaveHours) * 10) / 10;
   const varianceHours = totalEarnedHours - targetHours;
   const pacePercent = targetHours > 0 ? Math.round((totalEarnedHours / targetHours) * 100) : 100;
 

@@ -1,3 +1,4 @@
+import { leaveCreditInRange, leaveCreditPerDay } from '../../services/hours/hoursPolicy';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   FileSpreadsheet,
@@ -225,14 +226,14 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     );
     activeLeave.forEach((le) => {
       const lt = leaveTypes.find((l) => l.id === le.leaveTypeId);
-      if (lt?.countsTowardHoursTarget !== false) {
-        leaveHours += le.hoursCredited || 8;
-      }
+      // Only the leave days inside this schedule count (shared hours rule)
+      leaveHours += leaveCreditInRange(le, lt, schedule.startDate, schedule.endDate);
     });
+    leaveHours = Math.round(leaveHours * 10) / 10;
 
-    const totalHours = dutyHours + leaveHours;
-    const targetHours = Math.round(schedule.hoursTargetFullTime * (nurse.contractPercent / 100));
-    const percent = Math.min(100, Math.round((totalHours / targetHours) * 100));
+    const totalHours = Math.round((dutyHours + leaveHours) * 10) / 10;
+    const targetHours = Math.round((schedule.hoursTargetFullTime || 0) * (nurse.contractPercent / 100));
+    const percent = targetHours > 0 ? Math.min(100, Math.round((totalHours / targetHours) * 100)) : 0;
 
     return { totalHours, targetHours, percent, dutyHours, leaveHours };
   };
@@ -256,13 +257,13 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
         );
         if (leave) {
           const lt = leaveTypes.find((l) => l.id === leave.leaveTypeId);
-          if (lt?.countsTowardHoursTarget !== false) {
-            bLeave += leave.hoursCredited || 8;
-          }
+          // One day's share of the leave entry, not the entry's whole total
+          bLeave += leaveCreditPerDay(leave, lt);
         }
       }
     });
-    return { blockTotal: bDuty + bLeave, bDuty, bLeave };
+    bLeave = Math.round(bLeave * 10) / 10;
+    return { blockTotal: Math.round((bDuty + bLeave) * 10) / 10, bDuty, bLeave };
   };
 
   // Open Cell Editor for Duty Shift or Leave

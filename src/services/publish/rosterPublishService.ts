@@ -26,6 +26,7 @@ import { AssignmentDiffItem } from '../history/diffEngine';
 import { getRepository } from '../repository';
 import { authService } from '../auth/authService';
 import { escapeHtml, safeColor } from '../../utils/escapeHtml';
+import { leaveCreditInRange } from '../hours/hoursPolicy';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -108,17 +109,13 @@ export class RosterPublishService {
       }
     }
 
+    // Only the leave days inside this schedule count (shared hours rule)
     let leaveCreditedHours = 0;
     for (const le of nurseLeaves) {
-      const lt = ltMap.get(le.leaveTypeId);
-      if (lt && lt.countsTowardHoursTarget) {
-        if (typeof lt.creditedHours === 'number') {
-          leaveCreditedHours += lt.creditedHours;
-        } else {
-          leaveCreditedHours += 8;
-        }
-      }
+      leaveCreditedHours += leaveCreditInRange(le, ltMap.get(le.leaveTypeId), schedule.startDate, schedule.endDate);
     }
+    leaveCreditedHours = Math.round(leaveCreditedHours * 10) / 10;
+    dutyHours = Math.round(dutyHours * 10) / 10;
 
     const targetHours = Math.round((schedule.hoursTargetFullTime * (nurse.contractPercent || 100)) / 100);
     const totalEarnedHours = dutyHours + leaveCreditedHours;

@@ -25,6 +25,7 @@ import {
   IsoDateString,
   AssignmentSource,
   WorkingHoursPeriod,
+  LeaveType,
 } from '../../types';
 import {
   GenerationProgressCallback,
@@ -33,6 +34,7 @@ import {
   GenerationPreflightSummary,
 } from './types';
 import { isExclusiveNurseClinic } from './nurseClinicUtils';
+import { resolveFullTimeTarget, nurseLeaveHoursInRange, leaveDaysInRange } from '../hours/hoursPolicy';
 import { calculateWorkingHoursForDateRange } from '../periods/workingHoursPeriodService';
 import { generateDoctorSessionsForDateRange } from '../schedule/doctorScheduleService';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
@@ -44,9 +46,13 @@ export function resolveRule(
   rules: Rule[],
   templateKey?: string,
   fallbackId?: string,
-  semanticKeywords?: string[]
+  semanticKeywords?: string[],
+  excludeKeywords: string[] = []
 ): Rule | undefined {
   if (!rules || rules.length === 0) return undefined;
+
+  // A rule already tagged with a different template is a different rule.
+  const isCandidate = (r: Rule) => !r.templateKey || !templateKey || r.templateKey === templateKey;
 
   // 1. Direct templateKey match
   if (templateKey) {
@@ -56,15 +62,18 @@ export function resolveRule(
 
   // 2. Direct ID match
   if (fallbackId) {
-    const byId = rules.find((r) => r.id === fallbackId);
+    const byId = rules.find((r) => r.id === fallbackId && isCandidate(r));
     if (byId) return byId;
   }
 
-  // 3. Semantic keywords match on rule name
+  // 3. Keywords in the rule name (only for older rules without a template key)
   if (semanticKeywords && semanticKeywords.length > 0) {
     const lowerKeywords = semanticKeywords.map((k) => k.toLowerCase());
+    const lowerExcludes = excludeKeywords.map((k) => k.toLowerCase());
     const byName = rules.find((r) => {
+      if (!isCandidate(r)) return false;
       const lowerName = (r.name || '').toLowerCase();
+      if (lowerExcludes.some((k) => lowerName.includes(k))) return false;
       return lowerKeywords.some((keyword) => lowerName.includes(keyword));
     });
     if (byName) return byName;
@@ -72,6 +81,9 @@ export function resolveRule(
 
   return undefined;
 }
+
+/** Name words that mark a rule about late or night duties (never "max consecutive days"). */
+export const LATE_DUTY_RULE_WORDS = ['late', 'night', '21:00'];
 
 interface InternalSlot {
   date: IsoDateString;
@@ -144,22 +156,18 @@ export class SchedulingEngine {
     let isProratedPeriod: boolean | undefined = undefined;
     let hoursTargetDescription: string | undefined = undefined;
 
-    if (workingHoursPeriods && workingHoursPeriods.length > 0 && schedule.startDate && schedule.endDate) {
+    const fullTimeTarget = resolveFullTimeTarget(schedule, workingHoursPeriods);
+    targetWorkingHoursFullTime = fullTimeTarget.hours;
+    detectedPeriodName = fullTimeTarget.periodName;
+    if (fullTimeTarget.source === 'PERIOD' && workingHoursPeriods) {
       const calc = calculateWorkingHoursForDateRange(schedule.startDate, schedule.endDate, workingHoursPeriods);
-      detectedPeriodName = calc.matchedPeriod?.name || (calc.isProrated ? `${calc.totalScheduleDays}d Prorated` : undefined);
-      if (calc.targetHours > 0) {
-        targetWorkingHoursFullTime = calc.targetHours;
-      }
       isProratedPeriod = !calc.isExactMatch;
       hoursTargetDescription = calc.description;
-    }
-
-    if (!targetWorkingHoursFullTime || targetWorkingHoursFullTime <= 0) {
-      if (schedule.hoursTargetFullTime && schedule.hoursTargetFullTime > 0) {
-        targetWorkingHoursFullTime = schedule.hoursTargetFullTime;
-      } else {
-        targetWorkingHoursFullTime = Math.max(24, Math.round((totalDays * 40) / 7));
-      }
+    } else {
+      hoursTargetDescription =
+        fullTimeTarget.source === 'SCHEDULE'
+          ? `Schedule target: ${fullTimeTarget.hours}h full time`
+          : `No dedicated period covers these dates: ${fullTimeTarget.hours}h (40h per week)`;
     }
 
     let scheduleSessions = sessions.filter(
@@ -173,8 +181,11 @@ export class SchedulingEngine {
         schedule.endDate,
         doctors
       );
+      // Include cancelled sessions here, so a cancelled session is not added back as demand.
       const existingKeySet = new Set(
-        scheduleSessions.map((s) => `${s.doctorId}_${s.date}_${s.startTime}`)
+        sessions
+          .filter((s) => s.date >= schedule.startDate && s.date <= schedule.endDate)
+          .map((s) => `${s.doctorId}_${s.date}_${s.startTime}`)
       );
       const missingRecurring = recurringSessions.filter(
         (s) => !existingKeySet.has(`${s.doctorId}_${s.date}_${s.startTime}`)
@@ -235,7 +246,10 @@ export class SchedulingEngine {
       nurseClinicRuleSeverity: ncSeverity,
       nurseClinicRuleEnabled: ncEnabled,
       existingLocksCount: scheduleLocks.length,
-      existingLeaveDaysCount: scheduleLeave.length,
+      existingLeaveDaysCount: scheduleLeave.reduce(
+        (sum, le) => sum + leaveDaysInRange(le, schedule.startDate, schedule.endDate),
+        0
+      ),
       estimatedTotalAssignments: scheduleSessions.length + totalDays + nurseClinicSlotsCount,
       priorityDutiesCount,
       standardDutiesCount,
@@ -325,7 +339,8 @@ export class SchedulingEngine {
     rules: Rule[],
     onProgress?: GenerationProgressCallback,
     workingHoursPeriods?: WorkingHoursPeriod[],
-    doctors: Doctor[] = []
+    doctors: Doctor[] = [],
+    leaveTypes: LeaveType[] = []
   ): Promise<GenerationResult> {
     const startTimeMs = performance.now();
 
@@ -339,28 +354,10 @@ export class SchedulingEngine {
       seniorityLevels.filter((s) => s.isSenior).map((s) => s.id)
     );
 
-    // Resolve authoritative full-time target hours from dedicated periods or prorating
-    let effectiveFullTimeTarget = 0;
-    let resolvedPeriodName: string | undefined = schedule.periodName;
-
-    if (workingHoursPeriods && workingHoursPeriods.length > 0 && schedule.startDate && schedule.endDate) {
-      const calc = calculateWorkingHoursForDateRange(schedule.startDate, schedule.endDate, workingHoursPeriods);
-      if (calc.targetHours > 0) {
-        effectiveFullTimeTarget = calc.targetHours;
-        resolvedPeriodName = calc.matchedPeriod?.name || (calc.isProrated ? `${calc.totalScheduleDays}d Prorated` : schedule.periodName);
-      }
-    }
-
-    if (!effectiveFullTimeTarget || effectiveFullTimeTarget <= 0) {
-      if (schedule.hoursTargetFullTime && schedule.hoursTargetFullTime > 0) {
-        effectiveFullTimeTarget = schedule.hoursTargetFullTime;
-      } else {
-        const sDate = new Date(schedule.startDate || '2026-01-01');
-        const eDate = new Date(schedule.endDate || '2026-01-31');
-        const sDays = Math.max(1, Math.round((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-        effectiveFullTimeTarget = Math.max(24, Math.round((sDays * 40) / 7));
-      }
-    }
+    // Full time target hours (shared rule: dedicated periods, then the schedule's own target)
+    const fullTimeTarget = resolveFullTimeTarget(schedule, workingHoursPeriods);
+    const effectiveFullTimeTarget = fullTimeTarget.hours;
+    const resolvedPeriodName: string | undefined = fullTimeTarget.periodName;
 
     // Dedicated Nurse Clinic rule lookup & configuration
     const ncRule = resolveRule(rules, 'DEDICATED_NURSE_CLINIC', 'rule-nurse-clinic', [
@@ -399,17 +396,27 @@ export class SchedulingEngine {
       'ending at 21:00',
       'late duties',
     ]);
-    const maxConsecutiveLate = (consecutiveLateRule?.enabled !== false && consecutiveLateRule?.value) ? consecutiveLateRule.value : 3;
+    const maxConsecutiveLate = consecutiveLateRule?.value ? consecutiveLateRule.value : 3;
     const consecutiveLateSeverity = consecutiveLateRule?.severity || 'HARD';
     const consecutiveLateEnabled = consecutiveLateRule ? consecutiveLateRule.enabled : true;
+    // A duty "ends late" when it ends at or after this time (rule setting, default 21:00)
+    const lateThreshold: string = (consecutiveLateRule?.params as any)?.thresholdTime || '21:00';
 
     // Consecutive Working Days (Hard Rule H2)
-    const consecutiveDaysRule = resolveRule(rules, 'MAX_CONSECUTIVE_DAYS', 'rule-h2', [
-      'consecutive duties',
-      'consecutive working days',
-      'consecutive days',
-    ]);
-    const maxConsecutiveDays = (consecutiveDaysRule?.enabled !== false && consecutiveDaysRule?.value) ? consecutiveDaysRule.value : 6;
+    const consecutiveDaysRule = resolveRule(
+      rules,
+      'MAX_CONSECUTIVE_DAYS',
+      'rule-h2',
+      ['consecutive duties', 'consecutive working days', 'consecutive days'],
+      LATE_DUTY_RULE_WORDS
+    );
+    // Switched off: no limit. SOFT: only a scoring penalty (see below), not a hard stop.
+    const consecutiveDaysEnabled = consecutiveDaysRule ? consecutiveDaysRule.enabled : true;
+    const maxConsecutiveDays = consecutiveDaysEnabled
+      ? consecutiveDaysRule?.value
+        ? consecutiveDaysRule.value
+        : 6
+      : Number.POSITIVE_INFINITY;
     const consecutiveDaysSeverity = consecutiveDaysRule?.severity || 'HARD';
 
     // Minimum Rest Between Duties (Hard Rule H3)
@@ -417,7 +424,11 @@ export class SchedulingEngine {
       'rest between duties',
       'minimum rest',
     ]);
-    const minRestHoursRequired = (minRestRule?.enabled !== false && minRestRule?.value) ? minRestRule.value : 11;
+    // Enforced as a hard limit only when the rule is on and HARD (0 = no limit).
+    const minRestEnabled = minRestRule ? minRestRule.enabled : true;
+    const minRestSeverity = minRestRule?.severity || 'HARD';
+    const minRestHoursRequired =
+      minRestEnabled && minRestSeverity === 'HARD' ? (minRestRule?.value ? minRestRule.value : 11) : 0;
 
     const nurseClinicRole = roles.find(
       (r) => r.id === 'role-nurse-clinic' || r.acronym === 'NC' || r.name.toLowerCase().includes('nurse clinic')
@@ -523,15 +534,14 @@ export class SchedulingEngine {
     const nurseStates = new Map<string, NurseDayState>();
     sortedNurses.forEach((nurse) => {
       // Calculate credited leave hours for this nurse during the schedule period
-      const nurseLeaveHours = leaveEntries
-        .filter(
-          (le) =>
-            le.nurseId === nurse.id &&
-            le.approved &&
-            le.startDate <= schedule.endDate &&
-            le.endDate >= schedule.startDate
-        )
-        .reduce((acc, le) => acc + (le.hoursCredited || 8), 0);
+      // Only the leave days inside this schedule count (shared hours rule)
+      const nurseLeaveHours = nurseLeaveHoursInRange(
+        nurse.id,
+        leaveEntries,
+        leaveTypes,
+        schedule.startDate,
+        schedule.endDate
+      );
 
       // Calculate initial committed duty hours from retained locks and manual assignments
       let initialPreservedDutyHours = 0;
@@ -550,7 +560,10 @@ export class SchedulingEngine {
         hasDuty: false,
         consecutiveWorkingDays: 0,
         consecutiveLateEnds: 0,
-        totalDutyHoursEarned: initialPreservedDutyHours + nurseLeaveHours,
+        // Duty hours only: leave is already taken off the duty target below, so it
+        // must not also be counted here. Retained (locked, manual) shifts are
+        // committed up front and not counted again on their own day.
+        totalDutyHoursEarned: initialPreservedDutyHours,
         leaveHoursCredited: nurseLeaveHours,
         initialLockedHours: initialPreservedDutyHours,
         weekendsWorked: initialWeekendsWorked,
@@ -596,7 +609,9 @@ export class SchedulingEngine {
     const getConsecutiveDaysWorkedEndingYesterday = (nurseId: string, currentDateStr: string): number => {
       let consecutive = 0;
       const [y, m, d] = currentDateStr.split('-').map(Number);
-      for (let i = 1; i <= 6; i++) {
+      // Look back as far as the configured limit (capped at 31 days)
+      const lookback = Math.min(Number.isFinite(maxConsecutiveDays) ? maxConsecutiveDays : 31, 31);
+      for (let i = 1; i <= lookback; i++) {
         const prevDate = new Date(Date.UTC(y, m - 1, d - i)).toISOString().split('T')[0];
         if (resultAssignmentsMap.has(`${nurseId}_${prevDate}`)) {
           consecutive++;
@@ -616,7 +631,7 @@ export class SchedulingEngine {
         const prevAsgn = resultAssignmentsMap.get(`${nurseId}_${prevDate}`);
         if (!prevAsgn) break;
         const prevDuty = dutyMapGlobal.get(prevAsgn.dutyWindowId);
-        if (prevDuty && prevDuty.endTime >= '21:00') {
+        if (prevDuty && prevDuty.endTime >= lateThreshold) {
           consecutive++;
         } else {
           break;
@@ -851,7 +866,7 @@ export class SchedulingEngine {
           const state = nurseStates.get(nurse.id);
           if (state) {
             state.consecutiveWorkingDays = getConsecutiveDaysWorkedEndingYesterday(nurse.id, date) + 1;
-            state.totalDutyHoursEarned += calculateDutyDurationHours(duty);
+            // Hours and weekends of retained shifts were committed up front.
             state.lastDutyEndTime = `${date} ${duty.endTime}`;
             if (
               asgn.kind === 'CLINICAL_ROLE' &&
@@ -859,13 +874,10 @@ export class SchedulingEngine {
             ) {
               state.nurseClinicCount += 1;
             }
-            if (duty.endTime >= '21:00') {
+            if (duty.endTime >= lateThreshold) {
               state.consecutiveLateEnds += 1;
             } else {
               state.consecutiveLateEnds = 0;
-            }
-            if (isWeekend) {
-              state.weekendsWorked += 1;
             }
           }
         }
@@ -1182,7 +1194,7 @@ export class SchedulingEngine {
                 // HARD CONSTRAINT S1: Maximum consecutive late duties ending at 21:00
                 const consecutiveLateEndingYesterday = getConsecutiveLateDutiesEndingYesterday(nurse.id, date);
                 if (
-                  candidateDuty.endTime >= '21:00' &&
+                  candidateDuty.endTime >= lateThreshold &&
                   consecutiveLateEnabled &&
                   consecutiveLateSeverity === 'HARD' &&
                   consecutiveLateEndingYesterday >= maxConsecutiveLate
@@ -1284,7 +1296,7 @@ export class SchedulingEngine {
 
                 // S3: Hours fairness — score bonus for nurses furthest below target
                 const dutyTarget = nurseLimits?.dutyTarget ?? Math.round(effectiveFullTimeTarget * (nurse.contractPercent / 100));
-                const hoursDeficit = dutyTarget - (state.totalDutyHoursEarned - (state.leaveHoursCredited || 0));
+                const hoursDeficit = dutyTarget - state.totalDutyHoursEarned;
                 if (hoursDeficit <= 0) {
                   score -= 150; // Nurse has already met duty hours target; strongly prioritize nurses with remaining hours
                 } else {
@@ -1297,7 +1309,7 @@ export class SchedulingEngine {
                 }
 
                 // S1: Consecutive late duties ending at 21:00 (penalty if already approaching ceiling)
-                if (candidateDuty.endTime >= '21:00') {
+                if (consecutiveLateEnabled && candidateDuty.endTime >= lateThreshold) {
                   if (consecutiveLateEndingYesterday >= maxConsecutiveLate) {
                     score -= 150; // soft rule violation penalty
                   } else if (consecutiveLateEndingYesterday >= maxConsecutiveLate - 1) {
@@ -1405,7 +1417,7 @@ export class SchedulingEngine {
           if (isWeekend) {
             state.weekendsWorked += 1;
           }
-          if (chosenDuty.endTime >= '21:00') {
+          if (chosenDuty.endTime >= lateThreshold) {
             state.consecutiveLateEnds += 1;
           } else {
             state.consecutiveLateEnds = 0;
@@ -1436,8 +1448,10 @@ export class SchedulingEngine {
           return n && seniorLevelIds.has(n.seniorityLevelId);
         });
 
-        if (!hasSenior && assignedToDuty.length > 0) {
-          const targetAssignment = assignedToDuty[0];
+        // Only a generated cell can be handed to a senior (never a pinned or manual one).
+        const swappableAssignment = assignedToDuty.find((a) => a.source === 'GENERATED');
+        if (!hasSenior && swappableAssignment) {
+          const targetAssignment = swappableAssignment;
           const targetDuty = dutyWindows.find((d) => d.id === targetAssignment.dutyWindowId) || fullDayDuty;
 
           // Look for an available senior not working today who satisfies hard constraints
@@ -1479,6 +1493,15 @@ export class SchedulingEngine {
             );
             if (onLeave) return false;
 
+            // A day off lock always wins
+            if (activeLocks.some((l) => l.nurseId === n.id && l.date === date && l.mode === 'OFF')) return false;
+
+            // Phlebotomy (PHL) cells need the PHL capability (Hard Rule H6)
+            if (targetAssignment.kind === 'CLINICAL_ROLE' && targetAssignment.clinicalRoleId) {
+              const role = roles.find((r) => r.id === targetAssignment.clinicalRoleId);
+              if (role?.acronym === 'PHL' && !n.capabilityIds.includes(role.id)) return false;
+            }
+
             const seniorState = nurseStates.get(n.id);
             if (seniorState) {
               if (consecutiveDaysSeverity === 'HARD' && getConsecutiveDaysWorkedEndingYesterday(n.id, date) >= maxConsecutiveDays) return false;
@@ -1493,7 +1516,7 @@ export class SchedulingEngine {
                 return false;
               }
               if (
-                targetDuty.endTime >= '21:00' &&
+                targetDuty.endTime >= lateThreshold &&
                 consecutiveLateEnabled &&
                 consecutiveLateSeverity === 'HARD' &&
                 getConsecutiveLateDutiesEndingYesterday(n.id, date) >= maxConsecutiveLate
@@ -1517,20 +1540,32 @@ export class SchedulingEngine {
             return true;
           });
 
-          if (availableSenior && targetAssignment.source === 'GENERATED') {
+          if (availableSenior) {
             // Release junior
             resultAssignmentsMap.delete(`${targetAssignment.nurseId}_${date}`);
             nursesAssignedToday.delete(targetAssignment.nurseId);
             const juniorState = nurseStates.get(targetAssignment.nurseId);
             if (juniorState) {
+              // Undo everything today's shift added to the junior's state
               juniorState.consecutiveWorkingDays = getConsecutiveDaysWorkedEndingYesterday(targetAssignment.nurseId, date);
               juniorState.totalDutyHoursEarned = Math.max(
                 0,
                 juniorState.totalDutyHoursEarned - calculateDutyDurationHours(targetDuty)
               );
-              if (targetDuty.endTime >= '21:00') {
-                juniorState.consecutiveLateEnds = Math.max(0, juniorState.consecutiveLateEnds - 1);
+              juniorState.consecutiveLateEnds = getConsecutiveLateDutiesEndingYesterday(targetAssignment.nurseId, date);
+              if (isWeekend) juniorState.weekendsWorked = Math.max(0, juniorState.weekendsWorked - 1);
+              if (
+                targetAssignment.kind === 'CLINICAL_ROLE' &&
+                (targetAssignment.clinicalRoleId === nurseClinicRole.id || targetAssignment.clinicalRoleId === 'role-nurse-clinic')
+              ) {
+                juniorState.nurseClinicCount = Math.max(0, juniorState.nurseClinicCount - 1);
               }
+              // Rest is measured from yesterday's shift, which is now the junior's last duty
+              const [yy, mm, dd] = date.split('-').map(Number);
+              const yesterday = new Date(Date.UTC(yy, mm - 1, dd - 1)).toISOString().split('T')[0];
+              const yesterdayAsgn = resultAssignmentsMap.get(`${targetAssignment.nurseId}_${yesterday}`);
+              const yesterdayDuty = yesterdayAsgn ? dutyMapGlobal.get(yesterdayAsgn.dutyWindowId) : undefined;
+              juniorState.lastDutyEndTime = yesterdayDuty ? `${yesterday} ${yesterdayDuty.endTime}` : undefined;
             }
 
             // Assign senior
@@ -1547,7 +1582,7 @@ export class SchedulingEngine {
               seniorState.totalDutyHoursEarned += calculateDutyDurationHours(targetDuty);
               seniorState.lastDutyEndTime = `${date} ${targetDuty.endTime}`;
               if (isWeekend) seniorState.weekendsWorked += 1;
-              if (targetDuty.endTime >= '21:00') {
+              if (targetDuty.endTime >= lateThreshold) {
                 seniorState.consecutiveLateEnds += 1;
               } else {
                 seniorState.consecutiveLateEnds = 0;
@@ -1559,7 +1594,10 @@ export class SchedulingEngine {
 
       // 4.5 Hourly +1 Additional Nurse Balancing Pass:
       // Ensure at least one additional nurse above active doctors during clinic operating hours.
-      if (plusOneEnabled && daySessions.length > 0) {
+      // Count every doctor working today, including doctors whose nurse was pinned or set by hand
+      // (daySessions above only holds sessions that still needed a nurse).
+      const allDaySessions = sessions.filter((s) => !s.cancelled && s.date === date);
+      if (plusOneEnabled && allDaySessions.length > 0) {
         const dutyMapLocal = new Map(dutyWindows.map((d) => [d.id, d]));
 
         let hasDeficit = true;
@@ -1576,7 +1614,7 @@ export class SchedulingEngine {
             const hourStart = `${String(hour).padStart(2, '0')}:00`;
             const hourEnd = `${String(hour + 1).padStart(2, '0')}:00`;
 
-            const docsActive = daySessions.filter(
+            const docsActive = allDaySessions.filter(
               (s) => s.startTime < hourEnd && s.endTime > hourStart
             ).length;
 
@@ -1586,7 +1624,7 @@ export class SchedulingEngine {
               return duty.startTime < hourEnd && duty.endTime > hourStart;
             }).length;
 
-            const isOperating = docsActive > 0 || (hour >= 9 && hour <= 20 && daySessions.length > 0);
+            const isOperating = docsActive > 0 || (hour >= 9 && hour <= 20 && allDaySessions.length > 0);
             const required = docsActive + (isOperating ? minAdditionalNurses : 0);
             const deficit = Math.max(0, required - nursesActive);
 
@@ -1604,8 +1642,9 @@ export class SchedulingEngine {
             // and extend to Full Day (09:00-21:00) or Late (11:00-21:00), prioritizing nurse-clinic enabled staff.
             let promoted = false;
             if (worstHour >= 16) {
+              // Only cells the engine generated may be extended; pinned and hand set cells stay as they are.
               const eligibleAssigned = Array.from(resultAssignmentsMap.values()).filter((a) => {
-                if (a.date !== date || a.locked) return false;
+                if (a.date !== date || a.locked || a.source !== 'GENERATED') return false;
                 const duty = dutyMapLocal.get(a.dutyWindowId);
                 return duty && duty.endTime < '21:00';
               });
@@ -1636,7 +1675,7 @@ export class SchedulingEngine {
                 const state = nurseStates.get(nurse.id);
                 const newDuty = fullDayDuty.endTime >= '21:00' ? fullDayDuty : lateDuty;
                 if (
-                  newDuty.endTime >= '21:00' &&
+                  newDuty.endTime >= lateThreshold &&
                   consecutiveLateEnabled &&
                   consecutiveLateSeverity === 'HARD' &&
                   getConsecutiveLateDutiesEndingYesterday(nurse.id, date) >= maxConsecutiveLate
@@ -1659,15 +1698,19 @@ export class SchedulingEngine {
                   continue; // Duty extension would cause overwork
                 }
 
-                asgn.dutyWindowId = newDuty.id;
-                asgn.note = asgn.note
-                  ? `${asgn.note} (Extended for +1 clinic coverage)`
-                  : 'Extended for +1 clinic coverage (overhang)';
+                // Replace the cell with an extended copy (never change the caller's objects)
+                resultAssignmentsMap.set(`${asgn.nurseId}_${date}`, {
+                  ...asgn,
+                  dutyWindowId: newDuty.id,
+                  note: asgn.note
+                    ? `${asgn.note} (Extended for +1 clinic coverage)`
+                    : 'Extended for +1 clinic coverage (overhang)',
+                });
 
                 if (state) {
                   state.totalDutyHoursEarned += Math.max(0, addedHours);
                   state.lastDutyEndTime = `${date} ${newDuty.endTime}`;
-                  if (newDuty.endTime >= '21:00') {
+                  if (newDuty.endTime >= lateThreshold) {
                     state.consecutiveLateEnds += 1;
                   }
                 }
@@ -1721,7 +1764,7 @@ export class SchedulingEngine {
                 }
 
                 if (
-                  chosenDuty.endTime >= '21:00' &&
+                  chosenDuty.endTime >= lateThreshold &&
                   consecutiveLateEnabled &&
                   consecutiveLateSeverity === 'HARD' &&
                   getConsecutiveLateDutiesEndingYesterday(nurse.id, date) >= maxConsecutiveLate
@@ -1809,7 +1852,7 @@ export class SchedulingEngine {
                   state.lastDutyEndTime = `${date} ${chosenDuty.endTime}`;
                   if (isNcQualified) state.nurseClinicCount += 1;
                   if (isWeekend) state.weekendsWorked += 1;
-                  if (chosenDuty.endTime >= '21:00') {
+                  if (chosenDuty.endTime >= lateThreshold) {
                     state.consecutiveLateEnds += 1;
                   } else {
                     state.consecutiveLateEnds = 0;
@@ -1835,7 +1878,7 @@ export class SchedulingEngine {
           // Float pool must NEVER push a nurse over their duty target, and never push to 6 or 7 consecutive days
           if (
             state.totalDutyHoursEarned < nurseTarget &&
-            consecutiveDaysEndingYesterday < 5
+            (consecutiveDaysSeverity !== 'HARD' || consecutiveDaysEndingYesterday < maxConsecutiveDays - 1)
           ) {
             const onLeave = leaveEntries.some(
               (le) =>
@@ -1845,6 +1888,9 @@ export class SchedulingEngine {
                 date <= le.endDate
             );
             if (onLeave) return;
+
+            // A day off lock always wins
+            if (activeLocks.some((l) => l.nurseId === nurse.id && l.date === date && l.mode === 'OFF')) return;
 
             // Prioritize priority duty windows first; fallback to standard duties for pool
             const activePoolDuties = dutyWindows.filter((d) => d.active !== false);
@@ -1865,7 +1911,7 @@ export class SchedulingEngine {
                 }
 
                 if (
-                  cand.endTime >= '21:00' &&
+                  cand.endTime >= lateThreshold &&
                   consecutiveLateEnabled &&
                   consecutiveLateSeverity === 'HARD' &&
                   getConsecutiveLateDutiesEndingYesterday(nurse.id, date) >= maxConsecutiveLate
@@ -1902,7 +1948,11 @@ export class SchedulingEngine {
             // If nurse has an allocated specialty in their profile, assign their own allocated specialty!
             // If nurse has NO specialty preference, do NOT assign an arbitrary specialty like specialties[0] (e.g. PCC).
             // Instead, assign as general clinical float (CLINICAL_ROLE).
-            const nurseAllocatedSpecPref = nurse.preferences?.find((p) => p.kind === 'SPECIALTY');
+            // Specialty cells need a clinic nurse who is not exclusive to the Nurse Clinic.
+            const canTakeSpecialty = nurse.isClinicNurse && !isExclusiveNurseClinic(nurse, roles);
+            const nurseAllocatedSpecPref = canTakeSpecialty
+              ? nurse.preferences?.find((p) => p.kind === 'SPECIALTY')
+              : undefined;
             const matchingAllocatedSpec = nurseAllocatedSpecPref
               ? specialties.find(
                   (s) =>
@@ -1933,7 +1983,7 @@ export class SchedulingEngine {
             state.totalDutyHoursEarned += calculateDutyDurationHours(selectedPoolDuty);
             state.lastDutyEndTime = `${date} ${selectedPoolDuty.endTime}`;
             if (isWeekend) state.weekendsWorked += 1;
-            if (selectedPoolDuty.endTime >= '21:00') {
+            if (selectedPoolDuty.endTime >= lateThreshold) {
               state.consecutiveLateEnds += 1;
             } else {
               state.consecutiveLateEnds = 0;

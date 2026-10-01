@@ -309,7 +309,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rList,
           sortedWhp,
           spList,
-          dList
+          dList,
+          ltList
         );
         setValidationReport(report);
       }
@@ -405,7 +406,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rules,
           workingHoursPeriods,
           specialties,
-          doctors
+          doctors,
+          leaveTypes
         );
         setValidationReport(report);
       }, 300);
@@ -443,7 +445,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rules,
           workingHoursPeriods,
           specialties,
-          doctors
+          doctors,
+          leaveTypes
         );
         setValidationReport(report);
       }
@@ -486,7 +489,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rules,
           workingHoursPeriods,
           specialties,
-          doctors
+          doctors,
+          leaveTypes
         );
         setValidationReport(report);
       }
@@ -514,7 +518,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         rules,
         workingHoursPeriods,
         specialties,
-        doctors
+        doctors,
+          leaveTypes
       );
       setValidationReport(report);
     }
@@ -781,7 +786,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           (progress) => {
             setGenerationProgress(progress);
           },
-          workingHoursPeriods
+          workingHoursPeriods,
+          doctors,
+          leaveTypes
         );
 
         let finalAssignments = result.assignments;
@@ -805,7 +812,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rules,
           workingHoursPeriods,
           specialties,
-          doctors
+          doctors,
+          leaveTypes
         );
         setValidationReport(report);
 
@@ -854,7 +862,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           setGenerationProgress(progress);
         },
         workingHoursPeriods,
-        doctors
+        doctors,
+          leaveTypes
       );
 
       // If engine resolved an authoritative period target, synchronize the schedule record
@@ -897,7 +906,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         rules,
         workingHoursPeriods,
         specialties,
-        doctors
+        doctors,
+          leaveTypes
       );
       setValidationReport(report);
 
