@@ -634,25 +634,45 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const currentUser = authService.getCurrentUser();
   const isMasterAdmin = currentUser?.email?.toLowerCase() === 'rolandabj@gmail.com' || currentUser?.role === 'OWNER';
 
-  const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
-    ...(isMasterAdmin
-      ? [{ id: 'access-roles' as SettingsTab, label: 'Access & Permissions', icon: ShieldCheck }]
-      : []),
-    { id: 'clinic', label: 'Clinic', icon: Building2 },
-    { id: 'directory', label: 'Enterprise Directory & SSO', icon: Users },
-    { id: 'duties', label: 'Duties', icon: Clock },
-    { id: 'leave', label: 'Leave', icon: CalendarCheck },
-    { id: 'seniority', label: 'Seniority', icon: Shield },
-    { id: 'clinical-roles', label: 'Clinical Roles', icon: Stethoscope },
-    { id: 'specialties', label: 'Specialties', icon: Tags },
-    { id: 'rules', label: 'Rules', icon: Sliders },
-    { id: 'holidays', label: 'Public Holidays', icon: Flag },
-    { id: 'hours-policy', label: 'Hours Policy', icon: Calculator },
-    { id: 'working-hours-periods', label: 'Dedicated Time Periods', icon: CalendarRange },
-    { id: 'email', label: 'Email', icon: Mail },
-    { id: 'integrations', label: 'Integrations', icon: Cloud },
-    { id: 'database', label: 'Database & Storage', icon: Database },
+  // Settings pages, grouped in the side menu
+  const tabGroups: { title: string; tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] }[] = [
+    {
+      title: 'Clinic',
+      tabs: [
+        { id: 'clinic', label: 'Clinic profile', icon: Building2 },
+        { id: 'holidays', label: 'Public holidays', icon: Flag },
+        { id: 'working-hours-periods', label: 'Time periods', icon: CalendarRange },
+      ],
+    },
+    {
+      title: 'Scheduling',
+      tabs: [
+        { id: 'rules', label: 'Rules', icon: Sliders },
+        { id: 'hours-policy', label: 'Hours policy', icon: Calculator },
+        { id: 'duties', label: 'Shifts', icon: Clock },
+      ],
+    },
+    {
+      title: 'Staff',
+      tabs: [
+        { id: 'leave', label: 'Leave types', icon: CalendarCheck },
+        { id: 'seniority', label: 'Seniority', icon: Shield },
+        { id: 'clinical-roles', label: 'Clinical roles', icon: Stethoscope },
+        { id: 'specialties', label: 'Specialties', icon: Tags },
+        { id: 'directory', label: 'Staff directory', icon: Users },
+      ],
+    },
+    {
+      title: 'Access & system',
+      tabs: [
+        ...(isMasterAdmin ? [{ id: 'access-roles' as SettingsTab, label: 'Access & permissions', icon: ShieldCheck }] : []),
+        { id: 'email', label: 'Email', icon: Mail },
+        { id: 'integrations', label: 'Integrations', icon: Cloud },
+        { id: 'database', label: 'Database & backup', icon: Database },
+      ],
+    },
   ];
+  const tabs = tabGroups.flatMap((g) => g.tabs);
 
   // A tab saved in this browser may not be available to the current user
   // (e.g. Access & Permissions after signing in as someone else).
@@ -671,41 +691,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Clinic Settings</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Configure clinic operating parameters, acceptable duties, leave rules, seniority ranks, public holidays, hours policy, and cloud integrations.
-          </p>
-        </div>
+      <div>
+        <h1 className="text-xl font-semibold text-slate-900 tracking-tight">Settings</h1>
+        <p className="text-sm text-slate-500 mt-0.5">Set up your clinic, staff and the rules the roster follows.</p>
       </div>
 
-      {/* Tab Navigation Ribbon */}
-      <div className="flex border-b border-slate-200 overflow-x-auto gap-1 pb-px">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              aria-current={isActive ? 'page' : undefined}
-              onClick={() => handleTabSwitch(tab.id)}
-              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 whitespace-nowrap transition-colors cursor-pointer ${
-                isActive
-                  ? 'border-indigo-600 text-indigo-600 font-semibold'
-                  : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <div className="grid gap-6 md:grid-cols-[13rem_minmax(0,1fr)]">
+      {/* Side menu (a dropdown on small screens) */}
+      <nav aria-label="Settings pages" className="md:sticky md:top-4 md:self-start">
+        <label className="md:hidden block">
+          <span className="sr-only">Settings page</span>
+          <select
+            value={activeTab}
+            onChange={(e) => handleTabSwitch(e.target.value as SettingsTab)}
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800"
+          >
+            {tabGroups.map((group) => (
+              <optgroup key={group.title} label={group.title}>
+                {group.tabs.map((tab) => (
+                  <option key={tab.id} value={tab.id}>
+                    {tab.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        <div className="hidden md:block space-y-5">
+          {tabGroups.map((group) => (
+            <div key={group.title}>
+              <p className="px-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{group.title}</p>
+              <ul className="space-y-0.5">
+                {group.tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <li key={tab.id}>
+                      <button
+                        type="button"
+                        aria-current={isActive ? 'page' : undefined}
+                        onClick={() => handleTabSwitch(tab.id)}
+                        className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                          isActive ? 'bg-indigo-50 font-medium text-indigo-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                        }`}
+                      >
+                        <Icon className={`h-4 w-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} aria-hidden="true" />
+                        <span>{tab.label}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </nav>
 
       {/* TAB CONTENT PANELS */}
-      <div className="bg-white border border-slate-200 rounded p-6 shadow-xs">
+      <div className="min-w-0 bg-white border border-slate-200 rounded-lg p-6 shadow-xs">
         {/* 0. ACCESS & ROLES MANAGEMENT (MASTER ADMIN ONLY) */}
         {activeTab === 'access-roles' && isMasterAdmin && <AccessManagementPanel currentUser={currentUser || undefined} />}
 
@@ -826,6 +869,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeTab === 'database' && (
           <DatabaseTab loadData={loadData} triggerSaveNotification={triggerSaveNotification} />
         )}
+      </div>
       </div>
     </div>
   );

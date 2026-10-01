@@ -3,16 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Settings > Rules tab.
+ *
+ * Every rule the roster generator and the checker use, written as a plain
+ * sentence with its number in place. Each rule has an on/off switch and a
+ * "Must" (never broken) or "Try to" (followed when possible) choice. Changes
+ * save straight away.
  */
 
-import React, { useId, useState } from 'react';
-import { Plus, Trash2, RefreshCw } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Check, ChevronDown, Lock, Minus, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { RuleSyncService } from '../../../services/rules/ruleSyncService';
-import { Rule } from '../../../types';
+import { Rule, RuleTemplateKey } from '../../../types';
 import { HoursPolicyConfig } from '../../../types/settings';
-import { notify, confirmDialog } from '../../common/dialogs';
-import { SaveNotifier, SettingsDialog } from './shared';
+import { confirmDialog } from '../../common/dialogs';
+import { SaveNotifier } from './shared';
 
 interface RulesTabProps {
   rules: Rule[];
@@ -23,982 +28,475 @@ interface RulesTabProps {
   syncHoursPolicyFromRule: (updates: Partial<HoursPolicyConfig>) => void;
 }
 
-export const RulesTab: React.FC<RulesTabProps> = ({
-  rules,
-  setRules,
-  loadData,
-  triggerSaveNotification,
-  syncHoursPolicyFromRule,
+interface NumberField {
+  min: number;
+  max: number;
+  step?: number;
+  unit?: string;
+}
+
+interface RuleDef {
+  key: RuleTemplateKey;
+  id: string;
+  title: string;
+  /** The sentence, with {value} (and {time}) where the inputs go. */
+  sentence: string;
+  help: string;
+  value?: NumberField;
+  /** The rule has a "late" time (params.thresholdTime). */
+  hasTime?: boolean;
+  /** What "Try to" means for this rule, shown on hover. */
+  softMeaning?: string;
+}
+
+interface RuleGroup {
+  title: string;
+  description: string;
+  rules: RuleDef[];
+}
+
+const GROUPS: RuleGroup[] = [
+  {
+    title: 'Clinic coverage',
+    description: 'Who must be on duty every day.',
+    rules: [
+      {
+        key: 'DEDICATED_NURSE_CLINIC',
+        id: 'rule-nurse-clinic',
+        title: 'Nurse Clinic',
+        sentence: 'Keep {value} nurse(s) at Nurse Clinic every day, not with a doctor.',
+        help: 'Only nurses with the Nurse Clinic option in their profile are chosen. She also does blood collection.',
+        value: { min: 1, max: 5 },
+      },
+      {
+        key: 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS',
+        id: 'rule-nurse-plus-one',
+        title: 'Free nurse every hour',
+        sentence: 'Keep at least {value} free nurse(s) at every opening hour.',
+        help: 'A free nurse is not with a doctor at that hour. The Nurse Clinic nurse counts, and so does a doctor’s nurse after her doctor leaves. Not checked on public holidays.',
+        value: { min: 1, max: 5 },
+      },
+      {
+        key: 'SENIOR_ON_DUTY',
+        id: 'rule-h1',
+        title: 'Senior nurse',
+        sentence: 'At least one senior nurse is on duty every day.',
+        help: 'Any shift counts; she does not need to cover all opening hours.',
+      },
+    ],
+  },
+  {
+    title: 'Working hours',
+    description: 'How far a nurse may go past her hours goal for the period.',
+    rules: [
+      {
+        key: 'MAX_WORKING_HOURS_PER_PERIOD',
+        id: 'rule-h7-max-hours',
+        title: 'Hours limit',
+        sentence: 'A nurse works at most {value} of her hours goal.',
+        help: '100% means never over her goal. Above 100%, she may go over by at most one shift (8 hours), and only when a doctor or the free nurse would otherwise have nobody.',
+        value: { min: 100, max: 150, step: 5, unit: '%' },
+        softMeaning: 'Going over is only reported, not stopped.',
+      },
+    ],
+  },
+  {
+    title: 'Days in a row and rest',
+    description: 'Keeps shifts safe and spread out.',
+    rules: [
+      {
+        key: 'MAX_CONSECUTIVE_DAYS',
+        id: 'rule-h2',
+        title: 'Days in a row',
+        sentence: 'A nurse works at most {value} days in a row.',
+        help: 'The last days of the previous roster count too.',
+        value: { min: 1, max: 14 },
+        softMeaning: 'Longer runs are avoided where possible.',
+      },
+      {
+        key: 'MIN_REST_HOURS',
+        id: 'rule-h3',
+        title: 'Rest between shifts',
+        sentence: 'At least {value} hours of rest between the end of one shift and the start of the next.',
+        help: 'For example, a shift ending at 21:00 and the next one starting at 09:00 gives 12 hours of rest.',
+        value: { min: 0, max: 24 },
+        softMeaning: 'Short rest is only reported, not stopped.',
+      },
+      {
+        key: 'MAX_CONSECUTIVE_LATE_DUTIES',
+        id: 'rule-s1',
+        title: 'Late shifts in a row',
+        sentence: 'A nurse works at most {value} late shifts in a row. A shift is late when it ends at or after {time}.',
+        help: 'With 2, a nurse who worked two late shifts gets an earlier shift or a day off next.',
+        value: { min: 1, max: 14 },
+        hasTime: true,
+        softMeaning: 'Longer runs are avoided where possible.',
+      },
+    ],
+  },
+];
+
+/** Rules that are always applied; shown for information only. */
+const ALWAYS_ON: { key: RuleTemplateKey; title: string; sentence: string }[] = [
+  { key: 'MAX_DUTIES_PER_DAY', title: 'One shift a day', sentence: 'A nurse works at most one shift a day.' },
+  {
+    key: 'STRICT_PROFILE_ALLOCATION',
+    title: 'Doctors in the profile',
+    sentence: 'A nurse with doctors or specialties in her profile only works with those.',
+  },
+];
+
+const KNOWN_KEYS = new Set<string>([...GROUPS.flatMap((g) => g.rules.map((r) => r.key)), ...ALWAYS_ON.map((r) => r.key)]);
+
+function findRule(rules: Rule[], def: { key: string; id?: string }): Rule | undefined {
+  return rules.find((r) => r.templateKey === def.key) || (def.id ? rules.find((r) => r.id === def.id) : undefined);
+}
+
+/** On/off switch. */
+const Toggle: React.FC<{ on: boolean; label: string; onChange: () => void }> = ({ on, label, onChange }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={on}
+    aria-label={label}
+    onClick={onChange}
+    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 ${
+      on ? 'bg-indigo-600' : 'bg-slate-300'
+    }`}
+  >
+    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : 'translate-x-0.5'}`} />
+  </button>
+);
+
+/** "Must" / "Try to" choice. */
+const Strictness: React.FC<{ value: 'HARD' | 'SOFT'; disabled: boolean; softMeaning?: string; onChange: (v: 'HARD' | 'SOFT') => void; label: string }> = ({
+  value,
+  disabled,
+  softMeaning,
+  onChange,
+  label,
+}) => (
+  <div role="radiogroup" aria-label={label} className={`inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-[11px] ${disabled ? 'opacity-50' : ''}`}>
+    {(['HARD', 'SOFT'] as const).map((option) => (
+      <button
+        key={option}
+        type="button"
+        role="radio"
+        aria-checked={value === option}
+        disabled={disabled}
+        title={option === 'HARD' ? 'Never broken' : softMeaning || 'Followed when possible'}
+        onClick={() => onChange(option)}
+        className={`rounded px-2 py-0.5 font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+          value === option ? 'bg-white text-indigo-700 font-semibold shadow-xs ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-800'
+        }`}
+      >
+        {option === 'HARD' ? 'Must' : 'Try to'}
+      </button>
+    ))}
+  </div>
+);
+
+/** A small number box with − and + buttons; saves on +/−, Enter or leaving the box. */
+const Stepper: React.FC<{ value: number; field: NumberField; disabled: boolean; label: string; onCommit: (v: number) => void }> = ({
+  value,
+  field,
+  disabled,
+  label,
+  onCommit,
 }) => {
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const step = field.step || 1;
+  const clamp = (n: number) => Math.min(field.max, Math.max(field.min, n));
+  const commit = (n: number) => {
+    const next = clamp(Math.round(n / step) * step);
+    setDraft(String(next));
+    if (next !== value) onCommit(next);
+  };
+  return (
+    <span className={`inline-flex items-center gap-1 align-middle ${disabled ? 'opacity-50' : ''}`}>
+      <span className="inline-flex items-center rounded-md border border-slate-300 bg-white">
+        <button
+          type="button"
+          aria-label={`Decrease ${label}`}
+          disabled={disabled || value <= field.min}
+          onClick={() => commit(value - step)}
+          className="px-1 py-0.5 text-slate-500 hover:text-slate-900 disabled:opacity-40"
+        >
+          <Minus className="h-3 w-3" aria-hidden="true" />
+        </button>
+        <input
+          type="number"
+          inputMode="numeric"
+          aria-label={label}
+          disabled={disabled}
+          min={field.min}
+          max={field.max}
+          step={step}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            const n = Number(draft);
+            if (draft.trim() === '' || Number.isNaN(n)) setDraft(String(value));
+            else commit(n);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+          className="w-10 border-x border-slate-200 py-0.5 text-center font-semibold tabular-nums text-slate-900 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+        <button
+          type="button"
+          aria-label={`Increase ${label}`}
+          disabled={disabled || value >= field.max}
+          onClick={() => commit(value + step)}
+          className="px-1 py-0.5 text-slate-500 hover:text-slate-900 disabled:opacity-40"
+        >
+          <Plus className="h-3 w-3" aria-hidden="true" />
+        </button>
+      </span>
+      {field.unit && <span className="text-slate-600">{field.unit}</span>}
+    </span>
+  );
+};
+
+export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, triggerSaveNotification, syncHoursPolicyFromRule }) => {
   const repo = getRepository();
-  const customRuleModalTitleId = useId();
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [showOther, setShowOther] = useState(false);
 
-  // Custom rule modal
-  const [isCustomRuleModalOpen, setIsCustomRuleModalOpen] = useState(false);
-  const [newRule, setNewRule] = useState<Partial<Rule>>({
-    name: 'Custom Duty Rule',
-    scope: 'PER_NURSE',
-    metric: 'CONSECUTIVE_DUTIES_ENDING_AT_OR_AFTER',
-    operator: 'MAX',
-    value: 3,
-    severity: 'SOFT',
-    params: { thresholdTime: '21:00' },
-    enabled: true,
-  });
-
-  const [ruleDrafts, setRuleDrafts] = useState<Record<string, string>>({});
-
-  const handleToggleRule = async (rule: Rule) => {
-    const nextEnabled = !rule.enabled;
-    setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, enabled: nextEnabled } : r)));
-    await repo.update('rules', rule.id, { enabled: nextEnabled });
-    triggerSaveNotification(`Rule "${rule.name}" ${nextEnabled ? 'enabled' : 'disabled'}.`);
-  };
-
-  const handleUpdateRuleValue = async (rule: Rule, value: number, severity: 'HARD' | 'SOFT') => {
-    setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, value, severity } : r)));
-    await repo.update('rules', rule.id, { value, severity });
-
-    // Keep hours policy in sync with rule values
-    let policyUpdates: Partial<HoursPolicyConfig> | null = null;
-    if (rule.id === 'rule-h2' || rule.templateKey === 'MAX_CONSECUTIVE_DAYS' || rule.metric === 'CONSECUTIVE_WORKING_DAYS') {
-      policyUpdates = { maxConsecutiveDays: value };
-    } else if (rule.id === 'rule-h3' || rule.templateKey === 'MIN_REST_HOURS') {
-      policyUpdates = { minRestBetweenDuties: value };
-    } else if (rule.id === 'rule-h4' || rule.templateKey === 'MAX_DUTIES_PER_DAY') {
-      policyUpdates = { maxDutiesPerDay: value };
-    }
-
-    if (policyUpdates) {
-      syncHoursPolicyFromRule(policyUpdates);
-    }
-
-    triggerSaveNotification(`Updated rule "${rule.name}".`);
-  };
-
-  const [isSyncingRules, setIsSyncingRules] = useState(false);
-
-  const handleEnsureStandardRules = async () => {
-    setIsSyncingRules(true);
+  const saveRule = async (rule: Rule, updates: Partial<Rule>, message: string) => {
+    setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, ...updates } : r)));
     try {
-      const syncResult = await RuleSyncService.syncStandardRules();
-      // Ensure dedicated nurse clinic clinical role also exists
-      const roles = await repo.list('clinicalRoles');
-      const hasNcRole = roles.some(
-        (r) => r.id === 'role-nurse-clinic' || r.acronym === 'NC' || r.name.toLowerCase().includes('nurse clinic')
-      );
-      if (!hasNcRole) {
-        await repo.create('clinicalRoles', {
-          id: 'role-nurse-clinic',
-          name: 'Nurse Clinic',
-          acronym: 'NC',
-          description: 'Dedicated nurse-led clinic (triage, dressings, vitals & injections) — independent of doctor sessions',
-          defaultDailyQuota: 1,
-          defaultStartTime: '09:00',
-          defaultEndTime: '17:00',
-        });
-      }
-      setRules(syncResult.rules);
-      triggerSaveNotification(`All standard clinical rules synchronized (${syncResult.total} rules verified).`);
+      await repo.update('rules', rule.id, updates);
+      triggerSaveNotification(message);
+    } catch (err: any) {
+      triggerSaveNotification(`Not saved: ${err?.message || err}`);
       loadData();
-    } catch (err) {
-      console.error('Failed to ensure standard rules:', err);
-      triggerSaveNotification('Failed to verify standard rules.');
-    } finally {
-      setIsSyncingRules(false);
-    }
-  };
-
-  const handleSaveCustomRule = async () => {
-    if (!newRule.name) {
-      notify('Please enter a rule name.', 'warning');
       return;
     }
-    await repo.create('rules', {
-      name: newRule.name,
-      templateKey: newRule.templateKey,
-      scope: newRule.scope || 'PER_NURSE',
-      metric: newRule.metric || 'CONSECUTIVE_DUTIES_ENDING_AT_OR_AFTER',
-      operator: newRule.operator || 'MAX',
-      value: Number(newRule.value) || 3,
-      severity: newRule.severity || 'SOFT',
-      params: newRule.params,
-      enabled: true,
-    });
-    setIsCustomRuleModalOpen(false);
-    triggerSaveNotification(`Custom rule "${newRule.name}" added to engine.`);
-    loadData();
+    // Keep the Hours Policy tab in step with these two rules
+    if (updates.value !== undefined) {
+      if (rule.templateKey === 'MAX_CONSECUTIVE_DAYS') syncHoursPolicyFromRule({ maxConsecutiveDays: updates.value });
+      if (rule.templateKey === 'MIN_REST_HOURS') syncHoursPolicyFromRule({ minRestBetweenDuties: updates.value });
+    }
   };
 
-  const handleDeleteRule = async (id: string, name: string) => {
-    if (
-      await confirmDialog({
-        title: 'Remove rule',
-        message: `Remove rule "${name}"?`,
-        confirmLabel: 'Remove',
-        danger: true,
-      })
-    ) {
-      await repo.remove('rules', id);
-      triggerSaveNotification(`Rule removed.`);
+  const addMissingRules = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await RuleSyncService.syncStandardRules();
+      setRules(result.rules);
+      triggerSaveNotification('Standard rules checked; any missing ones were added.');
       loadData();
+    } catch (err) {
+      console.error('Failed to add standard rules:', err);
+      triggerSaveNotification('The standard rules could not be added.');
+    } finally {
+      setIsSyncing(false);
     }
+  };
+
+  const shownIds = new Set(
+    [...GROUPS.flatMap((g) => g.rules), ...ALWAYS_ON].map((def) => findRule(rules, def)?.id).filter(Boolean) as string[]
+  );
+  const otherRules = rules.filter((r) => !shownIds.has(r.id) && !(r.templateKey && KNOWN_KEYS.has(r.templateKey)));
+  const missingCount = GROUPS.flatMap((g) => g.rules).filter((def) => !findRule(rules, def)).length;
+
+  const renderSentence = (def: RuleDef, rule: Rule, enabled: boolean) => {
+    const parts = def.sentence.split(/(\{value\}|\{time\})/);
+    return parts.map((part, i) => {
+      if (part === '{value}' && def.value) {
+        return (
+          <Stepper
+            key={i}
+            value={Number(rule.value) || def.value.min}
+            field={def.value}
+            disabled={!enabled}
+            label={def.title}
+            onCommit={(v) => saveRule(rule, { value: v }, `${def.title}: set to ${v}${def.value?.unit === '%' ? '%' : ''}.`)}
+          />
+        );
+      }
+      if (part === '{time}') {
+        const time = (rule.params as any)?.thresholdTime || '21:00';
+        return (
+          <input
+            key={i}
+            type="time"
+            aria-label={`${def.title}: late from`}
+            disabled={!enabled}
+            value={time}
+            onChange={(e) => {
+              if (e.target.value && e.target.value !== time) {
+                saveRule(rule, { params: { ...(rule.params || {}), thresholdTime: e.target.value } }, `${def.title}: late from ${e.target.value}.`);
+              }
+            }}
+            className={`mx-0.5 rounded-md border border-slate-300 bg-white px-1.5 py-0.5 align-middle font-semibold tabular-nums text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+              enabled ? '' : 'opacity-50'
+            }`}
+          />
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
   };
 
   return (
-    <>
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900">Constraint Rules &amp; Presets</h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Configure scheduling engine constraints (Hard constraints cannot be breached; Soft constraints optimize scoring). Build custom rules for consecutive shifts or hours.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleEnsureStandardRules}
-              disabled={isSyncingRules}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-teal-300 bg-teal-50/80 hover:bg-teal-100 text-teal-800 rounded text-xs font-medium cursor-pointer shadow-2xs transition-colors disabled:opacity-50"
-              title="Synchronize all 9 canonical clinical rules with Firestore database"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-teal-600 ${isSyncingRules ? 'animate-spin' : ''}`} />
-              <span>{isSyncingRules ? 'Synchronizing...' : 'Synchronize Standard Rules'}</span>
-            </button>
-            <button
-              onClick={() => {
-                setNewRule({
-                  name: 'Custom Duty Rule',
-                  scope: 'PER_NURSE',
-                  metric: 'CONSECUTIVE_DUTIES_ENDING_AT_OR_AFTER',
-                  operator: 'MAX',
-                  value: 3,
-                  severity: 'SOFT',
-                  params: { thresholdTime: '21:00' },
-                  enabled: true,
-                });
-                setIsCustomRuleModalOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium cursor-pointer shadow-xs"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Build Custom Rule</span>
-            </button>
-          </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">Scheduling rules</h2>
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">
+            These rules guide the roster generator and the roster checker. Change a number and it saves straight away.
+            <span className="ml-1 text-slate-600">
+              <strong className="font-semibold text-slate-800">Must</strong> rules are never broken;{' '}
+              <strong className="font-semibold text-slate-800">Try to</strong> rules are followed when possible.
+            </span>
+          </p>
         </div>
+        {missingCount > 0 && (
+          <button
+            type="button"
+            onClick={addMissingRules}
+            disabled={isSyncing}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} aria-hidden="true" />
+            {isSyncing ? 'Adding…' : `Add ${missingCount} missing rule${missingCount === 1 ? '' : 's'}`}
+          </button>
+        )}
+      </div>
 
-        {/* FEATURED: Dedicated Nurse Clinic Rule Card & Controls */}
-        {(() => {
-          const ncRule = rules.find(
-            (r) => r.templateKey === 'DEDICATED_NURSE_CLINIC' || r.id === 'rule-nurse-clinic'
-          );
-          return (
-            <div className="p-4 bg-teal-50/50 border border-teal-200 rounded-lg space-y-3 shadow-2xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-teal-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                    🩺
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-xs font-bold text-slate-900">
-                        Dedicated Nurse Clinic Rule (Independent of Doctor Sessions)
-                      </h3>
-                      <span className="font-mono text-[9px] bg-teal-100 text-teal-800 px-1.5 py-0.5 rounded font-bold">
-                        NC · Unpaired
-                      </span>
+      {/* Rule groups */}
+      {GROUPS.map((group) => (
+        <section key={group.title} aria-labelledby={`rules-${group.title}`} className="space-y-2">
+          <div>
+            <h3 id={`rules-${group.title}`} className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              {group.title}
+            </h3>
+            <p className="text-xs text-slate-400">{group.description}</p>
+          </div>
+          <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+            {group.rules.map((def) => {
+              const rule = findRule(rules, def);
+              if (!rule) {
+                return (
+                  <div key={def.key} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                    <div>
+                      <p className="font-medium text-slate-700">{def.title}</p>
+                      <p className="text-xs text-slate-400">This rule is not set up yet.</p>
                     </div>
-                    <p className="text-[11px] text-slate-600 mt-0.5 max-w-2xl">
-                      Allocates 1 nurse to the Nurse Clinic (dressings, triage, vitals &amp; injections) and blood collection, who is <strong>not assigned to any doctor</strong>, for each day of the schedule. She must be qualified for blood collection and works the opening hours where possible.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  {ncRule ? (
-                    <>
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="text-slate-500 text-[11px]">Nurses/Day:</span>
-                        <input
-                          aria-label="Nurse Clinic nurses per day"
-                          type="number"
-                          min="1"
-                          max="5"
-                          value={ruleDrafts[ncRule.id] !== undefined ? ruleDrafts[ncRule.id] : ncRule.value}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setRuleDrafts((prev) => ({ ...prev, [ncRule.id]: val }));
-                          }}
-                          onBlur={() => {
-                            const raw = ruleDrafts[ncRule.id];
-                            if (raw !== undefined) {
-                              const parsed = Number(raw);
-                              if (!isNaN(parsed) && parsed > 0) {
-                                handleUpdateRuleValue(ncRule, parsed, ncRule.severity);
-                              }
-                              setRuleDrafts((prev) => {
-                                const next = { ...prev };
-                                delete next[ncRule.id];
-                                return next;
-                              });
-                            }
-                          }}
-                          className="w-14 px-1.5 py-1 border border-teal-300 rounded font-mono text-center text-xs bg-white focus:ring-1 focus:ring-teal-500 focus:outline-none"
-                        />
-                      </div>
-
-                      <select
-                        aria-label="Nurse Clinic rule severity"
-                        value={ncRule.severity}
-                        onChange={(e) =>
-                          handleUpdateRuleValue(ncRule, ncRule.value, e.target.value as any)
-                        }
-                        className="px-2 py-1 border border-teal-300 rounded text-xs bg-white text-slate-800"
-                      >
-                        <option value="HARD">HARD (Blocks Doctor Pairing)</option>
-                        <option value="SOFT">SOFT (Fills After Doctors)</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => handleToggleRule(ncRule)}
-                        className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition-colors ${
-                          ncRule.enabled
-                            ? 'bg-teal-600 text-white hover:bg-teal-700'
-                            : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                        }`}
-                      >
-                        {ncRule.enabled ? 'Active' : 'Disabled'}
-                      </button>
-                    </>
-                  ) : (
                     <button
                       type="button"
-                      onClick={handleEnsureStandardRules}
-                      className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white rounded text-xs font-semibold cursor-pointer shadow-2xs"
+                      onClick={addMissingRules}
+                      disabled={isSyncing}
+                      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                     >
-                      Enable &amp; Initialize Rule
+                      Add
                     </button>
-                  )}
+                  </div>
+                );
+              }
+              const enabled = rule.enabled !== false;
+              const severity = (rule.severity || 'HARD') as 'HARD' | 'SOFT';
+              return (
+                <div key={rule.id} className={`flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-start sm:justify-between ${enabled ? '' : 'bg-slate-50/60'}`}>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-sm font-medium ${enabled ? 'text-slate-900' : 'text-slate-500'}`}>{def.title}</p>
+                    <p className={`mt-1 text-sm leading-7 ${enabled ? 'text-slate-700' : 'text-slate-400'}`}>{renderSentence(def, rule, enabled)}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">{enabled ? def.help : 'Switched off: the generator and the checker ignore this rule.'}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3 sm:pt-0.5">
+                    <Strictness
+                      value={severity}
+                      disabled={!enabled}
+                      softMeaning={def.softMeaning}
+                      label={`${def.title}: must or try to`}
+                      onChange={(v) => saveRule(rule, { severity: v }, `${def.title}: ${v === 'HARD' ? 'must' : 'try to'}.`)}
+                    />
+                    <Toggle
+                      on={enabled}
+                      label={`${def.title} ${enabled ? 'on' : 'off'}`}
+                      onChange={() => saveRule(rule, { enabled: !enabled }, `${def.title} switched ${enabled ? 'off' : 'on'}.`)}
+                    />
+                  </div>
                 </div>
-              </div>
+              );
+            })}
+          </div>
+        </section>
+      ))}
 
-              <div className="text-[11px] text-teal-800 bg-teal-100/60 p-2 rounded flex items-center justify-between">
-                <span>
-                  {ncRule?.enabled
-                    ? ncRule.severity === 'HARD'
-                      ? '✓ Active: Guaranteed Priority 120 slot. The engine reserves 1 nurse for Dedicated Nurse Clinic before filling any doctor sessions, preventing doctor-nurse pairing.'
-                      : 'ℹ Active (Soft): The engine pairs doctors first (Priority 100), and assigns remaining available nurses to Nurse Clinic (Priority 75).'
-                    : '⚠ Disabled: Nurses will only be assigned to doctors and general phlebotomy; no dedicated nurse clinic nurse will be scheduled.'}
-                </span>
-                <span className="font-mono text-[10px] text-teal-900 font-semibold shrink-0 ml-2">
-                  Scope: PER_DAY · Quota: {ncRule?.value ?? 1}/day
-                </span>
+      {/* Always applied */}
+      <section className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Always applied</h3>
+        <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+          {ALWAYS_ON.map((r) => (
+            <div key={r.key} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div>
+                <p className="text-sm font-medium text-slate-900">{r.title}</p>
+                <p className="text-sm text-slate-600">{r.sentence}</p>
               </div>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                <Lock className="h-3 w-3" aria-hidden="true" />
+                Always on
+              </span>
             </div>
-          );
-        })()}
+          ))}
+        </div>
+      </section>
 
-        {/* FEATURED: At Least +1 Additional Nurse Above Doctors During Operating Hours */}
-        {(() => {
-          const plusOneRule = rules.find(
-            (r) =>
-              r.templateKey === 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS' ||
-              r.id === 'rule-nurse-plus-one'
-          );
-          return (
-            <div className="p-4 bg-indigo-50/50 border border-indigo-200 rounded-lg space-y-3 shadow-2xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                    👥
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-xs font-bold text-slate-900">
-                        A Free Nurse at Every Opening Hour
-                      </h3>
-                      <span className="font-mono text-[9px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded font-bold">
-                        Not With a Doctor · Opening Hours
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 mt-0.5 max-w-2xl">
-                      At every hour the clinic is open there must be at least this many nurses who are not with a doctor at that hour and are qualified for blood collection. The Nurse Clinic nurse counts, and so does a doctor's nurse once her doctor's session has ended (e.g. a nurse working 9am to 9pm with a doctor until 6pm counts from 6pm to 9pm). Opening hours come from the clinic profile. Not checked on public holidays, when one nurse covers the clinic.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  {plusOneRule ? (
-                    <>
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="text-slate-500 text-[11px]">Min Additional:</span>
-                        <input
-                          aria-label="Minimum additional nurses above doctors"
-                          type="number"
-                          min="1"
-                          max="5"
-                          value={
-                            ruleDrafts[plusOneRule.id] !== undefined
-                              ? ruleDrafts[plusOneRule.id]
-                              : plusOneRule.value
-                          }
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setRuleDrafts((prev) => ({ ...prev, [plusOneRule.id]: val }));
-                          }}
-                          onBlur={() => {
-                            const raw = ruleDrafts[plusOneRule.id];
-                            if (raw !== undefined) {
-                              const parsed = Number(raw);
-                              if (!isNaN(parsed) && parsed > 0) {
-                                handleUpdateRuleValue(plusOneRule, parsed, plusOneRule.severity);
-                              }
-                              setRuleDrafts((prev) => {
-                                const next = { ...prev };
-                                delete next[plusOneRule.id];
-                                return next;
-                              });
-                            }
-                          }}
-                          className="w-14 px-1.5 py-1 border border-indigo-300 rounded font-mono text-center text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                        />
-                      </div>
-
-                      <select
-                        aria-label="Additional nurse rule severity"
-                        value={plusOneRule.severity}
-                        onChange={(e) =>
-                          handleUpdateRuleValue(plusOneRule, plusOneRule.value, e.target.value as any)
-                        }
-                        className="px-2 py-1 border border-indigo-300 rounded text-xs bg-white text-slate-800"
-                      >
-                        <option value="HARD">HARD (Enforces +1 Nurses Every Hour)</option>
-                        <option value="SOFT">SOFT (Prefers Overhang &amp; Float)</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => handleToggleRule(plusOneRule)}
-                        className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition-colors ${
-                          plusOneRule.enabled
-                            ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                            : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                        }`}
-                      >
-                        {plusOneRule.enabled ? 'Active' : 'Disabled'}
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleEnsureStandardRules}
-                      className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold cursor-pointer shadow-2xs"
-                    >
-                      Enable &amp; Initialize Rule
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="text-[11px] text-indigo-800 bg-indigo-100/60 p-2 rounded flex items-center justify-between">
-                <span>
-                  {plusOneRule?.enabled
-                    ? plusOneRule.severity === 'HARD'
-                      ? `✓ Active: Engine guarantees active nurses >= (active doctors + ${plusOneRule?.value ?? 1}) for all operating hours. Prioritizes nurse-clinic-enabled staff for overhang & evening windows.`
-                      : 'ℹ Active (Soft): Engine scores duty overhang and floats to favor maintaining additional nurses without failing generation.'
-                    : '⚠ Disabled: Schedule requires only 1:1 doctor-to-nurse pairing during clinic sessions.'}
-                </span>
-                <span className="font-mono text-[10px] text-indigo-900 font-semibold shrink-0 ml-2">
-                  Scope: PER_DUTY_WINDOW · Additional: +{plusOneRule?.value ?? 1}
-                </span>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* FEATURED: Maximum Working Hours Limit Per Period (Rule H7) */}
-        {(() => {
-          const maxHoursRule = rules.find(
-            (r) =>
-              r.templateKey === 'MAX_WORKING_HOURS_PER_PERIOD' ||
-              r.id === 'rule-h7-max-hours' ||
-              (r.name && r.name.toLowerCase().includes('max working hours'))
-          );
-          return (
-            <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-lg space-y-3 shadow-2xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                    ⏱️
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-xs font-bold text-slate-900">
-                        Maximum Working Hours Limit &amp; Overwork Cap (Rule H7)
-                      </h3>
-                      <span className="font-mono text-[9px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
-                        H7 · Burnout Prevention
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 mt-0.5 max-w-2xl">
-                      Caps total duty hours earned across the schedule period. Full-time period target is prorated by each nurse&apos;s contract percentage. When set to HARD, the scheduling engine strictly prohibits assigning any duty that breaches the maximum allowable limit across all 6 passes.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  {maxHoursRule ? (
-                    <>
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="text-slate-500 text-[11px]">Cap (% of Contract):</span>
-                        <input
-                          aria-label="Max working hours cap (% of contract)"
-                          type="number"
-                          min="100"
-                          max="125"
-                          value={
-                            ruleDrafts[maxHoursRule.id] !== undefined
-                              ? ruleDrafts[maxHoursRule.id]
-                              : maxHoursRule.value
-                          }
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setRuleDrafts((prev) => ({ ...prev, [maxHoursRule.id]: val }));
-                          }}
-                          onBlur={() => {
-                            const raw = ruleDrafts[maxHoursRule.id];
-                            if (raw !== undefined) {
-                              const parsed = Number(raw);
-                              if (!isNaN(parsed) && parsed >= 100) {
-                                handleUpdateRuleValue(maxHoursRule, parsed, maxHoursRule.severity);
-                              }
-                              setRuleDrafts((prev) => {
-                                const next = { ...prev };
-                                delete next[maxHoursRule.id];
-                                return next;
-                              });
-                            }
-                          }}
-                          className="w-16 px-1.5 py-1 border border-emerald-300 rounded font-mono text-center text-xs bg-white focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-                        />
-                        <span className="text-slate-400 text-xs">%</span>
-                      </div>
-
-                      <select
-                        aria-label="Max working hours rule severity"
-                        value={maxHoursRule.severity}
-                        onChange={(e) =>
-                          handleUpdateRuleValue(maxHoursRule, maxHoursRule.value, e.target.value as any)
-                        }
-                        className="px-2 py-1 border border-emerald-300 rounded text-xs bg-white text-slate-800"
-                      >
-                        <option value="HARD">HARD (Strict Overwork Prohibition)</option>
-                        <option value="SOFT">SOFT (Flexible Overtime Advisory)</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => handleToggleRule(maxHoursRule)}
-                        className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition-colors ${
-                          maxHoursRule.enabled
-                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                            : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                        }`}
-                      >
-                        {maxHoursRule.enabled ? 'Active' : 'Disabled'}
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleEnsureStandardRules}
-                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold cursor-pointer shadow-2xs"
-                    >
-                      Enable &amp; Initialize Rule
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="text-[11px] text-emerald-800 bg-emerald-100/60 p-2 rounded flex items-center justify-between">
-                <span>
-                  {maxHoursRule?.enabled
-                    ? maxHoursRule.severity === 'HARD'
-                      ? `✓ Active: Hard ceiling enforced at max(target, min(target + 8h, round(target × ${((maxHoursRule.value || 105) / 100).toFixed(2)}))). Prevents all overwork violations in generation & pre-publish validation.`
-                      : 'ℹ Active (Soft): Evaluates nurse hours deficit and soft scoring to balance hours across staff without rejecting shifts.'
-                    : '⚠ Disabled: Nurses may be scheduled for unlimited shifts without period working hours capping.'}
-                </span>
-                <span className="font-mono text-[10px] text-emerald-900 font-semibold shrink-0 ml-2">
-                  Scope: PER_NURSE · Cap: {maxHoursRule?.value ?? 105}%
-                </span>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* FEATURED: Maximum Consecutive Late Duties Ending at 21:00 (Rule S1) */}
-        {(() => {
-          const lateRule = rules.find(
-            (r) =>
-              r.templateKey === 'MAX_CONSECUTIVE_LATE_DUTIES' ||
-              r.id === 'rule-s1' ||
-              (r.name && (r.name.toLowerCase().includes('consecutive late') || r.name.toLowerCase().includes('consecutive night')))
-          );
-          return (
-            <div className="p-4 bg-purple-50/50 border border-purple-200 rounded-lg space-y-3 shadow-2xs">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
-                    🌙
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-xs font-bold text-slate-900">
-                        Maximum Consecutive Late Duties Ending at 21:00 (Rule S1)
-                      </h3>
-                      <span className="font-mono text-[9px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-bold">
-                        S1 · Night/Late Duty Restriction
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 mt-0.5 max-w-2xl">
-                      Restricts consecutive evening duties ending at or after 21:00 (e.g. 13:00–21:00 or 09:00–21:00). When set to HARD, the engine looks back across preceding calendar days and strictly blocks assigning a { (lateRule?.value ?? 3) + 1 }th consecutive late duty across all assignment and float passes.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  {lateRule ? (
-                    <>
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="text-slate-500 text-[11px]">Max Consecutive:</span>
-                        <input
-                          aria-label="Max consecutive late duties"
-                          type="number"
-                          min="1"
-                          max="7"
-                          value={
-                            ruleDrafts[lateRule.id] !== undefined
-                              ? ruleDrafts[lateRule.id]
-                              : lateRule.value
-                          }
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setRuleDrafts((prev) => ({ ...prev, [lateRule.id]: val }));
-                          }}
-                          onBlur={() => {
-                            const raw = ruleDrafts[lateRule.id];
-                            if (raw !== undefined) {
-                              const parsed = Number(raw);
-                              if (!isNaN(parsed) && parsed > 0) {
-                                handleUpdateRuleValue(lateRule, parsed, lateRule.severity);
-                              }
-                              setRuleDrafts((prev) => {
-                                const next = { ...prev };
-                                delete next[lateRule.id];
-                                return next;
-                              });
-                            }
-                          }}
-                          className="w-14 px-1.5 py-1 border border-purple-300 rounded font-mono text-center text-xs bg-white focus:ring-1 focus:ring-purple-500 focus:outline-none"
-                        />
-                        <span className="text-slate-500 text-[11px] ml-1">Threshold:</span>
-                        <span className="font-mono text-xs bg-purple-100/80 text-purple-900 px-1.5 py-0.5 rounded font-bold">
-                          {lateRule.params?.thresholdTime || '21:00'}
-                        </span>
-                      </div>
-
-                      <select
-                        aria-label="Late duty rule severity"
-                        value={lateRule.severity}
-                        onChange={(e) =>
-                          handleUpdateRuleValue(lateRule, lateRule.value, e.target.value as any)
-                        }
-                        className="px-2 py-1 border border-purple-300 rounded text-xs bg-white text-slate-800"
-                      >
-                        <option value="HARD">HARD (Inviolable Block)</option>
-                        <option value="SOFT">SOFT (Pacing Penalty)</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => handleToggleRule(lateRule)}
-                        className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition-colors ${
-                          lateRule.enabled
-                            ? 'bg-purple-600 text-white hover:bg-purple-700'
-                            : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                        }`}
-                      >
-                        {lateRule.enabled ? 'Active' : 'Disabled'}
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleEnsureStandardRules}
-                      className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs font-semibold cursor-pointer shadow-2xs"
-                    >
-                      Enable &amp; Initialize Rule
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className="text-[11px] text-purple-800 bg-purple-100/60 p-2 rounded flex items-center justify-between">
-                <span>
-                  {lateRule?.enabled
-                    ? lateRule.severity === 'HARD'
-                      ? `✓ Active: Hard constraint enforced. Nurses working ${lateRule.value} consecutive duties ending at or after 21:00 will never be assigned or extended to a late duty on the following day.`
-                      : `ℹ Active (Soft): Applies a progressive scoring penalty (-50 / -150) when nurses approach or reach ${lateRule.value} consecutive late duties.`
-                    : '⚠ Disabled: Nurses may be assigned to consecutive late duties without restriction.'}
-                </span>
-                <span className="font-mono text-[10px] text-purple-900 font-semibold shrink-0 ml-2">
-                  Scope: PER_NURSE · Max: {lateRule?.value ?? 3} in a row
-                </span>
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* List of Remaining Standard & Custom Rules */}
-        {(() => {
-          const otherRules = rules.filter(
-            (r) =>
-              r.templateKey !== 'DEDICATED_NURSE_CLINIC' &&
-              r.templateKey !== 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS' &&
-              r.templateKey !== 'MAX_WORKING_HOURS_PER_PERIOD' &&
-              r.templateKey !== 'MAX_CONSECUTIVE_LATE_DUTIES' &&
-              r.id !== 'rule-nurse-clinic' &&
-              r.id !== 'rule-nurse-plus-one' &&
-              r.id !== 'rule-h7-max-hours' &&
-              r.id !== 'rule-s1'
-          );
-
-          return (
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between pb-1">
-                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Additional Clinical Constraints &amp; Custom Rules ({otherRules.length})
-                </h3>
-                <span className="text-[11px] text-slate-500">
-                  Standard safety constraints and custom builder rules
-                </span>
-              </div>
-
+      {/* Old custom rules the generator does not use */}
+      {otherRules.length > 0 && (
+        <section className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setShowOther((v) => !v)}
+            aria-expanded={showOther}
+            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800"
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showOther ? '' : '-rotate-90'}`} aria-hidden="true" />
+            Other saved rules ({otherRules.length}) — not used by the roster generator
+          </button>
+          {showOther && (
+            <div className="divide-y divide-slate-100 rounded-lg border border-dashed border-slate-300 bg-white">
               {otherRules.map((rule) => (
-                <div
-                  key={rule.id}
-                  className={`p-3.5 rounded border transition-colors ${
-                    rule.enabled
-                      ? 'bg-white border-slate-200 shadow-2xs'
-                      : 'bg-slate-50/80 border-slate-200 opacity-60'
-                  }`}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-                            rule.severity === 'HARD'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {rule.severity}
-                        </span>
-                        <span className="font-semibold text-slate-800 text-xs">{rule.name}</span>
-                        {rule.templateKey && (
-                          <span className="font-mono text-[10px] text-slate-400">
-                            ({rule.templateKey})
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-500">
-                        Scope: <strong className="text-slate-700 font-mono">{rule.scope}</strong> · Metric: <span className="font-mono text-slate-600">{rule.metric}</span> {rule.params?.thresholdTime ? `(Threshold: ${rule.params.thresholdTime})` : ''} · Condition: <span className="font-mono font-semibold text-slate-800">{rule.operator} {rule.value}</span>
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="text-slate-500 text-[11px]">Value:</span>
-                        <input
-                          aria-label={`Value for ${rule.name}`}
-                          type="number"
-                          value={ruleDrafts[rule.id] !== undefined ? ruleDrafts[rule.id] : rule.value}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setRuleDrafts((prev) => ({ ...prev, [rule.id]: val }));
-                          }}
-                          onBlur={() => {
-                            const raw = ruleDrafts[rule.id];
-                            if (raw !== undefined) {
-                              const parsed = Number(raw);
-                              if (!isNaN(parsed) && raw.trim() !== '') {
-                                handleUpdateRuleValue(rule, parsed, rule.severity);
-                              }
-                              setRuleDrafts((prev) => {
-                                const next = { ...prev };
-                                delete next[rule.id];
-                                return next;
-                              });
-                            }
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              (e.target as HTMLInputElement).blur();
-                            }
-                          }}
-                          className="w-16 px-1.5 py-1 border border-slate-300 rounded font-mono text-center text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                        />
-                      </div>
-
-                      <select
-                        aria-label={`Severity for ${rule.name}`}
-                        value={rule.severity}
-                        onChange={(e) =>
-                          handleUpdateRuleValue(rule, rule.value, e.target.value as any)
-                        }
-                        className="px-2 py-1 border border-slate-300 rounded text-xs bg-white text-slate-800"
-                      >
-                        <option value="HARD">HARD</option>
-                        <option value="SOFT">SOFT</option>
-                      </select>
-
-                      <button
-                        onClick={() => handleToggleRule(rule)}
-                        className={`px-2.5 py-1 rounded text-xs font-medium cursor-pointer transition-colors ${
-                          rule.enabled
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-slate-200 text-slate-600'
-                        }`}
-                      >
-                        {rule.enabled ? 'Enabled' : 'Disabled'}
-                      </button>
-
-                      {!rule.templateKey && (
-                        <button
-                          aria-label="Delete custom rule"
-                          onClick={() => handleDeleteRule(rule.id, rule.name)}
-                          className="p-1 text-slate-400 hover:text-red-600 rounded cursor-pointer"
-                          title="Delete custom rule"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                <div key={rule.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                  <span className="text-slate-600">{rule.name}</span>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${rule.name}`}
+                    onClick={async () => {
+                      if (
+                        await confirmDialog({
+                          title: 'Delete rule',
+                          message: `Delete "${rule.name}"? It is not used by the roster generator.`,
+                          confirmLabel: 'Delete',
+                          danger: true,
+                        })
+                      ) {
+                        await repo.remove('rules', rule.id);
+                        triggerSaveNotification('Rule deleted.');
+                        loadData();
+                      }
+                    }}
+                    className="rounded p-1 text-slate-400 hover:text-rose-600"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
                 </div>
               ))}
             </div>
-          );
-        })()}
-      </div>
-
-      {isCustomRuleModalOpen && (
-        <SettingsDialog
-          onClose={() => setIsCustomRuleModalOpen(false)}
-          labelledBy={customRuleModalTitleId}
-          overlayClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs"
-          panelClassName="bg-white rounded-lg border border-slate-200 shadow-xl max-w-lg w-full p-5 space-y-4 text-xs"
-        >
-          <h3 id={customRuleModalTitleId} className="text-sm font-bold text-slate-900">Custom Scheduling Rule Builder</h3>
-          <p className="text-[11px] text-slate-500">
-            Formulate a custom constraint metric evaluated during deterministic generation and live cell editing.
-          </p>
-
-          {/* Quick Presets / Templates */}
-          <div>
-            <label className="block font-medium text-slate-700 mb-1.5">Load Standard Preset</label>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() =>
-                  setNewRule({
-                    name: 'Dedicated nurse clinic coverage (not assigned to doctor)',
-                    templateKey: 'DEDICATED_NURSE_CLINIC',
-                    scope: 'PER_DAY',
-                    metric: 'DUTIES_WITH_END_TIME_X_COUNT',
-                    operator: 'MIN',
-                    value: 1,
-                    severity: 'HARD',
-                    enabled: true,
-                  })
-                }
-                className="p-2 border border-teal-200 bg-teal-50/70 hover:bg-teal-100/70 text-left rounded text-[11px] cursor-pointer transition-colors"
-              >
-                <span className="font-bold text-teal-900 block">🩺 Dedicated Nurse Clinic</span>
-                <span className="text-[10px] text-teal-700">1 nurse/day unpaired from doctor</span>
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setNewRule({
-                    name: 'No more than 3 consecutive duties ending at 21:00',
-                    templateKey: 'MAX_CONSECUTIVE_LATE_DUTIES',
-                    scope: 'PER_NURSE',
-                    metric: 'CONSECUTIVE_DUTIES_ENDING_AT_OR_AFTER',
-                    params: { thresholdTime: '21:00' },
-                    operator: 'MAX',
-                    value: 3,
-                    severity: 'SOFT',
-                    enabled: true,
-                  })
-                }
-                className="p-2 border border-slate-200 bg-slate-50 hover:bg-slate-100 text-left rounded text-[11px] cursor-pointer transition-colors"
-              >
-                <span className="font-bold text-slate-800 block">🌙 Max 3 Consecutive Late Ends</span>
-                <span className="text-[10px] text-slate-500">Soft limit on shifts ending 21:00</span>
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setNewRule({
-                    name: 'At least one additional nurse above doctors during clinic operating hours',
-                    templateKey: 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS',
-                    scope: 'PER_DUTY_WINDOW',
-                    metric: 'DUTIES_WITH_END_TIME_X_COUNT',
-                    operator: 'MIN',
-                    value: 1,
-                    severity: 'HARD',
-                    enabled: true,
-                  })
-                }
-                className="p-2 border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100/70 text-left rounded text-[11px] cursor-pointer transition-colors sm:col-span-2"
-              >
-                <span className="font-bold text-indigo-900 block">👥 +1 Additional Nurse Over Doctors</span>
-                <span className="text-[10px] text-indigo-700">Maintains &gt;= (Doctors + 1) nurses; prioritizes nurse-clinic enabled overhang</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Rule Name</label>
-              <input
-                aria-label="Rule Name"
-                type="text"
-                value={newRule.name || ''}
-                onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
-                placeholder="e.g. Max 3 consecutive late duties ending at 21:00"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Evaluation Scope</label>
-                <select
-                  aria-label="Evaluation Scope"
-                  value={newRule.scope}
-                  onChange={(e) => setNewRule({ ...newRule, scope: e.target.value as any })}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white"
-                >
-                  <option value="PER_NURSE">PER_NURSE</option>
-                  <option value="PER_DAY">PER_DAY</option>
-                  <option value="PER_DUTY_WINDOW">PER_DUTY_WINDOW</option>
-                  <option value="PER_PERIOD">PER_PERIOD</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Severity</label>
-                <select
-                  aria-label="Severity"
-                  value={newRule.severity}
-                  onChange={(e) => setNewRule({ ...newRule, severity: e.target.value as any })}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white"
-                >
-                  <option value="SOFT">SOFT (Scored / Warning)</option>
-                  <option value="HARD">HARD (Blocks Generation)</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Metric Definition</label>
-              <select
-                aria-label="Metric Definition"
-                value={newRule.metric}
-                onChange={(e) => setNewRule({ ...newRule, metric: e.target.value as any })}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-mono"
-              >
-                <option value="CONSECUTIVE_DUTIES_ENDING_AT_OR_AFTER">
-                  CONSECUTIVE_DUTIES_ENDING_AT_OR_AFTER
-                </option>
-                <option value="CONSECUTIVE_WORKING_DAYS">CONSECUTIVE_WORKING_DAYS</option>
-                <option value="TOTAL_HOURS_IN_WINDOW">TOTAL_HOURS_IN_WINDOW</option>
-                <option value="WEEKENDS_OFF_COUNT">WEEKENDS_OFF_COUNT</option>
-                <option value="HOLIDAYS_WORKED_COUNT">HOLIDAYS_WORKED_COUNT</option>
-                <option value="DUTIES_WITH_END_TIME_X_COUNT">DUTIES_WITH_END_TIME_X_COUNT</option>
-              </select>
-            </div>
-
-            {newRule.metric === 'CONSECUTIVE_DUTIES_ENDING_AT_OR_AFTER' && (
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  End-Time Threshold (e.g. 21:00)
-                </label>
-                <input
-                  aria-label="End-Time Threshold (e.g. 21:00)"
-                  type="time"
-                  value={newRule.params?.thresholdTime || '21:00'}
-                  onChange={(e) =>
-                    setNewRule({
-                      ...newRule,
-                      params: { ...newRule.params, thresholdTime: e.target.value },
-                    })
-                  }
-                  className="w-32 px-3 py-1.5 border border-slate-300 rounded font-mono text-center"
-                />
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Comparison Operator</label>
-                <select
-                  aria-label="Comparison Operator"
-                  value={newRule.operator}
-                  onChange={(e) => setNewRule({ ...newRule, operator: e.target.value as any })}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-mono"
-                >
-                  <option value="MAX">MAX (Cannot exceed)</option>
-                  <option value="MIN">MIN (Must reach at least)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Threshold Value (N)</label>
-                <input
-                  aria-label="Threshold Value (N)"
-                  type="number"
-                  value={newRule.value}
-                  onChange={(e) => setNewRule({ ...newRule, value: Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono text-center"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setIsCustomRuleModalOpen(false)}
-              className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSaveCustomRule}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
-            >
-              Add Rule to Engine
-            </button>
-          </div>
-        </SettingsDialog>
+          )}
+        </section>
       )}
-    </>
+
+      <p className="flex items-center gap-1.5 text-xs text-slate-400">
+        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        Changes apply the next time you generate or check a roster.
+      </p>
+    </div>
   );
 };
