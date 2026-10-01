@@ -59,6 +59,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
   const [newRole, setNewRole] = useState<UserAccessRole>('VIEWER');
   const [newIsManager, setNewIsManager] = useState(false);
   const [newLinkedNurseId, setNewLinkedNurseId] = useState('');
+  const [checkEmail, setCheckEmail] = useState('');
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -608,7 +609,98 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
         </div>
       </div>
 
-      {/* 3. PRE-APPROVE USER MODAL */}
+      {/* 3. CHECK AN EMAIL, AND STAFF WITHOUT AN ACCOUNT */}
+      {(() => {
+        const accountEmails = new Set(users.map((u) => u.email.trim().toLowerCase()));
+        const staff = [
+          ...nurses.filter((n) => n.active !== false).map((n) => ({ id: n.id, name: n.fullName, email: n.gmail || '', kind: 'Nurse', nurseId: n.id })),
+          ...doctors.filter((d) => d.active !== false).map((d) => ({ id: d.id, name: d.fullName, email: d.gmail || '', kind: 'Doctor', nurseId: '' })),
+        ];
+        const withoutAccount = staff
+          .filter((p) => !p.email || !accountEmails.has(p.email.trim().toLowerCase()))
+          .sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
+
+        const query = checkEmail.trim().toLowerCase();
+        const record = query ? users.find((u) => u.email.trim().toLowerCase() === query) : undefined;
+        const profiles = query ? staff.filter((p) => p.email.trim().toLowerCase() === query) : [];
+        const isOwnerEmail = query === MASTER_EMAIL;
+        const linked = record?.linkedNurseId ? nurses.find((n) => n.id === record.linkedNurseId) : undefined;
+        const describe = () => {
+          if (isOwnerEmail) return 'Owner: can do everything, including access and backups.';
+          if (!record) return 'No account. This person can sign in, but must wait for your approval before seeing anything.';
+          if (record.status === 'PENDING') return 'Waiting for your approval. They can\'t see anything yet.';
+          if (record.status === 'REVOKED') return 'Access removed. They can\'t see anything.';
+          const role = record.appRole === 'EDITOR' ? 'Can view and edit rosters, staff and settings' : 'Can view rosters';
+          return `${role}${record.isManager ? ', and can approve leave and availability' : ''}.`;
+        };
+
+        return (
+          <div className="bg-white border border-slate-200 rounded-lg p-5 space-y-4 shadow-2xs">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Check an email</h3>
+              <p className="text-slate-500 text-[11px] mt-0.5">See what someone can do in the app, and which staff profile their email belongs to.</p>
+            </div>
+            <input
+              aria-label="Email to check"
+              type="email"
+              value={checkEmail}
+              onChange={(e) => setCheckEmail(e.target.value)}
+              placeholder="name@gmail.com"
+              className="w-full sm:w-80 px-3 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none text-[11px]"
+            />
+            {query && (
+              <div className="p-3 rounded border border-slate-200 bg-slate-50 space-y-1 text-[11px] text-slate-700">
+                <p className="font-semibold text-slate-900">{describe()}</p>
+                <p>
+                  Staff profile:{' '}
+                  {profiles.length > 0 ? profiles.map((p) => `${p.name} (${p.kind.toLowerCase()})`).join(', ') : 'none with this email'}
+                  {linked ? `. Linked to nurse ${linked.fullName}, so they can request leave.` : ''}
+                </p>
+              </div>
+            )}
+
+            <div className="pt-3 border-t border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900">Staff without an app account ({withoutAccount.length})</h3>
+              <p className="text-slate-500 text-[11px] mt-0.5">
+                Active nurses and doctors whose email has no account yet. Approve them ahead of time so they get in on first sign in.
+              </p>
+              {withoutAccount.length === 0 ? (
+                <p className="mt-2 text-[11px] text-slate-500">Everyone has an account.</p>
+              ) : (
+                <ul className="mt-2 divide-y divide-slate-100 border border-slate-200 rounded">
+                  {withoutAccount.map((p) => (
+                    <li key={`${p.kind}-${p.id}`} className="flex items-center justify-between gap-3 px-3 py-2">
+                      <div className="min-w-0">
+                        <span className="font-semibold text-slate-900">{p.name}</span>
+                        <span className="ml-1.5 text-slate-400">{p.kind}</span>
+                        <span className="block text-[11px] text-slate-500 font-mono truncate">{p.email || 'No email on the profile'}</span>
+                      </div>
+                      {p.email && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewEmail(p.email.trim().toLowerCase());
+                            setNewName(p.name);
+                            setNewRole('VIEWER');
+                            setNewIsManager(false);
+                            setNewLinkedNurseId(p.nurseId);
+                            setIsAddModalOpen(true);
+                          }}
+                          className="shrink-0 px-2.5 py-1 rounded border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold cursor-pointer"
+                        >
+                          Approve ahead
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 4. PRE-APPROVE USER MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none">
           <div

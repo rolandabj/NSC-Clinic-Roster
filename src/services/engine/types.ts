@@ -44,7 +44,8 @@ export interface GenerationPreflightSummary {
   activeNursesCount: number;
   activeDoctorsCount: number;
   doctorSessionsCount: number;
-  phlebotomySlotsCount: number;
+  /** Active nurses with the blood collection skill (needed to run Nurse Clinic). */
+  bloodCollectionNursesCount: number;
   nurseClinicSlotsCount?: number;
   nurseClinicRuleSeverity?: 'HARD' | 'SOFT';
   nurseClinicRuleEnabled?: boolean;

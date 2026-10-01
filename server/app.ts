@@ -7,7 +7,6 @@
  * browser, protected by the Firestore security rules. This server only:
  *   - serves the web app (Vite middleware in development, the built bundle in production)
  *   - sends email through Google SMTP (credentials from AI Studio Secrets)
- *   - tests webhook endpoints configured in Settings
  */
 
 import express, { Request, Response } from 'express';
@@ -17,7 +16,6 @@ import path from 'path';
 import { authMiddleware, requireAuth } from './middleware/auth';
 import { authRouter } from './routes/auth';
 import { emailRouter } from './routes/email';
-import { webhookRouter } from './routes/webhook';
 
 export async function startServer() {
   const app = express();
@@ -45,7 +43,7 @@ export async function startServer() {
     next();
   });
 
-  // Limit on authentication, email and webhook endpoints
+  // Limit on authentication and email endpoints
   const apiRateLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 60,
@@ -83,7 +81,6 @@ export async function startServer() {
 
   app.use('/api/auth', authRouter);
   app.use('/api', emailRouter);
-  app.use('/api', webhookRouter);
 
   // Unknown API routes
   app.use('/api', (_req: Request, res: Response) => {

@@ -934,9 +934,12 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                             <span className="font-semibold text-slate-800">
                               {role.name} ({role.acronym})
                             </span>
-                            <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
-                              {role.defaultStartTime || '09:00'}–{role.defaultEndTime || '13:00'}
-                            </span>
+                            {/* Nurse Clinic and blood collection follow the clinic's opening hours. */}
+                            {role.acronym !== 'NC' && role.acronym !== 'PHL' && role.id !== 'role-nurse-clinic' && (
+                              <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
+                                {role.defaultStartTime || '09:00'}–{role.defaultEndTime || '13:00'}
+                              </span>
+                            )}
                           </div>
                           <p className="text-[10px] text-slate-500">{role.description}</p>
                         </div>

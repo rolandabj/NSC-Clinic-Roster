@@ -12,7 +12,6 @@ import { notify } from '../../common/dialogs';
 export type SettingsTab =
   | 'access-roles'
   | 'clinic'
-  | 'directory'
   | 'duties'
   | 'leave'
   | 'seniority'
@@ -22,7 +21,6 @@ export type SettingsTab =
   | 'holidays'
   | 'working-hours-periods'
   | 'email'
-  | 'integrations'
   | 'database';
 
 /** Auto-save state shown in the "Saving... / All changes saved" badges. */
@@ -47,13 +45,6 @@ export function withSaveErrors<A extends unknown[]>(
       notify(`Could not ${what}: ${err?.message || 'unknown error'}. Nothing was changed.`, 'error');
     }
   };
-}
-
-export interface DirectorySummary {
-  owners: number;
-  planners: number;
-  staff: number;
-  viewers: number;
 }
 
 export const DUTY_COLOR_PALETTE = [

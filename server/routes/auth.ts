@@ -32,7 +32,6 @@ function computePrivileges(role: BackendRole, isManager: boolean) {
     canViewSchedules: true,
     canExportReports: isEditorOrOwner || isManager,
     canManageStaff: isOwner,
-    canConfigureWebhooks: isOwner,
   };
 }
 

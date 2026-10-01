@@ -83,29 +83,11 @@ export const ClinicTab: React.FC<ClinicTabProps> = ({
             className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono bg-slate-50 text-slate-700"
           />
           <span className="text-[10px] text-slate-400 mt-0.5 block">
-            Dates and hours are calculated in this timezone (default: Asia/Dubai).
+            Used for calendar downloads and the shared roster page (default: Asia/Dubai).
           </span>
         </div>
 
-        <div>
-          <label className="block font-medium text-slate-700 mb-1">Default Block Weeks</label>
-          <select
-            aria-label="Default Block Weeks"
-            value={clinic.defaultBlockWeeks}
-            onChange={(e) =>
-              updateClinicField({ defaultBlockWeeks: Number(e.target.value) as any }, true)
-            }
-            className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white"
-          >
-            <option value={1}>1 Week (7-day blocks)</option>
-            <option value={2}>2 Weeks (14-day blocks - Default)</option>
-            <option value={3}>3 Weeks (21-day blocks)</option>
-            <option value={4}>4 Weeks (28-day blocks)</option>
-          </select>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">
-            Controls default workbook pagination and PDF print block spans.
-          </span>
-        </div>
+        <p className="md:col-span-2 text-[11px] text-slate-500 -mb-2">The clinic is open every day between these times.</p>
 
         <div>
           <label className="block font-medium text-slate-700 mb-1">Daily Clinic Open Time</label>
@@ -131,33 +113,6 @@ export const ClinicTab: React.FC<ClinicTabProps> = ({
             required
             className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono text-center"
           />
-        </div>
-
-        <div className="md:col-span-2">
-          <label className="block font-medium text-slate-700 mb-1.5">Working Days</label>
-          <div className="flex flex-wrap gap-2">
-            {WEEKDAY_NAMES.map((name, idx) => {
-              const isChecked = clinic.workingDays[idx];
-              return (
-                <button
-                  type="button"
-                  key={name}
-                  onClick={() => {
-                    const next = [...clinic.workingDays];
-                    next[idx] = !next[idx];
-                    updateClinicField({ workingDays: next }, true);
-                  }}
-                  className={`px-3 py-1 rounded border text-xs font-medium cursor-pointer transition-colors ${
-                    isChecked
-                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-semibold'
-                      : 'bg-slate-50 border-slate-200 text-slate-400'
-                  }`}
-                >
-                  {name} {isChecked ? '✓' : ''}
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         <div className="md:col-span-2">

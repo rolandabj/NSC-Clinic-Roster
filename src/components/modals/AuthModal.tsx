@@ -103,7 +103,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     canViewSchedules: true,
     canExportReports: currentUser?.role !== 'VIEWER',
     canManageStaff: currentUser?.role === 'OWNER',
-    canConfigureWebhooks: currentUser?.role === 'OWNER',
   };
 
   return (
@@ -305,15 +304,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </span>
                 <span className={privs.canEditClinicSettings ? 'text-slate-800 dark:text-slate-200' : 'text-slate-400'}>
                   Clinic Governance
-                </span>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className={`w-3 h-3 rounded-full flex items-center justify-center text-[9px] ${privs.canConfigureWebhooks ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
-                  {privs.canConfigureWebhooks ? '✓' : '×'}
-                </span>
-                <span className={privs.canConfigureWebhooks ? 'text-slate-800 dark:text-slate-200' : 'text-slate-400'}>
-                  ChatOps Webhooks
                 </span>
               </div>
             </div>

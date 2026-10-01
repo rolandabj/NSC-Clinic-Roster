@@ -39,14 +39,20 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
       return;
     }
 
+    const hours = typeof lt.creditedHours === 'number' ? lt.creditedHours : lt.creditedHours === undefined || lt.creditedHours === 'match_duty' ? 8 : NaN;
+    if (!Number.isFinite(hours) || hours < 0 || hours > 24) {
+      notify('Hours per leave day must be a number from 0 to 24.', 'warning');
+      return;
+    }
+
     if (lt.id) {
-      await repo.update('leaveTypes', lt.id, lt as any);
+      await repo.update('leaveTypes', lt.id, { ...lt, creditedHours: hours } as any);
       triggerSaveNotification(`Leave type "${lt.name}" updated.`);
     } else {
       await repo.create('leaveTypes', {
         name: lt.name || 'New Leave',
         acronym: acronymClean,
-        creditedHours: lt.creditedHours ?? 8,
+        creditedHours: hours,
         countsTowardHoursTarget: lt.countsTowardHoursTarget ?? true,
         color: lt.color || '#f59e0b',
         active: lt.active !== false,
@@ -142,7 +148,7 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
                   </td>
                   <td className="py-2.5 px-3 font-medium text-slate-800">{lt.name}</td>
                   <td className="py-2.5 px-3 font-mono text-slate-600">
-                    {lt.creditedHours === 'match_duty' ? 'Match Duty Hours' : `${lt.creditedHours}h`}
+                    {typeof lt.creditedHours === 'number' ? `${lt.creditedHours}h` : '8h'}
                   </td>
                   <td className="py-2.5 px-3">
                     <span
@@ -253,41 +259,27 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
             </div>
 
             <div>
-              <label className="block font-medium text-slate-700 mb-1">Credited Hours</label>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name="credType"
-                    checked={typeof editingLeave.creditedHours === 'number'}
-                    onChange={() => setEditingLeave({ ...editingLeave, creditedHours: 8 })}
-                  />
-                  <span>Fixed Hours:</span>
-                </label>
-                {typeof editingLeave.creditedHours === 'number' && (
-                  <input
-                    aria-label="Fixed credited hours"
-                    type="number"
-                    value={editingLeave.creditedHours}
-                    onChange={(e) =>
-                      setEditingLeave({
-                        ...editingLeave,
-                        creditedHours: Number(e.target.value),
-                      })
-                    }
-                    className="w-16 px-2 py-1 border border-slate-300 rounded font-mono text-center"
-                  />
-                )}
-                <label className="flex items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name="credType"
-                    checked={editingLeave.creditedHours === 'match_duty'}
-                    onChange={() => setEditingLeave({ ...editingLeave, creditedHours: 'match_duty' })}
-                  />
-                  <span>Match Duty Hours</span>
-                </label>
-              </div>
+              <label htmlFor="leave-credited-hours" className="block font-medium text-slate-700 mb-1">
+                Hours counted per leave day
+              </label>
+              <input
+                id="leave-credited-hours"
+                type="number"
+                min={0}
+                max={24}
+                step={0.5}
+                value={typeof editingLeave.creditedHours === 'number' ? editingLeave.creditedHours : 8}
+                onChange={(e) =>
+                  setEditingLeave({
+                    ...editingLeave,
+                    creditedHours: e.target.value === '' ? ('' as any) : Number(e.target.value),
+                  })
+                }
+                className="w-20 px-2 py-1 border border-slate-300 rounded font-mono text-center"
+              />
+              <span className="text-[10px] text-slate-400 mt-0.5 block">
+                Changes apply to leave added from now on.
+              </span>
             </div>
 
             <div>

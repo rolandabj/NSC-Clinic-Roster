@@ -9,23 +9,14 @@ export type EmailProviderType = 'GOOGLE' | 'MOCK' | 'SMTP';
 
 export interface EmailSettingsConfig {
   provider: EmailProviderType;
-  mockMode: boolean; // default true (Safe Sandbox)
+  /** Sandbox (true): nothing is sent. Shared by the whole clinic. */
+  mockMode: boolean;
+  /** The name shown as the sender. The address is the server's Gmail account. */
   senderName: string;
-  senderEmail: string; // e.g. rolandabj@gmail.com
-  googleAppPassword?: string; // Optional for live Google SMTP dispatch
-  smtpHost?: string; // default smtp.gmail.com
-  smtpPort?: number; // default 587
-  smtpUser?: string;
-  smtpPass?: string;
-  smtpSecure?: boolean;
 }
 
 export const DEFAULT_EMAIL_SETTINGS: EmailSettingsConfig = {
   provider: 'GOOGLE',
   mockMode: true,
   senderName: 'Dr. Roland / Clinical Director',
-  senderEmail: 'rolandabj@gmail.com',
-  smtpHost: 'smtp.gmail.com',
-  smtpPort: 587,
-  smtpSecure: false,
 };

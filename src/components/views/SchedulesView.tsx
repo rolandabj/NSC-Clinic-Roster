@@ -1915,9 +1915,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                     </span>
                   </div>
                   <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 text-[10px] block">Phlebotomy Quota</span>
+                    <span className="text-slate-500 text-[10px] block">Can take blood</span>
                     <span className="font-bold text-slate-900 font-mono text-xs">
-                      {preflightSummary.phlebotomySlotsCount} Slots
+                      {preflightSummary.bloodCollectionNursesCount} Nurses
                     </span>
                   </div>
                   <div className="p-2 bg-slate-50 rounded border border-slate-200">

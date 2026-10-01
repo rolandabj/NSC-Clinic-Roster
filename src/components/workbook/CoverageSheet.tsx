@@ -51,9 +51,13 @@ export const CoverageSheet: React.FC<CoverageSheetProps> = ({
   const dayAssignments = assignments.filter((a) => a.date === selectedDate);
 
   const phlRole = roles.find((r) => r.acronym === 'PHL');
-  const phlNursesOnDuty = dayAssignments.filter(
-    (a) => a.kind === 'CLINICAL_ROLE' && a.clinicalRoleId === phlRole?.id
-  ).length;
+  // Blood collection is done by the Nurse Clinic nurse, so count the nurses on
+  // duty that day who have the skill.
+  const phlNursesOnDuty = new Set(
+    dayAssignments
+      .filter((a) => a.dutyWindowId && (!phlRole || nurseMap.get(a.nurseId)?.capabilityIds.includes(phlRole.id)))
+      .map((a) => a.nurseId)
+  ).size;
 
   const ncRole = roles.find(
     (r) =>
@@ -220,16 +224,16 @@ export const CoverageSheet: React.FC<CoverageSheetProps> = ({
             <div className="flex items-center justify-between text-[11px]">
               <div className="flex items-center gap-1.5 font-medium text-slate-700">
                 <span className="text-rose-600 font-bold">🩸</span>
-                <span>Phlebotomist on Duty (Blood Collection &amp; IV):</span>
+                <span>Nurses on duty who can take blood:</span>
               </div>
               <span
                 className={`font-mono font-bold px-2 py-0.5 rounded text-[10px] ${
-                  phlNursesOnDuty >= (phlRole?.defaultDailyQuota || 1)
+                  phlNursesOnDuty >= 1
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-rose-100 text-rose-800'
                 }`}
               >
-                {phlNursesOnDuty} on duty (Quota: {phlRole?.defaultDailyQuota || 1})
+                {phlNursesOnDuty} on duty
               </span>
             </div>
 

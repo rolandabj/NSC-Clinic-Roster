@@ -42,6 +42,16 @@ export interface SendEmailResult {
   error?: string;
 }
 
+/** The email settings plus the SMTP connection, which only the server environment provides. */
+interface ServerEmailConfig extends EmailSettingsConfig {
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpUser?: string;
+  smtpPass?: string;
+  googleAppPassword?: string;
+  smtpSecure?: boolean;
+}
+
 // SMTP connection settings and credentials may only come from the server
 // environment (AI Studio Secrets). They are never taken from stored clinic
 // settings or from a request, so they cannot be redirected to another server.
@@ -74,10 +84,10 @@ export class EmailService {
   /**
    * Resolves effective email configuration from repository or environment
    */
-  public static getConfig(): EmailSettingsConfig {
+  public static getConfig(): ServerEmailConfig {
     const defaults = withoutConnectionSettings(DEFAULT_EMAIL_SETTINGS);
 
-    return <EmailSettingsConfig>{
+    return <ServerEmailConfig>{
       ...defaults,
       // Environment (AI Studio Secrets) provides the provider and SMTP credentials
       ...(process.env.EMAIL_PROVIDER ? { provider: process.env.EMAIL_PROVIDER as any } : {}),
@@ -95,7 +105,7 @@ export class EmailService {
    */
   public static async send(payload: SendEmailPayload): Promise<SendEmailResult> {
     const baseConfig = this.getConfig();
-    const config: EmailSettingsConfig = { ...baseConfig, ...pickRequestOverrides(payload.config) } as EmailSettingsConfig;
+    const config: ServerEmailConfig = { ...baseConfig, ...pickRequestOverrides(payload.config) };
 
     const rawList = Array.isArray(payload.to) ? payload.to : [payload.to];
     // Filter and normalize recipient emails
@@ -116,7 +126,7 @@ export class EmailService {
 
     const fromName = String(payload.fromName || config.senderName || 'Clinic Rostering').replace(/["<>\r\n]/g, '');
     // Gmail SMTP only sends as the authenticated account, so the sender is the SMTP user when set.
-    const fromEmail = config.smtpUser || config.senderEmail || 'rolandabj@gmail.com';
+    const fromEmail = config.smtpUser || 'rolandabj@gmail.com';
     const fromAddress = `"${fromName}" <${fromEmail}>`;
 
     let result: SendEmailResult;

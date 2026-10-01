@@ -12,7 +12,7 @@ import { getRepository } from '../../../services/repository';
 import { authService } from '../../../services/auth/authService';
 import { escapeHtml } from '../../../utils/escapeHtml';
 import { EmailSettingsConfig } from '../../../types/settings';
-import { DirectorySummary, SaveStatus } from './shared';
+import { SaveStatus } from './shared';
 
 interface EmailTabProps {
   context: ClinicContextState;
@@ -21,7 +21,6 @@ interface EmailTabProps {
   updateEmailConfigField: (updates: Partial<EmailSettingsConfig>, immediate?: boolean) => void;
   flushEmailSave: () => void;
   handleSaveEmailConfig: (e: React.FormEvent) => void;
-  directorySummary: DirectorySummary;
 }
 
 export const EmailTab: React.FC<EmailTabProps> = ({
@@ -31,7 +30,6 @@ export const EmailTab: React.FC<EmailTabProps> = ({
   updateEmailConfigField,
   flushEmailSave,
   handleSaveEmailConfig,
-  directorySummary,
 }) => {
   const repo = getRepository();
 

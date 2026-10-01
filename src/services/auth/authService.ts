@@ -37,7 +37,6 @@ export interface UserPrivileges {
   canViewSchedules: boolean;
   canExportReports: boolean;
   canManageStaff: boolean;
-  canConfigureWebhooks: boolean;
 }
 
 export interface UserProfile {
@@ -77,7 +76,6 @@ export function computePrivileges(role: UserRole, isManager: boolean = false): U
     canViewSchedules: true,
     canExportReports: isEditorOrOwner || isManager,
     canManageStaff: isOwner,
-    canConfigureWebhooks: isOwner,
   };
 }
 

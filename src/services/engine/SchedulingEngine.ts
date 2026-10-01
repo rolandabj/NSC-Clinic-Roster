@@ -151,7 +151,7 @@ export class SchedulingEngine {
         activeNursesCount: nurses?.length || 0,
         activeDoctorsCount: doctors?.length || 0,
         doctorSessionsCount: 0,
-        phlebotomySlotsCount: 0,
+        bloodCollectionNursesCount: 0,
         existingLocksCount: locks?.length || 0,
         existingLeaveDaysCount: leaveEntries?.length || 0,
         estimatedTotalAssignments: 0,
@@ -255,7 +255,10 @@ export class SchedulingEngine {
       activeNursesCount: nurses.length,
       activeDoctorsCount: doctors.length,
       doctorSessionsCount: scheduleSessions.length,
-      phlebotomySlotsCount: totalDays * (roles.find((r) => r.acronym === 'PHL')?.defaultDailyQuota || 1),
+      bloodCollectionNursesCount: (() => {
+        const phl = bloodCollectionRole(roles);
+        return phl ? nurses.filter((n) => n.capabilityIds.includes(phl.id)).length : nurses.length;
+      })(),
       nurseClinicSlotsCount,
       nurseClinicRuleSeverity: ncSeverity,
       nurseClinicRuleEnabled: ncEnabled,

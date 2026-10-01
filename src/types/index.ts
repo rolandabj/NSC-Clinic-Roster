@@ -133,27 +133,6 @@ export interface SwapRequest {
   resolvedAt?: string;
 }
 
-// Webhooks & ChatOps Configuration
-export type WebhookPlatform = 'SLACK' | 'TEAMS' | 'DISCORD' | 'GENERIC';
-
-export interface WebhookEndpoint {
-  id: string;
-  name: string;
-  url: string;
-  platform: WebhookPlatform;
-  enabled: boolean;
-  events: {
-    rosterPublished: boolean;
-    shiftSwapFinalized: boolean;
-    severeViolationDetected: boolean;
-  };
-}
-
-export interface WebhookConfig {
-  enabled: boolean;
-  endpoints: WebhookEndpoint[];
-}
-
 // 1. ClinicProfile
 export interface ClinicProfile {
   id: string;
@@ -161,13 +140,10 @@ export interface ClinicProfile {
   address?: string;
   phone?: string;
   timezone: string; // default 'Asia/Dubai'
-  workingDays: boolean[]; // index 0 = Sun, 1 = Mon ... 6 = Sat (default all true)
   weekendDays?: number[]; // weekday numbers counted as the weekend (0 = Sun ... 6 = Sat); default Sat and Sun
   openTime: TimeString; // '09:00'
   closeTime: TimeString; // '21:00'
-  defaultBlockWeeks: BlockWeeks; // default 2
   updatedAt: string;
-  webhookConfig?: WebhookConfig;
 }
 
 // 2. DutyWindow ("acceptable duty")
@@ -188,7 +164,7 @@ export interface LeaveType {
   id: string;
   name: string;
   acronym: string; // max 3 chars, e.g. "RO", "DO", "BL", "AL", "PH", "SL"
-  creditedHours: number | 'match_duty'; // 0, 8, or 'match_duty'
+  creditedHours: number | 'match_duty'; // hours per leave day; 'match_duty' only in old data, counted as 8
   countsTowardHoursTarget: boolean; // default ON for BL/AL/PH/SL, OFF for RO/DO
   color: string;
   active: boolean;

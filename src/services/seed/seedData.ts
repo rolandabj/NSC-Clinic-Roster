@@ -14,10 +14,8 @@ export const SEED_CLINIC_PROFILE: ClinicProfile = {
   address: 'Nad Al Sheba, Dubai, UAE',
   phone: '+971 4 300 0000',
   timezone: 'Asia/Dubai',
-  workingDays: [true, true, true, true, true, true, true], // Sun-Sat (all 7 days)
   openTime: '09:00',
   closeTime: '21:00',
-  defaultBlockWeeks: 2,
   updatedAt: new Date().toISOString(),
 };
 

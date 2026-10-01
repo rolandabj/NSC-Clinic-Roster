@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Clinic Settings: the tab bar, the data several tabs share (clinic profile,
- * entity lists, email settings, staff directory) and their
+ * entity lists, email settings) and their
  * auto-save machinery. Each tab's content lives in ./settings/<Name>Tab.tsx.
  */
 
@@ -18,17 +18,14 @@ import {
   Sliders,
   Flag,
   Mail,
-  Cloud,
   CheckCircle2,
   Database,
   ShieldCheck,
-  Users,
   CalendarRange,
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
 import { authService } from '../../services/auth/authService';
-import { RoleDirectoryService } from '../../services/auth/directoryService';
 import { getWeekendDays, setClinicWeekendDays } from '../../utils/weekend';
 import {
   ClinicProfile,
@@ -39,8 +36,6 @@ import {
   Specialty,
   Rule,
   PublicHoliday,
-  WebhookConfig,
-  WebhookEndpoint,
 } from '../../types';
 import {
   EmailSettingsConfig,
@@ -50,18 +45,16 @@ import { SEED_CLINIC_PROFILE } from '../../services/seed/seedData';
 import { notify } from '../common/dialogs';
 import { AccessManagementPanel } from './AccessManagementPanel';
 import { WorkingHoursPeriodsPanel } from './WorkingHoursPeriodsPanel';
-import { DirectorySummary, SaveStatus, SettingsTab } from './settings/shared';
+import { SaveStatus, SettingsTab } from './settings/shared';
 import { ClinicTab } from './settings/ClinicTab';
-import { DirectoryTab } from './settings/DirectoryTab';
 import { DutiesTab } from './settings/DutiesTab';
 import { LeaveTab } from './settings/LeaveTab';
 import { SeniorityTab } from './settings/SeniorityTab';
-import { ClinicalRolesTab } from './settings/ClinicalRolesTab';
+import { NurseSkillsTab } from './settings/NurseSkillsTab';
 import { SpecialtiesTab } from './settings/SpecialtiesTab';
 import { RulesTab } from './settings/RulesTab';
 import { HolidaysTab } from './settings/HolidaysTab';
 import { EmailTab } from './settings/EmailTab';
-import { IntegrationsTab } from './settings/IntegrationsTab';
 import { DatabaseTab } from './settings/DatabaseTab';
 import { cachedEmailSettings, loadEmailSettings, saveEmailSettings } from '../../services/settings/emailSettingsStore';
 
@@ -104,40 +97,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     return cachedEmailSettings();
   });
 
-  // Webhooks & ChatOps State
-  const [testingWebhookId, setTestingWebhookId] = useState<string | null>(null);
-  const [webhookTestResults, setWebhookTestResults] = useState<Record<string, { success: boolean; message: string }>>({});
-
-  // Enterprise Role Directory & Email Mapping Engine State (Sub-Phase 4.4)
-  // Loaded here because the Email tab also shows the directory's staff count.
-  const [directoryEntries, setDirectoryEntries] = useState<any[]>([]);
-  const [directorySummary, setDirectorySummary] = useState<DirectorySummary>({
-    owners: 0,
-    planners: 0,
-    staff: 0,
-    viewers: 0,
-  });
-  const [isLoadingDirectory, setIsLoadingDirectory] = useState(false);
-
   const repo = getRepository();
-
-  const loadDirectory = async () => {
-    setIsLoadingDirectory(true);
-    try {
-      const entries = await RoleDirectoryService.getDirectoryStaff();
-      setDirectoryEntries(entries as any);
-      setDirectorySummary({
-        owners: entries.filter((e) => e.role === 'OWNER').length,
-        planners: entries.filter((e) => e.role === 'PLANNER' || (e.role === 'EDITOR' && e.isManager)).length,
-        staff: entries.filter((e) => e.type === 'NURSE' || e.type === 'DOCTOR' || e.role === 'STAFF').length,
-        viewers: entries.filter((e) => e.role === 'VIEWER' && e.type !== 'NURSE' && e.type !== 'DOCTOR').length,
-      });
-    } catch (err) {
-      console.warn('Could not load the staff directory:', err);
-    } finally {
-      setIsLoadingDirectory(false);
-    }
-  };
 
   const loadData = async () => {
     try {
@@ -214,11 +174,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           timezone: (targetClinic.timezone || '').trim() || 'Asia/Dubai',
           address: targetClinic.address || '',
           phone: targetClinic.phone || '',
-          workingDays: targetClinic.workingDays || [true, true, true, true, true, true, true],
           weekendDays: targetClinic.weekendDays || getWeekendDays(),
           openTime: targetClinic.openTime || '09:00',
           closeTime: targetClinic.closeTime || '21:00',
-          defaultBlockWeeks: targetClinic.defaultBlockWeeks || 2,
           updatedAt: new Date().toISOString(),
         };
 
@@ -294,98 +252,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (!latestClinicRef.current) return;
     flushClinicSave();
     triggerSaveNotification('Clinic profile updated and saved permanently.');
-  };
-
-  // --- Webhooks & ChatOps Handlers ---
-  // Note: no tab currently renders a webhook editor, so these are not wired to any UI.
-  const handleToggleWebhooksEnabled = (enabled: boolean) => {
-    if (!clinic) return;
-    const currentConfig: WebhookConfig = clinic.webhookConfig || { enabled: false, endpoints: [] };
-    const nextConfig: WebhookConfig = {
-      ...currentConfig,
-      enabled,
-    };
-    updateClinicField({ webhookConfig: nextConfig }, true);
-  };
-
-  const handleAddWebhookEndpoint = () => {
-    if (!clinic) return;
-    const currentConfig: WebhookConfig = clinic.webhookConfig || { enabled: true, endpoints: [] };
-    const newEndpoint: WebhookEndpoint = {
-      id: `wh-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      name: `Alerts Channel #${(currentConfig.endpoints?.length || 0) + 1}`,
-      platform: 'SLACK',
-      url: '',
-      enabled: true,
-      events: {
-        rosterPublished: true,
-        shiftSwapFinalized: true,
-        severeViolationDetected: true,
-      },
-    };
-    const nextConfig: WebhookConfig = {
-      ...currentConfig,
-      enabled: true,
-      endpoints: [...(currentConfig.endpoints || []), newEndpoint],
-    };
-    updateClinicField({ webhookConfig: nextConfig }, true);
-  };
-
-  const handleUpdateWebhookEndpoint = (id: string, updates: Partial<WebhookEndpoint>) => {
-    if (!clinic || !clinic.webhookConfig) return;
-    const endpoints = (clinic.webhookConfig.endpoints || []).map((ep) =>
-      ep.id === id ? { ...ep, ...updates } : ep
-    );
-    updateClinicField({ webhookConfig: { ...clinic.webhookConfig, endpoints } }, true);
-  };
-
-  const handleRemoveWebhookEndpoint = (id: string) => {
-    if (!clinic || !clinic.webhookConfig) return;
-    const endpoints = (clinic.webhookConfig.endpoints || []).filter((ep) => ep.id !== id);
-    updateClinicField({ webhookConfig: { ...clinic.webhookConfig, endpoints } }, true);
-  };
-
-  const handleTestWebhook = async (endpoint: WebhookEndpoint) => {
-    setTestingWebhookId(endpoint.id);
-    setWebhookTestResults((prev) => ({
-      ...prev,
-      [endpoint.id]: { success: false, message: 'Testing dispatch...' },
-    }));
-    try {
-      const res = await fetch('/api/webhook/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authService.getToken() || ''}`,
-        },
-        body: JSON.stringify({ endpoint }),
-      });
-      const json = await res.json();
-      if (json.data && json.data.success) {
-        setWebhookTestResults((prev) => ({
-          ...prev,
-          [endpoint.id]: {
-            success: true,
-            message: `Connected successfully! (HTTP ${json.data.statusCode || 200})`,
-          },
-        }));
-      } else {
-        setWebhookTestResults((prev) => ({
-          ...prev,
-          [endpoint.id]: {
-            success: false,
-            message: json.data?.error || json.message || 'Connection failed',
-          },
-        }));
-      }
-    } catch (err: any) {
-      setWebhookTestResults((prev) => ({
-        ...prev,
-        [endpoint.id]: { success: false, message: err.message || 'Network error' },
-      }));
-    } finally {
-      setTestingWebhookId(null);
-    }
   };
 
   // --- 10. Email Settings Auto-Save ---
@@ -507,15 +373,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  useEffect(() => {
-    loadDirectory();
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === 'directory') {
-      loadDirectory();
-    }
-  }, [activeTab]);
 
   const currentUser = authService.getCurrentUser();
   const isMasterAdmin = currentUser?.email?.toLowerCase() === 'rolandabj@gmail.com' || currentUser?.role === 'OWNER';
@@ -542,9 +399,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       tabs: [
         { id: 'leave', label: 'Leave types', icon: CalendarCheck },
         { id: 'seniority', label: 'Seniority', icon: Shield },
-        { id: 'clinical-roles', label: 'Clinical roles', icon: Stethoscope },
+        { id: 'clinical-roles', label: 'Nurse skills', icon: Stethoscope },
         { id: 'specialties', label: 'Specialties', icon: Tags },
-        { id: 'directory', label: 'Staff directory', icon: Users },
       ],
     },
     {
@@ -552,7 +408,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       tabs: [
         ...(isMasterAdmin ? [{ id: 'access-roles' as SettingsTab, label: 'Access & permissions', icon: ShieldCheck }] : []),
         { id: 'email', label: 'Email', icon: Mail },
-        { id: 'integrations', label: 'Integrations', icon: Cloud },
         ...(isMasterAdmin ? [{ id: 'database' as SettingsTab, label: 'Database & backup', icon: Database }] : []),
       ],
     },
@@ -648,16 +503,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           />
         )}
 
-        {/* 2. ENTERPRISE DIRECTORY & GOOGLE SSO (Sub-Phase 4.4) */}
-        {activeTab === 'directory' && (
-          <DirectoryTab
-            directoryEntries={directoryEntries}
-            directorySummary={directorySummary}
-            isLoadingDirectory={isLoadingDirectory}
-            loadDirectory={loadDirectory}
-          />
-        )}
-
         {/* 3. DUTY WINDOWS ("acceptable duty") */}
         {activeTab === 'duties' && (
           <DutiesTab duties={duties} loadData={loadData} triggerSaveNotification={triggerSaveNotification} />
@@ -678,9 +523,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           />
         )}
 
-        {/* 5. CLINICAL ROLES */}
+        {/* 5. NURSE SKILLS */}
         {activeTab === 'clinical-roles' && (
-          <ClinicalRolesTab
+          <NurseSkillsTab
             clinicalRoles={clinicalRoles}
             loadData={loadData}
             triggerSaveNotification={triggerSaveNotification}
@@ -730,12 +575,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             updateEmailConfigField={updateEmailConfigField}
             flushEmailSave={flushEmailSave}
             handleSaveEmailConfig={handleSaveEmailConfig}
-            directorySummary={directorySummary}
           />
         )}
-
-        {/* 11. INTEGRATIONS (FIREBASE LOCAL / CLOUD SWITCH) */}
-        {activeTab === 'integrations' && <IntegrationsTab />}
 
         {/* 12. DATABASE & STORAGE MANAGEMENT */}
         {activeTab === 'database' && isMasterAdmin && (

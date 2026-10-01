@@ -17,6 +17,7 @@ import {
   DatabaseStats,
 } from '../../../services/seed/seedRunner';
 import { notify } from '../../common/dialogs';
+import { defaultFirebaseConfig } from '../../../services/firebase/firebaseConfig';
 import { SaveNotifier, SettingsDialog } from './shared';
 
 interface DatabaseTabProps {
@@ -157,7 +158,9 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
                 Records in the database
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                How many records the clinic has saved.
+                How many records the clinic has saved. Data is stored in Cloud Firestore (project{' '}
+                <span className="font-mono">{defaultFirebaseConfig.projectId}</span>, database{' '}
+                <span className="font-mono">{defaultFirebaseConfig.firestoreDatabaseId || '(default)'}</span>).
               </p>
             </div>
             <button
