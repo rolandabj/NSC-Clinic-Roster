@@ -13,6 +13,7 @@
  *      templateKey. Only created when the rules collection is empty, so user-customised
  *      rules are never overwritten.
  *   3. Dedicated working-hours periods — the authoritative full-time hours targets.
+ *   4. Standard leave types — the engine's type-driven leave credits (RO/DO = 0 hours).
  *
  * This is configuration only: it never creates nurses, doctors, schedules, assignments,
  * leave or demo data, and it is skipped entirely when the database carries the explicit
@@ -21,7 +22,7 @@
 
 import { IRepository } from '../repository/IRepository';
 import { ClinicalRole } from '../../types';
-import { SEED_CLINICAL_ROLES, SEED_WORKING_HOURS_PERIODS } from './seedData';
+import { SEED_CLINICAL_ROLES, SEED_LEAVE_TYPES, SEED_WORKING_HOURS_PERIODS } from './seedData';
 import { CANONICAL_RULES_SPEC } from '../rules/canonicalRules';
 import { resolveRule } from '../engine/SchedulingEngine';
 
@@ -47,6 +48,7 @@ export interface ConfigurationBootstrapSummary {
   rulesAdded: number;
   rulesSkippedBecausePopulated: boolean;
   workingHoursPeriodsAdded: number;
+  leaveTypesAdded: number;
 }
 
 const EMPTY_SUMMARY: ConfigurationBootstrapSummary = {
@@ -55,6 +57,7 @@ const EMPTY_SUMMARY: ConfigurationBootstrapSummary = {
   rulesAdded: 0,
   rulesSkippedBecausePopulated: false,
   workingHoursPeriodsAdded: 0,
+  leaveTypesAdded: 0,
 };
 
 /**
@@ -139,6 +142,19 @@ export async function ensureWorkingHoursPeriods(repo: IRepository): Promise<numb
 }
 
 /**
+ * Writes the standard leave types when the collection is empty. Leave types are engine
+ * configuration since the leave-credit work: they define how many hours a leave day credits
+ * (RO/DO = 0, match-duty = 8). Additive only — an existing (possibly customised) leave-type
+ * set is never overwritten.
+ */
+export async function ensureLeaveTypes(repo: IRepository): Promise<number> {
+  const existing = await repo.list('leaveTypes');
+  if (existing.length > 0) return 0;
+  await repo.bulkUpsert('leaveTypes', SEED_LEAVE_TYPES);
+  return SEED_LEAVE_TYPES.length;
+}
+
+/**
  * Runs the configuration bootstrap. Returns a summary of what was written.
  * NOTE: skipped when the database carries the explicit CLEARED tombstone — an administrator
  * wipe is respected. In that state the configuration is restored on demand from the UI
@@ -159,6 +175,7 @@ export async function ensureConfigurationDefaults(
     const clinicalRolesAdded = await ensureSystemClinicalRoles(repo);
     const rules = await ensureCanonicalRules(repo, { onlyWhenEmpty: true });
     const workingHoursPeriodsAdded = await ensureWorkingHoursPeriods(repo);
+    const leaveTypesAdded = await ensureLeaveTypes(repo);
 
     const summary: ConfigurationBootstrapSummary = {
       skipped: false,
@@ -166,12 +183,19 @@ export async function ensureConfigurationDefaults(
       rulesAdded: rules.added,
       rulesSkippedBecausePopulated: rules.skippedBecausePopulated,
       workingHoursPeriodsAdded,
+      leaveTypesAdded,
     };
 
-    if (clinicalRolesAdded > 0 || rules.added > 0 || workingHoursPeriodsAdded > 0) {
+    if (
+      clinicalRolesAdded > 0 ||
+      rules.added > 0 ||
+      workingHoursPeriodsAdded > 0 ||
+      leaveTypesAdded > 0
+    ) {
       console.info(
         `${logPrefix} Configuration ensured: ${clinicalRolesAdded} system role(s), ` +
-          `${rules.added} canonical rule(s), ${workingHoursPeriodsAdded} working-hours period(s).`
+          `${rules.added} canonical rule(s), ${workingHoursPeriodsAdded} working-hours period(s), ` +
+          `${leaveTypesAdded} leave type(s).`
       );
     }
 

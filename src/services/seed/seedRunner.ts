@@ -30,11 +30,11 @@ import {
 } from './seedData';
 import {
   DoctorSession,
-  WeeklyPatternSlot,
   ScheduleVersion,
   CollectionName,
 } from '../../types';
 import { SchedulingEngine } from '../engine/SchedulingEngine';
+import { buildSeedDoctorSessions, seedEngineExtras } from './seedEngineInputs';
 import {
   ensureCanonicalRules,
   ensureSystemClinicalRoles,
@@ -73,38 +73,11 @@ export const ALL_COLLECTIONS: CollectionName[] = [
 ];
 
 /**
- * Expand weekly patterns into concrete DoctorSession records for October 2026
+ * Expand weekly patterns into concrete DoctorSession records for October 2026.
+ * Delegates to the shared seed→engine bridge so the client and server seeders cannot drift.
  */
 export function buildOctober2026DoctorSessions(): DoctorSession[] {
-  const expandedSessions: DoctorSession[] = [];
-  const year = 2026;
-  const monthIndex = 9; // 0-indexed: October is 9
-
-  for (let day = 1; day <= 31; day++) {
-    const dateObj = new Date(Date.UTC(year, monthIndex, day));
-    const weekday = dateObj.getUTCDay(); // 0 = Sun, 1 = Mon ... 6 = Sat
-    const isoDate = `2026-10-${String(day).padStart(2, '0')}`;
-
-    SEED_DOCTORS.forEach((doctor) => {
-      doctor.weeklyPattern.forEach((pattern: WeeklyPatternSlot) => {
-        if (pattern.weekday === weekday) {
-          expandedSessions.push({
-            id: `sess-${doctor.id}-${isoDate}-${pattern.startTime.replace(':', '')}`,
-            doctorId: doctor.id,
-            date: isoDate,
-            startTime: pattern.startTime,
-            endTime: pattern.endTime,
-            specialtyId: doctor.specialtyIds[0],
-            room: pattern.room,
-            source: 'PATTERN',
-            cancelled: false,
-          });
-        }
-      });
-    });
-  }
-
-  return expandedSessions;
+  return buildSeedDoctorSessions();
 }
 
 /**
@@ -174,6 +147,9 @@ async function populateSeedData(repo: IRepository): Promise<void> {
 
   // 21. Generate Initial 31-Day Shift Assignments
   try {
+    // Phase 4: generate the baseline with the same engine contract the live app uses
+    // (Q1 period targets, doctor profiles, type-driven leave credits).
+    const seedExtras = seedEngineExtras();
     const genResult = await SchedulingEngine.generate(
       SEED_SCHEDULE,
       'GENERATE_ALL',
@@ -186,7 +162,12 @@ async function populateSeedData(repo: IRepository): Promise<void> {
       expandedSessions,
       SEED_LOCKS,
       SEED_LEAVE_ENTRIES,
-      SEED_RULES
+      SEED_RULES,
+      undefined,
+      seedExtras.workingHoursPeriods,
+      seedExtras.doctors,
+      seedExtras.leaveTypes,
+      seedExtras.historyAssignments
     );
 
     if (genResult.assignments && genResult.assignments.length > 0) {
