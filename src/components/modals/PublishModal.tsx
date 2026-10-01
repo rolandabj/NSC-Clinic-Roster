@@ -296,7 +296,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         await repo.create('shareLinks', {
           id: uuidv4(),
           scheduleId: schedule.id,
-          token: Math.random().toString(36).substring(2, 12),
+          token: `sh_${crypto.randomUUID()}`,
           role: 'VIEWER',
           public: true,
           allowedEmails: [],
@@ -313,7 +313,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       let sentCount = 0;
 
       for (const nurse of targetNurses) {
-        const ackToken = `ack-${uuidv4().substring(0, 8)}`;
+        const ackToken = `ack-${uuidv4()}`;
         const nurseChanges = computedDiff?.changesByNurse[nurse.id] || [];
 
         const payload = RosterPublishService.generatePersonalEmailHtml({

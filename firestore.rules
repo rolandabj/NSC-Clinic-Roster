@@ -2,19 +2,111 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
+    // ---------------------------------------------------------------------
+    // Identity helpers
+    // Access is granted from the signed in user's userAccess record, whose
+    // document id is the user's lowercased email address.
+    // ---------------------------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email_verified == true;
     }
 
-    function isMasterAdmin() {
-      return isAuthenticated() && request.auth.token.email.lower() == 'rolandabj@gmail.com';
+    function myEmail() {
+      return request.auth.token.email.lower();
     }
 
-    // Open read and write access for all clinic entities and roster collections
-    match /{document=**} {
-      allow read, write: if true;
+    function isOwner() {
+      return signedIn() && myEmail() == 'rolandabj@gmail.com';
+    }
+
+    function accessPath() {
+      return /databases/$(database)/documents/userAccess/$(myEmail());
+    }
+
+    function hasAccessRecord() {
+      return signedIn() && exists(accessPath());
+    }
+
+    function access() {
+      return get(accessPath()).data;
+    }
+
+    // Approved users can read clinic data.
+    function isApproved() {
+      return isOwner() || (hasAccessRecord() && access().status == 'APPROVED');
+    }
+
+    // Editors and managers can change clinic data.
+    function isEditor() {
+      return isOwner()
+        || (isApproved() && (access().appRole == 'EDITOR' || access().isManager == true));
+    }
+
+    // ---------------------------------------------------------------------
+    // User access whitelist: only the owner manages it.
+    // A signed in user may read their own record and may file a single
+    // PENDING request for themselves, with no privileges.
+    // ---------------------------------------------------------------------
+    match /userAccess/{userEmail} {
+      allow get: if signedIn() && (userEmail == myEmail() || isOwner());
+      allow list: if isOwner();
+
+      allow create: if isOwner() || (
+        signedIn()
+        && userEmail == myEmail()
+        && request.resource.data.keys().hasOnly(['id', 'email', 'name', 'status', 'appRole', 'isManager', 'approvedBy', 'createdAt', 'updatedAt'])
+        && request.resource.data.email == myEmail()
+        && request.resource.data.status == 'PENDING'
+        && request.resource.data.appRole == 'VIEWER'
+        && request.resource.data.isManager == false
+      );
+
+      allow update, delete: if isOwner();
+    }
+
+    // ---------------------------------------------------------------------
+    // Acknowledgments: any approved user may confirm receipt (set ackAt);
+    // everything else needs editor rights.
+    // ---------------------------------------------------------------------
+    match /acknowledgments/{ackId} {
+      allow read: if isApproved();
+      allow create, delete: if isEditor();
+      allow update: if isEditor() || (
+        isApproved()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ackAt'])
+      );
+    }
+
+    // ---------------------------------------------------------------------
+    // Email log and audit trail hold full email bodies and history:
+    // readable by editors only.
+    // ---------------------------------------------------------------------
+    match /emailLog/{docId} {
+      allow read, write: if isEditor();
+    }
+
+    match /audit/{docId} {
+      allow read, create: if isEditor();
+      allow update, delete: if isOwner();
+    }
+
+    // ---------------------------------------------------------------------
+    // Every other clinic collection: approved users read, editors write.
+    // ---------------------------------------------------------------------
+    match /{collection}/{docId} {
+      allow read: if isApproved()
+        && collection != 'userAccess'
+        && collection != 'acknowledgments'
+        && collection != 'emailLog'
+        && collection != 'audit';
+      allow write: if isEditor()
+        && collection != 'userAccess'
+        && collection != 'acknowledgments'
+        && collection != 'emailLog'
+        && collection != 'audit';
     }
   }
 }
-

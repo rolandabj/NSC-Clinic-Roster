@@ -30,7 +30,8 @@ import {
   X,
   ChevronDown,
 } from 'lucide-react';
-import { authService, UserProfile } from '../../services/auth/authService';
+import { UserProfile } from '../../services/auth/authService';
+import { getRepository } from '../../services/repository';
 import { UserAccessRecord, Nurse, Doctor, UserAccessRole, UserAccessStatus } from '../../types';
 
 interface AccessManagementPanelProps {
@@ -60,26 +61,25 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // Access records are stored in Firestore with the lowercased email as the
+  // document id, which is what the Firestore security rules look up.
+  const MASTER_EMAIL = 'rolandabj@gmail.com';
+
   const fetchDirectory = async () => {
     setIsLoading(true);
     try {
-      const token = authService.getToken();
-      const res = await fetch('/api/admin/users', {
-        headers: {
-          Authorization: `Bearer ${token || 'local-owner'}`,
-        },
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to load access directory: HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      setUsers(data.users || []);
-      setNurses(data.nurses || []);
-      setDoctors(data.doctors || []);
+      const repo = getRepository();
+      const [userList, nurseList, doctorList] = await Promise.all([
+        repo.list('userAccess'),
+        repo.list('nurses'),
+        repo.list('doctors'),
+      ]);
+      setUsers(userList as UserAccessRecord[]);
+      setNurses(nurseList as Nurse[]);
+      setDoctors(doctorList as Doctor[]);
     } catch (err: any) {
       console.error('[AccessManagementPanel] fetch error:', err);
+      triggerToast(`Could not load the access directory: ${err?.message || err}`);
     } finally {
       setIsLoading(false);
     }
@@ -89,6 +89,31 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
     fetchDirectory();
   }, []);
 
+  /**
+   * Writes an access record under its email key. Records created before this
+   * change used other ids; those are moved to the email key and the old copy removed.
+   */
+  const saveAccessRecord = async (email: string, fields: Partial<UserAccessRecord>) => {
+    const repo = getRepository();
+    const key = email.trim().toLowerCase();
+    const legacy = users.filter((u) => u.email?.trim().toLowerCase() === key && u.id !== key);
+    const base = users.find((u) => u.id === key) || legacy[0];
+    const now = new Date().toISOString();
+
+    await repo.update('userAccess', key, {
+      ...(base || {}),
+      ...fields,
+      id: key,
+      email: key,
+      createdAt: base?.createdAt || now,
+      updatedAt: now,
+    } as UserAccessRecord);
+
+    for (const old of legacy) {
+      await repo.remove('userAccess', old.id);
+    }
+  };
+
   const handleApproveUser = async (
     email: string,
     appRole: UserAccessRole,
@@ -96,31 +121,29 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
     linkedNurseId?: string,
     name?: string
   ) => {
+    const key = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key)) {
+      alert('Please enter a valid email address.');
+      return false;
+    }
     setIsBusy(true);
     try {
-      const token = authService.getToken();
-      const res = await fetch('/api/admin/users/approve', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token || 'local-owner'}`,
-        },
-        body: JSON.stringify({
-          email,
-          appRole,
-          isManager,
-          linkedNurseId,
-          name,
-        }),
+      await saveAccessRecord(key, {
+        name: name || key.split('@')[0],
+        status: 'APPROVED',
+        appRole: appRole === 'EDITOR' ? 'EDITOR' : 'VIEWER',
+        isManager: Boolean(isManager),
+        linkedNurseId: linkedNurseId || '',
+        approvedBy: currentUser?.email || MASTER_EMAIL,
+        approvedAt: new Date().toISOString(),
       });
 
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message || 'Failed to approve user.');
-
-      triggerToast(`Approved access for ${email} as ${appRole} (Manager: ${isManager ? 'Yes' : 'No'})`);
+      triggerToast(`Approved access for ${key} as ${appRole} (Manager: ${isManager ? 'Yes' : 'No'})`);
       await fetchDirectory();
+      return true;
     } catch (err: any) {
       alert(`Approval error: ${err.message}`);
+      return false;
     } finally {
       setIsBusy(false);
     }
@@ -130,20 +153,18 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
     userId: string,
     updates: Partial<UserAccessRecord>
   ) => {
+    const existing = users.find((u) => u.id === userId);
+    if (!existing) return;
+    if (existing.email.trim().toLowerCase() === MASTER_EMAIL) {
+      alert('The Master Administrator account cannot be modified or degraded.');
+      return;
+    }
     setIsBusy(true);
     try {
-      const token = authService.getToken();
-      const res = await fetch(`/api/admin/users/${userId}/role`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token || 'local-owner'}`,
-        },
-        body: JSON.stringify(updates),
-      });
-
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message || 'Failed to update user.');
+      const clean: Partial<UserAccessRecord> = { ...updates };
+      if ('linkedNurseId' in updates) clean.linkedNurseId = updates.linkedNurseId || '';
+      if (clean.appRole) clean.appRole = clean.appRole === 'EDITOR' ? 'EDITOR' : 'VIEWER';
+      await saveAccessRecord(existing.email, clean);
 
       triggerToast('User access and privileges updated successfully.');
       await fetchDirectory();
@@ -155,19 +176,14 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
   };
 
   const handleRevokeUser = async (userId: string, email: string) => {
+    if (email.trim().toLowerCase() === MASTER_EMAIL) {
+      alert('The Master Administrator account cannot be revoked.');
+      return;
+    }
     if (!confirm(`Are you sure you want to revoke access for ${email}?`)) return;
     setIsBusy(true);
     try {
-      const token = authService.getToken();
-      const res = await fetch(`/api/admin/users/${userId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token || 'local-owner'}`,
-        },
-      });
-
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message || 'Failed to revoke user.');
+      await saveAccessRecord(email, { status: 'REVOKED' });
 
       triggerToast(`Access revoked for ${email}.`);
       await fetchDirectory();
@@ -181,13 +197,14 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
   const handleAddUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEmail.trim()) return;
-    await handleApproveUser(
+    const approved = await handleApproveUser(
       newEmail.trim().toLowerCase(),
       newRole,
       newIsManager,
       newLinkedNurseId || undefined,
       newName.trim() || undefined
     );
+    if (!approved) return;
     setIsAddModalOpen(false);
     setNewEmail('');
     setNewName('');

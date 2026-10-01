@@ -131,7 +131,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
         try {
           const token = authService.getToken();
           const res = await fetch('/api/approvals/pending', {
-            headers: { Authorization: `Bearer ${token || 'local-owner'}` },
+            headers: { Authorization: `Bearer ${token || ''}` },
           });
           if (res.ok) {
             const j = await res.json();

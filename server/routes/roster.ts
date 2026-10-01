@@ -324,7 +324,7 @@ rosterRouter.post('/schedules/:id/versions/:versionId/rollback', requirePlanner,
  * Validates and executes a peer two-way nurse shift swap
  * Checks leave conflicts, locks, updates assignments, and writes an audit log
  */
-rosterRouter.post('/roster/swap', async (req: Request, res: Response) => {
+rosterRouter.post('/roster/swap', requirePlanner, async (req: Request, res: Response) => {
   try {
     const {
       scheduleId,
@@ -542,32 +542,24 @@ rosterRouter.post('/roster/swap', async (req: Request, res: Response) => {
 
 /**
  * POST /api/roster/acknowledge
- * Validates acknowledgment token, marks the receipt as acknowledged, records UTC timestamp,
+ * Validates the acknowledgment token (the only accepted proof), marks the receipt as acknowledged, records UTC timestamp,
  * and updates audit records.
  */
 rosterRouter.post('/roster/acknowledge', async (req: Request, res: Response) => {
   try {
-    const { token, scheduleId, nurseId } = req.body;
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
 
-    if (!token && (!scheduleId || !nurseId)) {
+    if (!token) {
       res.status(400).json({
         error: 'BadRequest',
-        message: 'Either acknowledgment token or (scheduleId and nurseId) is required.',
+        message: 'An acknowledgment token is required.',
       });
       return;
     }
 
     const repo = getServerRepository();
     const allAcks = await repo.list('acknowledgments');
-
-    let matched: Acknowledgment | undefined;
-    if (token) {
-      matched = allAcks.find((a) => a.token === token);
-    } else {
-      matched = allAcks.find(
-        (a) => a.scheduleId === scheduleId && a.nurseId === nurseId
-      );
-    }
+    const matched: Acknowledgment | undefined = allAcks.find((a) => a.token === token);
 
     if (!matched) {
       res.status(404).json({

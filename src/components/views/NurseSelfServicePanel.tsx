@@ -78,10 +78,10 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
       const token = authService.getToken();
       const [leaveRes, availRes] = await Promise.all([
         fetch('/api/leave/my', {
-          headers: { Authorization: `Bearer ${token || 'local-staff'}` },
+          headers: { Authorization: `Bearer ${token || ''}` },
         }),
         fetch('/api/availability/my', {
-          headers: { Authorization: `Bearer ${token || 'local-staff'}` },
+          headers: { Authorization: `Bearer ${token || ''}` },
         }),
       ]);
 
@@ -114,7 +114,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token || 'local-staff'}`,
+          Authorization: `Bearer ${token || ''}`,
         },
         body: JSON.stringify({
           leaveTypeId,
@@ -149,7 +149,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token || 'local-staff'}`,
+          Authorization: `Bearer ${token || ''}`,
         },
         body: JSON.stringify({
           date: availDate,
@@ -183,7 +183,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
       const token = authService.getToken();
       const res = await fetch(`/api/leave/request/${id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token || 'local-staff'}` },
+        headers: { Authorization: `Bearer ${token || ''}` },
       });
       if (!res.ok) throw new Error('Failed to cancel leave.');
       triggerToast('Leave request cancelled.');
@@ -203,7 +203,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
       const token = authService.getToken();
       const res = await fetch(`/api/availability/request/${id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token || 'local-staff'}` },
+        headers: { Authorization: `Bearer ${token || ''}` },
       });
       if (!res.ok) throw new Error('Failed to cancel request.');
       triggerToast('Availability request cancelled.');

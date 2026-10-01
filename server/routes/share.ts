@@ -93,7 +93,8 @@ shareRouter.post('/share', requirePlanner, async (req: Request, res: Response) =
 shareRouter.get('/share/:token', async (req: Request, res: Response) => {
   try {
     const { token } = req.params;
-    const requestedEmail = (req.query.email as string)?.trim().toLowerCase() || req.user?.email?.toLowerCase();
+    // Restricted links only accept the verified email of the signed in caller.
+    const requestedEmail = req.user?.email?.toLowerCase();
 
     const repo = getServerRepository();
     const allShares = await repo.list('shareLinks');

@@ -151,19 +151,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <button
                   onClick={async () => {
                     try {
-                      const res = await fetch('/api/auth/directory/test-match', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: currentUser?.email }),
-                      });
-                      const data = await res.json();
-                      if (data.accessStatus === 'APPROVED') {
+                      const refreshed = await authService.refreshProfile();
+                      if (refreshed?.accessStatus === 'APPROVED') {
                         window.location.reload();
-                      } else {
-                        alert('Your account is still pending approval by rolandabj@gmail.com.');
                       }
-                    } catch {
-                      alert('Could not verify status. Please check your network connection.');
+                    } catch (err: any) {
+                      alert(err?.message || 'Could not verify status. Please check your network connection.');
                     }
                   }}
                   className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer transition-colors shadow-2xs"
