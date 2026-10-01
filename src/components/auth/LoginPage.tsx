@@ -13,6 +13,7 @@ import {
   Loader2,
   Lock,
   Building2,
+  ExternalLink,
 } from 'lucide-react';
 import { authService, UserProfile } from '../../services/auth/authService';
 
@@ -24,6 +25,7 @@ interface LoginPageProps {
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, clinicName }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
   const [displayName, setDisplayName] = useState<string>(
     () => {
       const stored = typeof window !== 'undefined' ? localStorage.getItem('clinic_roster_clinic_name') : null;
@@ -99,6 +101,38 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, clinicName
                 <span aria-hidden="true">✕</span>
               </button>
             </div>
+            {isInIframe && (
+              <div className="pt-2 border-t border-rose-800/60 flex items-center justify-between gap-2">
+                <span className="text-[11px] text-rose-300">Popups can be restricted in embedded frames:</span>
+                <a
+                  href={typeof window !== 'undefined' ? window.location.href : '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-rose-900 hover:bg-rose-800 text-rose-100 text-[11px] font-medium transition-colors shrink-0 cursor-pointer"
+                >
+                  <span>Open in New Tab</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Embedded Preview Banner */}
+        {isInIframe && !errorMessage && (
+          <div className="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-900/60 text-indigo-200 text-xs flex items-center justify-between gap-2">
+            <span className="text-[11px] leading-tight text-indigo-300">
+              In preview mode? You can open the app in a dedicated tab.
+            </span>
+            <a
+              href={typeof window !== 'undefined' ? window.location.href : '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-600/80 hover:bg-indigo-600 text-white text-[11px] font-medium shrink-0 transition-colors shadow-2xs cursor-pointer"
+            >
+              <span>Full Tab</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
           </div>
         )}
 

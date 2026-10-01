@@ -24,14 +24,26 @@ export async function startServer() {
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const isProduction = process.env.NODE_ENV === 'production';
 
-  // Security Headers via Helmet (configured to allow iframe rendering in AI Studio preview)
+  // Security Headers via Helmet
+  // Configured to allow iframe rendering in AI Studio preview and seamless Firebase Auth signInWithPopup
+  // COOP (Cross-Origin-Opener-Policy) MUST be false so popup window.opener is not severed by the browser
   app.use(
     helmet({
       contentSecurityPolicy: false,
       frameguard: false,
       crossOriginEmbedderPolicy: false,
+      crossOriginOpenerPolicy: false,
+      crossOriginResourcePolicy: false,
+      originAgentCluster: false,
     })
   );
+
+  // Explicitly ensure no Cross-Origin-Opener-Policy header is attached that would block Firebase popups
+  app.use((_req: Request, res: Response, next) => {
+    res.removeHeader('Cross-Origin-Opener-Policy');
+    res.removeHeader('Cross-Origin-Embedder-Policy');
+    next();
+  });
 
   // Limit on authentication, email and webhook endpoints
   const apiRateLimiter = rateLimit({
