@@ -62,6 +62,36 @@ test('max consecutive days switched off is not enforced', async () => {
   assert.equal(await generateWeek([h2({ enabled: false })]), 7);
 });
 
-test('max consecutive days set to SOFT is not a hard stop', async () => {
-  assert.equal(await generateWeek([h2({ severity: 'SOFT' })]), 7);
+test('max consecutive days set to SOFT still keeps runs within the limit', async () => {
+  // SOFT is no hard stop in the main pass, but it must not allow unlimited runs either.
+  assert.ok((await generateWeek([h2({ severity: 'SOFT' })])) <= 6);
+});
+
+test('a SOFT max consecutive days rule never allows a run longer than the limit (14 days)', async () => {
+  const result = await SchedulingEngine.generate(
+    makeSchedule({ startDate: '2026-10-05', endDate: '2026-10-18', hoursTargetFullTime: 112 }),
+    'GENERATE_ALL',
+    [],
+    [makeNurse('n1')],
+    [SENIOR],
+    [DAY_DUTY],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [...hoursOnlyRules(), h2({ severity: 'SOFT' })],
+    undefined,
+    [],
+    [],
+    [ANNUAL_LEAVE]
+  );
+  const days = new Set(result.assignments.map((a) => a.date));
+  let longest = 0;
+  let run = 0;
+  for (let d = 5; d <= 18; d++) {
+    run = days.has(`2026-10-${String(d).padStart(2, '0')}`) ? run + 1 : 0;
+    longest = Math.max(longest, run);
+  }
+  assert.ok(longest <= 6, `longest run ${longest}`);
 });

@@ -21,6 +21,7 @@ import {
   ClinicalRole,
   Specialty,
   Rule,
+  WorkingHoursPeriod,
 } from '../../types';
 import {
   calculateNurseHoursAccounting,
@@ -42,6 +43,7 @@ export interface RosterExportOptions {
   roles: ClinicalRole[];
   specialties: Specialty[];
   rules?: Rule[];
+  workingHoursPeriods?: WorkingHoursPeriod[];
   versionNumber?: number;
   blockIndex?: number; // Optional specific block export
   blockDates?: string[]; // Optional specific block dates
@@ -86,6 +88,7 @@ export function exportRosterToExcel(options: RosterExportOptions) {
     roles,
     specialties,
     rules = [],
+    workingHoursPeriods = [],
     versionNumber = schedule.activeVersionNumber || 1,
     blockDates,
   } = options;
@@ -134,7 +137,9 @@ export function exportRosterToExcel(options: RosterExportOptions) {
       seniorityLevels,
       doctors,
       roles,
-      specialties
+      specialties,
+      [],
+      workingHoursPeriods
     );
     nurseAccountingMap.set(nurse.id, acct);
   });

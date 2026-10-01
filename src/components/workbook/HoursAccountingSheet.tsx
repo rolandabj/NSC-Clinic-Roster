@@ -33,6 +33,7 @@ import {
   ClinicalRole,
   Specialty,
   NurseHoursQuota,
+  WorkingHoursPeriod,
 } from '../../types';
 import {
   calculateNurseHoursAccounting,
@@ -54,6 +55,7 @@ interface HoursAccountingSheetProps {
   roles: ClinicalRole[];
   specialties: Specialty[];
   quotas: NurseHoursQuota[];
+  workingHoursPeriods?: WorkingHoursPeriod[];
   onGoToReports?: () => void;
 }
 
@@ -70,6 +72,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
   specialties,
   quotas,
   onGoToReports,
+  workingHoursPeriods = [],
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | HoursAccountingStatus>('ALL');
@@ -90,7 +93,8 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
         doctors,
         roles,
         specialties,
-        quotas
+        quotas,
+        workingHoursPeriods
       )
     );
   }, [

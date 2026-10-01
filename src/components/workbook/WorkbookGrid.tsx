@@ -1,5 +1,5 @@
 import { isWeekendDay } from '../../utils/weekend';
-import { leaveCreditInRange, leaveCreditPerDay } from '../../services/hours/hoursPolicy';
+import { leaveCreditInRange, leaveCreditPerDay, resolveFullTimeTarget } from '../../services/hours/hoursPolicy';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   FileSpreadsheet,
@@ -54,6 +54,7 @@ import {
   PublicHoliday,
   AssignmentKind,
   AssignmentSource,
+  WorkingHoursPeriod,
 } from '../../types';
 import { ValidationReport, ValidationFinding } from '../../services/validation/ScheduleValidator';
 import { calculateDutyDurationHours } from '../../services/reports/hoursAccounting';
@@ -62,6 +63,7 @@ import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 
 interface WorkbookGridProps {
   schedule: Schedule;
+  workingHoursPeriods?: WorkingHoursPeriod[];
   assignments: Assignment[];
   nurses: Nurse[];
   doctors: Doctor[];
@@ -92,6 +94,7 @@ interface WorkbookGridProps {
 const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
+  workingHoursPeriods = [],
   schedule,
   assignments,
   nurses,
@@ -233,7 +236,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     leaveHours = Math.round(leaveHours * 10) / 10;
 
     const totalHours = Math.round((dutyHours + leaveHours) * 10) / 10;
-    const targetHours = Math.round((schedule.hoursTargetFullTime || 0) * (nurse.contractPercent / 100));
+    const targetHours = Math.round(resolveFullTimeTarget(schedule, workingHoursPeriods).hours * (nurse.contractPercent / 100));
     const percent = targetHours > 0 ? Math.min(100, Math.round((totalHours / targetHours) * 100)) : 0;
 
     return { totalHours, targetHours, percent, dutyHours, leaveHours };

@@ -216,7 +216,7 @@ export class SchedulingEngine {
       'dedicated nurse clinic',
       'nurse clinic coverage',
     ]);
-    const ncEnabled = ncRule ? ncRule.enabled : true;
+    const ncEnabled = ncRule ? ncRule.enabled !== false : true;
     const ncSeverity = ncRule?.severity || 'HARD';
     const ncQuota = ncEnabled ? (ncRule?.value ?? 1) : 0;
     const nurseClinicSlotsCount = totalDays * ncQuota;
@@ -365,7 +365,7 @@ export class SchedulingEngine {
       'dedicated nurse clinic',
       'nurse clinic coverage',
     ]);
-    const ncEnabled = ncRule ? ncRule.enabled : true;
+    const ncEnabled = ncRule ? ncRule.enabled !== false : true;
     const ncSeverity = ncRule?.severity || 'HARD';
     const ncQuota = ncEnabled ? (ncRule?.value ?? 1) : 0;
 
@@ -375,7 +375,7 @@ export class SchedulingEngine {
       'above doctors',
       'plus one',
     ]);
-    const plusOneEnabled = plusOneRule ? plusOneRule.enabled : true;
+    const plusOneEnabled = plusOneRule ? plusOneRule.enabled !== false : true;
     const minAdditionalNurses = plusOneEnabled ? (plusOneRule?.value ?? 1) : 0;
 
     // Maximum Working Hours Per Period rule lookup & configuration (Hard Rule H7)
@@ -386,7 +386,7 @@ export class SchedulingEngine {
       'overwork',
       'hour limit',
     ]);
-    const maxHoursEnabled = maxHoursRule ? maxHoursRule.enabled : true;
+    const maxHoursEnabled = maxHoursRule ? maxHoursRule.enabled !== false : true;
     const maxHoursSeverity = maxHoursRule?.severity || 'HARD';
     const maxHoursToleranceRatio = (maxHoursRule?.value ? maxHoursRule.value : 105) / 100;
 
@@ -399,7 +399,7 @@ export class SchedulingEngine {
     ]);
     const maxConsecutiveLate = consecutiveLateRule?.value ? consecutiveLateRule.value : 3;
     const consecutiveLateSeverity = consecutiveLateRule?.severity || 'HARD';
-    const consecutiveLateEnabled = consecutiveLateRule ? consecutiveLateRule.enabled : true;
+    const consecutiveLateEnabled = consecutiveLateRule ? consecutiveLateRule.enabled !== false : true;
     // A duty "ends late" when it ends at or after this time (rule setting, default 21:00)
     const lateThreshold: string = (consecutiveLateRule?.params as any)?.thresholdTime || '21:00';
 
@@ -412,7 +412,7 @@ export class SchedulingEngine {
       LATE_DUTY_RULE_WORDS
     );
     // Switched off: no limit. SOFT: only a scoring penalty (see below), not a hard stop.
-    const consecutiveDaysEnabled = consecutiveDaysRule ? consecutiveDaysRule.enabled : true;
+    const consecutiveDaysEnabled = consecutiveDaysRule ? consecutiveDaysRule.enabled !== false : true;
     const maxConsecutiveDays = consecutiveDaysEnabled
       ? consecutiveDaysRule?.value
         ? consecutiveDaysRule.value
@@ -426,10 +426,10 @@ export class SchedulingEngine {
       'minimum rest',
     ]);
     // Enforced as a hard limit only when the rule is on and HARD (0 = no limit).
-    const minRestEnabled = minRestRule ? minRestRule.enabled : true;
+    const minRestEnabled = minRestRule ? minRestRule.enabled !== false : true;
     const minRestSeverity = minRestRule?.severity || 'HARD';
     const minRestHoursRequired =
-      minRestEnabled && minRestSeverity === 'HARD' ? (minRestRule?.value ? minRestRule.value : 11) : 0;
+      minRestEnabled && minRestSeverity === 'HARD' ? (minRestRule?.value ?? 11) : 0;
 
     const nurseClinicRole = roles.find(
       (r) => r.id === 'role-nurse-clinic' || r.acronym === 'NC' || r.name.toLowerCase().includes('nurse clinic')
@@ -1207,7 +1207,7 @@ export class SchedulingEngine {
                 let score = 0;
 
                 // S0: Pacing penalty: If nurse is 1 day away from hitting the consecutive days ceiling, apply soft penalty (-60)
-                if (consecutiveDaysEndingYesterday === maxConsecutiveDays - 1) {
+                if (consecutiveDaysEndingYesterday >= maxConsecutiveDays - 1) {
                   score -= 60;
                 }
 
@@ -1879,7 +1879,9 @@ export class SchedulingEngine {
           // Float pool must NEVER push a nurse over their duty target, and never push to 6 or 7 consecutive days
           if (
             state.totalDutyHoursEarned < nurseTarget &&
-            (consecutiveDaysSeverity !== 'HARD' || consecutiveDaysEndingYesterday < maxConsecutiveDays - 1)
+            // The float pool keeps a one day margin under the limit while the rule is on
+            // (HARD or SOFT); only a switched off rule removes the limit.
+            consecutiveDaysEndingYesterday < maxConsecutiveDays - 1
           ) {
             const onLeave = leaveEntries.some(
               (le) =>

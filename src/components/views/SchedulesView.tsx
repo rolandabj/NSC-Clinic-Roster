@@ -1469,6 +1469,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           <>
             {activeTab === 'roster' && (
               <WorkbookGrid
+                workingHoursPeriods={workingHoursPeriods}
                 schedule={activeSchedule}
                 assignments={assignments}
                 nurses={nurses}
@@ -1562,6 +1563,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 roles={roles}
                 specialties={specialties}
                 quotas={quotas}
+                workingHoursPeriods={workingHoursPeriods}
               />
             )}
 
@@ -2090,6 +2092,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       {/* --- EXPORT & PRINT CENTER MODAL (Phase 11) --- */}
       {activeSchedule && (
         <ExportModal
+          workingHoursPeriods={workingHoursPeriods}
           clinicName={context.clinicName}
           schedule={activeSchedule}
           assignments={assignments}

@@ -20,13 +20,14 @@ import {
   EmailRecipientLog,
   Acknowledgment,
   ShareLink,
+  WorkingHoursPeriod,
 } from '../../types';
 import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
 import { AssignmentDiffItem } from '../history/diffEngine';
 import { getRepository } from '../repository';
 import { authService } from '../auth/authService';
 import { escapeHtml, safeColor } from '../../utils/escapeHtml';
-import { leaveCreditInRange } from '../hours/hoursPolicy';
+import { leaveCreditInRange, resolveFullTimeTarget } from '../hours/hoursPolicy';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -47,6 +48,7 @@ export interface GenerateEmailPayloadParams {
   shareToken?: string;
   ackToken: string;
   isChangeAlert?: boolean;
+  workingHoursPeriods?: WorkingHoursPeriod[];
 }
 
 export interface DispatchResult {
@@ -80,6 +82,7 @@ export class RosterPublishService {
       shareToken,
       ackToken,
       isChangeAlert,
+      workingHoursPeriods = [],
     } = params;
 
     const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
@@ -117,7 +120,9 @@ export class RosterPublishService {
     leaveCreditedHours = Math.round(leaveCreditedHours * 10) / 10;
     dutyHours = Math.round(dutyHours * 10) / 10;
 
-    const targetHours = Math.round((schedule.hoursTargetFullTime * (nurse.contractPercent || 100)) / 100);
+    const targetHours = Math.round(
+      (resolveFullTimeTarget(schedule, workingHoursPeriods).hours * (nurse.contractPercent || 100)) / 100
+    );
     const totalEarnedHours = dutyHours + leaveCreditedHours;
     const variance = totalEarnedHours - targetHours;
 

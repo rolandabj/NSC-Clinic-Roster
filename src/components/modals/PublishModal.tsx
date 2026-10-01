@@ -352,6 +352,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           shareToken: emailShareToken,
           ackToken,
           isChangeAlert: publishKind === 'CHANGE',
+          workingHoursPeriods,
         });
 
         // Dispatch via provider

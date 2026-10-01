@@ -48,6 +48,7 @@ import {
   ClinicalRole,
   Specialty,
   NurseHoursQuota,
+  WorkingHoursPeriod,
 } from '../../types';
 import {
   NurseHoursAccounting,
@@ -83,6 +84,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
   const [nurses, setNurses] = useState<Nurse[]>([]);
   const [dutyWindows, setDutyWindows] = useState<DutyWindow[]>([]);
   const [leaveEntries, setLeaveEntries] = useState<LeaveEntry[]>([]);
+  const [workingHoursPeriods, setWorkingHoursPeriods] = useState<WorkingHoursPeriod[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [seniorityLevels, setSeniorityLevels] = useState<SeniorityLevel[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -122,6 +124,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
         crList,
         spList,
         qList,
+        whpList,
       ] = await Promise.all([
         repo.list('schedules'),
         repo.list('assignments'),
@@ -134,6 +137,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
         repo.list('clinicalRoles'),
         repo.list('specialties'),
         repo.list('quotas'),
+        repo.list('workingHoursPeriods'),
       ]);
 
       const uniqueSchedules = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
@@ -146,6 +150,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
       setClinicalRoles(crList);
       setSpecialties(spList);
       setQuotas(qList);
+      setWorkingHoursPeriods(whpList);
 
       const activeNursesList = nList.filter((n) => n.active);
       setNurses(activeNursesList);
@@ -196,7 +201,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
         doctors,
         roles,
         specialties,
-        quotas
+        quotas,
+        workingHoursPeriods
       )
     );
   }, [
@@ -211,6 +217,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
     roles,
     specialties,
     quotas,
+    workingHoursPeriods,
   ]);
 
   // Compute high-level clinic metrics & fairness equity indices

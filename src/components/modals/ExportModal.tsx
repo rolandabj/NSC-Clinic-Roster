@@ -34,6 +34,7 @@ import {
   ClinicalRole,
   Specialty,
   Rule,
+  WorkingHoursPeriod,
 } from '../../types';
 import {
   exportRosterToExcel,
@@ -61,6 +62,7 @@ interface ExportModalProps {
   roles: ClinicalRole[];
   specialties: Specialty[];
   rules?: Rule[];
+  workingHoursPeriods?: WorkingHoursPeriod[];
   currentBlockIndex?: number;
   blockDates?: string[];
   versionNumber?: number;
@@ -91,6 +93,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   versionNumber = schedule.activeVersionNumber || 1,
   isOpen,
   onClose,
+  workingHoursPeriods = [],
 }) => {
   const [activeTab, setActiveTab] = useState<ExportTab>('excel');
   const [excelScope, setExcelScope] = useState<'ALL' | 'ACTIVE_BLOCK'>('ALL');
@@ -112,6 +115,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   // 1. Download Excel
   const handleDownloadExcel = () => {
     exportRosterToExcel({
+      workingHoursPeriods,
       clinicName,
       schedule,
       assignments,
@@ -186,7 +190,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       seniorityLevels,
       doctors,
       roles,
-      specialties
+      specialties,
+      [],
+      workingHoursPeriods
     )
   );
 
