@@ -43,6 +43,7 @@ import {
   openingHourSlots,
   overlaps,
   resolveClinicSetup,
+  uncoveredParts,
 } from '../engine/clinicModel';
 
 export type FindingSeverity = 'ERROR' | 'WARN' | 'INFO';
@@ -391,6 +392,26 @@ export class ScheduleValidator {
         const pairedNurse = dayAssignments.find(
           (a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId
         );
+        // Hours of the session no linked nurse covers (partial cover is allowed, but shown)
+        const linkedDuties = dayAssignments
+          .filter((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId)
+          .map((a) => dutyMap.get(a.dutyWindowId))
+          .filter((d): d is DutyWindow => !!d);
+        if (linkedDuties.length > 0) {
+          const missing = uncoveredParts(sess.startTime, sess.endTime, linkedDuties);
+          if (missing.length > 0) {
+            const doctorName = doctors.find((d) => d.id === sess.doctorId)?.fullName || 'A doctor';
+            findings.push({
+              id: `session-partial-${sess.id}`,
+              category: 'COVERAGE_GAP',
+              severity: 'WARN',
+              message: `${doctorName} on ${formatDate(date)} has no nurse for ${missing.map((m) => `${m.start}–${m.end}`).join(' and ')}.`,
+              affectedNurseIds: [],
+              cellRefs: [],
+              date,
+            });
+          }
+        }
         const pairedDuty = pairedNurse ? dutyMap.get(pairedNurse.dutyWindowId) : undefined;
         if (pairedNurse && pairedDuty && !overlaps(pairedDuty.startTime, pairedDuty.endTime, sess.startTime, sess.endTime)) {
           findings.push({

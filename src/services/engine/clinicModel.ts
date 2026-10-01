@@ -117,3 +117,21 @@ export function coveredMinutes(duty: DutyWindow, start: string, end: string): nu
   const to = Math.min(toMinutes(duty.endTime), toMinutes(end));
   return Math.max(0, to - from);
 }
+
+/** The parts of [start, end) that none of the duties cover. */
+export function uncoveredParts(start: string, end: string, duties: DutyWindow[]): { start: string; end: string }[] {
+  const parts: { start: string; end: string }[] = [];
+  let cursor = toMinutes(start);
+  const stop = toMinutes(end);
+  const sorted = [...duties].sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
+  for (const d of sorted) {
+    const ds = toMinutes(d.startTime);
+    const de = toMinutes(d.endTime);
+    if (de <= cursor) continue;
+    if (ds > cursor) parts.push({ start: fromMinutes(cursor), end: fromMinutes(Math.min(ds, stop)) });
+    cursor = Math.max(cursor, de);
+    if (cursor >= stop) break;
+  }
+  if (cursor < stop) parts.push({ start: fromMinutes(cursor), end: fromMinutes(stop) });
+  return parts.filter((p) => p.start < p.end);
+}

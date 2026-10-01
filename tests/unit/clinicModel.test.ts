@@ -122,3 +122,60 @@ test('shifts already fixed later in the month are respected (no 7 days in a row)
   const { report } = await generate(staff, { existing: fixed });
   assert.equal(errorsOf(report, 'h2-days-n1').length, 0);
 });
+
+// One doctor, 09:00 to 21:00, for the preference and cover tests below
+const ONE_DAY = makeSchedule({ startDate: '2026-11-02', endDate: '2026-11-02', hoursTargetFullTime: 12 });
+const DR_X = { id: 'docX', fullName: 'Dr X', specialtyIds: [], weeklyPattern: [], active: true };
+const LONG_SESSION = [{ id: 's-x', doctorId: 'docX', date: '2026-11-02', startTime: '09:00', endTime: '21:00', specialtyId: 'spec', source: 'PATTERN', cancelled: false } as DoctorSession];
+const NINE_TO_SEVEN = { id: 'x97', name: '9-7', acronym: '9-7', startTime: '09:00', endTime: '19:00', color: '#000', active: true };
+const prefers = (rank: number) => [{ kind: 'DOCTOR', refId: 'docX', rank }] as any;
+const freeNurse = makeNurse('free', { capabilityIds: [PHL.id], seniorityLevelId: SENIOR.id });
+
+async function oneDay(staff: any[], duties: any[], rules: any[] = [], prior: Assignment[] = []) {
+  const result = await SchedulingEngine.generate(
+    ONE_DAY, 'GENERATE_ALL', [], staff, LEVELS, duties, ROLES, [], LONG_SESSION, [], [], rules, undefined, [], [DR_X] as any, [], { priorAssignments: prior }
+  );
+  return result.assignments.filter((a) => a.kind === 'DOCTOR');
+}
+
+test('preference order is exact: rank 3 beats rank 5, even when the rank 5 nurse is senior', async () => {
+  const staff = [freeNurse, makeNurse('rank5', { preferences: prefers(5) }), makeNurse('rank3', { seniorityLevelId: JUNIOR.id, preferences: prefers(3) })];
+  const withDoctor = await oneDay(staff, DUTIES);
+  assert.equal(withDoctor[0]?.nurseId, 'rank3');
+});
+
+test('full cover comes before preference: a lower ranked nurse who covers the whole session wins', async () => {
+  // The first choice nurse worked a late shift yesterday and may not do two in a row.
+  const lateRule = { id: 'rule-s1', name: 'Consecutive late duties', templateKey: 'MAX_CONSECUTIVE_LATE_DUTIES', enabled: true, severity: 'HARD', value: 1 } as any;
+  const prior = [{ id: 'p', scheduleId: 'prev', nurseId: 'first', date: '2026-11-01', dutyWindowId: 'l', kind: 'CLINICAL_ROLE', clinicalRoleId: 'role-float', locked: false, source: 'GENERATED' } as Assignment];
+  const staff = [freeNurse, makeNurse('first', { preferences: prefers(1) }), makeNurse('second', { preferences: prefers(2) })];
+  const withDoctor = await oneDay(staff, [D, L, NINE_TO_SEVEN], [lateRule], prior);
+  assert.equal(withDoctor.length, 1);
+  assert.equal(withDoctor[0].nurseId, 'second');
+  assert.equal(withDoctor[0].dutyWindowId, 'd');
+});
+
+test('a doctor only partly covered gets a second nurse for the missing hours', async () => {
+  // No shift covers 09:00 to 21:00, so the doctor needs two nurses.
+  const staff = [freeNurse, makeNurse('a', { preferences: prefers(1) }), makeNurse('b', { preferences: prefers(2) })];
+  const withDoctor = await oneDay(staff, [NINE_TO_SEVEN, L], []);
+  assert.equal(withDoctor.length, 2);
+  const ends = withDoctor.map((a) => (a.dutyWindowId === 'l' ? '21:00' : '19:00')).sort();
+  assert.deepEqual(ends, ['19:00', '21:00']);
+});
+
+test('nobody goes over her hours goal when there are enough nurses', async () => {
+  for (const count of [10, 14]) {
+    const { result } = await generate(nurses(count));
+    const hours = new Map<string, number>();
+    result.assignments.forEach((a) => hours.set(a.nurseId, (hours.get(a.nurseId) || 0) + HOURS[a.dutyWindowId]));
+    hours.forEach((h, id) => assert.ok(h <= 160, `${count} nurses: ${id} has ${h}h`));
+  }
+});
+
+test('hours are kept back so the last days are staffed like the others', async () => {
+  const { result } = await generate(nurses(10));
+  const last = result.assignments.filter((a) => a.date >= '2026-11-26' && a.kind === 'DOCTOR').length;
+  // 26 to 28 Nov: Thu and Fri have 4 doctors, Sat has 2
+  assert.equal(last, 10);
+});
