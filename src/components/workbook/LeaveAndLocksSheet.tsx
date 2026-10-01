@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { LeaveEntry, LockEntry, Nurse, LeaveType, DutyWindow } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
+import { clippedLeaveCredit } from '../../services/leave/leaveCredit';
 
 interface LeaveAndLocksSheetProps {
   scheduleStartDate: string;
@@ -163,7 +164,7 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
                         </span>
                       </td>
                       <td className="py-2 px-3 text-slate-700 font-bold">
-                        {le.hoursCredited}h
+                        {clippedLeaveCredit(le, lt, scheduleStartDate, scheduleEndDate)}h
                       </td>
                       <td className="py-2 px-3 text-slate-400 italic font-sans">{le.note || '—'}</td>
                       <td className="py-2 px-3 text-right">

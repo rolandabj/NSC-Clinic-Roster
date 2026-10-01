@@ -18,6 +18,7 @@ import {
   Specialty,
   NurseHoursQuota,
 } from '../../types';
+import { resolveLeaveHoursPerDay } from '../leave/leaveCredit';
 
 export type HoursAccountingStatus =
   | 'OPTIMAL'        // 90% - 110%
@@ -264,7 +265,9 @@ export function calculateNurseHoursAccounting(
     if (leave) {
       type = 'LEAVE';
       leaveType = leaveTypeMap.get(leave.leaveTypeId);
-      const credits = leave.hoursCredited || (leaveType?.creditedHours === 8 ? 8 : 0);
+      // Per-day credit from the shared helper (RO/DO = 0, 'match_duty' = 8, snapshot honoured).
+      // The timeline only walks schedule dates, so boundary-spanning leave is clipped by design.
+      const credits = resolveLeaveHoursPerDay(leave, leaveType);
 
       if (leaveType?.countsTowardHoursTarget !== false) {
         hoursEarned = credits;

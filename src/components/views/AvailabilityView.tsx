@@ -28,6 +28,10 @@ import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
 import { resolveScheduleIdForLockDate } from '../../services/schedule/lockScope';
 import {
+  creditHoursForDateRange,
+  resolveLeaveHoursPerDay,
+} from '../../services/leave/leaveCredit';
+import {
   Nurse,
   LeaveType,
   LeaveEntry,
@@ -295,8 +299,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
     const lt = leaveTypes.find((l) => l.id === editingLeaveEntry.leaveTypeId);
     const daySpan = countDaysBetween(start, end);
-    const dailyCredit = lt ? (typeof lt.creditedHours === 'number' ? lt.creditedHours : 8) : 8;
-    const totalCredits = dailyCredit * daySpan;
+    const totalCredits = creditHoursForDateRange(start, end, lt);
 
     // Strict Quota Ceiling Enforcement: Block save if quota would be exceeded
     if (leaveQuotaInfo && leaveQuotaInfo.isExceeded) {
@@ -374,7 +377,10 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     setIsDeletingLeave(true);
     try {
       const totalSpanDays = countDaysBetween(entry.startDate, entry.endDate);
-      const hoursPerDay = entry.hoursCredited ? entry.hoursCredited / totalSpanDays : 8;
+      const hoursPerDay = resolveLeaveHoursPerDay(
+        entry,
+        leaveTypes.find((l) => l.id === entry.leaveTypeId)
+      );
 
       if (entry.startDate === entry.endDate || totalSpanDays <= 1) {
         // Single day leave: simply remove this entry
@@ -531,7 +537,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               endDate: hol.date,
               note: `Public Holiday: ${hol.name}`,
               approved: true,
-              hoursCredited: 8,
+              // Credit exactly what the PH leave type declares (never a hardcoded 8).
+              hoursCredited: creditHoursForDateRange(hol.date, hol.date, phLeaveType),
             });
             createdCount++;
           }
@@ -590,7 +597,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           Math.round(
             (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
           ) + 1;
-        const totalCredits = (typeof lt.creditedHours === 'number' ? lt.creditedHours : 8) * daySpan;
+        const totalCredits = creditHoursForDateRange(startDate, endDate, lt);
 
         // Quota Check
         const rawQuota = nurse.leaveQuotas?.[lt.id];
@@ -799,7 +806,11 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
       {/* VIEW PANEL 1: MANAGER APPROVALS QUEUE */}
       {activeTab === 'approvals' && isManager && (
-        <ApprovalsQueuePanel currentUser={currentUser || undefined} onRequestDecided={loadData} />
+        <ApprovalsQueuePanel
+          currentUser={currentUser || undefined}
+          onRequestDecided={loadData}
+          leaveTypes={leaveTypes}
+        />
       )}
 
       {/* VIEW PANEL 2: NURSE SELF-SERVICE PORTAL */}

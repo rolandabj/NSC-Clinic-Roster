@@ -14,7 +14,7 @@ export default defineConfig(() => {
     server: {
       // The app is served through Vite middleware (dev) and previewed behind a proxied
       // sandbox host, so host checking must accept the forwarded Host header.
-      allowedHosts: true,
+      allowedHosts: true as const,
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',

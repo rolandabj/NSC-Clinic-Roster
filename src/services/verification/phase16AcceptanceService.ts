@@ -129,7 +129,8 @@ export class Phase16AcceptanceService {
         sessions,
         locks,
         leaveEntries,
-        rules
+        rules,
+        leaveTypes
       )
     );
 
@@ -147,7 +148,8 @@ export class Phase16AcceptanceService {
         sessions,
         locks,
         leaveEntries,
-        rules
+        rules,
+        leaveTypes
       )
     );
 
@@ -327,7 +329,8 @@ export class Phase16AcceptanceService {
     sessions: DoctorSession[],
     locks: LockEntry[],
     leaveEntries: LeaveEntry[],
-    rules: Rule[]
+    rules: Rule[],
+    leaveTypes: LeaveType[] = []
   ): Promise<AcceptanceCheckResult> {
     const t0 = performance.now();
     const subchecks: { name: string; passed: boolean; message: string }[] = [];
@@ -345,7 +348,11 @@ export class Phase16AcceptanceService {
       sessions,
       locks,
       leaveEntries,
-      rules
+      rules,
+      undefined,
+      undefined,
+      undefined,
+      leaveTypes
     );
 
     // Run 2 (with identical inputs to verify determinism)
@@ -361,7 +368,11 @@ export class Phase16AcceptanceService {
       sessions,
       locks,
       leaveEntries,
-      rules
+      rules,
+      undefined,
+      undefined,
+      undefined,
+      leaveTypes
     );
 
     const runDuration = run1.generationDurationMs;
@@ -443,7 +454,8 @@ export class Phase16AcceptanceService {
     sessions: DoctorSession[],
     locks: LockEntry[],
     leaveEntries: LeaveEntry[],
-    rules: Rule[]
+    rules: Rule[],
+    leaveTypes: LeaveType[] = []
   ): Promise<AcceptanceCheckResult> {
     const t0 = performance.now();
     const subchecks: { name: string; passed: boolean; message: string }[] = [];
@@ -470,7 +482,11 @@ export class Phase16AcceptanceService {
       sessions,
       locks,
       leaveEntries,
-      rules
+      rules,
+      undefined,
+      undefined,
+      undefined,
+      leaveTypes
     );
 
     let locksPreserved = true;
@@ -506,7 +522,11 @@ export class Phase16AcceptanceService {
       sessions,
       locks,
       leaveEntries,
-      rules
+      rules,
+      undefined,
+      undefined,
+      undefined,
+      leaveTypes
     );
 
     let locksPreservedInRebalance = true;

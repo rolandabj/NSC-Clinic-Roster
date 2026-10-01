@@ -11,6 +11,7 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "verify:phase1": "tsx scripts/verify-phase1.ts",
+    "verify:phase2": "tsx scripts/verify-phase2.ts",
     "migrate:phase1": "tsx scripts/migrate-phase1.ts"
   },
   "dependencies": {

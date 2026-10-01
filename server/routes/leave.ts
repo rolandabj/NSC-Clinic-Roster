@@ -11,6 +11,7 @@ import { Router, Request, Response } from 'express';
 import { getServerRepository } from '../db/index';
 import { requireAuth } from '../middleware/auth';
 import { LeaveEntry, LeaveType, Nurse } from '../../src/types';
+import { creditHoursForDateRange } from '../../src/services/leave/leaveCredit';
 import { MASTER_ADMIN_EMAIL } from '../services/auth/roleDirectoryService';
 
 export const leaveRouter = Router();
@@ -131,12 +132,12 @@ leaveRouter.post('/leave/request', requireAuth, async (req: Request, res: Respon
     const leaveTypes = (await repo.list('leaveTypes')) as LeaveType[];
     const matchedType = leaveTypes.find((lt) => lt.id === leaveTypeId);
 
-    // Calculate approximate credited hours (8 hours per day standard if match_duty or fixed)
+    // Credited hours come from the shared leave-credit rules: RO/DO credit 0, a numeric
+    // creditedHours is the per-day rate, 'match_duty' credits a standard 8h duty day.
     const start = new Date(startDate);
     const end = new Date(endDate);
     const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-    const hoursPerDay = typeof matchedType?.creditedHours === 'number' ? matchedType.creditedHours : 8;
-    const totalHoursCredited = diffDays * hoursPerDay;
+    const totalHoursCredited = creditHoursForDateRange(startDate, endDate, matchedType);
 
     // Strict Annual Quota in Days Enforcement
     const nurses = (await repo.list('nurses')) as Nurse[];

@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { LeaveEntry, AvailabilityRequest, LeaveType, Nurse, DutyWindow } from '../../types';
+import { creditHoursForLeave } from '../../services/leave/leaveCredit';
 
 interface NurseSelfServicePanelProps {
   currentUser?: UserProfile;
@@ -316,7 +317,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                         {l.startDate} {l.startDate !== l.endDate ? `→ ${l.endDate}` : ''}
                       </td>
                       <td className="py-2.5 px-3 font-bold text-slate-700">
-                        {l.hoursCredited || 8}h
+                        {creditHoursForLeave(l, lt)}h
                       </td>
                       <td className="py-2.5 px-3 text-slate-600 max-w-xs truncate">
                         {l.note || <span className="text-slate-400 italic">None</span>}

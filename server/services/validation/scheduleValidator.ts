@@ -41,6 +41,10 @@ export async function validateScheduleById(
     locks,
     roles,
     rules,
+    workingHoursPeriods,
+    specialties,
+    doctors,
+    leaveTypes,
   ] = await Promise.all([
     repo.list('assignments'),
     repo.list('nurses'),
@@ -51,6 +55,10 @@ export async function validateScheduleById(
     repo.list('locks'),
     repo.list('clinicalRoles'),
     repo.list('rules'),
+    repo.list('workingHoursPeriods'),
+    repo.list('specialties'),
+    repo.list('doctors'),
+    repo.list('leaveTypes'),
   ]);
 
   // Filter assignments for this specific schedule
@@ -65,11 +73,14 @@ export async function validateScheduleById(
   // Locks are schedule-scoped: tagged locks match by scheduleId, legacy untagged locks
   // fall back to the date window (see src/services/schedule/lockScope.ts).
   const scheduleLocks = filterLocksForSchedule(locks, schedule);
+  // Only approved leave counts toward hours — same rule as the client-side validator.
   const scheduleLeaves = leaveEntries.filter(
-    (le) => le.startDate <= schedule.endDate && le.endDate >= schedule.startDate
+    (le) => le.approved && le.startDate <= schedule.endDate && le.endDate >= schedule.startDate
   );
 
-  // Run the comprehensive validation audit
+  // Run the comprehensive validation audit with the same context the client passes,
+  // so API-generated reports and in-app reports agree (hours targets, leave credits,
+  // specialty/doctor breakdowns).
   const report = ScheduleValidator.validate(
     schedule,
     scheduleAssignments,
@@ -80,7 +91,11 @@ export async function validateScheduleById(
     scheduleLeaves,
     scheduleLocks,
     roles,
-    rules
+    rules,
+    workingHoursPeriods,
+    specialties,
+    doctors,
+    leaveTypes
   );
 
   return report;

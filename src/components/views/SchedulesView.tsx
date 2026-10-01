@@ -303,7 +303,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rList,
           sortedWhp,
           spList,
-          dList
+          dList,
+          leaveTypes
         );
         setValidationReport(report);
       } else {
@@ -378,7 +379,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rules,
           workingHoursPeriods,
           specialties,
-          doctors
+          doctors,
+          leaveTypes
         );
         setValidationReport(report);
       }, 300);
@@ -420,7 +422,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rules,
           workingHoursPeriods,
           specialties,
-          doctors
+          doctors,
+          leaveTypes
         );
         setValidationReport(report);
       }
@@ -456,7 +459,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rules,
           workingHoursPeriods,
           specialties,
-          doctors
+          doctors,
+          leaveTypes
         );
         setValidationReport(report);
       }
@@ -481,7 +485,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         rules,
         workingHoursPeriods,
         specialties,
-        doctors
+        doctors,
+        leaveTypes
       );
       setValidationReport(report);
     }
@@ -731,6 +736,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setUndoStack((prev) => [assignments, ...prev].slice(0, 50));
       setRedoStack([]);
 
+      // Cross-schedule continuity (E8): hand the engine the days immediately before this
+      // schedule so H2/S1 streaks are not silently reset at the schedule start boundary.
+      let priorAssignments: Assignment[] = [];
+      try {
+        const allAssignments = await repo.list('assignments');
+        priorAssignments = allAssignments.filter((a) => a.date < activeSchedule.startDate);
+      } catch (err) {
+        console.warn('Could not load prior assignments for consecutive-day lookback:', err);
+      }
+
       if (activeGenerationMode === 'CLEAR_GENERATED') {
         const result = await SchedulingEngine.generate(
           activeSchedule,
@@ -748,7 +763,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           (progress) => {
             setGenerationProgress(progress);
           },
-          workingHoursPeriods
+          workingHoursPeriods,
+          undefined,
+          leaveTypes,
+          priorAssignments
         );
 
         let finalAssignments = result.assignments;
@@ -772,7 +790,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rules,
           workingHoursPeriods,
           specialties,
-          doctors
+          doctors,
+          leaveTypes
         );
         setValidationReport(report);
 
@@ -821,7 +840,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           setGenerationProgress(progress);
         },
         workingHoursPeriods,
-        doctors
+        doctors,
+        leaveTypes,
+        priorAssignments
       );
 
       // If engine resolved an authoritative period target, synchronize the schedule record
@@ -864,7 +885,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         rules,
         workingHoursPeriods,
         specialties,
-        doctors
+        doctors,
+        leaveTypes
       );
       setValidationReport(report);
 

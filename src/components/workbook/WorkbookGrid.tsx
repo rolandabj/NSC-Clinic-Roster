@@ -55,6 +55,11 @@ import {
 } from '../../types';
 import { ValidationReport, ValidationFinding } from '../../services/validation/ScheduleValidator';
 import { calculateDutyDurationHours } from '../../services/reports/hoursAccounting';
+import {
+  clippedLeaveCredit,
+  resolveLeaveHoursPerDay,
+  resolveLeaveTypeHoursPerDay,
+} from '../../services/leave/leaveCredit';
 import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 
@@ -225,9 +230,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     );
     activeLeave.forEach((le) => {
       const lt = leaveTypes.find((l) => l.id === le.leaveTypeId);
-      if (lt?.countsTowardHoursTarget !== false) {
-        leaveHours += le.hoursCredited || 8;
-      }
+      // Type-driven credits clipped to the schedule window (RO/DO = 0, never a hardcoded 8).
+      leaveHours += clippedLeaveCredit(le, lt, schedule.startDate, schedule.endDate);
     });
 
     const totalHours = dutyHours + leaveHours;
@@ -256,9 +260,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
         );
         if (leave) {
           const lt = leaveTypes.find((l) => l.id === leave.leaveTypeId);
-          if (lt?.countsTowardHoursTarget !== false) {
-            bLeave += leave.hoursCredited || 8;
-          }
+          // Block view walks real dates, so this is already clipped to the visible window.
+          bLeave += resolveLeaveHoursPerDay(leave, lt);
         }
       }
     });
@@ -457,8 +460,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       }
 
       // Case 2: Multi-day span: shrink or split, preserving all other days of the leave
-      const totalSpanDays = countDaysBetween(entry.startDate, entry.endDate);
-      const hoursPerDay = entry.hoursCredited ? entry.hoursCredited / totalSpanDays : 8;
+      const hoursPerDay = resolveLeaveHoursPerDay(
+        entry,
+        leaveTypes.find((l) => l.id === entry.leaveTypeId)
+      );
 
       if (entry.startDate === targetDate) {
         // Remove only the first day of the span
@@ -552,7 +557,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       // LEAVE / DAY OFF
       const lt = leaveTypes.find((l) => l.id === editorLeaveTypeId) || leaveTypes[0];
       const isProtected = !editorAllowOverwrite;
-      const creditedHours = typeof lt?.creditedHours === 'number' ? lt.creditedHours : 8;
+      // Type-driven single-day credit (RO/DO = 0, 'match_duty' = 8).
+      const creditedHours = resolveLeaveTypeHoursPerDay(lt);
 
       const newLeave: LeaveEntry = {
         id: `leave-${nurseId}-${date}-${Date.now()}`,

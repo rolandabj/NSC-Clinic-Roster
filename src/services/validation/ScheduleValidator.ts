@@ -27,8 +27,10 @@ import {
   WorkingHoursPeriod,
   Specialty,
   Doctor,
+  LeaveType,
 } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
+import { clippedLeaveCredit } from '../leave/leaveCredit';
 import { filterLocksForSchedule } from '../schedule/lockScope';
 import { isExclusiveNurseClinic } from '../engine/nurseClinicUtils';
 import { calculateWorkingHoursForDateRange } from '../periods/workingHoursPeriodService';
@@ -79,12 +81,14 @@ export class ScheduleValidator {
     rules: Rule[],
     workingHoursPeriods: WorkingHoursPeriod[] = [],
     specialties: Specialty[] = [],
-    doctors: Doctor[] = []
+    doctors: Doctor[] = [],
+    leaveTypes: LeaveType[] = []
   ): ValidationReport {
     const findings: ValidationFinding[] = [];
     const seniorLevelIds = new Set((seniorityLevels || []).filter((s) => s.isSenior).map((s) => s.id));
     const dutyMap = new Map((dutyWindows || []).map((d) => [d.id, d]));
     const nurseMap = new Map((nurses || []).map((n) => [n.id, n]));
+    const leaveTypeMap = new Map((leaveTypes || []).map((lt) => [lt.id, lt]));
 
     // Locks are scoped to this schedule: tagged locks match by scheduleId, legacy untagged
     // locks fall back to the date-window rule (see lockScope.ts).
@@ -660,7 +664,8 @@ export class ScheduleValidator {
         }
       }
 
-      // Leave credit additions
+      // Leave credit additions — same helper as the engine so both agree:
+      // type-driven credits (RO/DO = 0), clipped to the schedule window.
       const nurseLeave = leaveEntries.filter(
         (le) =>
           le.nurseId === nurse.id &&
@@ -668,7 +673,12 @@ export class ScheduleValidator {
           !(le.endDate < schedule.startDate || le.startDate > schedule.endDate)
       );
       nurseLeave.forEach((le) => {
-        totalHours += le.hoursCredited || 8;
+        totalHours += clippedLeaveCredit(
+          le,
+          leaveTypeMap.get(le.leaveTypeId),
+          schedule.startDate,
+          schedule.endDate
+        );
       });
 
       // Resolve authoritative full-time target hours

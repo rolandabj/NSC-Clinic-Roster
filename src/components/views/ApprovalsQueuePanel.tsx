@@ -26,15 +26,18 @@ import {
 } from 'lucide-react';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { LeaveEntry, AvailabilityRequest, Nurse, LeaveType } from '../../types';
+import { creditHoursForLeave } from '../../services/leave/leaveCredit';
 
 interface ApprovalsQueuePanelProps {
   currentUser?: UserProfile;
   onRequestDecided?: () => void;
+  leaveTypes?: LeaveType[];
 }
 
 export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
   currentUser,
   onRequestDecided,
+  leaveTypes = [],
 }) => {
   const [leaves, setLeaves] = useState<any[]>([]);
   const [availability, setAvailability] = useState<any[]>([]);
@@ -223,7 +226,11 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
                           {l.startDate} {l.startDate !== l.endDate ? `→ ${l.endDate}` : ''}
                         </td>
                         <td className="py-3 px-3 font-bold text-slate-700">
-                          {l.hoursCredited || 8}h
+                          {creditHoursForLeave(
+                            l,
+                            leaveTypes.find((lt) => lt.id === l.leaveTypeId)
+                          )}
+                          h
                         </td>
                         <td className="py-3 px-3 text-slate-600 max-w-xs truncate">
                           {l.note || <span className="text-slate-400 italic">None provided</span>}
