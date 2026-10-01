@@ -654,6 +654,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     { id: 'database', label: 'Database & Storage', icon: Database },
   ];
 
+  // A tab saved in this browser may not be available to the current user
+  // (e.g. Access & Permissions after signing in as someone else).
+  useEffect(() => {
+    if (!tabs.some((t) => t.id === activeTab)) setActiveTab('clinic');
+  }, [activeTab, isMasterAdmin]);
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Toast Save Notification */}
@@ -701,7 +707,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* TAB CONTENT PANELS */}
       <div className="bg-white border border-slate-200 rounded p-6 shadow-xs">
         {/* 0. ACCESS & ROLES MANAGEMENT (MASTER ADMIN ONLY) */}
-        {activeTab === 'access-roles' && <AccessManagementPanel currentUser={currentUser || undefined} />}
+        {activeTab === 'access-roles' && isMasterAdmin && <AccessManagementPanel currentUser={currentUser || undefined} />}
 
         {/* 1. CLINIC PROFILE */}
         {activeTab === 'clinic' && clinic && (
