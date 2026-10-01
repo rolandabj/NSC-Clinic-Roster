@@ -8,6 +8,8 @@ test('cached filters match like Firestore where clauses', () => {
   assert.equal(matchesFilter(a, { field: 'scheduleId', operator: '==', value: 's1' }), true);
   assert.equal(matchesFilter(b, { field: 'scheduleId', operator: '==', value: 's1' }), false);
   assert.equal(matchesFilter(a, { field: 'status', operator: '!=', value: 'APPROVED' }), true);
+  // A missing or null field never matches != in Firestore
+  assert.equal(matchesFilter({ id: '3', status: null }, { field: 'status', operator: '!=', value: 'APPROVED' }), false);
   // A missing field matches neither == nor != in Firestore
   assert.equal(matchesFilter(b, { field: 'status', operator: '!=', value: 'APPROVED' }), false);
   assert.equal(matchesFilter(b, { field: 'status', operator: '==', value: undefined }), false);

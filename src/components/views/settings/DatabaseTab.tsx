@@ -358,7 +358,10 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
 
       {isImportModalOpen && (
         <SettingsDialog
-          onClose={() => setIsImportModalOpen(false)}
+          onClose={() => {
+            // A restore in progress keeps the dialog open, like its disabled Cancel button.
+            if (!isBusyAction) setIsImportModalOpen(false);
+          }}
           labelledBy={importModalTitleId}
           overlayClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
           panelClassName="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-xl max-w-lg w-full p-5 space-y-4 text-xs"

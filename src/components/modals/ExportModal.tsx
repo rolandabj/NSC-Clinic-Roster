@@ -6,7 +6,7 @@
  * Supports Multi-Sheet Excel, CSV Matrix/Long, A3 Landscape Roster Print, and Per-Nurse Packets.
  */
 
-import React, { useId, useState } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import {
   X,
   FileSpreadsheet,
@@ -102,6 +102,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [selectedNurseId, setSelectedNurseId] = useState<string>('ALL');
   const titleId = useId();
   const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
+
+  // Start downloading the Excel library as soon as the dialog opens, so the
+  // file is ready when the user clicks (browsers may block a late download).
+  useEffect(() => {
+    if (isOpen) import('xlsx').catch(() => {});
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

@@ -375,7 +375,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
         tag === 'TEXTAREA' ||
         tag === 'SELECT' ||
         target?.isContentEditable ||
-        (e.key === 'Tab' && target && target !== document.body)
+        (e.key === 'Tab' && target && target !== document.body) ||
+        // Enter, Space and Delete on a focused button or link belong to it, not to the grid.
+        (target && target !== document.body && !!target.closest('button, a[href], [role="button"]'))
       ) {
         return;
       }

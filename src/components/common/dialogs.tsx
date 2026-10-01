@@ -76,6 +76,11 @@ export function confirmDialog(options: ConfirmOptions | string): Promise<boolean
     const text = typeof opts.message === 'string' ? opts.message : opts.title || 'Are you sure?';
     return Promise.resolve(typeof window !== 'undefined' ? window.confirm(text) : false);
   }
+  // The same question already waiting (e.g. a double click): answer the
+  // second request "no", so the action can't run twice.
+  if (state.confirms.some((c) => c.message === opts.message && c.title === opts.title)) {
+    return Promise.resolve(false);
+  }
   return new Promise<boolean>((resolve) => {
     const id = nextId++;
     setState({ ...state, confirms: [...state.confirms, { ...opts, id, resolve }] });

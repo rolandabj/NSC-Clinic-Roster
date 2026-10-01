@@ -97,6 +97,11 @@ export async function startServer() {
       next();
     });
     app.use(express.static(distPath));
+    // A missing script or style file must be a real 404, not the app page:
+    // the browser then reports a load error that the app can recover from.
+    app.use('/assets', (_req: Request, res: Response) => {
+      res.status(404).end();
+    });
     app.get('*', (_req: Request, res: Response) => {
       res.sendFile(path.resolve(distPath, 'index.html'));
     });

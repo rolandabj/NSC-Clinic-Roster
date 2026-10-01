@@ -21,6 +21,7 @@ import { RosterPublishService } from '../../services/publish/rosterPublishServic
 import { quotaTracker } from '../../services/firebase/quotaTracker';
 import { CheckCircle2, Check, AlertTriangle, X } from 'lucide-react';
 import { useDialogA11y } from '../common/useDialogA11y';
+import { LoadErrorBoundary } from '../common/LoadErrorBoundary';
 
 // Screens load on demand, so the first page does not download the whole app.
 const SchedulesView = lazy(() => import('../views/SchedulesView').then((m) => ({ default: m.SchedulesView })));
@@ -378,13 +379,13 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   // If in published view mode (read-only standalone page for external links or preview)
   if (currentRoute === 'published') {
     return (
-      <Suspense fallback={<PageLoading />}>
+      <LoadErrorBoundary><Suspense fallback={<PageLoading />}>
         <PublishedRosterView
           shareToken={shareTokenParam}
           nurseIdParam={nurseIdParam}
           onExitPreview={() => navigateTo('schedules')}
         />
-      </Suspense>
+      </Suspense></LoadErrorBoundary>
     );
   }
 
@@ -508,7 +509,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
           />
 
           <main className="flex-1 min-h-0 overflow-y-auto">
-            <Suspense fallback={<PageLoading />}>{renderCurrentView()}</Suspense>
+            <LoadErrorBoundary resetKey={currentRoute}><Suspense fallback={<PageLoading />}>{renderCurrentView()}</Suspense></LoadErrorBoundary>
           </main>
         </div>
       </div>

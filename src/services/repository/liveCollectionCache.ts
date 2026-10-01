@@ -38,26 +38,55 @@ export interface ListFilter {
 /** Collections that are written often and read rarely; they are not kept live. */
 const UNCACHED_COLLECTIONS = new Set<string>(['audit', 'emailLog']);
 
-/** How long to wait for the first server confirmed snapshot before reading directly. */
-const FIRST_SNAPSHOT_TIMEOUT_MS = 20_000;
+/**
+ * How long a read waits for the first server confirmed snapshot. After that
+ * the read goes to Firestore directly, while the listener keeps trying and
+ * serves later reads once it has data.
+ */
+const FIRST_SNAPSHOT_TIMEOUT_MS = 8_000;
+
+/**
+ * A listener nobody has read for this long is stopped, so a one off read of
+ * a big collection (a backup, database statistics) doesn't keep paying for
+ * every later change to it for the rest of the session.
+ */
+const IDLE_STOP_MS = 5 * 60_000;
 
 /** Same matching as a Firestore where() clause: a missing field never matches. */
 export function matchesFilter(item: Record<string, any>, filter: ListFilter): boolean {
   const value = item[filter.field];
   if (value === undefined) return false;
-  return filter.operator === '==' ? value === filter.value : value !== filter.value;
+  if (filter.operator === '==') return value === filter.value;
+  // Firestore's != also leaves out documents where the field is null.
+  return value !== null && value !== filter.value;
 }
 
 interface CacheEntry {
   docs: QueryDocumentSnapshot[] | null;
+  lastReadAt: number;
   ready: Promise<boolean>;
   stop: () => void;
 }
 
 export class LiveCollectionCache {
   private entries = new Map<string, CacheEntry>();
+  private sweeper: ReturnType<typeof setInterval> | null = null;
 
   constructor(private db: Firestore) {}
+
+  private startSweeper(): void {
+    if (this.sweeper) return;
+    this.sweeper = setInterval(() => {
+      const now = Date.now();
+      for (const [colName, entry] of this.entries) {
+        if (now - entry.lastReadAt > IDLE_STOP_MS) this.drop(colName, entry);
+      }
+      if (this.entries.size === 0 && this.sweeper) {
+        clearInterval(this.sweeper);
+        this.sweeper = null;
+      }
+    }, 60_000);
+  }
 
   isCacheable(colName: string): boolean {
     return !UNCACHED_COLLECTIONS.has(colName);
@@ -67,6 +96,10 @@ export class LiveCollectionCache {
   reset(): void {
     for (const entry of this.entries.values()) entry.stop();
     this.entries.clear();
+    if (this.sweeper) {
+      clearInterval(this.sweeper);
+      this.sweeper = null;
+    }
   }
 
   private drop(colName: string, entry: CacheEntry): void {
@@ -87,16 +120,13 @@ export class LiveCollectionCache {
     };
     const entry: CacheEntry = {
       docs: null,
+      lastReadAt: Date.now(),
       ready: new Promise<boolean>((resolve) => (settle = resolve)),
       stop: () => {},
     };
 
-    const timer = setTimeout(() => {
-      if (!entry.docs) {
-        finish(false);
-        this.drop(colName, entry);
-      }
-    }, FIRST_SNAPSHOT_TIMEOUT_MS);
+    // Slow or offline: let waiting reads go to Firestore directly, but keep listening.
+    const timer = setTimeout(() => finish(false), FIRST_SNAPSHOT_TIMEOUT_MS);
 
     const unsubscribe = onSnapshot(
       collection(this.db, colName),
@@ -121,6 +151,7 @@ export class LiveCollectionCache {
       finish(false);
     };
     this.entries.set(colName, entry);
+    this.startSweeper();
     return entry;
   }
 
@@ -136,8 +167,9 @@ export class LiveCollectionCache {
       if (filter) return null;
       entry = this.start(colName);
     }
-    const ok = await entry.ready;
-    if (!ok || !entry.docs || this.entries.get(colName) !== entry) return null;
+    entry.lastReadAt = Date.now();
+    await entry.ready;
+    if (!entry.docs || this.entries.get(colName) !== entry) return null;
     const items = entry.docs.map((d) => ({ id: d.id, ...d.data() }));
     return filter ? items.filter((item) => matchesFilter(item, filter)) : items;
   }
@@ -149,6 +181,7 @@ export class LiveCollectionCache {
   getDoc(colName: string, id: string): { item: any | null } | null {
     const entry = this.entries.get(colName);
     if (!entry?.docs) return null;
+    entry.lastReadAt = Date.now();
     const found = entry.docs.find((d) => d.id === id);
     return { item: found ? { id: found.id, ...found.data() } : null };
   }

@@ -24,11 +24,21 @@ export function useDialogA11y<T extends HTMLElement>(isOpen: boolean, onClose?: 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
+  // Remember what had focus before the dialog opened. This runs during render,
+  // before React applies autoFocus inside the dialog, so it records the
+  // element outside the dialog rather than the dialog's own button.
+  const wasOpenRef = useRef(false);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  if (isOpen && !wasOpenRef.current && typeof document !== 'undefined') {
+    returnFocusRef.current = document.activeElement as HTMLElement | null;
+  }
+  wasOpenRef.current = isOpen;
+
   useEffect(() => {
     if (!isOpen) return;
     const id = Symbol('dialog');
     openStack.push(id);
-    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previouslyFocused = returnFocusRef.current;
 
     const focusables = () =>
       Array.from(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) || []).filter(
