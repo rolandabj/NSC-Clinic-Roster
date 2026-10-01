@@ -31,16 +31,27 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
 
   const handleSaveSpecialty = withSaveErrors('save the specialty', async (sp: Partial<Specialty>) => {
     const codeClean = (sp.code || '').trim().toUpperCase();
-    if (!codeClean || codeClean.length < 2 || codeClean.length > 5) {
-      notify('Code must be 2 to 5 characters (e.g. CARD, PED).', 'warning');
+    const name = (sp.name || '').trim();
+    if (!name) {
+      notify('Please enter a specialty name.', 'warning');
       return;
     }
+    if (!/^[A-Z0-9]{2,5}$/.test(codeClean)) {
+      notify('The code must be 2 to 5 letters or numbers (e.g. CARD, PED).', 'warning');
+      return;
+    }
+    const duplicate = specialties.find((x) => x.code.toUpperCase() === codeClean && x.id !== sp.id);
+    if (duplicate) {
+      notify(`The code ${codeClean} is already used by "${duplicate.name}".`, 'warning');
+      return;
+    }
+    sp = { ...sp, name };
     if (sp.id) {
       await repo.update('specialties', sp.id, { name: sp.name, code: codeClean });
       triggerSaveNotification(`Specialty "${sp.name}" updated.`);
     } else {
       await repo.create('specialties', {
-        name: sp.name || 'New Specialty',
+        name,
         code: codeClean,
       });
       triggerSaveNotification(`Specialty "${sp.name}" created.`);
@@ -51,6 +62,25 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
   });
 
   const handleDeleteSpecialty = withSaveErrors('delete the specialty', async (id: string, name: string) => {
+    // Doctors, upcoming sessions and nurse preferences that still point at it would break.
+    const today = new Date().toISOString().split('T')[0];
+    const [doctors, sessions, nurses] = await Promise.all([
+      repo.list('doctors'),
+      repo.list('doctorSessions', { field: 'specialtyId', operator: '==', value: id }),
+      repo.list('nurses'),
+    ]);
+    const doctorsUsing = doctors.filter((d) => (d.specialtyIds || []).includes(id));
+    const upcoming = sessions.filter((x) => x.date >= today);
+    const nursesUsing = nurses.filter((n) => (n.preferences || []).some((p) => p.kind === 'SPECIALTY' && p.refId === id));
+    const uses = [
+      doctorsUsing.length ? `${doctorsUsing.length} doctor${doctorsUsing.length === 1 ? '' : 's'} (${doctorsUsing.slice(0, 3).map((d) => d.fullName).join(', ')}${doctorsUsing.length > 3 ? ', …' : ''})` : '',
+      upcoming.length ? `${upcoming.length} upcoming session${upcoming.length === 1 ? '' : 's'}` : '',
+      nursesUsing.length ? `the preferences of ${nursesUsing.length} nurse${nursesUsing.length === 1 ? '' : 's'}` : '',
+    ].filter(Boolean);
+    if (uses.length > 0) {
+      notify(`"${name}" is still used by ${uses.join(', ')}. Change those first, then delete it.`, 'warning');
+      return;
+    }
     if (
       await confirmDialog({
         title: 'Delete specialty',
@@ -72,7 +102,7 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
           <div>
             <h2 className="text-sm font-semibold text-slate-900">Clinic Specialties</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Clinical specialty departments (3–5 char codes) used for doctor categorization and nurse pairing preferences.
+              The doctors' specialties, each with a short code (2 to 5 letters). Used to group doctors and for nurses' pairing preferences.
             </p>
           </div>
           <button
@@ -161,10 +191,10 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
             </div>
             <div>
               <label className="block font-medium text-slate-700 mb-1">
-                Code (3–5 characters)
+                Code (2 to 5 characters)
               </label>
               <input
-                aria-label="Code (3–5 characters)"
+                aria-label="Code (2 to 5 characters)"
                 type="text"
                 maxLength={5}
                 value={editingSpecialty.code}

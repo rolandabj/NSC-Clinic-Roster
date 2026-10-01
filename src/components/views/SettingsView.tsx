@@ -505,7 +505,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         {/* 3. DUTY WINDOWS ("acceptable duty") */}
         {activeTab === 'duties' && (
-          <DutiesTab duties={duties} loadData={loadData} triggerSaveNotification={triggerSaveNotification} />
+          <DutiesTab
+            duties={duties}
+            openTime={clinic?.openTime}
+            closeTime={clinic?.closeTime}
+            loadData={loadData}
+            triggerSaveNotification={triggerSaveNotification}
+          />
         )}
 
         {/* 3. LEAVE TYPES */}

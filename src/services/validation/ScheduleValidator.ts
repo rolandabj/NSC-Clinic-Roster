@@ -209,7 +209,7 @@ export class ScheduleValidator {
         'above doctors',
         'plus one',
       ]);
-      const plusOneEnabled = plusOneRule ? plusOneRule.enabled : true;
+      const plusOneEnabled = plusOneRule ? plusOneRule.enabled !== false : true;
       const minAdditional = plusOneEnabled ? (plusOneRule?.value ?? 1) : 0;
       const isPlusOneHard = (plusOneRule?.severity || 'HARD') === 'HARD';
       const plusOneSeverity: FindingSeverity = isPlusOneHard ? 'ERROR' : 'WARN';
@@ -284,7 +284,7 @@ export class ScheduleValidator {
       const ncRole = roles.find(
         (r) => r.id === 'role-nurse-clinic' || r.acronym === 'NC' || r.name.toLowerCase().includes('nurse clinic')
       );
-      const ncEnabled = ncRule ? ncRule.enabled : true;
+      const ncEnabled = ncRule ? ncRule.enabled !== false : true;
       const isNcHard = (ncRule?.severity || 'HARD') === 'HARD';
       const ncSeverity: FindingSeverity = isNcHard ? 'ERROR' : 'WARN';
       const ncQuota = ncEnabled ? (ncRule?.value ?? 1) : 0;
@@ -472,7 +472,7 @@ export class ScheduleValidator {
     const maxLateAllowed = (s1Rule?.enabled !== false && s1Rule?.value) ? s1Rule.value : 3;
     // Same default as the canonical rule (HARD) and the engine
     const s1Severity: FindingSeverity = s1Rule?.severity === 'SOFT' ? 'WARN' : 'ERROR';
-    const s1Enabled = s1Rule ? s1Rule.enabled : true;
+    const s1Enabled = s1Rule ? s1Rule.enabled !== false : true;
     const s1LateThreshold: string = (s1Rule?.params as any)?.thresholdTime || '21:00';
 
     const h2Rule = resolveRule(
@@ -484,15 +484,16 @@ export class ScheduleValidator {
     );
     const maxConsecutiveDaysAllowed = (h2Rule?.enabled !== false && h2Rule?.value) ? h2Rule.value : 6;
     const h2Severity: FindingSeverity = h2Rule?.severity === 'SOFT' ? 'WARN' : 'ERROR';
-    const h2Enabled = h2Rule ? h2Rule.enabled : true;
+    const h2Enabled = h2Rule ? h2Rule.enabled !== false : true;
 
     const h3Rule = resolveRule(rules, 'MIN_REST_HOURS', 'rule-h3', [
       'rest between duties',
       'minimum rest',
     ]);
-    const minRestRequired = (h3Rule?.enabled !== false && h3Rule?.value) ? h3Rule.value : 11;
+    // 0 means no minimum rest, as in the generator.
+    const minRestRequired = h3Rule?.value ?? 11;
     const h3Severity: FindingSeverity = h3Rule?.severity === 'SOFT' ? 'WARN' : 'ERROR';
-    const h3Enabled = h3Rule ? h3Rule.enabled : true;
+    const h3Enabled = h3Rule ? h3Rule.enabled !== false : true;
 
     const h7Rule = resolveRule(rules, 'MAX_WORKING_HOURS_PER_PERIOD', 'rule-h7-max-hours', [
       'working hours',
@@ -502,7 +503,7 @@ export class ScheduleValidator {
       'hour limit',
     ]);
     const h7Severity: FindingSeverity = h7Rule?.severity === 'SOFT' ? 'WARN' : 'ERROR';
-    const h7Enabled = h7Rule ? h7Rule.enabled : true;
+    const h7Enabled = h7Rule ? h7Rule.enabled !== false : true;
     const h7TolerancePct = (h7Rule?.value ? h7Rule.value : 105) / 100;
 
     nurses.forEach((nurse) => {

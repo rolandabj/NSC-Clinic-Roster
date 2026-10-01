@@ -33,7 +33,21 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
   const [draggedSeniorityIndex, setDraggedSeniorityIndex] = useState<number | null>(null);
   const [dragOverSeniorityIndex, setDragOverSeniorityIndex] = useState<number | null>(null);
 
+  /** Asks before the last senior level stops being senior (no day could then meet the senior rule). */
+  const confirmNotLastSenior = async (level: SeniorityLevel | Partial<SeniorityLevel>, willBeSenior: boolean) => {
+    const othersSenior = seniority.some((l) => l.id !== level.id && l.isSenior);
+    const wasSenior = !!seniority.find((l) => l.id === level.id)?.isSenior;
+    if (willBeSenior || !wasSenior || othersSenior) return true;
+    return confirmDialog({
+      title: 'No senior level left',
+      message: `"${level.name}" is the only senior level. Without one, no day can meet the "senior nurse on duty each day" rule, and every roster will show that problem. Continue?`,
+      confirmLabel: 'Continue',
+      danger: true,
+    });
+  };
+
   const handleToggleSenior = withSaveErrors('change the senior setting', async (level: SeniorityLevel) => {
+    if (!(await confirmNotLastSenior(level, !level.isSenior))) return;
     await repo.update('seniorityLevels', level.id, {
       isSenior: !level.isSenior,
     });
@@ -47,6 +61,12 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
       notify('Seniority level name is required.', 'warning');
       return;
     }
+    const sameName = seniority.find((l) => l.name.trim().toLowerCase() === nameClean.toLowerCase() && l.id !== level.id);
+    if (sameName) {
+      notify(`There is already a level called "${sameName.name}".`, 'warning');
+      return;
+    }
+    if (level.id && !(await confirmNotLastSenior(level, !!level.isSenior))) return;
     if (level.id) {
       await repo.update('seniorityLevels', level.id, {
         name: nameClean,
@@ -55,7 +75,7 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
       });
       triggerSaveNotification(`Seniority level "${nameClean}" updated.`);
     } else {
-      const newRank = seniority.length + 1;
+      const newRank = seniority.reduce((max, l) => Math.max(max, l.rank || 0), 0) + 1;
       await repo.create('seniorityLevels', {
         name: nameClean,
         rank: newRank,
@@ -91,6 +111,13 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
       })
     ) {
       await repo.remove('seniorityLevels', id);
+      // Close the gap in the ranks (1, 2, 3 ...).
+      const renumbered = seniority
+        .filter((l) => l.id !== id)
+        .sort((a, b) => (a.rank || 0) - (b.rank || 0))
+        .map((l, i) => ({ ...l, rank: i + 1 }))
+        .filter((l, i) => l.rank !== seniority.find((o) => o.id === l.id)?.rank);
+      if (renumbered.length > 0) await repo.bulkUpsert('seniorityLevels', renumbered);
       triggerSaveNotification(`Seniority level "${name}" removed.`);
       loadData();
     }
@@ -102,8 +129,13 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
       setDragOverSeniorityIndex(null);
       return;
     }
+    await moveLevel(draggedSeniorityIndex, targetIndex);
+  };
+
+  const moveLevel = async (fromIndex: number, targetIndex: number) => {
+    if (targetIndex < 0 || targetIndex >= seniority.length || fromIndex === targetIndex) return;
     const updated = [...seniority];
-    const [movedItem] = updated.splice(draggedSeniorityIndex, 1);
+    const [movedItem] = updated.splice(fromIndex, 1);
     updated.splice(targetIndex, 0, movedItem);
 
     // Recalculate 1-based ranks
@@ -131,9 +163,9 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">Seniority Levels &amp; H1 Rule Configuration</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Seniority levels</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Ranks define staff seniority hierarchy. Drag rows to reorder precedence. Toggling &quot;Is Senior&quot; designates nurses who fulfill Hard Rule H1 (&quot;At least one senior nurse on every duty window&quot;).
+              The order sets how staff are sorted in reports. Nurses at a senior level count for the rule &quot;at least one senior nurse on duty each day&quot;.
             </p>
           </div>
           <button
@@ -141,7 +173,7 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
               setEditingSeniority({
                 id: '',
                 name: '',
-                rank: seniority.length + 1,
+                rank: seniority.reduce((max, l) => Math.max(max, l.rank || 0), 0) + 1,
                 isSenior: false,
                 color: SENIORITY_COLOR_PALETTE[0],
               });
@@ -158,10 +190,10 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-medium">
               <tr>
-                <th className="py-2.5 px-3 w-10 text-center" title="Drag to reorder"></th>
+                <th className="py-2.5 px-3 w-24 text-center"><span className="sr-only">Order</span></th>
                 <th className="py-2.5 px-3 w-16">Rank</th>
                 <th className="py-2.5 px-3">Seniority Level Name</th>
-                <th className="py-2.5 px-3">Is Senior (Fulfills H1)</th>
+                <th className="py-2.5 px-3">Senior?</th>
                 <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -198,7 +230,7 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
                       setDraggedSeniorityIndex(null);
                       setDragOverSeniorityIndex(null);
                     }}
-                    className={`transition-colors select-none ${
+                    className={`transition-colors ${
                       isDragging
                         ? 'opacity-40 bg-indigo-50/60'
                         : isOver
@@ -207,11 +239,32 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
                     }`}
                   >
                     <td className="py-2.5 px-2 text-center">
-                      <div
-                        className="cursor-grab active:cursor-grabbing p-1 text-slate-400 hover:text-slate-700 inline-flex items-center justify-center rounded hover:bg-slate-100 transition-colors"
-                        title="Drag to reorder hierarchy rank"
-                      >
-                        <GripVertical className="w-4 h-4" />
+                      <div className="inline-flex items-center gap-0.5">
+                        <div
+                          className="cursor-grab active:cursor-grabbing p-1 text-slate-400 hover:text-slate-700 inline-flex items-center justify-center rounded hover:bg-slate-100 transition-colors"
+                          title="Drag to reorder"
+                          aria-hidden="true"
+                        >
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={`Move ${level.name} up`}
+                          disabled={idx === 0}
+                          onClick={() => moveLevel(idx, idx - 1)}
+                          className="px-1 text-slate-500 hover:text-slate-800 disabled:opacity-30 cursor-pointer"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Move ${level.name} down`}
+                          disabled={idx === seniority.length - 1}
+                          onClick={() => moveLevel(idx, idx + 1)}
+                          className="px-1 text-slate-500 hover:text-slate-800 disabled:opacity-30 cursor-pointer"
+                        >
+                          ▼
+                        </button>
                       </div>
                     </td>
                     <td className="py-2.5 px-3 font-mono font-bold text-slate-700">
@@ -237,7 +290,7 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
                         }`}
                       >
                         <Shield className="w-3 h-3" />
-                        <span>{level.isSenior ? 'Senior Staff (Senior on Duty ✓)' : 'Standard Staff'}</span>
+                        <span>{level.isSenior ? 'Senior' : 'Not senior'}</span>
                       </button>
                     </td>
                     <td className="py-2.5 px-3 text-right">
@@ -354,11 +407,11 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
                   className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
                 />
                 <span className="font-semibold text-slate-800">
-                  Designate as Senior Staff (Fulfills Hard Rule H1)
+                  Senior level
                 </span>
               </label>
               <p className="text-[11px] text-slate-500 pl-6 leading-relaxed">
-                When enabled, nurses with this rank fulfill the Hard Rule H1 requirement: &quot;At least one senior nurse on every duty window&quot;.
+                Nurses at this level count for the rule &quot;at least one senior nurse on duty each day&quot;.
               </p>
             </div>
           </div>

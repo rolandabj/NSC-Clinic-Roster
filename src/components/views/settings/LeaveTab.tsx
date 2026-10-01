@@ -18,6 +18,10 @@ interface LeaveTabProps {
   triggerSaveNotification: SaveNotifier;
 }
 
+/** Codes the app looks up directly (quick buttons, reports, public holidays). */
+const BUILT_IN_LEAVE_CODES = ['AL', 'PH', 'BL', 'SL', 'RO', 'DO'];
+const isBuiltInCode = (code?: string) => !!code && BUILT_IN_LEAVE_CODES.includes(code.trim().toUpperCase());
+
 export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, triggerSaveNotification }) => {
   const repo = getRepository();
   const leaveModalTitleId = useId();
@@ -26,6 +30,15 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
 
   const handleSaveLeaveType = withSaveErrors('save the leave type', async (lt: Partial<LeaveType>) => {
+    const name = (lt.name || '').trim();
+    if (!name) {
+      notify('Please enter a name.', 'warning');
+      return;
+    }
+    const original = leaveTypes.find((l) => l.id === lt.id);
+    if (original && isBuiltInCode(original.acronym)) {
+      lt = { ...lt, acronym: original.acronym };
+    }
     const acronymClean = (lt.acronym || '').trim().toUpperCase();
     if (!acronymClean || acronymClean.length > 3) {
       notify('Leave acronym is required and must be 1 to 3 characters.', 'warning');
@@ -46,11 +59,12 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
     }
 
     if (lt.id) {
-      await repo.update('leaveTypes', lt.id, { ...lt, creditedHours: hours } as any);
+      const { id, ...fields } = lt;
+      await repo.update('leaveTypes', id!, { ...fields, name, acronym: acronymClean, creditedHours: hours } as any);
       triggerSaveNotification(`Leave type "${lt.name}" updated.`);
     } else {
       await repo.create('leaveTypes', {
-        name: lt.name || 'New Leave',
+        name,
         acronym: acronymClean,
         creditedHours: hours,
         countsTowardHoursTarget: lt.countsTowardHoursTarget ?? true,
@@ -65,6 +79,11 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
   });
 
   const handleDeleteLeaveType = withSaveErrors('delete the leave type', async (id: string, name: string) => {
+    const type = leaveTypes.find((l) => l.id === id);
+    if (type && isBuiltInCode(type.acronym)) {
+      notify(`"${name}" (${type.acronym}) is built in: the app finds it by its code for quick buttons, reports and holidays. It can't be deleted.`, 'warning');
+      return;
+    }
     // Check if in use in leaveEntries
     const existingEntries = await repo.list('leaveEntries', {
       field: 'leaveTypeId',
@@ -88,6 +107,13 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
       })
     ) {
       await repo.remove('leaveTypes', id);
+      // Drop its yearly allowance from the nurses' profiles.
+      const nurses = await repo.list('nurses');
+      const withQuota = nurses.filter((n) => n.leaveQuotas && id in n.leaveQuotas);
+      for (const n of withQuota) {
+        const { [id]: _removed, ...rest } = n.leaveQuotas!;
+        await repo.update('nurses', n.id, { leaveQuotas: rest } as any);
+      }
       triggerSaveNotification(`Leave type "${name}" deleted.`);
       loadData();
     }
@@ -98,9 +124,10 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">Leave Types &amp; Credited Hours</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Leave types</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Manage allowable leave types, credited hours (e.g. 8h or match duty), and whether they count toward the roster target hours.
+              The kinds of leave, how many hours a leave day counts, and whether it counts toward a nurse's hours target.
+              Built in codes (AL, PH, BL, SL, RO, DO) can't be changed or deleted.
             </p>
           </div>
           <button
@@ -145,6 +172,11 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
                     >
                       {lt.acronym}
                     </span>
+                    {isBuiltInCode(lt.acronym) && (
+                      <span className="ml-1.5 text-[10px] text-slate-400" title="The app finds this leave type by its code">
+                        built in
+                      </span>
+                    )}
                   </td>
                   <td className="py-2.5 px-3 font-medium text-slate-800">{lt.name}</td>
                   <td className="py-2.5 px-3 font-mono text-slate-600">
@@ -229,6 +261,8 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
                   aria-label="Acronym (max 3 chars)"
                   type="text"
                   maxLength={3}
+                  disabled={!!editingLeave.id && isBuiltInCode(leaveTypes.find((l) => l.id === editingLeave.id)?.acronym)}
+                  title="Built in codes can't be changed"
                   value={editingLeave.acronym}
                   onChange={(e) =>
                     setEditingLeave({ ...editingLeave, acronym: e.target.value.toUpperCase() })

@@ -9,21 +9,37 @@ import React, { useId, useState } from 'react';
 import { Plus, Trash2, Edit2, Star } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { DutyWindow } from '../../../types';
+import { resolveClinicSetup, toMinutes, uncoveredParts } from '../../../services/engine/clinicModel';
 import { notify, confirmDialog } from '../../common/dialogs';
 import { DUTY_COLOR_PALETTE, SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
 
 interface DutiesTabProps {
   duties: DutyWindow[];
+  openTime?: string;
+  closeTime?: string;
   loadData: () => void;
   triggerSaveNotification: SaveNotifier;
 }
 
-export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerSaveNotification }) => {
+const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/** Shift length in hours, minutes included (07:30 to 15:00 is 7.5). */
+function shiftHours(d: Pick<DutyWindow, 'startTime' | 'endTime'>): number {
+  if (!TIME.test(d.startTime || '') || !TIME.test(d.endTime || '')) return 0;
+  return (toMinutes(d.endTime) - toMinutes(d.startTime)) / 60;
+}
+
+export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTime, loadData, triggerSaveNotification }) => {
   const repo = getRepository();
   const dutyModalTitleId = useId();
 
   const [editingDuty, setEditingDuty] = useState<DutyWindow | null>(null);
   const [isDutyModalOpen, setIsDutyModalOpen] = useState(false);
+
+  // Opening hours that no active shift covers: nobody could be rostered then.
+  const setup = resolveClinicSetup({ openTime, closeTime });
+  const activeDuties = duties.filter((d) => d.active !== false && TIME.test(d.startTime || '') && TIME.test(d.endTime || ''));
+  const gaps = uncoveredParts(setup.openTime, setup.closeTime, activeDuties);
 
   const handleSaveDuty = withSaveErrors('save the shift', async (duty: Partial<DutyWindow>) => {
     // Acronym unique check
@@ -40,17 +56,31 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
       return;
     }
 
-    if (duty.startTime && duty.endTime && duty.startTime >= duty.endTime) {
-      notify('End time must be strictly after start time.', 'warning');
+    const name = (duty.name || '').trim();
+    if (!name) {
+      notify('Please enter a shift name.', 'warning');
+      return;
+    }
+    if (!TIME.test(duty.startTime || '') || !TIME.test(duty.endTime || '')) {
+      notify('Please enter both a start and an end time.', 'warning');
+      return;
+    }
+    if (duty.startTime! >= duty.endTime!) {
+      notify('The end time must be after the start time.', 'warning');
+      return;
+    }
+    if (duty.color && !/^#[0-9a-f]{6}$/i.test(duty.color)) {
+      notify('The colour must be a hex code like #3b82f6.', 'warning');
       return;
     }
 
     if (duty.id) {
-      await repo.update('dutyWindows', duty.id, duty as any);
+      const { id, ...fields } = duty;
+      await repo.update('dutyWindows', id, { ...fields, name, acronym: acronymClean } as any);
       triggerSaveNotification(`Duty "${duty.name}" updated.`);
     } else {
       await repo.create('dutyWindows', {
-        name: duty.name || 'New Duty',
+        name,
         acronym: acronymClean,
         startTime: duty.startTime || '09:00',
         endTime: duty.endTime || '21:00',
@@ -77,17 +107,51 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
     loadData();
   });
 
-  const handleDeleteDuty = withSaveErrors('delete the shift', async (id: string, name: string) => {
+  const handleDeleteDuty = withSaveErrors('delete the shift', async (duty: DutyWindow) => {
+    // A shift used in a roster, a pinned shift or a template is archived instead,
+    // so those rosters keep showing it.
+    const [assignments, locks, templates] = await Promise.all([
+      repo.list('assignments', { field: 'dutyWindowId', operator: '==', value: duty.id }),
+      repo.list('locks'),
+      repo.list('templates'),
+    ]);
+    const inLocks = locks.some((l: any) => l.dutyWindowId === duty.id);
+    const inTemplates = templates.some((t: any) => JSON.stringify(t).includes(`"${duty.id}"`));
+    if (assignments.length > 0 || inLocks || inTemplates) {
+      const where = [
+        assignments.length > 0 ? `${assignments.length} roster shift${assignments.length === 1 ? '' : 's'}` : '',
+        inLocks ? 'pinned shifts or requests' : '',
+        inTemplates ? 'a template' : '',
+      ]
+        .filter(Boolean)
+        .join(', ');
+      if (!duty.active) {
+        notify(`"${duty.name}" is used in ${where}, so it can't be deleted. It is already archived.`, 'info');
+        return;
+      }
+      if (
+        await confirmDialog({
+          title: 'Archive shift',
+          message: `"${duty.name}" is used in ${where}, so it can't be deleted. Archive it instead? Archived shifts stay on old rosters but are not used for new ones.`,
+          confirmLabel: 'Archive',
+        })
+      ) {
+        await repo.update('dutyWindows', duty.id, { active: false } as any);
+        triggerSaveNotification(`"${duty.name}" archived.`);
+        loadData();
+      }
+      return;
+    }
     if (
       await confirmDialog({
-        title: 'Delete duty',
-        message: `Are you sure you want to delete duty "${name}"?`,
+        title: 'Delete shift',
+        message: `Delete the shift "${duty.name}"? It isn't used in any roster.`,
         confirmLabel: 'Delete',
         danger: true,
       })
     ) {
-      await repo.remove('dutyWindows', id);
-      triggerSaveNotification(`Duty "${name}" removed.`);
+      await repo.remove('dutyWindows', duty.id);
+      triggerSaveNotification(`"${duty.name}" deleted.`);
       loadData();
     }
   });
@@ -97,9 +161,9 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
           <div>
-            <h2 className="text-sm font-semibold text-slate-900">Acceptable Duty Windows</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Shifts</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Pre-configured duty shifts with acronyms (≤5 chars) and designated colors. Multiple overlapping shifts can coexist (e.g. 09:00–21:00 and 11:00–21:00).
+              The shifts nurses can work, each with a short code (up to 5 letters) and a colour. Shifts may overlap, for example 09:00 to 21:00 and 11:00 to 21:00.
             </p>
           </div>
           <button
@@ -120,11 +184,18 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium cursor-pointer shadow-xs"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Add Duty Window</span>
+            <span>Add shift</span>
           </button>
         </div>
 
-        <div className="border border-slate-200 rounded overflow-hidden">
+        {gaps.length > 0 && (
+          <div className="p-3 rounded border border-amber-200 bg-amber-50 text-amber-900 text-xs">
+            No active shift covers {gaps.map((g) => `${g.start} to ${g.end}`).join(' and ')}, but the clinic is open then
+            ({setup.openTime} to {setup.closeTime}). Nobody can be rostered for those hours.
+          </div>
+        )}
+
+        <div className="border border-slate-200 rounded overflow-x-auto">
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-medium">
               <tr>
@@ -140,9 +211,7 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
             </thead>
             <tbody className="divide-y divide-slate-100">
               {duties.map((duty) => {
-                const startH = parseInt(duty.startTime.split(':')[0], 10);
-                const endH = parseInt(duty.endTime.split(':')[0], 10);
-                const durationHours = endH - startH;
+                const durationHours = shiftHours(duty);
                 return (
                   <tr key={duty.id} className="hover:bg-slate-50/80">
                     <td className="py-2.5 px-3">
@@ -181,7 +250,7 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
                       {duty.startTime} – {duty.endTime}
                     </td>
                     <td className="py-2.5 px-3 font-mono text-slate-500 tabular-nums">
-                      {durationHours} hours
+                      {durationHours > 0 ? `${durationHours} hours` : 'Times missing'}
                     </td>
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-1.5">
@@ -217,10 +286,10 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
                           <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>
                         <button
-                          aria-label="Delete duty"
-                          onClick={() => handleDeleteDuty(duty.id, duty.name)}
+                          aria-label={`Delete or archive ${duty.name}`}
+                          onClick={() => handleDeleteDuty(duty)}
                           className="p-1 hover:bg-red-50 rounded text-red-600 cursor-pointer"
-                          title="Delete duty"
+                          title="Delete, or archive if it is in use"
                         >
                           <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>
@@ -342,7 +411,7 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
                 />
               </label>
               <p className="text-[11px] text-slate-600 leading-relaxed">
-                When enabled, schedule generation will prioritize assigning staff to this duty first. If requirements, 11-hour rest periods, or quotas cannot be met with priority duties, the engine will automatically fall back to non-priority duties.
+                When on, the roster generator tries this shift first. If the rules (such as minimum rest) can't be met with it, other shifts are used.
               </p>
             </div>
 

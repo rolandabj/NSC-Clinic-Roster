@@ -15,6 +15,7 @@ import { Check, ChevronDown, Lock, Minus, Plus, RefreshCw, Trash2 } from 'lucide
 import { getRepository } from '../../../services/repository';
 import { RuleSyncService } from '../../../services/rules/ruleSyncService';
 import { Rule, RuleTemplateKey } from '../../../types';
+import { LATE_DUTY_RULE_WORDS, resolveRule } from '../../../services/engine/SchedulingEngine';
 import { confirmDialog, notify } from '../../common/dialogs';
 import { SaveNotifier } from './shared';
 
@@ -23,7 +24,6 @@ interface RulesTabProps {
   setRules: React.Dispatch<React.SetStateAction<Rule[]>>;
   loadData: () => void;
   triggerSaveNotification: SaveNotifier;
-  /** Writes rule values that mirror Hours Policy fields back into the hours policy. */
 }
 
 interface NumberField {
@@ -45,6 +45,11 @@ interface RuleDef {
   hasTime?: boolean;
   /** What "Try to" means for this rule, shown on hover. */
   softMeaning?: string;
+  /** The value the roster generator uses when none is set. */
+  fallback?: number;
+  /** Words in an older rule's name that the generator also matches (see resolveRule). */
+  keywords: string[];
+  excludeKeywords?: string[];
 }
 
 interface RuleGroup {
@@ -61,6 +66,8 @@ const GROUPS: RuleGroup[] = [
       {
         key: 'DEDICATED_NURSE_CLINIC',
         id: 'rule-nurse-clinic',
+        keywords: ['dedicated nurse clinic', 'nurse clinic coverage'],
+        fallback: 1,
         title: 'Nurse Clinic',
         sentence: 'Keep {value} nurse(s) at Nurse Clinic every day, not with a doctor.',
         help: 'Only nurses with the Nurse Clinic option in their profile are chosen. She also does blood collection.',
@@ -69,6 +76,8 @@ const GROUPS: RuleGroup[] = [
       {
         key: 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS',
         id: 'rule-nurse-plus-one',
+        keywords: ['additional nurse', 'above doctors', 'plus one'],
+        fallback: 1,
         title: 'Free nurse every hour',
         sentence: 'Keep at least {value} free nurse(s) at every opening hour.',
         help: 'A free nurse is not with a doctor at that hour. The Nurse Clinic nurse counts, and so does a doctor’s nurse after her doctor leaves. Not checked on public holidays.',
@@ -77,6 +86,7 @@ const GROUPS: RuleGroup[] = [
       {
         key: 'SENIOR_ON_DUTY',
         id: 'rule-h1',
+        keywords: ['senior nurse', 'senior on duty'],
         title: 'Senior nurse',
         sentence: 'At least one senior nurse is on duty every day.',
         help: 'Any shift counts; she does not need to cover all opening hours.',
@@ -90,6 +100,8 @@ const GROUPS: RuleGroup[] = [
       {
         key: 'MAX_WORKING_HOURS_PER_PERIOD',
         id: 'rule-h7-max-hours',
+        keywords: ['working hours', 'max hours', 'period hours', 'overwork', 'hour limit'],
+        fallback: 105,
         title: 'Hours limit',
         sentence: 'A nurse works at most {value} of her hours goal.',
         help: '100% means never over her goal. Above 100%, she may go over by at most one shift (8 hours), and only when a doctor or the free nurse would otherwise have nobody.',
@@ -105,6 +117,9 @@ const GROUPS: RuleGroup[] = [
       {
         key: 'MAX_CONSECUTIVE_DAYS',
         id: 'rule-h2',
+        keywords: ['consecutive duties', 'consecutive working days', 'consecutive days'],
+        excludeKeywords: LATE_DUTY_RULE_WORDS,
+        fallback: 6,
         title: 'Days in a row',
         sentence: 'A nurse works at most {value} days in a row.',
         help: 'The last days of the previous roster count too.',
@@ -114,6 +129,8 @@ const GROUPS: RuleGroup[] = [
       {
         key: 'MIN_REST_HOURS',
         id: 'rule-h3',
+        keywords: ['rest between duties', 'minimum rest'],
+        fallback: 11,
         title: 'Rest between shifts',
         sentence: 'At least {value} hours of rest between the end of one shift and the start of the next.',
         help: 'For example, a shift ending at 21:00 and the next one starting at 09:00 gives 12 hours of rest.',
@@ -123,6 +140,8 @@ const GROUPS: RuleGroup[] = [
       {
         key: 'MAX_CONSECUTIVE_LATE_DUTIES',
         id: 'rule-s1',
+        keywords: ['consecutive late', 'consecutive night', 'ending at 21:00', 'late duties'],
+        fallback: 3,
         title: 'Late shifts in a row',
         sentence: 'A nurse works at most {value} late shifts in a row. A shift is late when it ends at or after {time}.',
         help: 'With 2, a nurse who worked two late shifts gets an earlier shift or a day off next.',
@@ -144,11 +163,52 @@ const ALWAYS_ON: { key: RuleTemplateKey; title: string; sentence: string }[] = [
   },
 ];
 
+const slug = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
 const KNOWN_KEYS = new Set<string>([...GROUPS.flatMap((g) => g.rules.map((r) => r.key)), ...ALWAYS_ON.map((r) => r.key)]);
 
-function findRule(rules: Rule[], def: { key: string; id?: string }): Rule | undefined {
-  return rules.find((r) => r.templateKey === def.key) || (def.id ? rules.find((r) => r.id === def.id) : undefined);
+/** Finds a rule the same way the roster generator does, so both always mean the same rule. */
+function findRule(rules: Rule[], def: { key: string; id?: string; keywords?: string[]; excludeKeywords?: string[] }): Rule | undefined {
+  return resolveRule(rules, def.key, def.id, def.keywords, def.excludeKeywords);
 }
+
+/** The number the generator actually uses for this rule. */
+function effectiveValue(def: RuleDef, rule: Rule): number {
+  const v = Number(rule.value);
+  if (rule.value === undefined || rule.value === null || !Number.isFinite(v)) return def.fallback ?? def.value?.min ?? 0;
+  // Rest of 0 means no minimum rest; for the other rules a 0 means "use the default".
+  if (v === 0 && def.key !== 'MIN_REST_HOURS') return def.fallback ?? def.value?.min ?? 0;
+  return v;
+}
+
+/** A time box that saves when you leave it (not on every key press). */
+const TimeBox: React.FC<{ value: string; disabled: boolean; label: string; onCommit: (v: string) => void; className: string }> = ({
+  value,
+  disabled,
+  label,
+  onCommit,
+  className,
+}) => {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <input
+      type="time"
+      aria-label={label}
+      disabled={disabled}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (/^([01]\d|2[0-3]):[0-5]\d$/.test(draft) && draft !== value) onCommit(draft);
+        else setDraft(value);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+      className={className}
+    />
+  );
+};
 
 /** On/off switch. */
 const Toggle: React.FC<{ on: boolean; label: string; onChange: () => void }> = ({ on, label, onChange }) => (
@@ -273,9 +333,6 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
       loadData();
       return;
     }
-    // Keep the Hours Policy tab in step with these two rules
-    if (updates.value !== undefined) {
-    }
   };
 
   const addMissingRules = async () => {
@@ -306,7 +363,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
         return (
           <Stepper
             key={i}
-            value={Number(rule.value) || def.value.min}
+            value={effectiveValue(def, rule)}
             field={def.value}
             disabled={!enabled}
             label={def.title}
@@ -317,17 +374,12 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
       if (part === '{time}') {
         const time = (rule.params as any)?.thresholdTime || '21:00';
         return (
-          <input
+          <TimeBox
             key={i}
-            type="time"
-            aria-label={`${def.title}: late from`}
+            label={`${def.title}: late from`}
             disabled={!enabled}
             value={time}
-            onChange={(e) => {
-              if (e.target.value && e.target.value !== time) {
-                saveRule(rule, { params: { ...(rule.params || {}), thresholdTime: e.target.value } }, `${def.title}: late from ${e.target.value}.`);
-              }
-            }}
+            onCommit={(v) => saveRule(rule, { params: { ...(rule.params || {}), thresholdTime: v } }, `${def.title}: late from ${v}.`)}
             className={`mx-0.5 rounded-md border border-slate-300 bg-white px-1.5 py-0.5 align-middle font-semibold tabular-nums text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
               enabled ? '' : 'opacity-50'
             }`}
@@ -367,9 +419,9 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
 
       {/* Rule groups */}
       {GROUPS.map((group) => (
-        <section key={group.title} aria-labelledby={`rules-${group.title}`} className="space-y-2">
+        <section key={group.title} aria-labelledby={`rules-${slug(group.title)}`} className="space-y-2">
           <div>
-            <h3 id={`rules-${group.title}`} className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <h3 id={`rules-${slug(group.title)}`} className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               {group.title}
             </h3>
             <p className="text-xs text-slate-400">{group.description}</p>
