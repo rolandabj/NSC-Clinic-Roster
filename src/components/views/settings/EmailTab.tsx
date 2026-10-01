@@ -40,7 +40,12 @@ export const EmailTab: React.FC<EmailTabProps> = ({
 
   const handleSendTestEmail = async () => {
     setTestEmailResult('Dispatching test email...');
-    const sender = emailConfig.senderEmail || 'rolandabj@gmail.com';
+    // The test goes to whoever is signed in (the server only sends to staff or to the sender)
+    const sender = context.currentUser?.email || '';
+    if (!sender) {
+      setTestEmailResult('Sign in again to send a test email.');
+      return;
+    }
     const isMock = emailConfig.mockMode || emailConfig.provider === 'MOCK';
     const subject = `[Test] Clinic Roster Google Email Dispatch (${isMock ? 'MOCK' : 'GOOGLE'})`;
 
@@ -140,80 +145,23 @@ export const EmailTab: React.FC<EmailTabProps> = ({
         </div>
       </div>
 
-      {/* Google Sender Account Card */}
-      <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg space-y-3 shadow-2xs">
-        <div className="flex items-center justify-between">
-          <label className="block font-semibold text-slate-800 dark:text-slate-200">
-            Google Sender Email
-          </label>
-          <span className="text-[11px] text-slate-400">Exclusively Google (@gmail.com / Workspace)</span>
-        </div>
-
-        {/* Quick Select Presets */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-medium text-slate-500">Quick presets:</span>
-          <button
-            type="button"
-            onClick={() => {
-              updateEmailConfigField({ senderEmail: 'rolandabj@gmail.com' }, true);
-            }}
-            className={`px-2.5 py-1 rounded text-xs font-mono transition-colors cursor-pointer border ${
-              emailConfig.senderEmail === 'rolandabj@gmail.com'
-                ? 'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300 font-semibold'
-                : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'
-            }`}
-          >
-            rolandabj@gmail.com (Director)
-          </button>
-          {context.currentUser?.email && context.currentUser.email !== 'rolandabj@gmail.com' && (
-            <button
-              type="button"
-              onClick={() => {
-                updateEmailConfigField({ senderEmail: context.currentUser?.email || '' }, true);
-              }}
-              className={`px-2.5 py-1 rounded text-xs font-mono transition-colors cursor-pointer border ${
-                emailConfig.senderEmail === context.currentUser.email
-                  ? 'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300 font-semibold'
-                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300'
-              }`}
-            >
-              {context.currentUser.email} (My Account)
-            </button>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-          <div>
-            <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-              Sender Email Address
-            </label>
-            <input
-              aria-label="Sender Email Address"
-              type="email"
-              placeholder="rolandabj@gmail.com"
-              value={emailConfig.senderEmail}
-              onChange={(e) => updateEmailConfigField({ senderEmail: e.target.value })}
-              onBlur={flushEmailSave}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md font-mono bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 focus:outline-none"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-[11px] font-medium text-slate-600 dark:text-slate-400 mb-1">
-              Sender Display Name
-            </label>
-            <input
-              aria-label="Sender Display Name"
-              type="text"
-              placeholder="Dr. Roland / Clinical Director"
-              value={emailConfig.senderName}
-              onChange={(e) => updateEmailConfigField({ senderName: e.target.value })}
-              onBlur={flushEmailSave}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-md bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 focus:outline-none"
-            />
-          </div>
-        </div>
+      {/* Sender */}
+      <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 shadow-2xs">
+        <label htmlFor="email-sender-name" className="block font-semibold text-slate-800">
+          Sender name
+        </label>
+        <input
+          id="email-sender-name"
+          type="text"
+          placeholder="Clinic Roster"
+          value={emailConfig.senderName}
+          onChange={(e) => updateEmailConfigField({ senderName: e.target.value })}
+          onBlur={flushEmailSave}
+          className="w-full max-w-md px-3 py-2 border border-slate-300 rounded-md bg-white text-slate-900 focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 focus:outline-none"
+        />
+        <p className="text-[11px] text-slate-500">
+          The name staff see on roster emails. Emails are sent from the clinic's email account set up on the server.
+        </p>
       </div>
 
       {/* Dispatch Mode & Google Sandbox Card */}
@@ -259,20 +207,9 @@ export const EmailTab: React.FC<EmailTabProps> = ({
           </div>
         ) : (
           <div className="p-3 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-md text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed">
-            <strong>Live Google Dispatch Active:</strong> Published rosters and shift updates will be dispatched to staff recipient Google addresses from <strong>{emailConfig.senderEmail || 'rolandabj@gmail.com'}</strong>.
+            <strong>Live:</strong> publishing a roster emails each nurse on it, from the clinic's email account. This setting is shared by everyone who publishes.
           </div>
         )}
-      </div>
-
-      {/* Recipient Google Coverage Notice */}
-      <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg flex items-center justify-between text-[11px]">
-        <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span>
-            Connected Personnel: <strong>{directorySummary.staff || 0} clinical staff</strong> registered with Google emails in the Enterprise Directory.
-          </span>
-        </div>
-        <span className="font-mono text-slate-400 text-[10px]">Google Only</span>
       </div>
 
       {/* Action Bar */}
@@ -292,7 +229,7 @@ export const EmailTab: React.FC<EmailTabProps> = ({
           className="inline-flex items-center gap-1.5 px-3.5 py-2 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-md font-medium transition-colors cursor-pointer"
         >
           <Send className="w-3.5 h-3.5 text-slate-500" />
-          <span>Send Test Email to {emailConfig.senderEmail || 'Sender'}</span>
+          <span>Send a test email to me{context.currentUser?.email ? ` (${context.currentUser.email})` : ''}</span>
         </button>
 
         {emailSaveStatus === 'saved' && (

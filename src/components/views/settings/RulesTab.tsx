@@ -15,8 +15,7 @@ import { Check, ChevronDown, Lock, Minus, Plus, RefreshCw, Trash2 } from 'lucide
 import { getRepository } from '../../../services/repository';
 import { RuleSyncService } from '../../../services/rules/ruleSyncService';
 import { Rule, RuleTemplateKey } from '../../../types';
-import { HoursPolicyConfig } from '../../../types/settings';
-import { confirmDialog } from '../../common/dialogs';
+import { confirmDialog, notify } from '../../common/dialogs';
 import { SaveNotifier } from './shared';
 
 interface RulesTabProps {
@@ -25,7 +24,6 @@ interface RulesTabProps {
   loadData: () => void;
   triggerSaveNotification: SaveNotifier;
   /** Writes rule values that mirror Hours Policy fields back into the hours policy. */
-  syncHoursPolicyFromRule: (updates: Partial<HoursPolicyConfig>) => void;
 }
 
 interface NumberField {
@@ -260,7 +258,7 @@ const Stepper: React.FC<{ value: number; field: NumberField; disabled: boolean; 
   );
 };
 
-export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, triggerSaveNotification, syncHoursPolicyFromRule }) => {
+export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, triggerSaveNotification }) => {
   const repo = getRepository();
   const [isSyncing, setIsSyncing] = useState(false);
   const [showOther, setShowOther] = useState(false);
@@ -271,14 +269,12 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
       await repo.update('rules', rule.id, updates);
       triggerSaveNotification(message);
     } catch (err: any) {
-      triggerSaveNotification(`Not saved: ${err?.message || err}`);
+      notify(`Not saved: ${err?.message || err}`, 'error');
       loadData();
       return;
     }
     // Keep the Hours Policy tab in step with these two rules
     if (updates.value !== undefined) {
-      if (rule.templateKey === 'MAX_CONSECUTIVE_DAYS') syncHoursPolicyFromRule({ maxConsecutiveDays: updates.value });
-      if (rule.templateKey === 'MIN_REST_HOURS') syncHoursPolicyFromRule({ minRestBetweenDuties: updates.value });
     }
   };
 
@@ -291,7 +287,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
       loadData();
     } catch (err) {
       console.error('Failed to add standard rules:', err);
-      triggerSaveNotification('The standard rules could not be added.');
+      notify('The standard rules could not be added.', 'error');
     } finally {
       setIsSyncing(false);
     }
@@ -477,9 +473,13 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
                           danger: true,
                         })
                       ) {
-                        await repo.remove('rules', rule.id);
-                        triggerSaveNotification('Rule deleted.');
-                        loadData();
+                        try {
+                          await repo.remove('rules', rule.id);
+                          triggerSaveNotification('Rule deleted.');
+                          loadData();
+                        } catch (err: any) {
+                          notify(`Could not delete the rule: ${err?.message || 'unknown error'}.`, 'error');
+                        }
                       }
                     }}
                     className="rounded p-1 text-slate-400 hover:text-rose-600"

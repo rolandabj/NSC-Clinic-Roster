@@ -10,7 +10,7 @@ import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { LeaveType } from '../../../types';
 import { notify, confirmDialog } from '../../common/dialogs';
-import { LEAVE_COLOR_PALETTE, SaveNotifier, SettingsDialog } from './shared';
+import { LEAVE_COLOR_PALETTE, SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
 
 interface LeaveTabProps {
   leaveTypes: LeaveType[];
@@ -25,7 +25,7 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
   const [editingLeave, setEditingLeave] = useState<LeaveType | null>(null);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
 
-  const handleSaveLeaveType = async (lt: Partial<LeaveType>) => {
+  const handleSaveLeaveType = withSaveErrors('save the leave type', async (lt: Partial<LeaveType>) => {
     const acronymClean = (lt.acronym || '').trim().toUpperCase();
     if (!acronymClean || acronymClean.length > 3) {
       notify('Leave acronym is required and must be 1 to 3 characters.', 'warning');
@@ -56,9 +56,9 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
     setIsLeaveModalOpen(false);
     setEditingLeave(null);
     loadData();
-  };
+  });
 
-  const handleDeleteLeaveType = async (id: string, name: string) => {
+  const handleDeleteLeaveType = withSaveErrors('delete the leave type', async (id: string, name: string) => {
     // Check if in use in leaveEntries
     const existingEntries = await repo.list('leaveEntries', {
       field: 'leaveTypeId',
@@ -85,7 +85,7 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
       triggerSaveNotification(`Leave type "${name}" deleted.`);
       loadData();
     }
-  };
+  });
 
   return (
     <>

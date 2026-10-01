@@ -10,7 +10,7 @@ import { Shield, Plus, Trash2, Edit2, GripVertical } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { SeniorityLevel } from '../../../types';
 import { notify, confirmDialog } from '../../common/dialogs';
-import { SENIORITY_COLOR_PALETTE, SaveNotifier, SettingsDialog } from './shared';
+import { SENIORITY_COLOR_PALETTE, SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
 
 interface SeniorityTabProps {
   seniority: SeniorityLevel[];
@@ -33,15 +33,15 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
   const [draggedSeniorityIndex, setDraggedSeniorityIndex] = useState<number | null>(null);
   const [dragOverSeniorityIndex, setDragOverSeniorityIndex] = useState<number | null>(null);
 
-  const handleToggleSenior = async (level: SeniorityLevel) => {
+  const handleToggleSenior = withSaveErrors('change the senior setting', async (level: SeniorityLevel) => {
     await repo.update('seniorityLevels', level.id, {
       isSenior: !level.isSenior,
     });
     triggerSaveNotification(`Updated senior status for ${level.name}.`);
     loadData();
-  };
+  });
 
-  const handleSaveSeniority = async (level: Partial<SeniorityLevel>) => {
+  const handleSaveSeniority = withSaveErrors('save the seniority level', async (level: Partial<SeniorityLevel>) => {
     const nameClean = (level.name || '').trim();
     if (!nameClean) {
       notify('Seniority level name is required.', 'warning');
@@ -67,9 +67,9 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
     setIsSeniorityModalOpen(false);
     setEditingSeniority(null);
     loadData();
-  };
+  });
 
-  const handleDeleteSeniority = async (id: string, name: string) => {
+  const handleDeleteSeniority = withSaveErrors('delete the seniority level', async (id: string, name: string) => {
     const nursesUsing = await repo.list('nurses', {
       field: 'seniorityLevelId',
       operator: '==',
@@ -94,7 +94,7 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
       triggerSaveNotification(`Seniority level "${name}" removed.`);
       loadData();
     }
-  };
+  });
 
   const handleDropSeniority = async (targetIndex: number) => {
     if (draggedSeniorityIndex === null || draggedSeniorityIndex === targetIndex) {

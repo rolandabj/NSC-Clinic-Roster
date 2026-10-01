@@ -39,10 +39,15 @@ service cloud.firestore {
       return isOwner() || (hasAccessRecord() && access().status == 'APPROVED');
     }
 
-    // Editors and managers can change clinic data.
+    // Editors can change clinic data.
     function isEditor() {
-      return isOwner()
-        || (isApproved() && (access().appRole == 'EDITOR' || access().isManager == true));
+      return isOwner() || (isApproved() && access().appRole == 'EDITOR');
+    }
+
+    // Managers approve leave and availability requests (and editors can too).
+    // A manager is not an editor: she can't change rosters, staff or settings.
+    function canApprove() {
+      return isEditor() || (isApproved() && access().isManager == true);
     }
 
     // ---------------------------------------------------------------------
@@ -120,19 +125,26 @@ service cloud.firestore {
 
     match /leaveEntries/{leaveId} {
       allow read: if isApproved();
-      allow create: if isEditor() || (
+      allow create: if canApprove() || (
         isOwnPendingRequest(request.resource.data)
         && request.resource.data.approved == false
       );
-      allow update: if isEditor();
-      allow delete: if isEditor() || isOwnPendingRequest(resource.data);
+      allow update: if canApprove();
+      allow delete: if canApprove() || isOwnPendingRequest(resource.data);
     }
 
     match /availabilityRequests/{requestId} {
       allow read: if isApproved();
-      allow create: if isEditor() || isOwnPendingRequest(request.resource.data);
-      allow update: if isEditor();
-      allow delete: if isEditor() || isOwnPendingRequest(resource.data);
+      allow create: if canApprove() || isOwnPendingRequest(request.resource.data);
+      allow update: if canApprove();
+      allow delete: if canApprove() || isOwnPendingRequest(resource.data);
+    }
+
+    // Day off and pinned shift locks: approving an availability request adds or
+    // removes them, so managers may write them as well as editors.
+    match /locks/{lockId} {
+      allow read: if isApproved();
+      allow write: if canApprove();
     }
 
     // ---------------------------------------------------------------------
@@ -144,13 +156,14 @@ service cloud.firestore {
     }
 
     match /audit/{docId} {
-      allow read, create: if isEditor();
+      allow read: if isEditor();
+      allow create: if canApprove();
       allow update, delete: if isOwner();
     }
 
     // Collections with their own rules above; the catch all below never applies to them.
     function SPECIAL_COLLECTIONS() {
-      return ['userAccess', 'acknowledgments', 'emailLog', 'audit', 'publicRosters', 'leaveEntries', 'availabilityRequests'];
+      return ['userAccess', 'acknowledgments', 'emailLog', 'audit', 'publicRosters', 'leaveEntries', 'availabilityRequests', 'locks'];
     }
 
     // ---------------------------------------------------------------------

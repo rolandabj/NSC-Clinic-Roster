@@ -62,6 +62,7 @@ import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog } from '../common/dialogs';
 import { EmailHtmlPreview } from '../common/EmailHtmlPreview';
+import { loadEmailSettings } from '../../services/settings/emailSettingsStore';
 
 interface PublishViewProps {
   context: ClinicContextState;
@@ -205,15 +206,8 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
     return acks[0];
   };
 
-  // Email settings configured in Settings → Email (SMTP credentials live on the server)
-  const getEmailConfig = (): EmailSettingsConfig => {
-    try {
-      const raw = localStorage.getItem('clinic_roster_email_config');
-      return raw ? { ...DEFAULT_EMAIL_SETTINGS, ...JSON.parse(raw) } : DEFAULT_EMAIL_SETTINGS;
-    } catch {
-      return DEFAULT_EMAIL_SETTINGS;
-    }
-  };
+  // The clinic's shared email settings from Settings → Email (SMTP credentials live on the server)
+  const getEmailConfig = (): Promise<EmailSettingsConfig> => loadEmailSettings(repo);
 
   const [isSendingReminders, setIsSendingReminders] = useState(false);
 
@@ -240,7 +234,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
     });
 
     const { recipientLog } = await RosterPublishService.dispatchEmail(
-      getEmailConfig(),
+      await getEmailConfig(),
       nurse.gmail,
       nurse,
       email.subject,

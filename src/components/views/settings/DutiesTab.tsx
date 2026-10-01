@@ -10,7 +10,7 @@ import { Plus, Trash2, Edit2, Star } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { DutyWindow } from '../../../types';
 import { notify, confirmDialog } from '../../common/dialogs';
-import { DUTY_COLOR_PALETTE, SaveNotifier, SettingsDialog } from './shared';
+import { DUTY_COLOR_PALETTE, SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
 
 interface DutiesTabProps {
   duties: DutyWindow[];
@@ -25,7 +25,7 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
   const [editingDuty, setEditingDuty] = useState<DutyWindow | null>(null);
   const [isDutyModalOpen, setIsDutyModalOpen] = useState(false);
 
-  const handleSaveDuty = async (duty: Partial<DutyWindow>) => {
+  const handleSaveDuty = withSaveErrors('save the shift', async (duty: Partial<DutyWindow>) => {
     // Acronym unique check
     const acronymClean = (duty.acronym || '').trim().toUpperCase();
     if (!acronymClean || acronymClean.length > 5) {
@@ -64,9 +64,9 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
     setIsDutyModalOpen(false);
     setEditingDuty(null);
     loadData();
-  };
+  });
 
-  const handleToggleDutyPriority = async (duty: DutyWindow) => {
+  const handleToggleDutyPriority = withSaveErrors('change the shift priority', async (duty: DutyWindow) => {
     const nextPriority = !duty.isPriority;
     await repo.update('dutyWindows', duty.id, { isPriority: nextPriority } as any);
     triggerSaveNotification(
@@ -75,9 +75,9 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
         : `Duty "${duty.name}" set to Standard priority.`
     );
     loadData();
-  };
+  });
 
-  const handleDeleteDuty = async (id: string, name: string) => {
+  const handleDeleteDuty = withSaveErrors('delete the shift', async (id: string, name: string) => {
     if (
       await confirmDialog({
         title: 'Delete duty',
@@ -90,7 +90,7 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, loadData, triggerS
       triggerSaveNotification(`Duty "${name}" removed.`);
       loadData();
     }
-  };
+  });
 
   return (
     <>

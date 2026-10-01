@@ -5,12 +5,13 @@
  * Settings > Database & Storage tab.
  */
 
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useMemo, useState } from 'react';
 import { Trash2, AlertTriangle, Download, Upload, RefreshCw, X } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import {
+  checkBackup,
   clearDatabase,
-  exportFullDatabaseBackup,
+  downloadFullDatabaseBackup,
   importFullDatabaseBackup,
   getDatabaseStatistics,
   DatabaseStats,
@@ -58,70 +59,77 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
 
   const handleClearDatabase = async () => {
     if (clearConfirmInput.trim() !== 'CLEAR') {
-      notify('Please type CLEAR in uppercase letters to confirm.', 'warning');
+      notify('Please type CLEAR to confirm.', 'warning');
       return;
     }
     setIsBusyAction(true);
     try {
-      await clearDatabase(repo);
+      // A copy of everything is saved first; if that fails nothing is deleted.
       try {
-        localStorage.removeItem('clinic_roster_clinic_name');
-        localStorage.removeItem('clinic_roster_clinic_timezone');
-        localStorage.removeItem('clinic_roster_active_schedule_id');
-      } catch {
-        // ignore
+        await downloadFullDatabaseBackup(repo, 'before_wipe');
+      } catch (err: any) {
+        notify(`Nothing was deleted, because the safety backup could not be made. ${err.message || ''}`, 'error');
+        return;
       }
+      const { failed } = await clearDatabase(repo);
       await loadData();
       await loadStats();
       setIsClearConfirmOpen(false);
       setClearConfirmInput('');
       window.dispatchEvent(new CustomEvent('clinic-roster-cleared'));
-      triggerSaveNotification('All database records have been permanently purged from both client and server storage.');
+      if (failed.length > 0) {
+        notify(`Some data could not be deleted: ${failed.join(', ')}. A backup was downloaded before the wipe.`, 'error');
+      } else {
+        triggerSaveNotification('All clinic data was deleted. A backup was downloaded first. User access was kept.');
+      }
     } catch (err: any) {
-      notify(`Clear failed: ${err.message}`, 'error');
+      notify(`The wipe failed: ${err.message}`, 'error');
     } finally {
       setIsBusyAction(false);
     }
   };
 
   const handleExportBackup = async () => {
+    setIsBusyAction(true);
     try {
-      const json = await exportFullDatabaseBackup(repo);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `clinic_roster_full_backup_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      triggerSaveNotification('Full JSON backup downloaded.');
+      await downloadFullDatabaseBackup(repo);
+      triggerSaveNotification('Backup downloaded.');
     } catch (err: any) {
-      notify(`Backup failed: ${err.message}`, 'error');
+      notify(`The backup failed: ${err.message}`, 'error');
+    } finally {
+      setIsBusyAction(false);
     }
   };
 
+  const backupCheck = useMemo(() => (importJsonText.trim() ? checkBackup(importJsonText) : null), [importJsonText]);
+
   const handleImportBackup = async () => {
-    if (!importJsonText.trim()) {
-      setBackupStatusMessage({ text: 'Please paste JSON backup content or choose a file.', error: true });
-      return;
-    }
+    if (!backupCheck?.ok) return;
     setIsBusyAction(true);
     setBackupStatusMessage(null);
     try {
+      // A copy of the current data is saved first; if that fails nothing is changed.
+      try {
+        await downloadFullDatabaseBackup(repo, 'before_restore');
+      } catch (err: any) {
+        setBackupStatusMessage({
+          text: `Nothing was changed, because a backup of the current data could not be made. ${err.message || ''}`,
+          error: true,
+        });
+        return;
+      }
       const result = await importFullDatabaseBackup(repo, importJsonText);
+      await loadData();
+      await loadStats();
       if (result.success) {
-        await loadData();
-        await loadStats();
         setIsImportModalOpen(false);
         setImportJsonText('');
-        triggerSaveNotification('Database successfully restored from JSON backup.');
+        triggerSaveNotification('The backup was restored. A copy of the old data was downloaded first.');
       } else {
         setBackupStatusMessage({ text: result.message, error: true });
       }
     } catch (err: any) {
-      setBackupStatusMessage({ text: err.message || 'Import failed', error: true });
+      setBackupStatusMessage({ text: err.message || 'The restore failed.', error: true });
     } finally {
       setIsBusyAction(false);
     }
@@ -146,10 +154,10 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                Live Repository Database Records
+                Records in the database
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Real-time entity counts across active persistence storage (LocalStorage / Firestore Cloud).
+                How many records the clinic has saved.
               </p>
             </div>
             <button
@@ -159,7 +167,7 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
               className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded cursor-pointer"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoadingStats ? 'animate-spin' : ''}`} />
-              <span>Refresh Statistics</span>
+              <span>Refresh</span>
             </button>
           </div>
 
@@ -219,10 +227,10 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
         <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-800 space-y-3">
           <div>
             <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-              Full Database Backup &amp; Migration
+              Backup and restore
             </h3>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Export complete database snapshots including all clinic entities, schedules, assignments, audit trails, and version history.
+              Download a copy of all clinic data (staff, rosters, settings, history), or put a copy back. A backup of the current data always downloads before a restore.
             </p>
           </div>
 
@@ -230,10 +238,11 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
             <button
               type="button"
               onClick={handleExportBackup}
+              disabled={isBusyAction}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded font-medium transition-colors shadow-xs cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Export Full Database (JSON)</span>
+              <span>Download backup</span>
             </button>
 
             <button
@@ -246,7 +255,7 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded font-medium transition-colors shadow-2xs cursor-pointer"
             >
               <Upload className="w-3.5 h-3.5 text-slate-500" />
-              <span>Import Database Backup (JSON)</span>
+              <span>Restore from a backup...</span>
             </button>
           </div>
         </div>
@@ -258,7 +267,7 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
             <h4 className="text-sm font-bold text-red-900 dark:text-red-300">Danger Zone</h4>
           </div>
           <p className="text-[11px] text-red-700 dark:text-red-400 leading-relaxed">
-            Permanently remove all clinic records, schedules, assignments, and audit trails. Useful if configuring a brand new hospital from scratch.
+            Delete all clinic data (staff, rosters, settings and history) to start again from scratch. User access is kept, and a backup downloads first.
           </p>
           <div className="pt-1">
             <button
@@ -270,7 +279,7 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-medium transition-colors shadow-xs cursor-pointer text-xs"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Clear All Database Records...</span>
+              <span>Delete all clinic data...</span>
             </button>
           </div>
         </div>
@@ -293,34 +302,25 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
             </div>
             <div>
               <h3 id={clearModalTitleId} className="text-sm font-bold text-red-900 dark:text-red-300">
-                Irreversible Database Clear
+                Delete all clinic data?
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                This will permanently delete all records across all 24 collections. Type <strong className="font-mono text-red-700 dark:text-red-400">CLEAR</strong> below to confirm.
+                Staff, doctors, rosters, settings and history will be deleted for everyone. A backup downloads first, and user access is kept. Type <strong className="font-mono text-red-700 dark:text-red-400">CLEAR</strong> below to confirm.
               </p>
             </div>
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block font-medium text-slate-700 dark:text-slate-300">
-                Confirmation Keyword
-              </label>
-              <button
-                type="button"
-                onClick={() => setClearConfirmInput('CLEAR')}
-                className="text-[11px] text-red-600 hover:text-red-700 font-semibold cursor-pointer underline"
-              >
-                Quick-fill CLEAR
-              </button>
-            </div>
+            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
+              Type CLEAR
+            </label>
             <input
-              aria-label="Confirmation Keyword"
+              aria-label="Type CLEAR to confirm"
               type="text"
               value={clearConfirmInput}
               onChange={(e) => setClearConfirmInput(e.target.value.toUpperCase())}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && clearConfirmInput.trim().toUpperCase() === 'CLEAR') {
+                if (e.key === 'Enter' && !isBusyAction && clearConfirmInput.trim() === 'CLEAR') {
                   e.preventDefault();
                   handleClearDatabase();
                 }
@@ -346,11 +346,11 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
             <button
               type="button"
               onClick={handleClearDatabase}
-              disabled={isBusyAction || clearConfirmInput.trim().toUpperCase() !== 'CLEAR'}
+              disabled={isBusyAction || clearConfirmInput.trim() !== 'CLEAR'}
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40 transition-colors"
             >
               {isBusyAction ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-              <span>Wipe All Data</span>
+              <span>Download backup and delete</span>
             </button>
           </div>
         </SettingsDialog>
@@ -368,11 +368,15 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
         >
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
             <h3 id={importModalTitleId} className="text-sm font-bold text-slate-900 dark:text-white">
-              Import Database Backup (JSON)
+              Restore from a backup
             </h3>
             <button
+              type="button"
               aria-label="Close"
-              onClick={() => setIsImportModalOpen(false)}
+              onClick={() => {
+                if (!isBusyAction) setIsImportModalOpen(false);
+              }}
+              disabled={isBusyAction}
               className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
             >
               <X className="w-4 h-4" aria-hidden="true" />
@@ -382,10 +386,10 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
           <div className="space-y-3">
             <div>
               <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Upload Backup File (.json)
+                Backup file (.json)
               </label>
               <input
-                aria-label="Upload Backup File (.json)"
+                aria-label="Backup file (.json)"
                 type="file"
                 accept=".json,application/json"
                 onChange={handleFileUpload}
@@ -395,17 +399,40 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
 
             <div>
               <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Or Paste JSON Content Directly
+                Or paste the backup text
               </label>
               <textarea
-                aria-label="Or Paste JSON Content Directly"
-                rows={8}
+                aria-label="Or paste the backup text"
+                rows={6}
                 value={importJsonText}
                 onChange={(e) => setImportJsonText(e.target.value)}
                 placeholder='{"app": "ClinicRoster", "collections": { ... }}'
                 className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded font-mono text-[11px] bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200"
               />
             </div>
+
+            {backupCheck && !backupCheck.ok && (
+              <div className="p-2.5 rounded border text-[11px] bg-red-50 border-red-200 text-red-700">
+                {backupCheck.error}
+              </div>
+            )}
+
+            {backupCheck?.ok && (
+              <div className="p-2.5 rounded border text-[11px] bg-amber-50 border-amber-200 text-amber-900 space-y-1">
+                <p>
+                  This backup{backupCheck.exportedAt ? ` from ${new Date(backupCheck.exportedAt).toLocaleString()}` : ''} has{' '}
+                  <strong>{backupCheck.total}</strong> records
+                  {' '}({['nurses', 'doctors', 'schedules', 'assignments']
+                    .filter((c) => backupCheck.counts[c])
+                    .map((c) => `${backupCheck.counts[c]} ${c}`)
+                    .join(', ') || 'settings only'}).
+                </p>
+                <p>
+                  Restoring replaces <strong>all</strong> current clinic data for everyone. A backup of the current data downloads first.
+                  User access and the history of changes stay as they are.
+                </p>
+              </div>
+            )}
 
             {backupStatusMessage && (
               <div
@@ -432,11 +459,11 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
             <button
               type="button"
               onClick={handleImportBackup}
-              disabled={isBusyAction || !importJsonText.trim()}
+              disabled={isBusyAction || !backupCheck?.ok}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer shadow-xs disabled:opacity-40"
             >
               {isBusyAction ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-              <span>Restore Database</span>
+              <span>Download backup and restore</span>
             </button>
           </div>
         </SettingsDialog>

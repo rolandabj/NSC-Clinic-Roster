@@ -149,7 +149,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
         approvedAt: new Date().toISOString(),
       });
 
-      triggerToast(`Approved access for ${key} as ${appRole} (Manager: ${isManager ? 'Yes' : 'No'})`);
+      triggerToast(`Approved access for ${key}: ${appRole === 'EDITOR' ? 'can edit' : 'can view'}${isManager ? ', can approve leave' : ''}.`);
       await fetchDirectory();
       return true;
     } catch (err: any) {
@@ -318,7 +318,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                   <th className="py-2 px-3">Google Identity / Email</th>
                   <th className="py-2 px-3">Requested Name</th>
                   <th className="py-2 px-3">Assign Role</th>
-                  <th className="py-2 px-3">Manager Approver?</th>
+                  <th className="py-2 px-3">Can approve leave?</th>
                   <th className="py-2 px-3">Link Staff Profile</th>
                   <th className="py-2 px-3 text-right">Actions</th>
                 </tr>
@@ -340,11 +340,11 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                       <td className="py-2.5 px-3">
                         <select
                           id={`role-select-${pending.id}`}
-                          defaultValue={matchedNurse ? 'EDITOR' : 'VIEWER'}
+                          defaultValue="VIEWER"
                           className="px-2 py-1 border border-slate-300 rounded bg-white font-medium text-slate-800"
                         >
-                          <option value="VIEWER">VIEWER (View-Only)</option>
-                          <option value="EDITOR">EDITOR (Roster Planner)</option>
+                          <option value="VIEWER">Can view</option>
+                          <option value="EDITOR">Can edit (rosters, staff, settings)</option>
                         </select>
                       </td>
                       <td className="py-2.5 px-3">
@@ -355,7 +355,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                             defaultChecked={false}
                             className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                           />
-                          <span className="text-[11px] font-medium text-slate-700">Designate Manager</span>
+                          <span className="text-[11px] font-medium text-slate-700">Can approve leave</span>
                         </label>
                       </td>
                       <td className="py-2.5 px-3">
@@ -454,7 +454,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                 <th className="py-2.5 px-3">User / Google Email</th>
                 <th className="py-2.5 px-3">Status</th>
                 <th className="py-2.5 px-3">Roster Role</th>
-                <th className="py-2.5 px-3">Manager Approver?</th>
+                <th className="py-2.5 px-3">Can approve leave?</th>
                 <th className="py-2.5 px-3">Linked Nurse Profile</th>
                 <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
@@ -521,8 +521,8 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                           disabled={isBusy}
                           className="px-2 py-1 border border-slate-300 rounded bg-white text-slate-800 font-medium focus:ring-1 focus:ring-indigo-500"
                         >
-                          <option value="VIEWER">VIEWER (View-Only)</option>
-                          <option value="EDITOR">EDITOR (Roster Planner)</option>
+                          <option value="VIEWER">Can view</option>
+                          <option value="EDITOR">Can edit (rosters, staff, settings)</option>
                         </select>
                       )}
                     </td>
@@ -543,7 +543,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                             className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                           />
                           <span className={`text-[11px] font-medium ${user.isManager ? 'text-indigo-700 font-bold' : 'text-slate-600'}`}>
-                            {user.isManager ? 'Manager / Charge Approver' : 'Standard Staff'}
+                            {user.isManager ? 'Can approve leave' : 'No'}
                           </span>
                         </label>
                       )}
@@ -667,8 +667,8 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                     onChange={(e) => setNewRole(e.target.value as UserAccessRole)}
                     className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white text-xs"
                   >
-                    <option value="VIEWER">VIEWER (View-Only)</option>
-                    <option value="EDITOR">EDITOR (Roster Planner)</option>
+                    <option value="VIEWER">Can view</option>
+                    <option value="EDITOR">Can edit (rosters, staff, settings)</option>
                   </select>
                 </div>
 
@@ -698,9 +698,9 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                     className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                   />
                   <div>
-                    <span className="font-bold text-indigo-900 block">Designate as Manager / Approver</span>
+                    <span className="font-bold text-indigo-900 block">Can approve leave and availability</span>
                     <span className="text-[10px] text-indigo-700">
-                      Allows this user to approve nurse shift availability and leave requests.
+                      Lets this user approve or decline nurses' leave and availability requests. It doesn't let them edit rosters, staff or settings.
                     </span>
                   </div>
                 </label>

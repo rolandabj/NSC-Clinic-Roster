@@ -52,7 +52,14 @@ await t('viewer cannot read emailLog', false, getDoc(doc(viewer, 'emailLog/e1'))
 await t('editor reads emailLog', true, getDoc(doc(editor, 'emailLog/e1')));
 await t('editor writes nurses', true, setDoc(doc(editor, 'nurses/n3'), { fullName: 'C' }));
 await t('editor cannot write userAccess', false, setDoc(doc(editor, 'userAccess/z@x.com'), { status: 'APPROVED' }));
-await t('manager writes schedules', true, setDoc(doc(manager, 'schedules/s1'), { name: 'S' }));
+await t('manager cannot write schedules', false, setDoc(doc(manager, 'schedules/s1'), { name: 'S' }));
+await t('manager cannot write nurses', false, setDoc(doc(manager, 'nurses/nx'), { fullName: 'X' }));
+await t('manager writes day off locks', true, setDoc(doc(manager, 'locks/lk1'), { nurseId: 'n1', date: '2026-11-02', mode: 'OFF' }));
+await t('manager writes audit entries', true, setDoc(doc(manager, 'audit/a1'), { action: 'APPROVE' }));
+await t('manager cannot read audit', false, getDoc(doc(manager, 'audit/a1')));
+await t('viewer cannot write locks', false, setDoc(doc(viewer, 'locks/lk2'), { nurseId: 'n1' }));
+await t('editor writes locks', true, setDoc(doc(editor, 'locks/lk3'), { nurseId: 'n1' }));
+await t('viewer reads locks', true, getDoc(doc(viewer, 'locks/lk3')));
 await t('owner writes userAccess', true, setDoc(doc(owner, 'userAccess/z@x.com'), { status: 'APPROVED', appRole: 'EDITOR' }));
 await t('owner lists userAccess', true, getDocs(collection(owner, 'userAccess')));
 // self service

@@ -59,6 +59,7 @@ import { getRepository } from '../../services/repository';
 import { syncPublicRoster } from '../../services/publish/publicRosterService';
 import { escapeHtml } from '../../utils/escapeHtml';
 import { EmailHtmlPreview } from '../common/EmailHtmlPreview';
+import { cachedEmailSettings, loadEmailSettings } from '../../services/settings/emailSettingsStore';
 
 interface PublishModalProps {
   context: ClinicContextState;
@@ -118,14 +119,11 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   const [includeOwnerCopy, setIncludeOwnerCopy] = useState(true);
 
   // Email Config
-  const [emailConfig, setEmailConfig] = useState<EmailSettingsConfig>(() => {
-    try {
-      const raw = localStorage.getItem('clinic_roster_email_config');
-      return raw ? JSON.parse(raw) : DEFAULT_EMAIL_SETTINGS;
-    } catch {
-      return DEFAULT_EMAIL_SETTINGS;
-    }
-  });
+  const [emailConfig, setEmailConfig] = useState<EmailSettingsConfig>(() => cachedEmailSettings());
+  // The clinic's shared Sandbox / Live setting (not just this browser's)
+  useEffect(() => {
+    if (isOpen) loadEmailSettings(getRepository()).then(setEmailConfig).catch(() => {});
+  }, [isOpen]);
 
   // Diff against previous published version
   const [previousPublishedVersion, setPreviousPublishedVersion] = useState<ScheduleVersion | null>(null);
@@ -486,7 +484,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 <span className="text-slate-300">·</span>
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-semibold border border-rose-200">
                   <Mail className="w-3 h-3 text-rose-600" />
-                  <span>Google Email Dispatch (Sender: {emailConfig.senderEmail || 'rolandabj@gmail.com'})</span>
+                  <span>Email from the clinic account ({emailConfig.mockMode ? 'Sandbox, nothing is sent' : 'Live'})</span>
                 </span>
               </div>
             </div>
@@ -775,7 +773,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600">
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-50 text-rose-700 font-semibold border border-rose-200">
                     <Mail className="w-3 h-3 text-rose-600" />
-                    <span>Google Email Dispatch (Sender: {emailConfig.senderEmail || 'rolandabj@gmail.com'})</span>
+                    <span>Email from the clinic account ({emailConfig.mockMode ? 'Sandbox, nothing is sent' : 'Live'})</span>
                   </span>
                   <span className="text-slate-400">·</span>
                   <span><strong>{selectedNurseIds.size} staff</strong> ({emailConfig.mockMode ? 'Safe Sandbox' : 'Live Google'})</span>

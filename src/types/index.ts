@@ -471,8 +471,14 @@ export interface AuditEvent {
 
 // 23. SystemMetadata (Initialization & Persistent Tombstone State)
 export interface SystemMetadata {
-  id: string; // e.g. 'initialization_state'
-  status: 'CLEARED' | 'INITIALIZED';
+  id: string; // e.g. 'initialization_state', 'email_settings'
+  status?: 'CLEARED' | 'INITIALIZED' | 'RESTORED';
+  /** On 'email_settings': Sandbox (true) or Live (false), shared by every planner. */
+  emailMockMode?: boolean;
+  /** On 'email_settings': the name shown as the sender of roster emails. */
+  emailSenderName?: string;
+  updatedAt?: string;
+  updatedBy?: string;
   clearedAt?: string;
   clearedBy?: string;
   initializedAt?: string;

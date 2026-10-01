@@ -11,13 +11,15 @@ import { Router, Request, Response } from 'express';
 import { requirePlanner } from '../middleware/auth';
 import { escapeHtml } from '../../src/utils/escapeHtml';
 import { EmailService, isGoogleAccountEmail } from '../services/email/emailService';
+import { fetchStaffEmails } from '../services/auth/firebaseIdentityService';
 
 export const emailRouter = Router();
 
 /**
  * POST /api/email/test
  * Dispatches a test email, or a roster email built in the browser, via Google (SMTP or Mock mode).
- * Guarded: Requires Planner or Owner role. SMTP settings always come from the server environment.
+ * Guarded: owner or editors only (managers can't send), and only to the clinic's staff or to the
+ * sender. SMTP settings always come from the server environment.
  */
 emailRouter.post('/email/test', requirePlanner, async (req: Request, res: Response) => {
   try {
@@ -38,6 +40,28 @@ emailRouter.post('/email/test', requirePlanner, async (req: Request, res: Respon
         message: `Recipient email "${to}" must be a valid Google account (@gmail.com or Google Workspace).`,
       });
       return;
+    }
+
+    // Only to the clinic's own staff, or to the person sending it (e.g. a test
+    // email). The clinic's Gmail account can't be used to email anyone else.
+    const recipient = String(to).trim().toLowerCase();
+    const sender = String(req.user?.email || '').trim().toLowerCase();
+    if (recipient !== sender) {
+      let staffEmails: Set<string>;
+      try {
+        staffEmails = await fetchStaffEmails((req as any).firebaseIdToken || '');
+      } catch (lookupErr: any) {
+        console.error('[EmailAPI] Staff email lookup failed:', lookupErr);
+        res.status(503).json({ error: 'LookupFailed', message: 'Could not check the recipient against the staff list. Try again.' });
+        return;
+      }
+      if (!staffEmails.has(recipient)) {
+        res.status(403).json({
+          error: 'RecipientNotStaff',
+          message: `Emails can only go to the clinic's nurses and doctors, or to yourself. ${to} is not on the staff list.`,
+        });
+        return;
+      }
     }
 
     const effectiveProvider = provider === 'MOCK' ? 'MOCK' : 'GOOGLE';

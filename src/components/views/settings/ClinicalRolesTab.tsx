@@ -10,7 +10,7 @@ import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { ClinicalRole } from '../../../types';
 import { notify, confirmDialog } from '../../common/dialogs';
-import { SaveNotifier, SettingsDialog } from './shared';
+import { SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
 
 interface ClinicalRolesTabProps {
   clinicalRoles: ClinicalRole[];
@@ -29,7 +29,7 @@ export const ClinicalRolesTab: React.FC<ClinicalRolesTabProps> = ({
   const [editingClinicalRole, setEditingClinicalRole] = useState<ClinicalRole | null>(null);
   const [isClinicalRoleModalOpen, setIsClinicalRoleModalOpen] = useState(false);
 
-  const handleSaveClinicalRole = async (role: Partial<ClinicalRole>) => {
+  const handleSaveClinicalRole = withSaveErrors('save the role', async (role: Partial<ClinicalRole>) => {
     const acronymClean = (role.acronym || '').trim().toUpperCase();
     if (!acronymClean || acronymClean.length > 4) {
       notify('Acronym required (max 4 chars).', 'warning');
@@ -65,9 +65,9 @@ export const ClinicalRolesTab: React.FC<ClinicalRolesTabProps> = ({
     setIsClinicalRoleModalOpen(false);
     setEditingClinicalRole(null);
     loadData();
-  };
+  });
 
-  const handleDeleteClinicalRole = async (id: string, name: string) => {
+  const handleDeleteClinicalRole = withSaveErrors('delete the role', async (id: string, name: string) => {
     if (
       await confirmDialog({
         title: 'Delete clinical role',
@@ -80,7 +80,7 @@ export const ClinicalRolesTab: React.FC<ClinicalRolesTabProps> = ({
       triggerSaveNotification(`Role "${name}" deleted.`);
       loadData();
     }
-  };
+  });
 
   return (
     <>

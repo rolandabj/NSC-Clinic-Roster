@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Clinic Settings: the tab bar, the data several tabs share (clinic profile,
- * entity lists, hours policy, email settings, staff directory) and their
+ * entity lists, email settings, staff directory) and their
  * auto-save machinery. Each tab's content lives in ./settings/<Name>Tab.tsx.
  */
 
@@ -17,7 +17,6 @@ import {
   Tags,
   Sliders,
   Flag,
-  Calculator,
   Mail,
   Cloud,
   CheckCircle2,
@@ -44,9 +43,7 @@ import {
   WebhookEndpoint,
 } from '../../types';
 import {
-  HoursPolicyConfig,
   EmailSettingsConfig,
-  DEFAULT_HOURS_POLICY,
   DEFAULT_EMAIL_SETTINGS,
 } from '../../types/settings';
 import { SEED_CLINIC_PROFILE } from '../../services/seed/seedData';
@@ -63,10 +60,10 @@ import { ClinicalRolesTab } from './settings/ClinicalRolesTab';
 import { SpecialtiesTab } from './settings/SpecialtiesTab';
 import { RulesTab } from './settings/RulesTab';
 import { HolidaysTab } from './settings/HolidaysTab';
-import { HoursPolicyTab } from './settings/HoursPolicyTab';
 import { EmailTab } from './settings/EmailTab';
 import { IntegrationsTab } from './settings/IntegrationsTab';
 import { DatabaseTab } from './settings/DatabaseTab';
+import { cachedEmailSettings, loadEmailSettings, saveEmailSettings } from '../../services/settings/emailSettingsStore';
 
 interface SettingsViewProps {
   context: ClinicContextState;
@@ -103,15 +100,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [rules, setRules] = useState<Rule[]>([]);
   const [holidays, setHolidays] = useState<PublicHoliday[]>([]);
 
-  // Local hours policy & email settings
-  const [hoursPolicy, setHoursPolicy] = useState<HoursPolicyConfig>(() => {
-    const raw = localStorage.getItem('clinic_roster_hours_policy');
-    return raw ? JSON.parse(raw) : DEFAULT_HOURS_POLICY;
-  });
-
   const [emailConfig, setEmailConfig] = useState<EmailSettingsConfig>(() => {
-    const raw = localStorage.getItem('clinic_roster_email_config');
-    return raw ? JSON.parse(raw) : DEFAULT_EMAIL_SETTINGS;
+    return cachedEmailSettings();
   });
 
   // Webhooks & ChatOps State
@@ -258,9 +248,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       } catch (err: any) {
         console.error('Failed to save clinic profile:', err);
         setClinicSaveStatus('error');
-        if (showNotification) {
-          notify(`Failed to save clinic profile: ${err.message}`, 'error');
-        }
+        // Auto saves fail quietly otherwise, so always say so.
+        notify(`The clinic profile was not saved: ${err?.message || 'unknown error'}`, 'error');
       }
     },
     [repo]
@@ -399,128 +388,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  // --- 9. Hours Policy Auto-Save & Bidirectional Sync ---
-  const [hoursPolicySaveStatus, setHoursPolicySaveStatus] = useState<SaveStatus>('saved');
-  const hoursPolicyDebounceTimerRef = useRef<any>(null);
-  const latestHoursPolicyRef = useRef<HoursPolicyConfig>(hoursPolicy);
-  latestHoursPolicyRef.current = hoursPolicy;
-
-  // Rules tab: a rule value that mirrors an hours policy field was changed.
-  const syncHoursPolicyFromRule = (updates: Partial<HoursPolicyConfig>) => {
-    const nextPolicy = { ...latestHoursPolicyRef.current, ...updates };
-    setHoursPolicy(nextPolicy);
-    latestHoursPolicyRef.current = nextPolicy;
-    localStorage.setItem('clinic_roster_hours_policy', JSON.stringify(nextPolicy));
-  };
-
-  const persistHoursPolicy = useCallback(
-    async (policyToSave: HoursPolicyConfig, showNotification = false) => {
-      try {
-        setHoursPolicySaveStatus('saving');
-        localStorage.setItem('clinic_roster_hours_policy', JSON.stringify(policyToSave));
-
-        // Sync rules in repository and in local rules state
-        try {
-          const allRules = await repo.list('rules');
-          const h2 = allRules.find(
-            (r) =>
-              r.id === 'rule-h2' ||
-              r.templateKey === 'MAX_CONSECUTIVE_DAYS' ||
-              r.metric === 'CONSECUTIVE_WORKING_DAYS'
-          );
-          if (h2 && h2.value !== policyToSave.maxConsecutiveDays) {
-            await repo.update('rules', h2.id, { value: policyToSave.maxConsecutiveDays });
-            setRules((prev) =>
-              prev.map((r) => (r.id === h2.id ? { ...r, value: policyToSave.maxConsecutiveDays } : r))
-            );
-          }
-
-          const h3 = allRules.find((r) => r.id === 'rule-h3' || r.templateKey === 'MIN_REST_HOURS');
-          if (h3 && h3.value !== policyToSave.minRestBetweenDuties) {
-            await repo.update('rules', h3.id, { value: policyToSave.minRestBetweenDuties });
-            setRules((prev) =>
-              prev.map((r) => (r.id === h3.id ? { ...r, value: policyToSave.minRestBetweenDuties } : r))
-            );
-          }
-
-          const h4 = allRules.find((r) => r.id === 'rule-h4' || r.templateKey === 'MAX_DUTIES_PER_DAY');
-          if (h4 && h4.value !== policyToSave.maxDutiesPerDay) {
-            await repo.update('rules', h4.id, { value: policyToSave.maxDutiesPerDay });
-            setRules((prev) =>
-              prev.map((r) => (r.id === h4.id ? { ...r, value: policyToSave.maxDutiesPerDay } : r))
-            );
-          }
-        } catch (ruleErr) {
-          console.warn('Could not sync rules with hours policy:', ruleErr);
-        }
-
-        setHoursPolicySaveStatus('saved');
-        if (showNotification) {
-          triggerSaveNotification('Hours policy configuration saved permanently.');
-        }
-      } catch (err) {
-        console.error('Failed to save hours policy:', err);
-        setHoursPolicySaveStatus('error');
-      }
-    },
-    [repo]
-  );
-
-  const updateHoursPolicyField = useCallback(
-    (updates: Partial<HoursPolicyConfig>, immediate = false) => {
-      const nextPolicy = { ...latestHoursPolicyRef.current, ...updates };
-      setHoursPolicy(nextPolicy);
-      latestHoursPolicyRef.current = nextPolicy;
-      setHoursPolicySaveStatus('saving');
-
-      if (hoursPolicyDebounceTimerRef.current) {
-        clearTimeout(hoursPolicyDebounceTimerRef.current);
-        hoursPolicyDebounceTimerRef.current = null;
-      }
-
-      if (immediate) {
-        persistHoursPolicy(nextPolicy);
-      } else {
-        hoursPolicyDebounceTimerRef.current = setTimeout(() => {
-          persistHoursPolicy(nextPolicy);
-        }, 500);
-      }
-    },
-    [persistHoursPolicy]
-  );
-
-  const flushHoursPolicySave = useCallback(() => {
-    if (hoursPolicyDebounceTimerRef.current) {
-      clearTimeout(hoursPolicyDebounceTimerRef.current);
-      hoursPolicyDebounceTimerRef.current = null;
-    }
-    persistHoursPolicy(latestHoursPolicyRef.current);
-  }, [persistHoursPolicy]);
-
-  const handleSaveHoursPolicy = async (e: React.FormEvent) => {
-    e.preventDefault();
-    flushHoursPolicySave();
-    triggerSaveNotification('Hours policy configuration saved permanently.');
-  };
-
   // --- 10. Email Settings Auto-Save ---
   const [emailSaveStatus, setEmailSaveStatus] = useState<SaveStatus>('saved');
   const emailDebounceTimerRef = useRef<any>(null);
   const latestEmailConfigRef = useRef<EmailSettingsConfig>(emailConfig);
   latestEmailConfigRef.current = emailConfig;
 
+  // Load the clinic's shared email settings (this browser's copy shows until they arrive)
+  useEffect(() => {
+    loadEmailSettings(getRepository()).then((shared) => {
+      setEmailConfig(shared);
+      latestEmailConfigRef.current = shared;
+    });
+  }, []);
+
   const persistEmailConfig = useCallback(
-    (configToSave: EmailSettingsConfig, showNotification = false) => {
+    async (configToSave: EmailSettingsConfig, showNotification = false) => {
       try {
         setEmailSaveStatus('saving');
-        localStorage.setItem('clinic_roster_email_config', JSON.stringify(configToSave));
+        // Shared by the whole clinic, so every planner uses the same Sandbox / Live mode
+        await saveEmailSettings(getRepository(), configToSave, authService.getCurrentUser()?.email);
         setEmailSaveStatus('saved');
         if (showNotification) {
-          triggerSaveNotification('Email settings updated and saved.');
+          triggerSaveNotification('Email settings saved for everyone.');
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to save email config:', err);
         setEmailSaveStatus('error');
+        notify(`Email settings were not saved: ${err?.message || err}`, 'error');
       }
     },
     []
@@ -570,16 +465,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       }
     }
 
-    // 2. Flush Hours Policy only if timer is active
-    if (hoursPolicyDebounceTimerRef.current) {
-      clearTimeout(hoursPolicyDebounceTimerRef.current);
-      hoursPolicyDebounceTimerRef.current = null;
-      if (latestHoursPolicyRef.current) {
-        persistHoursPolicy(latestHoursPolicyRef.current);
-      }
-    }
-
-    // 3. Flush Email Settings only if timer is active
+    // 2. Flush Email Settings only if timer is active
     if (emailDebounceTimerRef.current) {
       clearTimeout(emailDebounceTimerRef.current);
       emailDebounceTimerRef.current = null;
@@ -587,7 +473,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         persistEmailConfig(latestEmailConfigRef.current);
       }
     }
-  }, [persistClinicProfile, persistHoursPolicy, persistEmailConfig]);
+  }, [persistClinicProfile, persistEmailConfig]);
 
   flushAllSettingsRef.current = flushAllSettings;
 
@@ -648,7 +534,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       title: 'Scheduling',
       tabs: [
         { id: 'rules', label: 'Rules', icon: Sliders },
-        { id: 'hours-policy', label: 'Hours policy', icon: Calculator },
         { id: 'duties', label: 'Shifts', icon: Clock },
       ],
     },
@@ -668,7 +553,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         ...(isMasterAdmin ? [{ id: 'access-roles' as SettingsTab, label: 'Access & permissions', icon: ShieldCheck }] : []),
         { id: 'email', label: 'Email', icon: Mail },
         { id: 'integrations', label: 'Integrations', icon: Cloud },
-        { id: 'database', label: 'Database & backup', icon: Database },
+        ...(isMasterAdmin ? [{ id: 'database' as SettingsTab, label: 'Database & backup', icon: Database }] : []),
       ],
     },
   ];
@@ -818,25 +703,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             setRules={setRules}
             loadData={loadData}
             triggerSaveNotification={triggerSaveNotification}
-            syncHoursPolicyFromRule={syncHoursPolicyFromRule}
           />
         )}
 
         {/* 8. PUBLIC HOLIDAYS */}
         {activeTab === 'holidays' && (
           <HolidaysTab holidays={holidays} loadData={loadData} triggerSaveNotification={triggerSaveNotification} />
-        )}
-
-        {/* 9. HOURS POLICY */}
-        {activeTab === 'hours-policy' && (
-          <HoursPolicyTab
-            hoursPolicy={hoursPolicy}
-            hoursPolicySaveStatus={hoursPolicySaveStatus}
-            updateHoursPolicyField={updateHoursPolicyField}
-            flushHoursPolicySave={flushHoursPolicySave}
-            handleSaveHoursPolicy={handleSaveHoursPolicy}
-            setActiveTab={setActiveTab}
-          />
         )}
 
         {/* 9b. DEDICATED TIME PERIODS & WORKING HOURS */}
@@ -866,7 +738,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeTab === 'integrations' && <IntegrationsTab />}
 
         {/* 12. DATABASE & STORAGE MANAGEMENT */}
-        {activeTab === 'database' && (
+        {activeTab === 'database' && isMasterAdmin && (
           <DatabaseTab loadData={loadData} triggerSaveNotification={triggerSaveNotification} />
         )}
       </div>

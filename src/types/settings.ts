@@ -2,16 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Hours Policy Settings Configuration Model
+ * Email settings model
  */
-
-export interface HoursPolicyConfig {
-  defaultFullTimeTarget?: number; // Deprecated; targets are configured per roster/schedule
-  maxDutiesPerDay: number; // default 1
-  minRestBetweenDuties: number; // default 11h
-  maxConsecutiveDays: number; // default 6
-  leaveCreditsCountTowardTarget: boolean; // default true
-}
 
 export type EmailProviderType = 'GOOGLE' | 'MOCK' | 'SMTP';
 
@@ -27,13 +19,6 @@ export interface EmailSettingsConfig {
   smtpPass?: string;
   smtpSecure?: boolean;
 }
-
-export const DEFAULT_HOURS_POLICY: HoursPolicyConfig = {
-  maxDutiesPerDay: 1,
-  minRestBetweenDuties: 11,
-  maxConsecutiveDays: 6,
-  leaveCreditsCountTowardTarget: true,
-};
 
 export const DEFAULT_EMAIL_SETTINGS: EmailSettingsConfig = {
   provider: 'GOOGLE',

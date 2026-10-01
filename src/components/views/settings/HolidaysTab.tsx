@@ -10,7 +10,7 @@ import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { PublicHoliday } from '../../../types';
 import { notify, confirmDialog } from '../../common/dialogs';
-import { SaveNotifier, SettingsDialog } from './shared';
+import { SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
 
 interface HolidaysTabProps {
   holidays: PublicHoliday[];
@@ -25,7 +25,7 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
   const [editingHoliday, setEditingHoliday] = useState<PublicHoliday | null>(null);
   const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
 
-  const handleSaveHoliday = async (hol: Partial<PublicHoliday>) => {
+  const handleSaveHoliday = withSaveErrors('save the holiday', async (hol: Partial<PublicHoliday>) => {
     if (!hol.date || !hol.name) {
       notify('Date and holiday name are required.', 'warning');
       return;
@@ -45,9 +45,9 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
     setIsHolidayModalOpen(false);
     setEditingHoliday(null);
     loadData();
-  };
+  });
 
-  const handleDeleteHoliday = async (id: string, name: string) => {
+  const handleDeleteHoliday = withSaveErrors('delete the holiday', async (id: string, name: string) => {
     if (
       await confirmDialog({
         title: 'Delete public holiday',
@@ -60,7 +60,7 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
       triggerSaveNotification(`Holiday "${name}" deleted.`);
       loadData();
     }
-  };
+  });
 
   return (
     <>

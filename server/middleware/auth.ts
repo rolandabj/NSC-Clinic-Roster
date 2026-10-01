@@ -76,6 +76,8 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
     const user = await verifyToken(token);
     if (user) {
       req.user = user;
+      // Kept for routes that read Firestore on the caller's behalf (with her own rights)
+      (req as any).firebaseIdToken = token;
     }
   } catch (err) {
     console.warn('[AuthMiddleware] Token verification warning:', err);

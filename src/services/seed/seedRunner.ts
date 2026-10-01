@@ -91,11 +91,21 @@ export async function ensureWorkingHoursPeriodsDefaults(repo: IRepository): Prom
   }
 }
 
+/** Collections a restore never touches: who may sign in, and the history of changes. */
+const RESTORE_SKIPS: CollectionName[] = ['userAccess', 'audit'];
+
+export interface ClearResult {
+  /** Collections that could not be emptied (the rest were). */
+  failed: string[];
+}
+
 /**
- * Wipe all collections from the repository and coordinate with backend server
+ * Wipe all clinic data. The user access list is always kept, so approved staff
+ * keep their accounts; `keepAudit` also keeps the history of changes.
  */
-export async function clearDatabase(repo: IRepository): Promise<void> {
+export async function clearDatabase(repo: IRepository, options?: { keepAudit?: boolean }): Promise<ClearResult> {
   console.info('[ClinicRoster] Initiating database wipe...');
+  const failed: string[] = [];
 
   // 1. Public roster snapshots cannot be listed (by design), so remove them
   //    through the share links that point to them.
@@ -106,45 +116,25 @@ export async function clearDatabase(repo: IRepository): Promise<void> {
     }
   } catch (e) {
     console.warn('[ClinicRoster] Could not remove public roster snapshots:', e);
+    failed.push('public roster links');
   }
 
-  // 2. Wipe all clinic data collections. The user access list is kept, so
-  //    approved staff keep their accounts.
+  // 2. Wipe the clinic data collections.
   for (const col of ALL_COLLECTIONS) {
     if (col === 'systemMetadata' || col === 'userAccess') continue;
+    if (col === 'audit' && options?.keepAudit) continue;
     try {
       await repo.clearCollection(col);
     } catch (e) {
       console.warn(`[ClinicRoster] Could not clear collection ${col}:`, e);
+      failed.push(col);
     }
   }
 
-  // 3. Write persistent CLEARED tombstone in active repository
-  try {
-    const existing = await repo.get('systemMetadata', 'initialization_state');
-    const now = new Date().toISOString();
-    if (existing) {
-      await repo.update('systemMetadata', 'initialization_state', {
-        status: 'CLEARED',
-        clearedAt: now,
-        clearedBy: 'Administrator',
-        note: 'All client database records cleared by administrator',
-      });
-    } else {
-      await repo.create('systemMetadata', {
-        id: 'initialization_state',
-        status: 'CLEARED',
-        clearedAt: now,
-        clearedBy: 'Administrator',
-        note: 'All client database records cleared by administrator',
-      });
-    }
-    console.info('[ClinicRoster] Persistent CLEARED tombstone recorded in client repository.');
-  } catch (tErr) {
-    console.warn('[ClinicRoster] Warning writing CLEARED tombstone to client repository:', tErr);
-  }
+  // 3. Record that the database was cleared.
+  await writeInitializationState(repo, 'CLEARED', 'All clinic records cleared by the owner');
 
-  // 4. Set localStorage tombstone flag & purge stale cache keys
+  // 4. Set the local flag and drop cached clinic details.
   if (typeof window !== 'undefined') {
     try {
       localStorage.setItem('clinic_roster_database_cleared', 'true');
@@ -154,6 +144,23 @@ export async function clearDatabase(repo: IRepository): Promise<void> {
     } catch {
       // ignore
     }
+  }
+
+  return { failed };
+}
+
+async function writeInitializationState(repo: IRepository, status: 'CLEARED' | 'RESTORED', note: string): Promise<void> {
+  try {
+    const now = new Date().toISOString();
+    const fields = { status, clearedAt: now, clearedBy: 'Owner', note };
+    const existing = await repo.get('systemMetadata', 'initialization_state');
+    if (existing) {
+      await repo.update('systemMetadata', 'initialization_state', fields);
+    } else {
+      await repo.create('systemMetadata', { id: 'initialization_state', ...fields });
+    }
+  } catch (err) {
+    console.warn('[ClinicRoster] Could not record the database state:', err);
   }
 }
 
@@ -231,18 +238,22 @@ export async function getDatabaseStatistics(repo: IRepository): Promise<Database
 }
 
 /**
- * Full Database JSON Backup Export
+ * Full database backup as JSON. Fails (naming the collections) rather than
+ * leaving parts out, so a backup taken before a wipe is never silently incomplete.
  */
 export async function exportFullDatabaseBackup(repo: IRepository): Promise<string> {
   const exportPayload: Record<string, any[]> = {};
+  const failed: string[] = [];
 
   for (const col of ALL_COLLECTIONS) {
     try {
-      const records = await repo.list(col);
-      exportPayload[col] = records;
+      exportPayload[col] = await repo.list(col);
     } catch {
-      exportPayload[col] = [];
+      failed.push(col);
     }
+  }
+  if (failed.length > 0) {
+    throw new Error(`Could not read ${failed.join(', ')}.`);
   }
 
   const backupEnvelope = {
@@ -256,45 +267,120 @@ export async function exportFullDatabaseBackup(repo: IRepository): Promise<strin
   return JSON.stringify(backupEnvelope, null, 2);
 }
 
+/** Saves a full backup to the user's downloads. Throws if the backup can't be made. */
+export async function downloadFullDatabaseBackup(repo: IRepository, label = 'full_backup'): Promise<void> {
+  const json = await exportFullDatabaseBackup(repo);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `clinic_roster_${label}_${stamp}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+export interface BackupCheck {
+  ok: boolean;
+  /** Why the file can't be used (when not ok). */
+  error?: string;
+  exportedAt?: string;
+  /** Records the restore would write, per collection. */
+  counts: Record<string, number>;
+  total: number;
+  /** Collections in the file that a restore leaves alone (user access, history). */
+  skipped: string[];
+}
+
+/** Checks a backup file without changing anything. */
+export function checkBackup(jsonString: string): BackupCheck {
+  const fail = (error: string): BackupCheck => ({ ok: false, error, counts: {}, total: 0, skipped: [] });
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonString);
+  } catch {
+    return fail('This is not a valid JSON file.');
+  }
+  if (!parsed || typeof parsed !== 'object' || parsed.app !== 'ClinicRoster') {
+    return fail('This file is not a Clinic Roster backup.');
+  }
+  const collections = parsed.collections;
+  if (!collections || typeof collections !== 'object' || Array.isArray(collections)) {
+    return fail('The backup has no data in it.');
+  }
+
+  const counts: Record<string, number> = {};
+  const skipped: string[] = [];
+  let total = 0;
+  for (const [name, records] of Object.entries(collections)) {
+    if (!(ALL_COLLECTIONS as string[]).includes(name)) continue;
+    if (!Array.isArray(records)) return fail(`"${name}" in the backup is not a list of records.`);
+    const bad = records.findIndex((r: any) => !r || typeof r !== 'object' || typeof r.id !== 'string' || !r.id.trim() || r.id.includes('/'));
+    if (bad >= 0) return fail(`Record ${bad + 1} in "${name}" has no valid id.`);
+    if ((RESTORE_SKIPS as string[]).includes(name)) {
+      if (records.length > 0) skipped.push(name);
+      continue;
+    }
+    counts[name] = records.length;
+    total += records.length;
+  }
+  if (total === 0) return fail('The backup is empty, so restoring it would only delete data.');
+
+  return {
+    ok: true,
+    exportedAt: typeof parsed.exportedAt === 'string' ? parsed.exportedAt : undefined,
+    counts,
+    total,
+    skipped,
+  };
+}
+
 /**
- * Full Database JSON Backup Import
+ * Restores a backup: checks the file first (nothing is deleted if it fails),
+ * then replaces the clinic data. The user access list and the history of
+ * changes are kept as they are and never taken from the file.
  */
 export async function importFullDatabaseBackup(
   repo: IRepository,
   jsonString: string
 ): Promise<{ success: boolean; message: string; recordCounts?: Record<string, number> }> {
+  const check = checkBackup(jsonString);
+  if (!check.ok) return { success: false, message: check.error || 'The backup file could not be read.' };
+
+  const collections = JSON.parse(jsonString).collections as Record<string, any[]>;
+  const cleared = await clearDatabase(repo, { keepAudit: true });
+
+  const failed = [...cleared.failed];
+  const counts: Record<string, number> = {};
+  for (const col of ALL_COLLECTIONS) {
+    if (RESTORE_SKIPS.includes(col)) continue;
+    const records = collections[col];
+    if (!Array.isArray(records) || records.length === 0) continue;
+    try {
+      const keep = col === 'systemMetadata' ? records.filter((r) => r.id !== 'initialization_state') : records;
+      await repo.bulkUpsert(col, keep as any);
+      counts[col] = keep.length;
+    } catch (e) {
+      console.warn(`[ClinicRoster] Could not restore ${col}:`, e);
+      failed.push(col);
+    }
+  }
+
+  await writeInitializationState(repo, 'RESTORED', `Restored from a backup made ${check.exportedAt || 'earlier'}`);
   try {
-    const parsed = JSON.parse(jsonString);
-    if (!parsed || !parsed.collections) {
-      return { success: false, message: 'Invalid backup file format: Missing "collections" map.' };
-    }
+    localStorage.removeItem('clinic_roster_database_cleared');
+  } catch {
+    // ignore
+  }
 
-    const collections = parsed.collections as Record<string, any[]>;
-    const counts: Record<string, number> = {};
-
-    // Clear existing
-    await clearDatabase(repo);
-
-    // Import each collection
-    for (const col of ALL_COLLECTIONS) {
-      const records = collections[col];
-      if (Array.isArray(records) && records.length > 0) {
-        await repo.bulkUpsert(col, records);
-        counts[col] = records.length;
-      } else {
-        counts[col] = 0;
-      }
-    }
-
-    return {
-      success: true,
-      message: `Database successfully restored from backup (${parsed.exportedAt || 'earlier export'}).`,
-      recordCounts: counts,
-    };
-  } catch (err: any) {
+  if (failed.length > 0) {
     return {
       success: false,
-      message: `Failed to import backup: ${err.message || 'Malformed JSON'}`,
+      message: `The restore was only partly done. These could not be restored: ${failed.join(', ')}. Your automatic backup was downloaded before the restore, so you can try again.`,
+      recordCounts: counts,
     };
   }
+  return { success: true, message: 'The backup was restored.', recordCounts: counts };
 }

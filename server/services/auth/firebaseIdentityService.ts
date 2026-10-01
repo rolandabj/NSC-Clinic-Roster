@@ -192,7 +192,8 @@ export async function resolveFirebaseUser(idToken: string): Promise<AuthUser | n
         name: record.name || displayName,
         email,
         // Managers may edit clinic data in Firestore, so they act as planners here too.
-        role: record.appRole === 'EDITOR' ? 'EDITOR' : record.isManager === true ? 'PLANNER' : 'VIEWER',
+        // A manager approves requests but is not an editor (same as firestore.rules)
+        role: record.appRole === 'EDITOR' ? 'EDITOR' : 'VIEWER',
         appRole: record.appRole === 'EDITOR' ? 'EDITOR' : 'VIEWER',
         isManager: record.isManager === true,
         accessStatus: 'APPROVED',
@@ -204,4 +205,40 @@ export async function resolveFirebaseUser(idToken: string): Promise<AuthUser | n
 
   writeCache(key, user, payload.exp);
   return user;
+}
+
+/**
+ * The clinic's staff email addresses (nurses' and doctors' gmail fields), read
+ * from Firestore with the caller's ID token. Used to limit who the email
+ * endpoint may send to. Cached briefly per caller.
+ */
+const staffEmailCache = new Map<string, { emails: Set<string>; at: number }>();
+export async function fetchStaffEmails(idToken: string): Promise<Set<string>> {
+  const key = cacheKey(idToken);
+  const hit = staffEmailCache.get(key);
+  if (hit && Date.now() - hit.at < 60_000) return hit.emails;
+
+  const { projectId, databaseId } = getFirebaseProjectConfig();
+  const base =
+    `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}` +
+    `/databases/${encodeURIComponent(databaseId)}/documents/`;
+  const emails = new Set<string>();
+  for (const collection of ['nurses', 'doctors']) {
+    let pageToken = '';
+    for (let page = 0; page < 20; page++) {
+      const url = `${base}${collection}?pageSize=300&mask.fieldPaths=gmail${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ''}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
+      if (!res.ok) throw new Error(`Staff email lookup failed (HTTP ${res.status})`);
+      const json: any = await res.json();
+      for (const d of json.documents || []) {
+        const email = d.fields?.gmail?.stringValue;
+        if (email) emails.add(String(email).trim().toLowerCase());
+      }
+      if (!json.nextPageToken) break;
+      pageToken = json.nextPageToken;
+    }
+  }
+  staffEmailCache.set(key, { emails, at: Date.now() });
+  if (staffEmailCache.size > 200) staffEmailCache.delete(staffEmailCache.keys().next().value as string);
+  return emails;
 }

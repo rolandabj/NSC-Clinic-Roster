@@ -9,10 +9,15 @@
 import { AppRoute } from '../../types/navigation';
 import { UserProfile } from './authService';
 
-/** Owner, editors and managers can change clinic data (same as isEditor() in firestore.rules). */
+/** Owner and editors can change clinic data (same as isEditor() in firestore.rules). */
 export function canEditClinicData(user?: UserProfile | null): boolean {
   if (!user) return false;
-  return user.role === 'OWNER' || user.role === 'EDITOR' || user.role === 'PLANNER' || user.isManager === true;
+  return user.role === 'OWNER' || user.role === 'EDITOR' || user.role === 'PLANNER';
+}
+
+/** Owner, editors and managers can approve leave and availability (canApprove() in firestore.rules). */
+export function canApproveRequests(user?: UserProfile | null): boolean {
+  return canEditClinicData(user) || user?.isManager === true;
 }
 
 const VIEWER_ROUTES: AppRoute[] = ['dashboard', 'availability', 'history', 'reports', 'published'];

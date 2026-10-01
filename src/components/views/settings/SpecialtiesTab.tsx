@@ -10,7 +10,7 @@ import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { Specialty } from '../../../types';
 import { notify, confirmDialog } from '../../common/dialogs';
-import { SaveNotifier, SettingsDialog } from './shared';
+import { SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
 
 interface SpecialtiesTabProps {
   specialties: Specialty[];
@@ -29,7 +29,7 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
   const [editingSpecialty, setEditingSpecialty] = useState<Specialty | null>(null);
   const [isSpecialtyModalOpen, setIsSpecialtyModalOpen] = useState(false);
 
-  const handleSaveSpecialty = async (sp: Partial<Specialty>) => {
+  const handleSaveSpecialty = withSaveErrors('save the specialty', async (sp: Partial<Specialty>) => {
     const codeClean = (sp.code || '').trim().toUpperCase();
     if (!codeClean || codeClean.length < 2 || codeClean.length > 5) {
       notify('Code must be 2 to 5 characters (e.g. CARD, PED).', 'warning');
@@ -48,9 +48,9 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
     setIsSpecialtyModalOpen(false);
     setEditingSpecialty(null);
     loadData();
-  };
+  });
 
-  const handleDeleteSpecialty = async (id: string, name: string) => {
+  const handleDeleteSpecialty = withSaveErrors('delete the specialty', async (id: string, name: string) => {
     if (
       await confirmDialog({
         title: 'Delete specialty',
@@ -63,7 +63,7 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
       triggerSaveNotification(`Specialty "${name}" deleted.`);
       loadData();
     }
-  };
+  });
 
   return (
     <>
