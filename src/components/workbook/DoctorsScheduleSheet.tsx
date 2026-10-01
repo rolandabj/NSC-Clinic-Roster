@@ -15,7 +15,7 @@ import {
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
-import { Doctor, DoctorSession, Specialty, Schedule, Assignment, Nurse } from '../../types';
+import { Doctor, DoctorSession, DutyWindow, Specialty, Schedule, Assignment, Nurse } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
 import { getRepository } from '../../services/repository';
 import { EditDoctorShiftModal } from '../modals/EditDoctorShiftModal';
@@ -37,6 +37,8 @@ interface DoctorsScheduleSheetProps {
   onSessionsChange?: (next: DoctorSession[]) => void;
   assignments?: Assignment[];
   nurses?: Nurse[];
+  /** E9: when provided, a session is paired with the nurse whose duty window spans it. */
+  dutyWindows?: DutyWindow[];
 }
 
 const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -53,6 +55,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
   onSessionsChange,
   assignments,
   nurses,
+  dutyWindows,
 }) => {
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -409,9 +412,20 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                     const sess = sessions.find(
                       (s) => s.doctorId === doc.id && s.date === dateStr && !s.cancelled
                     );
-                    const pairedAssignment = assignments?.find(
+                    // E9: a doctor's day can be split across sessions; pair the cell's session
+                    // with the nurse whose duty window actually spans it, not just the doctor.
+                    const dayAssignments = (assignments || []).filter(
                       (a) => a.kind === 'DOCTOR' && a.doctorId === doc.id && a.date === dateStr
                     );
+                    const pairedAssignment =
+                      (dutyWindows && sess
+                        ? dayAssignments.find((a) => {
+                            const duty = dutyWindows.find((w) => w.id === a.dutyWindowId);
+                            return Boolean(
+                              duty && duty.startTime <= sess.startTime && duty.endTime >= sess.endTime
+                            );
+                          })
+                        : undefined) || dayAssignments[0];
                     const pairedNurse = pairedAssignment ? nurses?.find((n) => n.id === pairedAssignment.nurseId) : null;
                     const nursePref = pairedNurse?.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === doc.id);
                     const nurseSpecPref = !nursePref && pairedNurse && doc.specialtyIds

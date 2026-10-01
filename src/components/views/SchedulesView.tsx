@@ -1471,6 +1471,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 onSessionsChange={handleSessionsChange}
                 assignments={assignments}
                 nurses={nurses}
+                dutyWindows={dutyWindows}
               />
             )}
 

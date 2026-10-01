@@ -318,6 +318,37 @@ export class ScheduleValidator {
 
       // Hard Rule H1: At least one senior nurse on each active duty window
       const dutiesToday = new Set(dayAssignments.map((a) => a.dutyWindowId));
+
+      // E4b: a duty window with ZERO nurses was previously never inspected (the loop below
+      // only sees windows already holding an assignment). Report an empty window when it
+      // overlaps a doctor clinic session that day — i.e. when the roster actually needs it.
+      // Empty windows outside clinic hours (unused shift shapes) stay silent.
+      const emptyClinicDuties = Array.from(dutyMap.values()).filter((duty) => {
+        if (duty.active === false) return false;
+        if (dutiesToday.has(duty.id)) return false;
+        return daySessions.some(
+          (sess) => duty.startTime < sess.endTime && duty.endTime > sess.startTime
+        );
+      });
+      emptyClinicDuties.forEach((duty) => {
+        const overlappingSessions = daySessions.filter(
+          (sess) => duty.startTime < sess.endTime && duty.endTime > sess.startTime
+        );
+        const dateObj = new Date(date);
+        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+        findings.push({
+          id: `h1-empty-duty-${date}-${duty.id}`,
+          category: 'COVERAGE_GAP',
+          severity: 'ERROR',
+          message: `No nurses assigned to ${duty.name} (${duty.acronym}) duty on ${dayName} ${formatDate(date)} while a doctor clinic runs (${overlappingSessions
+            .map((sess) => `${sess.startTime}–${sess.endTime}`)
+            .join(', ')}).`,
+          affectedNurseIds: [],
+          cellRefs: [],
+          date,
+        });
+      });
+
       dutiesToday.forEach((dutyId) => {
         const duty = dutyMap.get(dutyId);
         const assignedToDuty = dayAssignments.filter((a) => a.dutyWindowId === dutyId);
@@ -357,15 +388,20 @@ export class ScheduleValidator {
           });
         }
 
-        const pairedNurse = dayAssignments.find(
-          (a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId
-        );
+        // E9: a session counts as covered only when an assigned nurse's duty window spans its
+        // hours. Matching by doctor id alone let a morning shift "cover" an evening split
+        // session that its duty could never reach.
+        const pairedNurse = dayAssignments.find((a) => {
+          if (a.kind !== 'DOCTOR' || a.doctorId !== sess.doctorId) return false;
+          const duty = dutyMap.get(a.dutyWindowId);
+          return Boolean(duty && duty.startTime <= sess.startTime && duty.endTime >= sess.endTime);
+        });
         if (!pairedNurse) {
           findings.push({
             id: `unassigned-session-${sess.id}`,
             category: 'DATA_ISSUE',
             severity: 'WARN',
-            message: `Doctor clinic session (${sess.startTime}–${sess.endTime}) on ${formatDate(date)} has no nurse assigned.`,
+            message: `Doctor clinic session (${sess.startTime}–${sess.endTime}) on ${formatDate(date)} is not covered — no assigned nurse's duty window spans its hours.`,
             affectedNurseIds: [],
             cellRefs: [],
             date,

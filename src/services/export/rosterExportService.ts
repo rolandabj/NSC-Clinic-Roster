@@ -384,10 +384,13 @@ export function exportRosterToExcel(options: RosterExportOptions) {
     const dateObj = new Date(sess.date);
     const weekday = WEEKDAY_NAMES[dateObj.getUTCDay()];
 
-    // Find paired nurse
-    const asgn = assignments.find(
-      (a) => a.date === sess.date && a.doctorId === sess.doctorId
-    );
+    // Find the nurse whose duty window actually spans this session (split sessions of one
+    // doctor can be covered by different nurses at different times of day).
+    const asgn = assignments.find((a) => {
+      if (a.date !== sess.date || a.doctorId !== sess.doctorId) return false;
+      const duty = dutyMap.get(a.dutyWindowId);
+      return Boolean(duty && duty.startTime <= sess.startTime && duty.endTime >= sess.endTime);
+    });
     const pairedNurse = asgn ? nurseMap.get(asgn.nurseId)?.fullName : 'Unassigned';
 
     docsAoa.push([
