@@ -327,7 +327,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           try {
             const parsed = JSON.parse(rawSaved);
             setClinic(parsed);
-            await repo.bulkUpsert('clinics', [parsed]);
           } catch {
             setClinic(SEED_CLINIC_PROFILE);
           }

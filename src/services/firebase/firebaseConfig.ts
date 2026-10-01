@@ -10,6 +10,8 @@ import { getFirestore, Firestore, doc, getDocFromServer } from 'firebase/firesto
 import { getAuth, Auth, GoogleAuthProvider } from 'firebase/auth';
 import firebaseConfigJson from '../../../firebase-applet-config.json';
 
+import { quotaTracker } from './quotaTracker';
+
 export interface FirebaseConfig {
   apiKey: string;
   authDomain: string;
@@ -65,6 +67,11 @@ export async function testFirestoreConnection(): Promise<boolean> {
     console.info('[Firebase] Firestore server connection verified successfully.');
     return true;
   } catch (error) {
+    if (error && String(error).includes('resource-exhausted')) {
+      quotaTracker.notifyQuotaExceeded(error);
+      console.warn('[Firebase] Firestore quota limit reached for today.');
+      return true; // The server was reached, quota was indicated
+    }
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.warn('[Firebase] Client is offline or database is unreachable, checking configuration.');
       return false;

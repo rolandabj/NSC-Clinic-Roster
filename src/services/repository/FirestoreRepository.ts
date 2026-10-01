@@ -23,6 +23,7 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { CollectionName, EntityForCollection } from '../../types';
 import { IRepository, SubscribeCallback, Unsubscribe } from './IRepository';
+import { quotaTracker } from '../firebase/quotaTracker';
 
 // Firestore allows at most 500 writes in one batch; stay safely below it.
 const BATCH_LIMIT = 450;
@@ -76,31 +77,51 @@ export class FirestoreRepository implements IRepository {
     colName: T,
     filter?: { field: string; operator: '==' | '!='; value: any }
   ): Promise<EntityForCollection<T>[]> {
-    const colRef = collection(this.db, colName);
-    const q = filter ? query(colRef, where(filter.field, filter.operator, filter.value)) : query(colRef);
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as EntityForCollection<T>));
+    try {
+      const colRef = collection(this.db, colName);
+      const q = filter ? query(colRef, where(filter.field, filter.operator, filter.value)) : query(colRef);
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as EntityForCollection<T>));
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
+      console.warn(`[FirestoreRepository] list failed for ${colName}:`, err?.message || err);
+      return [];
+    }
   }
 
   async get<T extends CollectionName>(
     colName: T,
     id: string
   ): Promise<EntityForCollection<T> | null> {
-    const docRef = doc(this.db, colName, id);
-    const snap = await getDoc(docRef);
-    if (!snap.exists()) return null;
-    return { id: snap.id, ...snap.data() } as EntityForCollection<T>;
+    try {
+      const docRef = doc(this.db, colName, id);
+      const snap = await getDoc(docRef);
+      if (!snap.exists()) return null;
+      return { id: snap.id, ...snap.data() } as EntityForCollection<T>;
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
+      console.warn(`[FirestoreRepository] get failed for ${colName}/${id}:`, err?.message || err);
+      return null;
+    }
   }
 
   async create<T extends CollectionName>(
     colName: T,
     data: Omit<EntityForCollection<T>, 'id'> & { id?: string }
   ): Promise<EntityForCollection<T>> {
+    if (quotaTracker.isQuotaExceeded()) {
+      throw new Error('Firestore daily write quota reached. Operation paused until quota resets.');
+    }
     const docId = data.id || uuidv4();
     const docRef = doc(this.db, colName, docId);
     const entity = sanitizePayload({ ...data, id: docId }) as EntityForCollection<T>;
-    await setDoc(docRef, entity);
-    return entity;
+    try {
+      await setDoc(docRef, entity);
+      return entity;
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
+      throw err;
+    }
   }
 
   async update<T extends CollectionName>(
@@ -108,19 +129,35 @@ export class FirestoreRepository implements IRepository {
     id: string,
     data: Partial<EntityForCollection<T>>
   ): Promise<EntityForCollection<T>> {
+    if (quotaTracker.isQuotaExceeded()) {
+      throw new Error('Firestore daily write quota reached. Operation paused until quota resets.');
+    }
     const docRef = doc(this.db, colName, id);
     const cleanData = sanitizePayload(data);
-    await setDoc(docRef, cleanData, { merge: true });
-    const snap = await getDoc(docRef);
-    return { id: snap.id, ...snap.data() } as EntityForCollection<T>;
+    try {
+      await setDoc(docRef, cleanData, { merge: true });
+      const snap = await getDoc(docRef);
+      return { id: snap.id, ...snap.data() } as EntityForCollection<T>;
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
+      throw err;
+    }
   }
 
   async remove<T extends CollectionName>(
     colName: T,
     id: string
   ): Promise<void> {
+    if (quotaTracker.isQuotaExceeded()) {
+      throw new Error('Firestore daily write quota reached. Operation paused until quota resets.');
+    }
     const docRef = doc(this.db, colName, id);
-    await deleteDoc(docRef);
+    try {
+      await deleteDoc(docRef);
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
+      throw err;
+    }
   }
 
   /**
@@ -135,18 +172,27 @@ export class FirestoreRepository implements IRepository {
     options?: { replace?: boolean }
   ): Promise<void> {
     if (!items || items.length === 0) return;
-    for (let i = 0; i < items.length; i += BATCH_LIMIT) {
-      const chunk = items.slice(i, i + BATCH_LIMIT);
-      const batch = writeBatch(this.db);
-      for (const item of chunk) {
-        const docRef = doc(this.db, colName, (item as any).id);
-        if (options?.replace) {
-          batch.set(docRef, sanitizePayload(item));
-        } else {
-          batch.set(docRef, sanitizePayload(item), { merge: true });
+    if (quotaTracker.isQuotaExceeded()) {
+      console.warn('[FirestoreRepository] Skipping bulkUpsert: write quota currently exceeded.');
+      return;
+    }
+    try {
+      for (let i = 0; i < items.length; i += BATCH_LIMIT) {
+        const chunk = items.slice(i, i + BATCH_LIMIT);
+        const batch = writeBatch(this.db);
+        for (const item of chunk) {
+          const docRef = doc(this.db, colName, (item as any).id);
+          if (options?.replace) {
+            batch.set(docRef, sanitizePayload(item));
+          } else {
+            batch.set(docRef, sanitizePayload(item), { merge: true });
+          }
         }
+        await batch.commit();
       }
-      await batch.commit();
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
+      throw err;
     }
   }
 
@@ -155,14 +201,23 @@ export class FirestoreRepository implements IRepository {
     ids: string[]
   ): Promise<void> {
     if (!ids || ids.length === 0) return;
-    for (let i = 0; i < ids.length; i += BATCH_LIMIT) {
-      const chunk = ids.slice(i, i + BATCH_LIMIT);
-      const batch = writeBatch(this.db);
-      for (const id of chunk) {
-        const docRef = doc(this.db, colName, id);
-        batch.delete(docRef);
+    if (quotaTracker.isQuotaExceeded()) {
+      console.warn('[FirestoreRepository] Skipping bulkRemove: write quota currently exceeded.');
+      return;
+    }
+    try {
+      for (let i = 0; i < ids.length; i += BATCH_LIMIT) {
+        const chunk = ids.slice(i, i + BATCH_LIMIT);
+        const batch = writeBatch(this.db);
+        for (const id of chunk) {
+          const docRef = doc(this.db, colName, id);
+          batch.delete(docRef);
+        }
+        await batch.commit();
       }
-      await batch.commit();
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
+      throw err;
     }
   }
 
@@ -189,7 +244,8 @@ export class FirestoreRepository implements IRepository {
         callback(items);
       },
       (error) => {
-        console.error(`[FirestoreRepository] Live updates for "${colName}" stopped:`, error);
+        quotaTracker.notifyQuotaExceeded(error);
+        console.warn(`[FirestoreRepository] Live updates for "${colName}" stopped:`, error.message);
       }
     );
   }
