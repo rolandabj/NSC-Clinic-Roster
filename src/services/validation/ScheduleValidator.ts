@@ -6,7 +6,8 @@
  * Audits every cell update, generation pass, and manual edit.
  * 
  * Finding Categories:
- * 1. COVERAGE_GAP: Hourly deficits ("activeDoctors - activeNurses", evening tail deficits e.g. 19:00).
+ * 1. COVERAGE_GAP: An opening hour with no free nurse (not with a doctor, qualified for blood
+ *    collection), evening tail deficits e.g. 19:00. The clinic rules are in engine/clinicModel.ts.
  * 2. STAFFING_SCALE: Pre-flight ratio warnings (e.g. 7 nurses vs 9 doctors, evening departure tails).
  * 3. RULE_VIOLATION: H1 (Senior on duty), H2 (Consecutive days <= 6), H3 (11h rest), H6 (Phlebotomy capability & quota), S1 (Consecutive late ends >= 21:00).
  * 4. HOURS_IMBALANCE: Nurse pacing < 75% or > 105%.
@@ -34,6 +35,15 @@ import { isExclusiveNurseClinic } from '../engine/nurseClinicUtils';
 import { resolveFullTimeTarget, leaveCreditInRange } from '../hours/hoursPolicy';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
 import { resolveRule, LATE_DUTY_RULE_WORDS } from '../engine/SchedulingEngine';
+import {
+  ClinicSetup,
+  bloodCollectionRole,
+  canBeFreeNurse,
+  isFreeDuring,
+  openingHourSlots,
+  overlaps,
+  resolveClinicSetup,
+} from '../engine/clinicModel';
 
 export type FindingSeverity = 'ERROR' | 'WARN' | 'INFO';
 
@@ -80,9 +90,16 @@ export class ScheduleValidator {
     workingHoursPeriods: WorkingHoursPeriod[] = [],
     specialties: Specialty[] = [],
     doctors: Doctor[] = [],
-    leaveTypes: LeaveType[] = []
+    leaveTypes: LeaveType[] = [],
+    clinicSetup?: ClinicSetup
   ): ValidationReport {
     const findings: ValidationFinding[] = [];
+    const clinic = resolveClinicSetup(clinicSetup);
+    const openHours = openingHourSlots(clinic);
+    const phlRole = bloodCollectionRole(roles);
+    const seniorRule = resolveRule(rules, 'SENIOR_ON_DUTY', 'rule-h1', ['senior nurse', 'senior on duty']);
+    const seniorRuleEnabled = seniorRule ? seniorRule.enabled !== false : true;
+    const seniorSeverity: FindingSeverity = seniorRule?.severity === 'SOFT' ? 'WARN' : 'ERROR';
     const seniorLevelIds = new Set((seniorityLevels || []).filter((s) => s.isSenior).map((s) => s.id));
     const dutyMap = new Map((dutyWindows || []).map((d) => [d.id, d]));
     const nurseMap = new Map((nurses || []).map((n) => [n.id, n]));
@@ -112,8 +129,57 @@ export class ScheduleValidator {
     // 1. CATEGORY 1 & 3: HOURLY COVERAGE & DAILY CLINIC LEVEL RULES
     datesList.forEach((date) => {
       hourlyCoverageMap[date] = {};
-      const daySessions = sessions.filter((s) => !s.cancelled && s.date === date);
+      const isHoliday = clinic.holidays.has(date);
       const dayAssignments = assignments.filter((a) => a.date === date);
+      const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+      const hasSeniorToday = dayAssignments.some((a) => {
+        const n = nurseMap.get(a.nurseId);
+        return !!n && seniorLevelIds.has(n.seniorityLevelId);
+      });
+
+      // Public holiday: one nurse covers the clinic with the on call doctor; doctor sessions are ignored.
+      if (isHoliday) {
+        openHours.forEach((h) => {
+          const onDuty = dayAssignments.filter((a) => {
+            const duty = dutyMap.get(a.dutyWindowId);
+            return !!duty && overlaps(duty.startTime, duty.endTime, h.start, h.end);
+          }).length;
+          hourlyCoverageMap[date][h.start] = { nurses: onDuty, doctors: 0, deficit: onDuty > 0 ? 0 : 1 };
+        });
+        if (dayAssignments.length === 0) {
+          findings.push({
+            id: `holiday-no-nurse-${date}`,
+            category: 'COVERAGE_GAP',
+            severity: 'ERROR',
+            message: `Public holiday ${dayName} ${formatDate(date)}: no nurse on duty.`,
+            affectedNurseIds: [],
+            cellRefs: [],
+            date,
+          });
+        } else if (seniorRuleEnabled && !hasSeniorToday) {
+          findings.push({
+            id: `holiday-senior-${date}`,
+            category: 'RULE_VIOLATION',
+            severity: 'WARN',
+            message: `Public holiday ${dayName} ${formatDate(date)}: the nurse on duty is not a senior nurse.`,
+            affectedNurseIds: dayAssignments.map((a) => a.nurseId),
+            cellRefs: dayAssignments.map((a) => ({ nurseId: a.nurseId, date })),
+            date,
+          });
+        }
+        return;
+      }
+
+      // Each doctor works one session a day (a duplicate entry is ignored)
+      const seenDoctors = new Set<string>();
+      const daySessions = sessions
+        .filter((s) => !s.cancelled && s.date === date)
+        .sort((a, b) => a.startTime.localeCompare(b.startTime))
+        .filter((s) => {
+          if (seenDoctors.has(s.doctorId)) return false;
+          seenDoctors.add(s.doctorId);
+          return true;
+        });
 
       // Rule: At least +1 Additional Nurse Above Doctors During Operating Hours
       const plusOneRule = resolveRule(rules, 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS', 'rule-nurse-plus-one', [
@@ -126,48 +192,34 @@ export class ScheduleValidator {
       const isPlusOneHard = (plusOneRule?.severity || 'HARD') === 'HARD';
       const plusOneSeverity: FindingSeverity = isPlusOneHard ? 'ERROR' : 'WARN';
 
-      // Hourly coverage tracking from 08:00 to 22:00
-      for (let hour = 8; hour <= 21; hour++) {
-        const hourStr = `${String(hour).padStart(2, '0')}:00`;
-        const nextHourStr = `${String(hour + 1).padStart(2, '0')}:00`;
-
-        const activeDocs = daySessions.filter(
-          (s) => s.startTime < nextHourStr && s.endTime > hourStr
-        ).length;
-
+      // Every opening hour needs a free nurse: not with a doctor at that hour, and
+      // qualified for blood collection (she runs Nurse Clinic and blood collection).
+      openHours.forEach((h) => {
+        const activeDocs = daySessions.filter((s) => overlaps(s.startTime, s.endTime, h.start, h.end)).length;
         const activeNurses = dayAssignments.filter((a) => {
           const duty = dutyMap.get(a.dutyWindowId);
-          if (!duty) return false;
-          return duty.startTime < nextHourStr && duty.endTime > hourStr;
+          return !!duty && overlaps(duty.startTime, duty.endTime, h.start, h.end);
         }).length;
+        const freeNurses = dayAssignments.filter(
+          (a) => canBeFreeNurse(nurseMap.get(a.nurseId), roles) && isFreeDuring(a, dutyMap.get(a.dutyWindowId), daySessions, h.start, h.end)
+        ).length;
+        const deficit = Math.max(0, minAdditional - freeNurses);
 
-        // If clinic is operating (either active doctors, or within 09:00-21:00 on days with sessions)
-        const isClinicOperating = activeDocs > 0 || (hour >= 9 && hour <= 20 && daySessions.length > 0);
-        const requiredNurses = activeDocs + (isClinicOperating ? minAdditional : 0);
-        const deficit = Math.max(0, requiredNurses - activeNurses);
-
-        hourlyCoverageMap[date][hourStr] = {
-          nurses: activeNurses,
-          doctors: activeDocs,
-          deficit,
-        };
+        hourlyCoverageMap[date][h.start] = { nurses: activeNurses, doctors: activeDocs, deficit };
 
         if (deficit > 0) {
-          const dateObj = new Date(date);
-          const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
-
           findings.push({
-            id: `cov-gap-${date}-${hourStr}`,
+            id: `cov-gap-${date}-${h.start}`,
             category: 'COVERAGE_GAP',
             severity: plusOneSeverity,
-            message: `${dayName} ${formatDate(date)}, ${hourStr} — ${activeDocs} doctors still in session, only ${activeNurses} nurses on duty (requires at least ${requiredNurses} to maintain +${minAdditional} additional nurse ratio).`,
+            message: `${dayName} ${formatDate(date)}, ${h.start}: no free nurse on duty (one nurse not with a doctor${phlRole ? ' and qualified for blood collection' : ''} is needed at every opening hour).`,
             affectedNurseIds: dayAssignments.map((a) => a.nurseId),
             cellRefs: dayAssignments.map((a) => ({ nurseId: a.nurseId, date })),
             date,
-            hour: hourStr,
+            hour: h.start,
           });
         }
-      }
+      });
 
       // Check Evening Departure Tail Scenario (19:00 boundary):
       // "If 3 nurses are still on at 19:00 and 2 leave at 19:00, only 1 remains to cover 3 evening doctors."
@@ -216,11 +268,13 @@ export class ScheduleValidator {
       const ncQuota = ncEnabled ? (ncRule?.value ?? 1) : 0;
 
       if (ncEnabled && ncQuota > 0) {
+        // The free nurse runs Nurse Clinic and blood collection together, so either role counts.
         const assignedNcNurses = dayAssignments.filter(
           (a) =>
             a.kind === 'CLINICAL_ROLE' &&
             (a.clinicalRoleId === ncRole?.id ||
               a.clinicalRoleId === 'role-nurse-clinic' ||
+              (!!phlRole && a.clinicalRoleId === phlRole.id) ||
               a.note?.toLowerCase().includes('nurse clinic'))
         );
 
@@ -244,6 +298,18 @@ export class ScheduleValidator {
 
         // Strict verification: Nurse dedicated to Nurse Clinic MUST NOT be assigned to a doctor
         assignedNcNurses.forEach((asgn) => {
+          const ncNurse = nurseMap.get(asgn.nurseId);
+          if (ncNurse && !canBeFreeNurse(ncNurse, roles)) {
+            findings.push({
+              id: `nc-not-qualified-${asgn.nurseId}-${date}`,
+              category: 'RULE_VIOLATION',
+              severity: 'ERROR',
+              message: `${ncNurse.fullName} runs Nurse Clinic on ${formatDate(date)} but is not qualified for blood collection.`,
+              affectedNurseIds: [asgn.nurseId],
+              cellRefs: [{ nurseId: asgn.nurseId, date }],
+              date,
+            });
+          }
           const nurseHasDoctorOnDate = dayAssignments.some(
             (other) => other.nurseId === asgn.nurseId && other.id !== asgn.id && other.kind === 'DOCTOR'
           );
@@ -288,6 +354,7 @@ export class ScheduleValidator {
           role.acronym === 'NC' ||
           role.name.toLowerCase().includes('nurse clinic');
         if (isNc) return; // Handled specifically above by dedicated rule checker
+        if (ncEnabled && phlRole && role.id === phlRole.id) return; // part of the free nurse's job
 
         const assignedRoleNurses = dayAssignments.filter(
           (a) => a.kind === 'CLINICAL_ROLE' && a.clinicalRoleId === role.id
@@ -306,37 +373,36 @@ export class ScheduleValidator {
         }
       });
 
-      // Hard Rule H1: At least one senior nurse on each active duty window
-      const dutiesToday = new Set(dayAssignments.map((a) => a.dutyWindowId));
-      dutiesToday.forEach((dutyId) => {
-        const duty = dutyMap.get(dutyId);
-        const assignedToDuty = dayAssignments.filter((a) => a.dutyWindowId === dutyId);
-        const hasSenior = assignedToDuty.some((a) => {
-          const n = nurseMap.get(a.nurseId);
-          return n && seniorLevelIds.has(n.seniorityLevelId);
+      // Hard Rule H1: at least one senior nurse on duty each day (any shift)
+      if (seniorRuleEnabled && dayAssignments.length > 0 && !hasSeniorToday) {
+        findings.push({
+          id: `h1-senior-${date}`,
+          category: 'RULE_VIOLATION',
+          severity: seniorSeverity,
+          message: `No senior nurse on duty on ${dayName} ${formatDate(date)}.`,
+          affectedNurseIds: dayAssignments.map((a) => a.nurseId),
+          cellRefs: dayAssignments.map((a) => ({ nurseId: a.nurseId, date })),
+          date,
         });
-
-        if (!hasSenior && assignedToDuty.length > 0) {
-          const dateObj = new Date(date);
-          const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
-
-          findings.push({
-            id: `h1-senior-${date}-${dutyId}`,
-            category: 'RULE_VIOLATION',
-            severity: 'ERROR',
-            message: `No senior nurse on ${duty?.name || 'Duty'} (${duty?.acronym || ''}) duty, ${dayName} ${formatDate(date)}.`,
-            affectedNurseIds: assignedToDuty.map((a) => a.nurseId),
-            cellRefs: assignedToDuty.map((a) => ({ nurseId: a.nurseId, date })),
-            date,
-          });
-        }
-      });
+      }
 
       // CATEGORY 5: DATA ISSUE — Doctor sessions with no nurse assigned
       daySessions.forEach((sess) => {
         const pairedNurse = dayAssignments.find(
           (a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId
         );
+        const pairedDuty = pairedNurse ? dutyMap.get(pairedNurse.dutyWindowId) : undefined;
+        if (pairedNurse && pairedDuty && !overlaps(pairedDuty.startTime, pairedDuty.endTime, sess.startTime, sess.endTime)) {
+          findings.push({
+            id: `session-no-overlap-${sess.id}`,
+            category: 'COVERAGE_GAP',
+            severity: 'WARN',
+            message: `The nurse with the doctor on ${formatDate(date)} works ${pairedDuty.startTime}–${pairedDuty.endTime}, outside the session (${sess.startTime}–${sess.endTime}).`,
+            affectedNurseIds: [pairedNurse.nurseId],
+            cellRefs: [{ nurseId: pairedNurse.nurseId, date }],
+            date,
+          });
+        }
         if (!pairedNurse) {
           findings.push({
             id: `unassigned-session-${sess.id}`,
@@ -415,6 +481,24 @@ export class ScheduleValidator {
       let consecutiveLateDuties = 0;
       let consecutiveLateStartDay: string | null = null;
       let totalHours = 0;
+
+      // Rosters run back to back: carry the runs and the last shift over from the previous roster.
+      const priorByDate = new Map(
+        clinic.priorAssignments.filter((a) => a.nurseId === nurse.id && a.date < schedule.startDate).map((a) => [a.date, a])
+      );
+      const dayBefore = (iso: string, n: number) => {
+        const [y, m, d] = iso.split('-').map(Number);
+        return new Date(Date.UTC(y, m - 1, d - n)).toISOString().split('T')[0];
+      };
+      for (let k = 1; k <= 31 && priorByDate.has(dayBefore(schedule.startDate, k)); k++) consecutiveDays++;
+      for (let k = 1; k <= 31; k++) {
+        const prev = priorByDate.get(dayBefore(schedule.startDate, k));
+        const prevDuty = prev ? dutyMap.get(prev.dutyWindowId) : undefined;
+        if (!prevDuty || prevDuty.endTime < s1LateThreshold) break;
+        consecutiveLateDuties++;
+        consecutiveLateStartDay = prev!.date;
+      }
+      const lastPriorShift = priorByDate.get(dayBefore(schedule.startDate, 1));
 
       for (let i = 0; i < datesList.length; i++) {
         const date = datesList[i];
@@ -590,9 +674,10 @@ export class ScheduleValidator {
           }
 
           // Rule H3: Minimum rest between consecutive duties
-          if (h3Enabled && i > 0) {
-            const yesterdayDate = datesList[i - 1];
-            const yesterdayAsgns = nurseAssignments.filter((a) => a.date === yesterdayDate);
+          if (h3Enabled) {
+            const yesterdayDate = i > 0 ? datesList[i - 1] : dayBefore(schedule.startDate, 1);
+            const yesterdayAsgns =
+              i > 0 ? nurseAssignments.filter((a) => a.date === yesterdayDate) : lastPriorShift ? [lastPriorShift] : [];
             if (yesterdayAsgns.length > 0) {
               const prevDuty = dutyMap.get(yesterdayAsgns[0].dutyWindowId);
               if (prevDuty && duty) {

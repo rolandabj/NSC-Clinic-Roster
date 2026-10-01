@@ -210,7 +210,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-600 mt-0.5 max-w-2xl">
-                      Allocates 1 nurse solely to the Nurse Clinic (dressings, triage, vitals &amp; injections) who is <strong>not assigned to any doctor</strong> for each day of the schedule.
+                      Allocates 1 nurse to the Nurse Clinic (dressings, triage, vitals &amp; injections) and blood collection, who is <strong>not assigned to any doctor</strong>, for each day of the schedule. She must be qualified for blood collection and works the opening hours where possible.
                     </p>
                   </div>
                 </div>
@@ -317,14 +317,14 @@ export const RulesTab: React.FC<RulesTabProps> = ({
                   <div>
                     <div className="flex items-center gap-2">
                       <h3 className="text-xs font-bold text-slate-900">
-                        At Least +1 Additional Nurse Above Doctors (Operating Hours Coverage)
+                        A Free Nurse at Every Opening Hour
                       </h3>
                       <span className="font-mono text-[9px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded font-bold">
-                        +1 Over Doctors · Shift Overhang
+                        Not With a Doctor · Opening Hours
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-600 mt-0.5 max-w-2xl">
-                      Ensures at least 1 additional nurse is present above the active doctor count at all times of clinic operating hours. The additional nurse can be dedicated to Nurse Clinic or scheduled on extended hours whose assigned doctor finishes early (e.g. nurse working 9am–9pm with doctor scheduled 9am–6pm counts as additional from 6pm–9pm). Nurse-clinic-enabled nurses are prioritized.
+                      At every hour the clinic is open there must be at least this many nurses who are not with a doctor at that hour and are qualified for blood collection. The Nurse Clinic nurse counts, and so does a doctor's nurse once her doctor's session has ended (e.g. a nurse working 9am to 9pm with a doctor until 6pm counts from 6pm to 9pm). Opening hours come from the clinic profile. Not checked on public holidays, when one nurse covers the clinic.
                     </p>
                   </div>
                 </div>

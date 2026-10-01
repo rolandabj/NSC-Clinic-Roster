@@ -19,9 +19,9 @@ export interface CanonicalRuleDef extends Omit<Rule, 'id'> {
 export const CANONICAL_RULES_SPEC: CanonicalRuleDef[] = [
   {
     canonicalId: 'rule-h1',
-    name: 'At least one senior nurse on each duty',
+    name: 'At least one senior nurse on duty each day',
     templateKey: 'SENIOR_ON_DUTY',
-    scope: 'PER_DUTY_WINDOW',
+    scope: 'PER_DAY',
     metric: 'CONSECUTIVE_DUTIES_ENDING_AT_OR_AFTER',
     operator: 'MIN',
     value: 1,
