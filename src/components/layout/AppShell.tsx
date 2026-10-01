@@ -27,7 +27,8 @@ import {
 import { testFirestoreConnection } from '../../services/firebase/firebaseConfig';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
-import { CheckCircle2, Check } from 'lucide-react';
+import { quotaTracker } from '../../services/firebase/quotaTracker';
+import { CheckCircle2, Check, AlertTriangle, X } from 'lucide-react';
 
 interface AppShellProps {
   currentUser?: UserProfile | null;
@@ -112,6 +113,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   const [isAcceptanceOpen, setIsAcceptanceOpen] = useState(false);
   const [openCreateInSchedules, setOpenCreateInSchedules] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState(() => quotaTracker.isQuotaExceeded());
+  const [isQuotaBannerDismissed, setIsQuotaBannerDismissed] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('clinic_roster_sidebar_collapsed') === 'true';
@@ -201,13 +204,16 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   }, []);
 
   useEffect(() => {
+    return quotaTracker.subscribe((exceeded) => {
+      setIsQuotaExceeded(exceeded);
+    });
+  }, []);
+
+  useEffect(() => {
     async function bootstrap() {
       try {
         await testFirestoreConnection();
         const repo = repositoryManager.getRepo();
-
-        // Ensure baseline working hours periods are seeded if empty
-        await ensureWorkingHoursPeriodsDefaults(repo);
 
         // Fetch active clinic profile if present
         const clinics = await repo.list('clinics');
@@ -396,6 +402,40 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-100 font-sans text-slate-800">
+      {/* Cloud Quota Limit Notice Banner */}
+      {isQuotaExceeded && !isQuotaBannerDismissed && (
+        <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-xs flex items-center justify-between shrink-0 z-50">
+          <div className="flex items-center gap-2.5 min-w-0 pr-4">
+            <span className="p-1 rounded-md bg-amber-200/60 dark:bg-amber-800/60 text-amber-800 dark:text-amber-200 shrink-0">
+              <AlertTriangle className="w-4 h-4" />
+            </span>
+            <div className="leading-tight">
+              <strong className="font-semibold mr-1">Firestore Free Daily Write Quota Reached:</strong>
+              <span className="text-amber-800/90 dark:text-amber-300/90">
+                The database reached the Spark free tier limit (20,000 writes/day). The app remains operational in <strong>read-only mode</strong>. All clinical schedules and nurse data are preserved. Write operations will resume automatically tomorrow when Google Cloud resets the daily quota.
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <a
+              href="https://console.firebase.google.com/project/gen-lang-client-0671372661/firestore/databases/ai-studio-clinicroster-1845fa77-65a1-4351-a0d8-2f23afdb1499/data?openUpgradeDialog=true"
+              target="_blank"
+              rel="noreferrer"
+              className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium text-xs whitespace-nowrap"
+            >
+              Manage Database in Firebase
+            </a>
+            <button
+              onClick={() => setIsQuotaBannerDismissed(true)}
+              className="p-1 text-amber-700 dark:text-amber-400 hover:text-amber-950 dark:hover:text-white rounded transition-colors"
+              title="Dismiss notice"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Dismissible Local Mode Banner */}
       {clinicContext.isLocalMode && (
         <LocalModeBanner onNavigateToSettings={() => navigateTo('settings')} />

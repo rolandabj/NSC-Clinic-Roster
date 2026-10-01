@@ -19,6 +19,7 @@ import {
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { UserRole, UserAccessRecord } from '../../types';
 import { getAppAuth, getAppFirestore } from '../firebase/firebaseConfig';
+import { quotaTracker } from '../firebase/quotaTracker';
 
 export const MASTER_ADMIN_EMAIL = 'rolandabj@gmail.com';
 
@@ -254,27 +255,6 @@ export class AuthService {
     const now = new Date().toISOString();
 
     if (email === MASTER_ADMIN_EMAIL) {
-      // Keep an owner record in the whitelist so it appears in access management.
-      try {
-        const snap = await getDoc(accessRef);
-        if (!snap.exists()) {
-          const ownerRecord: UserAccessRecord = {
-            id: email,
-            email,
-            name,
-            status: 'APPROVED',
-            appRole: 'EDITOR',
-            isManager: true,
-            approvedBy: MASTER_ADMIN_EMAIL,
-            approvedAt: now,
-            createdAt: now,
-          };
-          await setDoc(accessRef, ownerRecord);
-        }
-      } catch (err) {
-        console.warn('[AuthService] Could not ensure owner access record:', err);
-      }
-
       return {
         uid: fbUser.uid,
         name,
@@ -294,19 +274,22 @@ export class AuthService {
     const snap = await getDoc(accessRef);
 
     if (!snap.exists()) {
-      try {
-        await setDoc(accessRef, {
-          id: email,
-          email,
-          name,
-          status: 'PENDING',
-          appRole: 'VIEWER',
-          isManager: false,
-          approvedBy: '',
-          createdAt: now,
-        });
-      } catch (err) {
-        console.warn('[AuthService] Could not file access request:', err);
+      if (!quotaTracker.isQuotaExceeded()) {
+        try {
+          await setDoc(accessRef, {
+            id: email,
+            email,
+            name,
+            status: 'PENDING',
+            appRole: 'VIEWER',
+            isManager: false,
+            approvedBy: '',
+            createdAt: now,
+          });
+        } catch (err: any) {
+          quotaTracker.notifyQuotaExceeded(err);
+          console.warn('[AuthService] Could not file access request:', err);
+        }
       }
       await this.signOutQuietly();
       throw new Error(
