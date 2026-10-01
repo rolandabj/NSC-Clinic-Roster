@@ -6,7 +6,7 @@
  * Full Validation Gate, Versioning, Per-Nurse HTML Email Preview, Diff Generation & Dispatch.
  */
 
-import React, { useState, useEffect, useId } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify } from '../common/dialogs';
 import {
@@ -140,6 +140,9 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   const [sendLogs, setSendLogs] = useState<string[]>([]);
   const [createdVersion, setCreatedVersion] = useState<ScheduleVersion | null>(null);
 
+  // Latest roster check run, and whether its clinic details are still loading
+  const validationRunRef = useRef(0);
+  const [isClinicCheckPending, setIsClinicCheckPending] = useState(false);
   const isOwner = context.currentUser?.role === 'OWNER';
   const repo = getRepository();
 
@@ -174,17 +177,24 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         leaveTypes
       );
       setValidationReport(report);
-      // Check again with the clinic's opening hours, public holidays and the previous roster
+      // Check again with the clinic's opening hours, public holidays and the previous roster.
+      // Only the latest check may update the report (the dialog can reopen meanwhile).
+      const checkId = ++validationRunRef.current;
+      setIsClinicCheckPending(true);
       loadClinicSetup(repo, schedule)
-        .then((setup) =>
+        .then((setup) => {
+          if (checkId !== validationRunRef.current) return;
           setValidationReport(
             ScheduleValidator.validate(
               schedule, assignments, nurses, seniorityLevels, dutyWindows, sessions, leaveEntries, locks,
               roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes, setup
             )
-          )
-        )
-        .catch(() => {});
+          );
+        })
+        .catch((err) => console.warn('[PublishModal] Clinic details could not be loaded for the check:', err))
+        .finally(() => {
+          if (checkId === validationRunRef.current) setIsClinicCheckPending(false);
+        });
 
       // 2. Find latest published version for diffing
       const publishedList = versions.filter((v) => v.isPublished);
@@ -853,13 +863,14 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 type="button"
                 disabled={
                   !isOwner ||
+                  isClinicCheckPending ||
                   (validationReport?.errorCount ?? 0) > 0 ||
                   ((validationReport?.warnCount ?? 0) > 0 && !acknowledgeWarnings)
                 }
                 onClick={() => setCurrentStep('DETAILS')}
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer disabled:opacity-40 shadow-xs"
               >
-                <span>Continue to Version Details</span>
+                <span>{isClinicCheckPending ? 'Checking the roster…' : 'Continue to Version Details'}</span>
               </button>
             </>
           )}

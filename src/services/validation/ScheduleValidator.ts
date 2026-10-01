@@ -147,6 +147,19 @@ export class ScheduleValidator {
           }).length;
           hourlyCoverageMap[date][h.start] = { nurses: onDuty, doctors: 0, deficit: onDuty > 0 ? 0 : 1 };
         });
+        const holidayDuties = dayAssignments.map((a) => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d);
+        const holidayGaps = uncoveredParts(clinic.openTime, clinic.closeTime, holidayDuties);
+        if (dayAssignments.length > 0 && holidayGaps.length > 0) {
+          findings.push({
+            id: `holiday-gap-${date}`,
+            category: 'COVERAGE_GAP',
+            severity: 'ERROR',
+            message: `Public holiday ${dayName} ${formatDate(date)}: no nurse on duty ${holidayGaps.map((g) => `${g.start}–${g.end}`).join(' and ')}.`,
+            affectedNurseIds: [],
+            cellRefs: [],
+            date,
+          });
+        }
         if (dayAssignments.length === 0) {
           findings.push({
             id: `holiday-no-nurse-${date}`,
@@ -542,6 +555,19 @@ export class ScheduleValidator {
         const onLeave = leaveEntries.some(
           (le) => le.nurseId === nurse.id && le.approved && date >= le.startDate && date <= le.endDate
         );
+        // A shift on a day off lock
+        const dayOffLock = (locks || []).some((l) => l.nurseId === nurse.id && l.date === date && l.mode === 'OFF');
+        if (dayOffLock && asgnsToday.length > 0) {
+          findings.push({
+            id: `dayoff-lock-${nurse.id}-${date}`,
+            category: 'RULE_VIOLATION',
+            severity: 'ERROR',
+            message: `${nurse.fullName} has a shift on ${formatDate(date)}, which is locked as a day off.`,
+            affectedNurseIds: [nurse.id],
+            cellRefs: [{ nurseId: nurse.id, date }],
+            date,
+          });
+        }
         if (onLeave && asgnsToday.length > 0) {
           findings.push({
             id: `leave-overlap-${nurse.id}-${date}`,

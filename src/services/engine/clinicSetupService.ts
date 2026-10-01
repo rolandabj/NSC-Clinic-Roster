@@ -22,7 +22,9 @@ function daysBefore(isoDate: string, days: number): string {
 /** The roster that ends last before this one starts (a published one wins a tie). */
 export function findPreviousSchedule(schedule: Schedule, schedules: Schedule[]): Schedule | undefined {
   return schedules
-    .filter((s) => s.id !== schedule.id && s.status !== 'ARCHIVED' && s.endDate < schedule.startDate)
+    // A roster that started earlier counts even if it overlaps this one; only its days
+    // before this roster starts are used.
+    .filter((s) => s.id !== schedule.id && s.status !== 'ARCHIVED' && s.startDate < schedule.startDate)
     .sort((a, b) => {
       if (a.endDate !== b.endDate) return b.endDate.localeCompare(a.endDate);
       return (b.status === 'PUBLISHED' ? 1 : 0) - (a.status === 'PUBLISHED' ? 1 : 0);

@@ -179,3 +179,44 @@ test('hours are kept back so the last days are staffed like the others', async (
   // 26 to 28 Nov: Thu and Fri have 4 doctors, Sat has 2
   assert.equal(last, 10);
 });
+
+test('a public holiday is covered for all opening hours even when no shift covers them alone', async () => {
+  const TEN = { id: 'x910', name: '9-7', acronym: '9-7', startTime: '09:00', endTime: '19:00', color: '#000', active: true };
+  const sessions = month();
+  const setup = { holidayDates: [HOLIDAY] };
+  const staff = nurses(10);
+  const result = await SchedulingEngine.generate(SCHEDULE, 'GENERATE_ALL', [], staff, LEVELS, [TEN, L], ROLES, [], sessions, [], [], [], undefined, [], DOCTORS, [], setup);
+  const holiday = result.assignments.filter((a) => a.date === HOLIDAY).map((a) => a.dutyWindowId).sort();
+  assert.deepEqual(holiday, ['l', 'x910']);
+  const report = ScheduleValidator.validate(SCHEDULE, result.assignments, staff, LEVELS, [TEN, L], sessions, [], [], ROLES, [], [], [], DOCTORS, [], setup);
+  assert.equal(errorsOf(report, 'holiday-').length, 0);
+});
+
+test('doctors can\'t use up the blood collection nurses: a free nurse is kept every day', async () => {
+  // Only four qualified nurses, and each is a doctor's first choice
+  const staff = nurses(12).map((n, i) => ({
+    ...n,
+    capabilityIds: i < 4 ? [PHL.id] : [],
+    preferences: i < 4 ? ([{ kind: 'DOCTOR', refId: DOCTORS[i].id, rank: 1 }] as any) : [],
+  }));
+  const { report } = await generate(staff);
+  // Very tight on purpose (each of them is also a doctor's first choice). Before this was
+  // handled, about 180 opening hours had no free nurse; a small remainder is acceptable.
+  assert.ok(report.findings.filter((f: any) => f.id.startsWith('cov-gap-')).length <= 4);
+});
+
+test('fill empty only drops a kept shift that now falls on approved leave', async () => {
+  const staff = nurses(10);
+  const kept = [{ id: 'g1', scheduleId: SCHEDULE.id, nurseId: 'n3', date: '2026-11-10', dutyWindowId: 'e', kind: 'CLINICAL_ROLE', clinicalRoleId: 'role-float', locked: false, source: 'GENERATED' } as Assignment];
+  const leave = [{ id: 'lv', nurseId: 'n3', leaveTypeId: 'lt', startDate: '2026-11-10', endDate: '2026-11-10', approved: true, status: 'APPROVED', hoursCredited: 8 } as any];
+  const result = await SchedulingEngine.generate(SCHEDULE, 'EMPTY_ONLY', kept, staff, LEVELS, DUTIES, ROLES, [], month(), [], leave, [], undefined, [], DOCTORS, [], {});
+  assert.ok(!result.assignments.some((a) => a.nurseId === 'n3' && a.date === '2026-11-10'));
+});
+
+test('the checker reports a shift on a day off lock', async () => {
+  const staff = nurses(10);
+  const shift = [{ id: 'm', scheduleId: SCHEDULE.id, nurseId: 'n1', date: '2026-11-03', dutyWindowId: 'e', kind: 'CLINICAL_ROLE', clinicalRoleId: 'role-float', locked: false, source: 'MANUAL' } as Assignment];
+  const lock = [{ id: 'k', nurseId: 'n1', date: '2026-11-03', mode: 'OFF', createdAt: '' } as any];
+  const report = ScheduleValidator.validate(SCHEDULE, shift, staff, LEVELS, DUTIES, [], [], lock, ROLES, [], [], [], DOCTORS, [], {});
+  assert.equal(errorsOf(report, 'dayoff-lock-').length, 1);
+});

@@ -135,3 +135,32 @@ export function uncoveredParts(start: string, end: string, duties: DutyWindow[])
   if (cursor < stop) parts.push({ start: fromMinutes(cursor), end: fromMinutes(stop) });
   return parts.filter((p) => p.start < p.end);
 }
+
+/**
+ * Hours of shifts needed to cover [start, end) with the given duties: one shift
+ * if one covers it all, otherwise the fewest shifts that do (e.g. 10h + 8h for
+ * 09:00 to 21:00 when the longest shift is 10 hours).
+ */
+export function hoursToCover(start: string, end: string, duties: DutyWindow[]): number {
+  const hoursOf = (d: DutyWindow) => (toMinutes(d.endTime) - toMinutes(d.startTime)) / 60;
+  const full = duties.filter((d) => d.startTime <= start && d.endTime >= end);
+  if (full.length > 0) return Math.min(...full.map(hoursOf));
+  let cursor = toMinutes(start);
+  const stop = toMinutes(end);
+  let total = 0;
+  for (let guard = 0; cursor < stop && guard < 24; guard++) {
+    const startingNow = duties.filter((d) => toMinutes(d.startTime) <= cursor && toMinutes(d.endTime) > cursor);
+    let next: DutyWindow | undefined;
+    if (startingNow.length > 0) {
+      next = startingNow.sort((a, b) => toMinutes(b.endTime) - toMinutes(a.endTime) || hoursOf(a) - hoursOf(b))[0];
+    } else {
+      next = duties
+        .filter((d) => toMinutes(d.startTime) > cursor && toMinutes(d.startTime) < stop)
+        .sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime))[0];
+      if (!next) break;
+    }
+    total += hoursOf(next);
+    cursor = toMinutes(next.endTime);
+  }
+  return total;
+}
