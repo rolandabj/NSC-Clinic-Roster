@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Schedule Sharing & Editor Invitations Dialog (Phase 12)
+ * Share dialog: links to view the published roster, and invitations for colleagues.
  */
 
 import React, { useState, useEffect, useId } from 'react';
@@ -36,7 +36,7 @@ import {
 } from '../../types';
 import { getRepository } from '../../services/repository';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { notify } from '../common/dialogs';
+import { notify, confirmDialog } from '../common/dialogs';
 
 interface ShareModalProps {
   schedule: Schedule;
@@ -107,7 +107,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   // --- CREATE VIEW-ONLY LINK ---
   const handleCreateShareLink = async () => {
     if (!latestPublishedVersion) {
-      notify('You must publish at least one version before creating a view-only share link. Draft changes are kept private.', 'warning');
+      notify('Publish the roster first. A link only ever shows the published roster, never your unpublished changes.', 'warning');
       return;
     }
 
@@ -131,25 +131,32 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
       await repo.create('shareLinks', newLink);
       await syncPublicRoster(newLink);
-      triggerToast('View-only link created.');
+      triggerToast('Link made.');
       setAllowedEmailsInput('');
       loadData();
     } catch (err: any) {
-      notify(`Failed to create share link: ${err.message}`, 'error');
+      notify(`Couldn't make the link: ${err.message}`, 'error');
     }
   };
 
   // --- REGENERATE TOKEN ---
   const handleRegenerateToken = async (link: ShareLink) => {
+    const ok = await confirmDialog({
+      title: 'Make a new link?',
+      message: 'This replaces the link with a new one. People with the old link will lose access, so you will need to send them the new one.',
+      confirmLabel: 'Make new link',
+      danger: true,
+    });
+    if (!ok) return;
     const newToken = `sh_${crypto.randomUUID()}`;
     try {
       // Regenerating keeps the link's revoked state; the old token stops working.
       await repo.update('shareLinks', link.id, { token: newToken });
       await removePublicRoster(link.token);
       await syncPublicRoster({ ...link, token: newToken });
-      triggerToast('Access token regenerated. The old link no longer works.');
+      triggerToast('New link made. The old link no longer works.');
     } catch (err: any) {
-      notify(`Failed to regenerate the link: ${err.message}`, 'error');
+      notify(`Couldn't make a new link: ${err.message}`, 'error');
     }
     loadData();
   };
@@ -160,23 +167,30 @@ export const ShareModal: React.FC<ShareModalProps> = ({
       const revoked = !link.revoked;
       await repo.update('shareLinks', link.id, { revoked });
       await syncPublicRoster({ ...link, revoked });
-      triggerToast(link.revoked ? 'Link restored.' : 'Link revoked.');
+      triggerToast(link.revoked ? 'Link turned back on.' : 'Link turned off.');
     } catch (err: any) {
-      notify(`Failed to update the link: ${err.message}`, 'error');
+      notify(`Couldn't change the link: ${err.message}`, 'error');
     }
     loadData();
   };
 
   // --- DELETE LINK ---
   const handleDeleteLink = async (linkId: string) => {
+    const ok = await confirmDialog({
+      title: 'Delete this link?',
+      message: 'People with this link will lose access. This cannot be undone.',
+      confirmLabel: 'Delete link',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const link = shareLinks.find((l) => l.id === linkId);
       // The public copy goes first: it can't be found once its link record is gone.
       if (link) await removePublicRoster(link.token);
       await repo.remove('shareLinks', linkId);
-      triggerToast('Share link removed.');
+      triggerToast('Link deleted.');
     } catch (err: any) {
-      notify(`Failed to remove the link: ${err.message}`, 'error');
+      notify(`Couldn't delete the link: ${err.message}`, 'error');
     }
     loadData();
   };
@@ -188,14 +202,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     navigator.clipboard.writeText(url);
     setCopiedToken(token);
     setTimeout(() => setCopiedToken(null), 2500);
-    triggerToast('Share link copied to clipboard.');
+    triggerToast('Link copied.');
   };
 
   // --- INVITE EDITOR / VIEWER ---
   const handleSendInvitation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim() || !inviteEmail.includes('@')) {
-      notify('Please enter a valid Gmail address.', 'warning');
+      notify('Please enter a valid email address.', 'warning');
       return;
     }
 
@@ -211,11 +225,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
       await repo.create('invitations', newInvite);
       // No email is sent from here: the person signs in with Google and the owner approves them.
-      triggerToast(`Invitation recorded for ${newInvite.email}. Ask them to sign in to the app, then approve them in Settings, Access & Permissions.`);
+      triggerToast(`Invitation saved for ${newInvite.email}. No email is sent: ask them to sign in to the app, then approve them in Settings, Access & permissions.`);
       setInviteEmail('');
       loadData();
     } catch (err: any) {
-      notify(`Failed to send invitation: ${err.message}`, 'error');
+      notify(`Couldn't save the invitation: ${err.message}`, 'error');
     }
   };
 
@@ -250,10 +264,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 id={titleId} className="text-base font-bold text-slate-900">Share &amp; Collaborate</h2>
+                <h2 id={titleId} className="text-base font-bold text-slate-900">Share</h2>
               </div>
               <p className="text-[11px] text-slate-500 font-sans mt-0.5">
-                {schedule.name} · Role-based access control &amp; immutable published links
+                {schedule.name} · links to the published roster and invitations
               </p>
             </div>
           </div>
@@ -280,7 +294,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             }`}
           >
             <Globe className="w-4 h-4" aria-hidden="true" />
-            <span>View-Only Links ({shareLinks.length})</span>
+            <span>Links to view ({shareLinks.length})</span>
           </button>
 
           <button
@@ -293,7 +307,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             }`}
           >
             <UserPlus className="w-4 h-4" aria-hidden="true" />
-            <span>Invite Editors &amp; Collaborators ({invitations.length})</span>
+            <span>Invite colleagues ({invitations.length})</span>
           </button>
         </div>
 
@@ -305,19 +319,20 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               {/* Informational Banner */}
               <div className="p-3 bg-indigo-50 border border-indigo-200 rounded text-indigo-900 space-y-1 text-[11px]">
                 <div className="flex items-center gap-1.5 font-bold">
-                  <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                  <span>Published Snapshot Privacy Guarantee:</span>
+                  <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" aria-hidden="true" />
+                  <span>Links only show the published roster</span>
                 </div>
                 <p>
-                  Share links point exclusively to the <strong>published version</strong> (
-                  {latestPublishedVersion ? `v${latestPublishedVersion.number}` : 'none published yet'}
-                  ). In-progress draft changes are completely invisible to external viewers until an explicit Publish action occurs.
+                  {latestPublishedVersion
+                    ? `People with a link see version ${latestPublishedVersion.number}, the last one you published.`
+                    : 'Nothing has been published yet.'}{' '}
+                  Changes you haven't published stay private until you publish them.
                 </p>
               </div>
 
               {/* Create New Link Section */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
-                <h3 className="font-bold text-slate-900 text-xs">Create New View-Only Link</h3>
+                <h3 className="font-bold text-slate-900 text-xs">Make a new link</h3>
 
                 <div className="space-y-2">
                   <div className="flex items-center gap-4">
@@ -329,8 +344,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                         onChange={() => setIsPublic(true)}
                         className="text-indigo-600"
                       />
-                      <span className="font-medium text-slate-800">Public Link</span>
-                      <span className="text-[10px] text-slate-400">(Anyone with link can view)</span>
+                      <span className="font-medium text-slate-800">Anyone with the link</span>
                     </label>
 
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -341,19 +355,19 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                         onChange={() => setIsPublic(false)}
                         className="text-indigo-600"
                       />
-                      <span className="font-medium text-slate-800">Restricted Link</span>
-                      <span className="text-[10px] text-slate-400">(Specific Google accounts only)</span>
+                      <span className="font-medium text-slate-800">Only people I name</span>
+                      <span className="text-[10px] text-slate-500">(they sign in with Google)</span>
                     </label>
                   </div>
 
                   {!isPublic && (
                     <div className="space-y-1 pt-1">
                       <label className="block text-[11px] font-semibold text-slate-700">
-                        Allowed Gmail Addresses (comma or line separated):
+                        Email addresses (separate them with commas or put one on each line):
                       </label>
                       <textarea
                         rows={2}
-                        aria-label="Allowed Gmail addresses"
+                        aria-label="Email addresses allowed to open the link"
                         value={allowedEmailsInput}
                         onChange={(e) => setAllowedEmailsInput(e.target.value)}
                         placeholder="nurse.mariam@gmail.com, doctor.ali@gmail.com"
@@ -371,14 +385,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded font-medium cursor-pointer shadow-xs"
                   >
                     <Share2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Generate Share Link</span>
+                    <span>Make link</span>
                   </button>
                 </div>
               </div>
 
               {/* Existing Links List */}
               <div className="space-y-2">
-                <h4 className="font-bold text-slate-800 text-xs">Active Share Links:</h4>
+                <h4 className="font-bold text-slate-800 text-xs">Links:</h4>
 
                 {shareLinks.length > 0 ? (
                   <div className="divide-y divide-slate-200 border border-slate-200 rounded overflow-hidden">
@@ -391,21 +405,21 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                           <div className="flex items-center gap-2">
                             {link.public ? (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-bold text-[10px]">
-                                <Globe className="w-3 h-3" /> PUBLIC
+                                <Globe className="w-3 h-3" aria-hidden="true" /> Anyone with the link
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]">
-                                <Lock className="w-3 h-3" /> RESTRICTED ({link.allowedEmails.length} emails)
+                                <Lock className="w-3 h-3" aria-hidden="true" /> {link.allowedEmails.length} named {link.allowedEmails.length === 1 ? 'person' : 'people'}
                               </span>
                             )}
 
                             {link.revoked ? (
                               <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-bold text-[10px]">
-                                REVOKED
+                                Turned off
                               </span>
                             ) : (
                               <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                                ACTIVE
+                                On
                               </span>
                             )}
 
@@ -420,10 +434,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                                 type="button"
                                 onClick={() => onOpenPreview(link.token)}
                                 className="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 hover:bg-slate-100 text-indigo-700 rounded font-medium text-[11px] cursor-pointer"
-                                title="Open read-only published page preview"
+                                title="See what people with this link see"
                               >
                                 <Eye className="w-3 h-3" aria-hidden="true" />
-                                <span>Open Preview</span>
+                                <span>Preview</span>
                               </button>
                             )}
 
@@ -432,22 +446,22 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                               onClick={() => handleCopyLink(link.token)}
                               disabled={link.revoked}
                               className="inline-flex items-center gap-1 px-2 py-1 border border-slate-200 hover:bg-slate-100 text-slate-700 rounded font-medium text-[11px] cursor-pointer"
-                              title="Copy URL to clipboard"
+                              title="Copy the link"
                             >
                               {copiedToken === link.token ? (
                                 <Check className="w-3 h-3 text-emerald-600" aria-hidden="true" />
                               ) : (
                                 <Copy className="w-3 h-3 text-slate-500" aria-hidden="true" />
                               )}
-                              <span>{copiedToken === link.token ? 'Copied!' : 'Copy Link'}</span>
+                              <span>{copiedToken === link.token ? 'Copied!' : 'Copy link'}</span>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => handleRegenerateToken(link)}
                               className="p-1 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded cursor-pointer"
-                              title="Regenerate token (invalidates old link)"
-                              aria-label="Regenerate token (invalidates old link)"
+                              title="Make a new link (the old one stops working)"
+                              aria-label="Make a new link (the old one stops working)"
                             >
                               <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
                             </button>
@@ -456,17 +470,17 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                               type="button"
                               onClick={() => handleToggleRevoke(link)}
                               className="px-2 py-1 border border-slate-200 hover:bg-slate-100 text-slate-600 rounded text-[11px] cursor-pointer"
-                              title={link.revoked ? 'Restore access' : 'Temporarily disable link'}
+                              title={link.revoked ? 'Let people open this link again' : 'Stop the link working for now'}
                             >
-                              {link.revoked ? 'Un-revoke' : 'Revoke'}
+                              {link.revoked ? 'Turn on' : 'Turn off'}
                             </button>
 
                             <button
                               type="button"
                               onClick={() => handleDeleteLink(link.id)}
                               className="p-1 text-slate-400 hover:text-red-600 rounded cursor-pointer"
-                              title="Delete share link permanently"
-                              aria-label="Delete share link permanently"
+                              title="Delete this link"
+                              aria-label="Delete this link"
                             >
                               <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                             </button>
@@ -482,7 +496,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   </div>
                 ) : (
                   <div className="p-6 text-center text-slate-400 border border-dashed border-slate-200 rounded">
-                    No share links created yet. Click "Generate Share Link" above.
+                    No links yet. Use "Make link" above.
                   </div>
                 )}
               </div>
@@ -493,22 +507,22 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           {activeTab === 'invite_editors' && (
             <div className="space-y-4">
               <div className="p-3 bg-purple-50 border border-purple-200 rounded text-purple-900 space-y-1 text-[11px]">
-                <p className="font-bold">Team Collaboration &amp; Permissions:</p>
+                <p className="font-bold">Who can do what:</p>
                 <p>
-                  <strong>Editors</strong> can edit assignments, adjust leave, and rebalance the roster. However, final publishing to live staff remains restricted to the Schedule <strong>Owner</strong>.
+                  <strong>Editors</strong> can change shifts and leave on the roster. <strong>Viewers</strong> can only look at it.
                 </p>
               </div>
 
               {/* Form */}
               <form onSubmit={handleSendInvitation} className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
-                <h3 className="font-bold text-slate-900 text-xs">Invite Colleague by Email</h3>
+                <h3 className="font-bold text-slate-900 text-xs">Invite a colleague</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="sm:col-span-2">
                     <input
                       type="email"
                       required
-                      aria-label="Colleague email"
-                      placeholder="colleague.email@gmail.com"
+                      aria-label="Colleague's email address"
+                      placeholder="name@gmail.com"
                       value={inviteEmail}
                       onChange={(e) => setInviteEmail(e.target.value)}
                       className="w-full px-3 py-1.5 border border-slate-300 rounded font-medium focus:ring-1 focus:ring-indigo-500"
@@ -516,13 +530,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                   </div>
                   <div>
                     <select
-                      aria-label="Invitation role"
+                      aria-label="What they can do"
                       value={inviteRole}
                       onChange={(e) => setInviteRole(e.target.value as any)}
                       className="w-full px-2.5 py-1.5 border border-slate-300 rounded font-medium bg-white"
                     >
-                      <option value="EDITOR">Editor (Can edit roster)</option>
-                      <option value="VIEWER">Viewer (View-only)</option>
+                      <option value="EDITOR">Editor (can change the roster)</option>
+                      <option value="VIEWER">Viewer (can only look)</option>
                     </select>
                   </div>
                 </div>
@@ -533,14 +547,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                     className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer shadow-xs"
                   >
                     <Mail className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Send Invitation</span>
+                    <span>Save invitation</span>
                   </button>
                 </div>
               </form>
 
               {/* Invitations List */}
               <div className="space-y-2">
-                <h4 className="font-bold text-slate-800 text-xs">Pending &amp; Active Invitations:</h4>
+                <h4 className="font-bold text-slate-800 text-xs">Invitations:</h4>
                 {invitations.length > 0 ? (
                   <div className="divide-y divide-slate-200 border border-slate-200 rounded overflow-hidden">
                     {invitations.map((inv) => (
@@ -555,10 +569,10 @@ export const ShareModal: React.FC<ShareModalProps> = ({
                                   : 'bg-slate-100 text-slate-700'
                               }`}
                             >
-                              {inv.role}
+                              {inv.role === 'EDITOR' ? 'Editor' : 'Viewer'}
                             </span>
                             <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold">
-                              {inv.status}
+                              {inv.status === 'PENDING' ? 'Waiting' : inv.status === 'ACCEPTED' ? 'Accepted' : 'Cancelled'}
                             </span>
                           </div>
                           <p className="text-[10px] text-slate-400 font-mono">
@@ -592,8 +606,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
         {/* Footer */}
         <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <span className="text-[11px] text-slate-500 font-mono">
-            Security: Cloud Firestore rules enforce role boundaries
+          <span className="text-[11px] text-slate-500">
+            Only people you allow can change the roster.
           </span>
           <button
             type="button"

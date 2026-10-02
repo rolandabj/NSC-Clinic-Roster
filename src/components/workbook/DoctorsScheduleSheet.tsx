@@ -234,12 +234,12 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
 
       triggerToast(
         result.createdCount > 0
-          ? `Synced ${result.createdCount} recurring doctor sessions (${result.existingCount} already existed) across schedule duration.`
-          : `All ${result.totalSessions} recurring doctor sessions are already present for this period.`
+          ? `Added ${result.createdCount} weekly doctor clinic${result.createdCount === 1 ? '' : 's'} to this roster (${result.existingCount} were already there).`
+          : `All ${result.totalSessions} weekly doctor clinics are already on this roster.`
       );
     } catch (err: any) {
       console.error('Failed to sync recurring doctor patterns:', err);
-      triggerToast(`Sync failed: ${err.message || 'Unknown error'}`);
+      triggerToast(`Couldn't add the weekly clinics: ${err.message || 'unknown error'}`);
     } finally {
       setIsSyncing(false);
     }
@@ -260,18 +260,18 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
         <div className="flex items-center gap-2.5">
           <div className="flex items-center gap-1.5 font-bold text-slate-800">
             <Stethoscope className="w-4 h-4 text-indigo-600" />
-            <span>Doctors&apos; Clinic Sessions Schedule</span>
+            <span>Doctors&apos; clinics</span>
           </div>
           <span className="px-2 py-0.5 rounded font-mono text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-            {totalSessionsInView} Sessions
+            {totalSessionsInView} clinic{totalSessionsInView === 1 ? '' : 's'}
           </span>
           <span className="text-slate-400 hidden sm:inline">·</span>
           <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-mono hidden md:flex">
-            <span>Click any cell to edit shift</span>
+            <span>Click a day to change it</span>
             <span className="text-slate-300">|</span>
-            <span className="text-indigo-600 font-bold">↻ Recurring</span>
+            <span className="text-indigo-600 font-bold">↻ Every week</span>
             <span className="text-slate-300">|</span>
-            <span className="text-amber-600 font-bold">★ Override</span>
+            <span className="text-amber-600 font-bold">★ This day only</span>
           </div>
         </div>
 
@@ -296,7 +296,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
               onChange={(e) => setSelectedSpecialty(e.target.value)}
               className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
-              <option value="ALL">All Specialties ({specialties.length})</option>
+              <option value="ALL">All specialties ({specialties.length})</option>
               {specialties.map((sp) => (
                 <option key={sp.id} value={sp.id}>
                   {sp.name} ({sp.code})
@@ -316,12 +316,12 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
             }`}
             title={
               isExpanded
-                ? 'Switch back to single block view'
-                : 'Expand doctors schedule to view all days in the entire schedule period'
+                ? 'Show only the days on this page again'
+                : 'Show every day of the roster'
             }
           >
             <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>{isExpanded ? `All Days (${displayedDates.length}d) ✓` : 'Expand All Days'}</span>
+            <span>{isExpanded ? `All ${displayedDates.length} days ✓` : 'Show all days'}</span>
           </button>
 
           {/* Sync Recurring Patterns Option */}
@@ -331,10 +331,10 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
               disabled={isSyncing}
               onClick={handleSyncRecurringPatterns}
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
-              title="Populate and refresh all active doctors' recurring weekly clinic sessions across the schedule duration"
+              title="Add every active doctor's weekly clinics to all days of this roster"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${isSyncing ? 'animate-spin' : ''}`} aria-hidden="true" />
-              <span>{isSyncing ? 'Syncing...' : 'Sync Recurring Patterns'}</span>
+              <span>{isSyncing ? 'Adding…' : 'Add weekly clinics'}</span>
             </button>
           )}
         </div>
@@ -349,7 +349,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                 <div className="flex items-center justify-between">
                   <span>Doctor / Department</span>
                   <span className="text-[10px] text-slate-400 font-normal">
-                    {filteredDoctors.length} docs
+                    {filteredDoctors.length} doctor{filteredDoctors.length === 1 ? '' : 's'}
                   </span>
                 </div>
               </th>
@@ -399,7 +399,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                       </div>
                       <span
                         className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-600 shrink-0"
-                        title={`${docSessionsInView} session${docSessionsInView === 1 ? '' : 's'} scheduled`}
+                        title={`${docSessionsInView} clinic${docSessionsInView === 1 ? '' : 's'} on these days`}
                       >
                         {docSessionsInView}
                       </span>
@@ -440,12 +440,12 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                       : null;
 
                     const nurseRankDesc = isAllocationMismatch
-                      ? `⚠ Allocation Mismatch: ${pairedNurse?.fullName} is not allocated to Dr. ${doc.fullName.replace('Dr. ', '')} or this department`
+                      ? `⚠ Not a usual match: ${pairedNurse?.fullName} doesn't usually work with ${doc.fullName} or this department`
                       : nursePref
-                      ? `Assigned Doctor Priority #${nursePref.rank}`
+                      ? `Works with this doctor, choice ${nursePref.rank}`
                       : nurseSpecPref
-                      ? `Specialty Match Priority #${nurseSpecPref.rank}`
-                      : 'General Pool';
+                      ? `Works in this specialty, choice ${nurseSpecPref.rank}`
+                      : 'Any nurse';
 
                     return (
                       <td
@@ -457,7 +457,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                             onClick={() => handleCellClick(doc, dateStr)}
                             role="button"
                             tabIndex={0}
-                            aria-label={`Edit shift for ${doc.fullName} on ${formatDate(dateStr)}: ${sess.startTime}–${sess.endTime}${pairedNurse ? `, paired nurse ${pairedNurse.fullName}` : ''}`}
+                            aria-label={`Change clinic for ${doc.fullName} on ${formatDate(dateStr)}: ${sess.startTime}–${sess.endTime}${pairedNurse ? `, nurse ${pairedNurse.fullName}` : ''}`}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
@@ -469,7 +469,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                                 ? 'bg-rose-50 border border-rose-300 text-rose-950 hover:bg-rose-100'
                                 : 'bg-indigo-50 border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-100/90 text-indigo-900'
                             }`}
-                            title={`Click to edit shift: ${sess.startTime}–${sess.endTime} in ${sess.room || 'Suite 101'} (${sess.source === 'PATTERN' ? 'Recurring Pattern' : 'Single Day Override'})${pairedNurse ? `\nPaired Nurse: ${pairedNurse.fullName} (${nurseRankDesc})` : '\nNo nurse currently paired'}`}
+                            title={`Click to change: ${sess.startTime}–${sess.endTime}${sess.room ? ` in ${sess.room}` : ''} (${sess.source === 'PATTERN' ? 'every week' : 'this day only'})${pairedNurse ? `\nNurse: ${pairedNurse.fullName} (${nurseRankDesc})` : '\nNo nurse with this doctor yet'}`}
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-bold font-mono">
@@ -487,7 +487,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                                         ? 'bg-blue-100 text-blue-800 border border-blue-300'
                                         : 'bg-slate-100 text-slate-700 border border-slate-300'
                                     }`}
-                                    title={`Paired Nurse: ${pairedNurse?.fullName} (${nurseRankDesc})`}
+                                    title={`Nurse: ${pairedNurse?.fullName} (${nurseRankDesc})`}
                                   >
                                     {priorityBadge}
                                   </span>
@@ -495,14 +495,14 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                                 {sess.source === 'PATTERN' ? (
                                   <span
                                     className="text-[9px] text-indigo-600 font-bold"
-                                    title="Recurring weekly pattern"
+                                    title="Every week"
                                   >
                                     ↻
                                   </span>
                                 ) : (
                                   <span
                                     className="text-[9px] text-amber-600 font-bold"
-                                    title="Single day override"
+                                    title="This day only"
                                   >
                                     ★
                                   </span>
@@ -521,7 +521,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                             onClick={() => handleCellClick(doc, dateStr)}
                             role="button"
                             tabIndex={0}
-                            aria-label={`Schedule shift for ${doc.fullName} on ${formatDate(dateStr)}`}
+                            aria-label={`Add a clinic for ${doc.fullName} on ${formatDate(dateStr)}`}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
@@ -529,7 +529,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                               }
                             }}
                             className="w-full h-full flex items-center justify-center text-slate-300 hover:text-indigo-600 hover:bg-indigo-50/70 rounded cursor-pointer transition-colors group"
-                            title={`Click to schedule shift for ${doc.fullName} on ${formatDate(dateStr)}`}
+                            title={`Click to add a clinic for ${doc.fullName} on ${formatDate(dateStr)}`}
                           >
                             <Plus className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-indigo-500" />
                             <span className="group-hover:hidden">·</span>

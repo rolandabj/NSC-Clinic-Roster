@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Version Snapshot Read-Only Viewer Modal (Phase 10 & 16)
- * High-elegance dual-view (Roster Matrix & Shifts List) inspection studio with deletion and restore controls.
+ * Version view: a saved version of a roster, read only, as a calendar or a
+ * list of shifts, with buttons to restore or delete it.
  */
 
 import { isWeekendDay } from '../../utils/weekend';
@@ -39,6 +39,9 @@ import {
   LeaveType,
 } from '../../types';
 import { useDialogA11y } from '../common/useDialogA11y';
+import { formatDate } from '../../utils/dateUtils';
+
+const SOURCE_LABELS: Record<string, string> = { GENERATED: 'Filled automatically', MANUAL: 'Set by hand', LOCK: 'From a pinned day' };
 
 interface VersionViewModalProps {
   version: ScheduleVersion | null;
@@ -151,19 +154,19 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 id={titleId} className="text-base font-bold text-slate-900">
-                  Version v{version.number} Snapshot Inspector
+                  Version {version.number}
                 </h2>
                 {version.isPublished && (
-                  <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold font-mono text-[10px]">
-                    PUBLISHED
+                  <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold text-[10px]">
+                    Published
                   </span>
                 )}
                 <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px]">
-                  {effectiveSchedule?.name || 'Roster Schedule'}
+                  {effectiveSchedule?.name || 'Roster'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 mt-0.5 font-sans">
-                &ldquo;{version.note || 'Save checkpoint'}&rdquo; · saved by <strong>{version.author}</strong> on {new Date(version.timestamp).toLocaleString()}
+                &ldquo;{version.note || 'No note'}&rdquo; · saved by <strong>{version.author || 'Planner'}</strong> on {new Date(version.timestamp).toLocaleString()}
               </p>
             </div>
           </div>
@@ -177,10 +180,10 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                   onClose();
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium cursor-pointer shadow-xs transition-colors"
-                title="Restore this version as active schedule draft"
+                title="Put this version's shifts back on the roster (you will be asked to confirm first)"
               >
                 <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Restore Draft</span>
+                <span>Restore this version</span>
               </button>
             )}
 
@@ -191,7 +194,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                   onDelete(version);
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 rounded-lg font-medium cursor-pointer shadow-2xs transition-colors"
-                title="Permanently delete this version"
+                title="Delete this version (you will be asked to confirm first)"
               >
                 <Trash2 className="w-3.5 h-3.5 text-rose-600" aria-hidden="true" />
                 <span>Delete</span>
@@ -223,7 +226,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
               }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Calendar Matrix</span>
+              <span>Calendar</span>
             </button>
             <button
               type="button"
@@ -235,12 +238,12 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
               }`}
             >
               <List className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Shifts List</span>
+              <span>List of shifts</span>
             </button>
           </div>
 
           {/* Quick Metrics */}
-          <div className="hidden sm:flex items-center gap-3 font-mono text-[11px] text-slate-600">
+          <div className="hidden sm:flex items-center gap-3 text-[11px] text-slate-600">
             <span className="px-2 py-0.5 rounded bg-slate-50 border border-slate-200">
               Shifts: <strong className="text-slate-900">{assignments.length}</strong>
             </span>
@@ -248,19 +251,19 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
               Leave: <strong className="text-slate-900">{leaveEntries.length}</strong>
             </span>
             <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800">
-              Locks: <strong>{locks.length}</strong>
+              Pinned days: <strong>{locks.length}</strong>
             </span>
           </div>
 
-          {/* Controls: Search, Nurse filter, Block navigation */}
+          {/* Controls: Search, Nurse filter, page of days */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Search */}
             <div className="relative w-56">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
               <input
                 type="text"
-                aria-label="Search staff or date"
-                placeholder="Search staff, date..."
+                aria-label="Search by nurse or date"
+                placeholder="Search by nurse or date..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
@@ -274,7 +277,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
               onChange={(e) => setSelectedNurseId(e.target.value)}
               className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-700 text-xs cursor-pointer"
             >
-              <option value="ALL">All Staff ({nurses.length})</option>
+              <option value="ALL">All nurses ({nurses.length})</option>
               {nurses.map((n) => (
                 <option key={n.id} value={n.id}>
                   {n.fullName} ({n.employeeCode})
@@ -290,21 +293,21 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                   disabled={selectedBlockIndex === 0}
                   onClick={() => setSelectedBlockIndex((p) => p - 1)}
                   className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
-                  title="Previous block"
-                  aria-label="Previous block"
+                  title="Earlier days"
+                  aria-label="Earlier days"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
                 <span className="px-2 font-mono font-bold text-[11px] text-slate-700">
-                  Block {selectedBlockIndex + 1}/{totalBlocks}
+                  Days {formatDate(blockDates[0])} to {formatDate(blockDates[blockDates.length - 1])}
                 </span>
                 <button
                   type="button"
                   disabled={selectedBlockIndex >= totalBlocks - 1}
                   onClick={() => setSelectedBlockIndex((p) => p + 1)}
                   className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
-                  title="Next block"
-                  aria-label="Next block"
+                  title="Later days"
+                  aria-label="Later days"
                 >
                   <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
                 </button>
@@ -323,7 +326,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                   <thead>
                     <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 text-[11px]">
                       <th className="py-2.5 px-3 sticky left-0 bg-slate-50 z-20 w-48 border-r border-slate-200">
-                        Nursing Staff
+                        Nurse
                       </th>
                       {blockDates.map((dateStr) => {
                         const dateObj = new Date(dateStr + 'T00:00:00Z');
@@ -380,7 +383,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                           let targetLabel = '';
                           if (asgn?.doctorId) {
                             const doc = doctorMap.get(asgn.doctorId);
-                            targetLabel = doc ? doc.fullName.split(' ')[1] || doc.fullName : 'Doc';
+                            targetLabel = doc ? doc.fullName.split(' ')[1] || doc.fullName : 'Doctor';
                           } else if (asgn?.clinicalRoleId) {
                             const cr = roleMap.get(asgn.clinicalRoleId);
                             targetLabel = cr ? cr.name : '';
@@ -397,7 +400,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                               {leave ? (
                                 <div
                                   className="p-1 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200"
-                                  title={`Approved Leave: ${leaveType?.name || 'Leave'}`}
+                                  title={`Approved leave: ${leaveType?.name || 'Leave'}`}
                                 >
                                   <div>{leaveType?.acronym || 'LV'}</div>
                                   <div className="text-[9px] font-normal text-amber-700">Leave</div>
@@ -410,7 +413,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                                 >
                                   <div className="flex items-center justify-center gap-0.5">
                                     <span>{duty.acronym}</span>
-                                    {isLocked && <Lock className="w-2.5 h-2.5 text-white/80 shrink-0" />}
+                                    {isLocked && <Lock className="w-2.5 h-2.5 text-white/80 shrink-0" aria-label="Pinned day" />}
                                   </div>
                                   {targetLabel && (
                                     <div className="text-[9px] font-normal opacity-90 truncate max-w-[68px]">
@@ -437,11 +440,11 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                 <thead className="sticky top-0 bg-slate-100 text-slate-600 text-[11px] border-b border-slate-200">
                   <tr>
                     <th className="py-2.5 px-4">Date</th>
-                    <th className="py-2.5 px-3">Nurse Staff</th>
-                    <th className="py-2.5 px-3">Duty Window</th>
-                    <th className="py-2.5 px-3">Assigned Clinical Target</th>
-                    <th className="py-2.5 px-3">Source</th>
-                    <th className="py-2.5 px-4 text-right">Lock Status</th>
+                    <th className="py-2.5 px-3">Nurse</th>
+                    <th className="py-2.5 px-3">Shift</th>
+                    <th className="py-2.5 px-3">Working with</th>
+                    <th className="py-2.5 px-3">How it was set</th>
+                    <th className="py-2.5 px-4 text-right">Pinned day</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -449,21 +452,21 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                     const nurse = nurseMap.get(a.nurseId);
                     const duty = dutyMap.get(a.dutyWindowId);
 
-                    let targetName = 'Specialty Pool';
+                    let targetName = 'Any specialty';
                     if (a.doctorId) {
                       const doc = doctorMap.get(a.doctorId);
                       targetName = doc ? doc.fullName : 'Doctor';
                     } else if (a.clinicalRoleId) {
                       const role = roleMap.get(a.clinicalRoleId);
-                      targetName = role ? role.name : 'Clinical Role';
+                      targetName = role ? role.name : 'Nurse skill';
                     } else if (a.specialtyId) {
                       const spec = specialtyMap.get(a.specialtyId);
-                      targetName = spec ? `${spec.name} Pool` : 'Specialty Pool';
+                      targetName = spec ? spec.name : 'Any specialty';
                     }
 
                     return (
                       <tr key={a.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-2 px-4 font-bold text-slate-900">{a.date}</td>
+                        <td className="py-2 px-4 font-bold text-slate-900">{formatDate(a.date)}</td>
                         <td className="py-2 px-3 font-sans font-medium text-slate-900">
                           {nurse?.fullName || a.nurseId}
                         </td>
@@ -485,14 +488,14 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                           )}
                         </td>
                         <td className="py-2 px-3 text-slate-800 font-sans">{targetName}</td>
-                        <td className="py-2 px-3 text-[10px] text-slate-500">{a.source}</td>
+                        <td className="py-2 px-3 text-[10px] text-slate-500">{SOURCE_LABELS[a.source] || a.source}</td>
                         <td className="py-2 px-4 text-right">
                           {a.locked ? (
                             <span className="inline-flex items-center gap-1 text-amber-700 font-bold text-[10px]">
-                              <Lock className="w-3 h-3" /> PINNED LOCK
+                              <Lock className="w-3 h-3" aria-hidden="true" /> Pinned
                             </span>
                           ) : (
-                            <span className="text-slate-400 text-[10px]">UNLOCKED</span>
+                            <span className="text-slate-400 text-[10px]">No</span>
                           )}
                         </td>
                       </tr>
@@ -502,7 +505,7 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
               </table>
               {filteredAssignments.length === 0 && (
                 <div className="p-8 text-center text-slate-400 text-xs">
-                  No assignments match the selected search or staff filters.
+                  No shifts match your search or the nurse you chose.
                 </div>
               )}
             </div>
@@ -512,14 +515,14 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
         {/* Footer */}
         <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-slate-500 text-[11px]">
           <span>
-            Snapshot contains {assignments.length} assignments, {leaveEntries.length} leaves, {locks.length} pinned locks
+            This version has {assignments.length} shift{assignments.length === 1 ? '' : 's'}, {leaveEntries.length} leave {leaveEntries.length === 1 ? 'entry' : 'entries'} and {locks.length} pinned day{locks.length === 1 ? '' : 's'}
           </span>
           <button
             type="button"
             onClick={onClose}
             className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium cursor-pointer transition-colors shadow-2xs"
           >
-            Close Inspector
+            Close
           </button>
         </div>
       </div>

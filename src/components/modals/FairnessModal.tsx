@@ -2,9 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Fairness Dashboard & Rebalance Optimization Engine (Phase 14.1)
- * Per-nurse distribution metrics (weekends off, holidays worked, late-ends, hours)
- * Balance spread score + Automated parity rebalancing with diff preview.
+ * Fairness dialog: how hours, weekends, holidays and late shifts are shared
+ * between nurses, and suggested shift moves that even them out.
  */
 
 import { summarizeNurseHours } from '../../services/reports/hoursAccounting';
@@ -40,9 +39,11 @@ import {
   ClinicalRole,
 } from '../../types';
 import { getRepository } from '../../services/repository';
+import { formatDate } from '../../utils/dateUtils';
 import { checkAssignment } from '../../services/engine/assignmentChecks';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { notify } from '../common/dialogs';
+import { notify, confirmDialog } from '../common/dialogs';
+import { authService } from '../../services/auth/authService';
 
 interface FairnessModalProps {
   schedule: Schedule;
@@ -162,7 +163,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
       const weekendsOff = Math.max(0, totalWeekendDays - weekendsWorked);
       // Hours and goal by the shared rule (leave counts, period targets apply), as in the Hours tab.
       const summary = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, workingHoursPeriods);
-      totalDutyHours = summary.totalHours;
+      totalDutyHours = Math.round(summary.totalHours * 10) / 10;
       const targetHours = summary.targetHours;
       const hoursDelta = Math.round((totalDutyHours - targetHours) * 10) / 10;
 
@@ -232,14 +233,14 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
           swaps.push({
             id: `swap-${asgn.id}-${under.nurse.id}`,
             date: asgn.date,
-            dutyName: dw ? `${dw.name} (${dw.startTime}–${dw.endTime})` : 'Duty Shift',
+            dutyName: dw ? `${dw.name} (${dw.startTime}–${dw.endTime})` : 'Shift',
             overloadedNurse: over.nurse,
             underloadedNurse: under.nurse,
             assignmentA: asgn,
             reason:
               over.hoursDelta > 0
-                ? `Reduces +${over.hoursDelta}h surplus for ${over.nurse.fullName}`
-                : `Redistributes late-end duty from ${over.nurse.fullName}`,
+                ? `${over.nurse.fullName} is ${over.hoursDelta}h over their goal`
+                : `${over.nurse.fullName} has many late shifts`,
           });
 
           if (swaps.length >= 6) break;
@@ -258,10 +259,18 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
   if (!isOpen) return null;
 
   const handleApplyRebalance = async () => {
+    const swapsToApply = proposedSwaps.filter((s) => selectedSwaps.has(s.id));
+    if (swapsToApply.length === 0) return;
+    const n = swapsToApply.length;
+    const nurseCount = new Set(swapsToApply.flatMap((s) => [s.overloadedNurse.id, s.underloadedNurse.id])).size;
+    const ok = await confirmDialog({
+      title: 'Move these shifts?',
+      message: `${n} shift${n === 1 ? '' : 's'} will move to another nurse (${nurseCount} nurses affected). You can undo this afterwards.`,
+      confirmLabel: `Move ${n} shift${n === 1 ? '' : 's'}`,
+    });
+    if (!ok) return;
     setIsApplying(true);
     try {
-      const swapsToApply = proposedSwaps.filter((s) => selectedSwaps.has(s.id));
-      if (swapsToApply.length === 0) return;
 
       const updated = assignments.map((a) => {
         const swap = swapsToApply.find((s) => s.assignmentA.id === a.id);
@@ -279,18 +288,18 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
       // Audit entry
       const repo = getRepository();
       await repo.create('audit', {
-        actor: 'Fairness Engine',
+        actor: authService.getCurrentUser()?.name || authService.getCurrentUser()?.email || 'Planner',
         action: 'REBALANCE',
         entity: 'Schedule',
         entityId: schedule.id,
-        note: `Applied ${swapsToApply.length} fairness rebalancing swaps.`,
+        note: `Moved ${n} shifts to even out the roster (fairness suggestions).`,
         timestamp: new Date().toISOString(),
       });
 
-      onApplyAssignments(updated, `Rebalanced ${swapsToApply.length} shifts towards parity`);
+      onApplyAssignments(updated, `Moved ${n} shift${n === 1 ? '' : 's'} to even out the roster`);
       onClose();
     } catch (err: any) {
-      notify(`Rebalancing failed: ${err.message}`, 'error');
+      notify(`Couldn't move the shifts: ${err.message}`, 'error');
     } finally {
       setIsApplying(false);
     }
@@ -314,11 +323,11 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 id={titleId} className="text-base font-bold text-slate-900">
-                  Roster Fairness &amp; Parity Dashboard
+                  Fairness
                 </h2>
               </div>
-              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                {schedule.name} · Equity spread analysis &amp; automated parity swaps
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {schedule.name} · how evenly the work is shared, and suggested changes
               </p>
             </div>
           </div>
@@ -337,7 +346,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
         <div className="px-6 py-3 bg-slate-100/70 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-600">Fairness Spread Score:</span>
+              <span className="font-semibold text-slate-600">Fairness score:</span>
               <span
                 className={`font-mono font-bold text-sm px-2.5 py-0.5 rounded border ${
                   spreadScore >= 80
@@ -354,7 +363,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
             <span className="text-slate-300">|</span>
 
             <div className="text-slate-600 text-[11px]">
-              Evaluates variance in working hours, weekend rotations, holidays, and 21:00 late-ends.
+              Higher is fairer. Looks at how far each nurse is from their hours goal and how evenly late shifts (ending 21:00 or later) are shared.
             </div>
           </div>
 
@@ -369,7 +378,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                   : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
-              Staff Metrics Grid
+              Each nurse
             </button>
             <button
               type="button"
@@ -384,7 +393,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
               }`}
             >
               <Sparkles className="w-3 h-3" aria-hidden="true" />
-              <span>Parity Rebalance ({proposedSwaps.length})</span>
+              <span>Suggested changes ({proposedSwaps.length})</span>
             </button>
           </div>
         </div>
@@ -397,14 +406,14 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 text-slate-600 font-mono text-[11px] border-b border-slate-200">
                     <tr>
-                      <th className="py-2.5 px-4">Nursing Staff</th>
+                      <th className="py-2.5 px-4">Nurse</th>
                       <th className="py-2.5 px-3">Contract</th>
-                      <th className="py-2.5 px-3">Target</th>
+                      <th className="py-2.5 px-3">Goal</th>
                       <th className="py-2.5 px-3">Hours (shifts + leave)</th>
-                      <th className="py-2.5 px-3">Variance</th>
-                      <th className="py-2.5 px-3">Weekends Off</th>
-                      <th className="py-2.5 px-3">Holidays Worked</th>
-                      <th className="py-2.5 px-3">21:00 Late-Ends</th>
+                      <th className="py-2.5 px-3">Difference from goal</th>
+                      <th className="py-2.5 px-3">Weekend days off</th>
+                      <th className="py-2.5 px-3">Holidays worked</th>
+                      <th className="py-2.5 px-3">Late shifts (end 21:00 or later)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono">
@@ -454,18 +463,18 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
             <div className="space-y-4">
               <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded text-xs space-y-1">
                 <div className="font-bold text-indigo-950 flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-indigo-600" />
-                  <span>Automated Fairness Optimization Engine</span>
+                  <Sparkles className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                  <span>Suggested shift moves</span>
                 </div>
                 <p className="text-indigo-900 text-[11px] leading-relaxed">
-                  The algorithm identifies safe shift transfers from staff with surplus hours or excessive 21:00 late-ends to qualified under-allocated staff, preserving all hard clinical constraints.
+                  These move a shift from a nurse with too many hours or many late shifts to a nurse with fewer. Each move is checked against the rules that are never broken, and the nurse must be able to do the shift. Pinned shifts are never moved.
                 </p>
               </div>
 
               {proposedSwaps.length > 0 ? (
                 <div className="space-y-2">
                   <span className="font-bold text-slate-800 block text-xs">
-                    Proposed Shift Transfers ({proposedSwaps.length}):
+                    Suggested moves ({proposedSwaps.length}):
                   </span>
 
                   <div className="space-y-2">
@@ -494,7 +503,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                             />
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className="font-bold font-mono">{s.date}</span>
+                                <span className="font-bold">{formatDate(s.date)}</span>
                                 <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono text-[10px]">
                                   {s.dutyName}
                                 </span>
@@ -519,7 +528,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                 </div>
               ) : (
                 <div className="p-8 border border-slate-200 rounded text-center text-slate-400 text-xs">
-                  Schedule is already at optimal fairness. No beneficial transfers detected.
+                  No moves to suggest. The work is already shared as evenly as the rules allow.
                 </div>
               )}
             </div>
@@ -544,7 +553,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
               className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40"
             >
               <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-              <span>Apply {selectedSwaps.size} Parity Swaps</span>
+              <span>Move {selectedSwaps.size} shift{selectedSwaps.size === 1 ? '' : 's'}</span>
             </button>
           )}
         </div>

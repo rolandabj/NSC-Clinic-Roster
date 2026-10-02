@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Hours & Equity Workbook Sheet (Phase 9)
+ * Hours tab: each nurse's shift and leave hours against their goal.
  */
 
 import React, { useState, useMemo } from 'react';
@@ -42,6 +42,9 @@ import {
   HoursAccountingStatus,
 } from '../../services/reports/hoursAccounting';
 import { NurseTimesheetModal } from '../modals/NurseTimesheetModal';
+
+/** Hours as shown to people: at most one decimal (sums of many shifts can carry long decimals). */
+const fmtHours = (h: number) => `${Math.round(h * 10) / 10}h`;
 
 interface HoursAccountingSheetProps {
   schedule: Schedule;
@@ -136,7 +139,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
       <div className="bg-white border-b border-slate-200 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <Scale className="w-4 h-4 text-indigo-600" />
+            <Scale className="w-4 h-4 text-indigo-600" aria-hidden="true" />
             <span className="font-bold text-slate-800">
               Hours ({schedule.name})
             </span>
@@ -147,13 +150,13 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
           {/* Quick Metrics Badges */}
           <div className="flex items-center gap-2 font-mono text-[11px]">
             <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700">
-              Target: <strong className="text-slate-900">{metrics.totalContractedTargetHours}h</strong>
+              Goal: <strong className="text-slate-900">{fmtHours(metrics.totalContractedTargetHours)}</strong>
             </span>
             <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700">
-              Duties: <strong>{metrics.totalDutyHoursWorked}h</strong>
+              Shifts: <strong>{fmtHours(metrics.totalDutyHoursWorked)}</strong>
             </span>
             <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700">
-              Leave: <strong>{metrics.totalLeaveHoursCredited}h</strong>
+              Leave: <strong>{fmtHours(metrics.totalLeaveHoursCredited)}</strong>
             </span>
             <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">
               Share of goal: <strong>{metrics.clinicFulfillmentPercent}%</strong>
@@ -176,7 +179,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
             onChange={(e) => setStatusFilter(e.target.value as any)}
             className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
           >
-            <option value="ALL">All Statuses ({nurseRows.length})</option>
+            <option value="ALL">All nurses ({nurseRows.length})</option>
             <option value="OPTIMAL">On goal</option>
             <option value="UNDER">A little short</option>
             <option value="CRITICAL_UNDER">Very short</option>
@@ -192,7 +195,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-medium font-mono">
               <tr>
-                <th className="py-2 px-3">Nurse Staff</th>
+                <th className="py-2 px-3">Nurse</th>
                 <th className="py-2 px-3 text-center">Contract</th>
                 <th className="py-2 px-3">Goal</th>
                 <th className="py-2 px-3">Shifts</th>
@@ -200,7 +203,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
                 <th className="py-2 px-3">Total (shifts + leave)</th>
                 <th className="py-2 px-3">Difference from goal</th>
                 <th className="py-2 px-3 text-center">Weekends</th>
-                <th className="py-2 px-3 text-center">Late Shifts</th>
+                <th className="py-2 px-3 text-center">Late shifts</th>
                 <th className="py-2 px-3 w-36">Share of goal</th>
                 <th className="py-2 px-3 text-right">Status</th>
               </tr>
@@ -235,19 +238,19 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
                     </td>
 
                     <td className="py-2 px-3 font-bold text-slate-800">
-                      {r.targetHours}h
+                      {fmtHours(r.targetHours)}
                     </td>
 
                     <td className="py-2 px-3 text-indigo-700 font-semibold">
-                      {r.dutyHours}h
+                      {fmtHours(r.dutyHours)}
                     </td>
 
                     <td className="py-2 px-3 text-amber-700 font-semibold">
-                      {r.leaveHours}h
+                      {fmtHours(r.leaveHours)}
                     </td>
 
                     <td className="py-2 px-3 font-bold text-slate-900">
-                      {r.totalEarnedHours}h
+                      {fmtHours(r.totalEarnedHours)}
                     </td>
 
                     <td className="py-2 px-3">
@@ -260,7 +263,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
                             : 'text-slate-600'
                         }`}
                       >
-                        {r.varianceHours > 0 ? `+${r.varianceHours}h` : `${r.varianceHours}h`}
+                        {r.varianceHours > 0 ? `+${fmtHours(r.varianceHours)}` : fmtHours(r.varianceHours)}
                       </span>
                     </td>
 

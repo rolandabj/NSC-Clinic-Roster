@@ -2,9 +2,9 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Shift Swap Manager & Bidirectional Safety Validator (Phase 14.3)
- * Records swap requests, validates both directions (rest, leave, hard rules),
- * applies MANUAL edits with AuditEvents for change alert email tracking.
+ * Swap dialog: two nurses exchange shifts. Both moved shifts are checked
+ * against the clinic rules (rest, leave, pinned days, senior nurse each day)
+ * before the swap is saved, and the swap is recorded under the signed in user.
  */
 
 import React, { useState, useMemo, useId } from 'react';
@@ -39,6 +39,9 @@ import { getRepository } from '../../services/repository';
 import { checkAssignment } from '../../services/engine/assignmentChecks';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify } from '../common/dialogs';
+import { authService } from '../../services/auth/authService';
+import { resolveRule } from '../../services/engine/SchedulingEngine';
+import { formatDate } from '../../utils/dateUtils';
 
 interface SwapManagerModalProps {
   schedule: Schedule;
@@ -126,24 +129,24 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
     const issuesB: string[] = [];
 
     if (!selectedAsgnA || !selectedAsgnB) {
-      return { isValid: false, issuesA: ['Please select assignments for both nurses'], issuesB: [] };
+      return { isValid: false, issuesA: ['Choose a shift for both nurses'], issuesB: [] };
     }
 
     if (nurseAId === nurseBId) {
-      return { isValid: false, issuesA: ['Nurse A and Nurse B cannot be the same person'], issuesB: [] };
+      return { isValid: false, issuesA: ['Choose two different nurses'], issuesB: [] };
     }
 
     const nurseA = nurseMap.get(nurseAId);
     const nurseB = nurseMap.get(nurseBId);
-    if (!nurseA || !nurseB) return { isValid: false, issuesA: ['Invalid staff'], issuesB: [] };
+    if (!nurseA || !nurseB) return { isValid: false, issuesA: ['One of these nurses could not be found'], issuesB: [] };
 
     // Pinned shifts cannot be given away
     const isPinned = (asgn: Assignment) =>
       asgn.locked ||
       asgn.source === 'LOCK' ||
       locks.some((l) => l.nurseId === asgn.nurseId && l.date === asgn.date && l.mode === 'ASSIGNMENT');
-    if (isPinned(selectedAsgnA)) issuesA.push(`${nurseA.fullName}'s shift on ${selectedAsgnA.date} is pinned and cannot be swapped`);
-    if (isPinned(selectedAsgnB)) issuesB.push(`${nurseB.fullName}'s shift on ${selectedAsgnB.date} is pinned and cannot be swapped`);
+    if (isPinned(selectedAsgnA)) issuesA.push(`${nurseA.fullName}'s shift on ${formatDate(selectedAsgnA.date)} is a pinned day and can't be swapped`);
+    if (isPinned(selectedAsgnB)) issuesB.push(`${nurseB.fullName}'s shift on ${formatDate(selectedAsgnB.date)} is a pinned day and can't be swapped`);
 
     // Check both moved cells against the roster as it would be after the swap
     // (same hard rules as the scheduling engine).
@@ -156,12 +159,34 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
     issuesA.push(...checkAssignment(ctx, movedToA));
     issuesB.push(...checkAssignment(ctx, movedToB));
 
+    // One senior nurse on duty each day (the same rule the roster check uses):
+    // the swap may not take away the only senior nurse on either day.
+    const seniorRule = resolveRule(rules, 'SENIOR_ON_DUTY', 'rule-h1', ['senior nurse', 'senior on duty']);
+    if (!seniorRule || seniorRule.enabled !== false) {
+      const isSenior = (nurseId: string) => {
+        const level = seniorityMap.get(nurseMap.get(nurseId)?.seniorityLevelId || '');
+        return !!level?.isSenior;
+      };
+      const hasSenior = (list: Assignment[], date: string) => list.some((a) => a.date === date && isSenior(a.nurseId));
+      const lostSenior = (date: string) => hasSenior(assignments, date) && !hasSenior(afterSwap, date);
+      if (lostSenior(selectedAsgnA.date)) {
+        issuesA.push(
+          `After the swap there would be no senior nurse on duty on ${formatDate(selectedAsgnA.date)}. Each day needs one senior nurse.`
+        );
+      }
+      if (selectedAsgnB.date !== selectedAsgnA.date && lostSenior(selectedAsgnB.date)) {
+        issuesB.push(
+          `After the swap there would be no senior nurse on duty on ${formatDate(selectedAsgnB.date)}. Each day needs one senior nurse.`
+        );
+      }
+    }
+
     return {
       isValid: issuesA.length === 0 && issuesB.length === 0,
       issuesA,
       issuesB,
     };
-  }, [selectedAsgnA, selectedAsgnB, nurseAId, nurseBId, nurseMap, locks, leaveEntries, assignments, nurses, dutyWindows, roles, rules]);
+  }, [selectedAsgnA, selectedAsgnB, nurseAId, nurseBId, nurseMap, seniorityMap, locks, leaveEntries, assignments, nurses, dutyWindows, roles, rules]);
 
   const titleId = useId();
   const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
@@ -175,6 +200,10 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
     try {
       const nurseA = nurseMap.get(nurseAId);
       const nurseB = nurseMap.get(nurseBId);
+      // The person signed in records (and so approves) the swap.
+      const user = authService.getCurrentUser();
+      const recordedBy = user?.name || user?.email || 'Planner';
+      const reasonText = swapReason.trim() || 'agreed between the nurses';
 
       const updatedAssignments = assignments.map((a) => {
         if (a.id === selectedAsgnA.id) {
@@ -182,7 +211,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             ...a,
             nurseId: nurseBId,
             source: 'MANUAL' as const,
-            note: `Swapped with ${nurseA?.fullName}. Reason: ${swapReason || 'Mutual staff swap'}`,
+            note: `Swapped with ${nurseA?.fullName}. Reason: ${reasonText}`,
           };
         }
         if (a.id === selectedAsgnB.id) {
@@ -190,7 +219,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             ...a,
             nurseId: nurseAId,
             source: 'MANUAL' as const,
-            note: `Swapped with ${nurseB?.fullName}. Reason: ${swapReason || 'Mutual staff swap'}`,
+            note: `Swapped with ${nurseB?.fullName}. Reason: ${reasonText}`,
           };
         }
         return a;
@@ -213,7 +242,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
         dutyWindowBId: selectedAsgnB.dutyWindowId,
         reason: swapReason.trim(),
         status: 'APPROVED',
-        requestedBy: nurseA?.fullName || 'Staff',
+        requestedBy: recordedBy,
         createdAt: nowIso,
         resolvedAt: nowIso,
       };
@@ -221,23 +250,23 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
       await repo.create('swaps', swapRecord);
 
       await repo.create('audit', {
-        actor: 'Clinical Supervisor',
+        actor: recordedBy,
         action: 'SWAP',
         entity: 'Assignment',
         entityId: `${selectedAsgnA.id}<->${selectedAsgnB.id}`,
         before: { nurseA: nurseAId, nurseB: nurseBId },
         after: { nurseA: nurseBId, nurseB: nurseAId },
-        note: `Approved shift swap between ${nurseA?.fullName} and ${nurseB?.fullName}: ${swapReason || 'Operational swap'}`,
+        note: `Shift swap between ${nurseA?.fullName} and ${nurseB?.fullName}, recorded by ${recordedBy}: ${reasonText}`,
         timestamp: nowIso,
       });
 
       onApplySwap(
         updatedAssignments,
-        `Swapped shifts between ${nurseA?.fullName} (${selectedAsgnA.date}) and ${nurseB?.fullName} (${selectedAsgnB.date})`
+        `Swapped shifts between ${nurseA?.fullName} (${formatDate(selectedAsgnA.date)}) and ${nurseB?.fullName} (${formatDate(selectedAsgnB.date)})`
       );
       onClose();
     } catch (err: any) {
-      notify(`Swap execution failed: ${err.message}`, 'error');
+      notify(`Couldn't save the swap: ${err.message}`, 'error');
     } finally {
       setIsExecuting(false);
     }
@@ -246,14 +275,14 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
   const renderAssignmentSummary = (asgn?: Assignment) => {
     if (!asgn) return <div className="text-slate-400 italic">No shift selected</div>;
     const dw = dutyMap.get(asgn.dutyWindowId);
-    let target = 'General Clinic';
+    let target = 'Clinic';
     if (asgn.doctorId) target = docMap.get(asgn.doctorId)?.fullName || 'Doctor';
     else if (asgn.clinicalRoleId) target = roleMap.get(asgn.clinicalRoleId)?.name || 'Role';
 
     return (
       <div className="p-3 rounded bg-slate-50 border border-slate-200 space-y-1">
         <div className="flex items-center justify-between">
-          <span className="font-bold font-mono text-slate-900">{asgn.date}</span>
+          <span className="font-bold text-slate-900">{formatDate(asgn.date)}</span>
           <span
             className="px-2 py-0.5 rounded text-white font-bold font-mono text-[10px]"
             style={{ backgroundColor: dw?.color || '#4f46e5' }}
@@ -261,7 +290,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             {dw?.acronym} ({dw?.startTime}–{dw?.endTime})
           </span>
         </div>
-        <div className="text-[11px] text-slate-600 font-medium">Pairing: {target}</div>
+        <div className="text-[11px] text-slate-600 font-medium">Working with: {target}</div>
       </div>
     );
   };
@@ -284,11 +313,11 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 id={titleId} className="text-base font-bold text-slate-900">
-                  Shift Swap Manager
+                  Swap shifts
                 </h2>
               </div>
-              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                Bidirectional clinical rule validation with audit trail
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Both nurses' new shifts are checked against the clinic rules before saving
               </p>
             </div>
           </div>
@@ -309,12 +338,12 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             {/* NURSE A */}
             <div className="p-3 border border-slate-200 rounded-lg space-y-3 bg-white shadow-2xs">
               <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Primary Nurse (Nurse A)</span>
+                <User className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
+                <span>First nurse</span>
               </span>
 
               <select
-                aria-label="Primary nurse (Nurse A)"
+                aria-label="First nurse"
                 value={nurseAId}
                 onChange={(e) => setNurseAId(e.target.value)}
                 className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-medium"
@@ -328,10 +357,10 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
 
               <div className="space-y-1">
                 <label className="block text-[11px] font-semibold text-slate-600">
-                  Select Shift to Relinquish:
+                  Shift to give away:
                 </label>
                 <select
-                  aria-label="Nurse A shift to relinquish"
+                  aria-label="First nurse's shift to give away"
                   value={assignmentAId}
                   onChange={(e) => setAssignmentAId(e.target.value)}
                   className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-mono text-[11px]"
@@ -340,11 +369,11 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
                     const dw = dutyMap.get(a.dutyWindowId);
                     return (
                       <option key={a.id} value={a.id}>
-                        {a.date} — {dw?.name} ({dw?.acronym})
+                        {formatDate(a.date)} — {dw?.name} ({dw?.acronym})
                       </option>
                     );
                   })}
-                  {nurseAAsgns.length === 0 && <option value="">No active shifts</option>}
+                  {nurseAAsgns.length === 0 && <option value="">No shifts on this roster</option>}
                 </select>
               </div>
 
@@ -354,8 +383,8 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
               {validation.issuesA.length > 0 ? (
                 <div className="p-2.5 bg-rose-50 border border-rose-200 rounded text-rose-800 text-[11px] space-y-1">
                   <div className="font-bold flex items-center gap-1">
-                    <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-                    <span>Incompatible for Nurse A:</span>
+                    <ShieldAlert className="w-3.5 h-3.5 text-rose-600" aria-hidden="true" />
+                    <span>Can't swap:</span>
                   </div>
                   {validation.issuesA.map((msg, i) => (
                     <div key={i}>• {msg}</div>
@@ -363,8 +392,8 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
                 </div>
               ) : (
                 <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-emerald-800 text-[11px] flex items-center gap-1.5 font-medium">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Eligible to receive Nurse B's shift</span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                  <span>Can take the second nurse's shift</span>
                 </div>
               )}
             </div>
@@ -372,12 +401,12 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             {/* NURSE B */}
             <div className="p-3 border border-slate-200 rounded-lg space-y-3 bg-white shadow-2xs">
               <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Partner Nurse (Nurse B)</span>
+                <User className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
+                <span>Second nurse</span>
               </span>
 
               <select
-                aria-label="Partner nurse (Nurse B)"
+                aria-label="Second nurse"
                 value={nurseBId}
                 onChange={(e) => setNurseBId(e.target.value)}
                 className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-medium"
@@ -391,10 +420,10 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
 
               <div className="space-y-1">
                 <label className="block text-[11px] font-semibold text-slate-600">
-                  Select Shift to Relinquish:
+                  Shift to give away:
                 </label>
                 <select
-                  aria-label="Nurse B shift to relinquish"
+                  aria-label="Second nurse's shift to give away"
                   value={assignmentBId}
                   onChange={(e) => setAssignmentBId(e.target.value)}
                   className="w-full px-2.5 py-1.5 border border-slate-300 rounded bg-white font-mono text-[11px]"
@@ -403,11 +432,11 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
                     const dw = dutyMap.get(a.dutyWindowId);
                     return (
                       <option key={a.id} value={a.id}>
-                        {a.date} — {dw?.name} ({dw?.acronym})
+                        {formatDate(a.date)} — {dw?.name} ({dw?.acronym})
                       </option>
                     );
                   })}
-                  {nurseBAsgns.length === 0 && <option value="">No active shifts</option>}
+                  {nurseBAsgns.length === 0 && <option value="">No shifts on this roster</option>}
                 </select>
               </div>
 
@@ -417,8 +446,8 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
               {validation.issuesB.length > 0 ? (
                 <div className="p-2.5 bg-rose-50 border border-rose-200 rounded text-rose-800 text-[11px] space-y-1">
                   <div className="font-bold flex items-center gap-1">
-                    <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-                    <span>Incompatible for Nurse B:</span>
+                    <ShieldAlert className="w-3.5 h-3.5 text-rose-600" aria-hidden="true" />
+                    <span>Can't swap:</span>
                   </div>
                   {validation.issuesB.map((msg, i) => (
                     <div key={i}>• {msg}</div>
@@ -426,8 +455,8 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
                 </div>
               ) : (
                 <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-emerald-800 text-[11px] flex items-center gap-1.5 font-medium">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Eligible to receive Nurse A's shift</span>
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
+                  <span>Can take the first nurse's shift</span>
                 </div>
               )}
             </div>
@@ -436,12 +465,12 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
           {/* Reason Field */}
           <div className="space-y-1">
             <label className="block font-bold text-slate-800 text-xs">
-              Reason / Swap Notes (Recorded in Audit &amp; Email Alerts):
+              Reason (kept in the roster history):
             </label>
             <input
               type="text"
-              aria-label="Reason or swap notes"
-              placeholder="e.g. Mutual accommodation for clinic CME conference on Saturday"
+              aria-label="Reason for the swap"
+              placeholder="For example: Mariam has a training day on Saturday"
               value={swapReason}
               onChange={(e) => setSwapReason(e.target.value)}
               className="w-full px-3 py-2 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-indigo-500"
@@ -466,7 +495,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40 transition-colors"
           >
             <ArrowLeftRight className="w-4 h-4" aria-hidden="true" />
-            <span>Confirm &amp; Execute Shift Swap</span>
+            <span>Swap shifts</span>
           </button>
         </div>
       </div>

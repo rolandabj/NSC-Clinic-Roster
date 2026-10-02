@@ -54,10 +54,10 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
       {/* Header */}
       <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <CalendarCheck2 className="w-4 h-4 text-indigo-600" />
-          <span className="font-bold text-slate-800">
-            Leave &amp; Pinned Locks Ledger ({intersectingLeave.length} leave, {intersectingLocks.length} locks)
-          </span>
+          <CalendarCheck2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+          <h2 className="font-bold text-slate-800">
+            Leave and pinned days ({intersectingLeave.length} leave, {intersectingLocks.length} pinned)
+          </h2>
         </div>
 
         <div className="flex items-center gap-2">
@@ -66,20 +66,20 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
             onChange={(e) => setFilterType(e.target.value as any)}
             className="px-2.5 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
           >
-            <option value="ALL">All Entries</option>
-            <option value="LEAVE">Leave Only</option>
-            <option value="LOCKS">Locks Only</option>
+            <option value="ALL">Leave and pinned days</option>
+            <option value="LEAVE">Leave only</option>
+            <option value="LOCKS">Pinned days only</option>
           </select>
         </div>
       </div>
 
-      {/* Table Ledger */}
+      {/* Tables */}
       <div className="flex-1 overflow-auto p-4 space-y-4">
         {(filterType === 'ALL' || filterType === 'LOCKS') && (
           <div className="bg-white border border-slate-200 rounded shadow-xs overflow-hidden">
             <div className="p-2.5 bg-amber-50/70 border-b border-amber-200 flex items-center gap-1.5 text-amber-900 font-bold">
-              <Lock className="w-3.5 h-3.5 text-amber-700" />
-              <span>Pinned Non-Changeable Shift Locks ({intersectingLocks.length})</span>
+              <Lock className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
+              <span>Pinned days ({intersectingLocks.length})</span>
             </div>
 
             <table className="w-full text-left text-xs">
@@ -87,8 +87,8 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
                 <tr>
                   <th className="py-2 px-3">Date</th>
                   <th className="py-2 px-3">Nurse</th>
-                  <th className="py-2 px-3">Mode</th>
-                  <th className="py-2 px-3">Duty / Target</th>
+                  <th className="py-2 px-3">Pinned as</th>
+                  <th className="py-2 px-3">Shift</th>
                   <th className="py-2 px-3">Note</th>
                   <th className="py-2 px-3 text-right">Actions</th>
                 </tr>
@@ -102,7 +102,7 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
                     </td>
                     <td className="py-2 px-3">
                       <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-bold text-[10px]">
-                        {lock.mode}
+                        {lock.mode === 'OFF' ? 'Day off' : 'Working'}
                       </span>
                     </td>
                     <td className="py-2 px-3 text-slate-600">
@@ -115,7 +115,7 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
                           onClick={() => onGoToCell(lock.nurseId, lock.date)}
                           className="text-indigo-600 hover:text-indigo-800 font-sans cursor-pointer text-xs"
                         >
-                          Jump to cell
+                          Show on roster
                         </button>
                       )}
                     </td>
@@ -129,8 +129,8 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
         {(filterType === 'ALL' || filterType === 'LEAVE') && (
           <div className="bg-white border border-slate-200 rounded shadow-xs overflow-hidden">
             <div className="p-2.5 bg-blue-50/70 border-b border-blue-200 flex items-center gap-1.5 text-blue-900 font-bold">
-              <CalendarCheck2 className="w-3.5 h-3.5 text-blue-700" />
-              <span>Approved Staff Leave ({intersectingLeave.length})</span>
+              <CalendarCheck2 className="w-3.5 h-3.5 text-blue-700" aria-hidden="true" />
+              <span>Approved leave ({intersectingLeave.length})</span>
             </div>
 
             <table className="w-full text-left text-xs">
@@ -138,8 +138,8 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
                 <tr>
                   <th className="py-2 px-3">Dates</th>
                   <th className="py-2 px-3">Nurse</th>
-                  <th className="py-2 px-3">Leave Type</th>
-                  <th className="py-2 px-3">Credited Hours</th>
+                  <th className="py-2 px-3">Type of leave</th>
+                  <th className="py-2 px-3">Hours counted</th>
                   <th className="py-2 px-3">Note</th>
                   <th className="py-2 px-3 text-right">Actions</th>
                 </tr>
@@ -160,7 +160,7 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
                           className="px-1.5 py-0.2 rounded text-white font-bold text-[10px]"
                           style={{ backgroundColor: lt?.color || '#f59e0b' }}
                         >
-                          {lt?.acronym} - {lt?.name}
+                          {lt ? `${lt.acronym}: ${lt.name}` : 'Unknown type'}
                         </span>
                       </td>
                       <td className="py-2 px-3 text-slate-700 font-bold">
@@ -173,7 +173,7 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
                             onClick={() => onGoToCell(le.nurseId, le.startDate)}
                             className="text-indigo-600 hover:text-indigo-800 font-sans cursor-pointer text-xs"
                           >
-                            Jump to cell
+                            Show on roster
                           </button>
                         )}
                       </td>

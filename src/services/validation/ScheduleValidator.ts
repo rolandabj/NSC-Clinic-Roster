@@ -143,7 +143,7 @@ export class ScheduleValidator {
         id: `scale-ratio-warning`,
         category: 'STAFFING_SCALE',
         severity: 'WARN',
-        message: `You have ${nurses.length} active nurses but ${activeDoctorIds.size} clinic doctors — expect pairing gaps on busy days.`,
+        message: `There are ${nurses.length} nurses and ${activeDoctorIds.size} doctors, so on busy days some doctors may not get a nurse.`,
         affectedNurseIds: [],
         cellRefs: [],
       });
@@ -240,7 +240,7 @@ export class ScheduleValidator {
             id: `cov-gap-${date}-${h.start}`,
             category: 'COVERAGE_GAP',
             severity: plusOneSeverity,
-            message: `${dayName} ${formatDate(date)}, ${h.start}: no Nurse Clinic nurse on duty (one nurse not with a doctor, with the Nurse Clinic option${phlRole ? ' and qualified for blood collection' : ''}, is needed at every opening hour).`,
+            message: `${dayName} ${formatDate(date)}, ${h.start}: no free nurse for Nurse Clinic (a nurse not with a doctor who can run Nurse Clinic${phlRole ? ' and take blood' : ''} is needed every opening hour).`,
             affectedNurseIds: dayAssignments.map((a) => a.nurseId),
             cellRefs: dayAssignments.map((a) => ({ nurseId: a.nurseId, date })),
             date,
@@ -273,7 +273,7 @@ export class ScheduleValidator {
             id: `evening-tail-${date}`,
             category: 'COVERAGE_GAP',
             severity: 'WARN',
-            message: `${date}: ${nursesBefore19} nurses active at 19:00 and ${nursesLeavingAt19} leave at 19:00, only ${nursesRemainingAfter19} remain to cover ${doctorsAfter19} evening doctors.`,
+            message: `${formatDate(date)}: ${nursesLeavingAt19} of ${nursesBefore19} nurses leave at 19:00, leaving ${nursesRemainingAfter19} for ${doctorsAfter19} evening doctor${doctorsAfter19 === 1 ? '' : 's'}.`,
             affectedNurseIds: dayAssignments.map((a) => a.nurseId),
             cellRefs: dayAssignments.map((a) => ({ nurseId: a.nurseId, date })),
             date,
@@ -316,8 +316,8 @@ export class ScheduleValidator {
             severity: ncSeverity,
             message:
               isNcHard
-                ? `Dedicated Nurse Clinic unassigned on ${dayName} ${formatDate(date)} (Hard Constraint violation: requires dedicated nurse not assigned to a doctor).`
-                : `Dedicated Nurse Clinic unassigned on ${dayName} ${formatDate(date)} (Soft Constraint: desired ${ncQuota} dedicated nurse).`,
+                ? `No nurse runs Nurse Clinic on ${dayName} ${formatDate(date)}. This rule is never broken: a nurse not with a doctor is needed.`
+                : `No nurse runs Nurse Clinic on ${dayName} ${formatDate(date)} (wanted: ${ncQuota}).`,
             affectedNurseIds: [],
             cellRefs: [],
             date,
@@ -350,7 +350,7 @@ export class ScheduleValidator {
               id: `nc-doctor-conflict-${asgn.nurseId}-${date}`,
               category: 'RULE_VIOLATION',
               severity: 'ERROR',
-              message: `Nurse assigned to Dedicated Nurse Clinic on ${date} cannot be assigned to a doctor.`,
+              message: `The Nurse Clinic nurse on ${formatDate(date)} is also with a doctor.`,
               affectedNurseIds: [asgn.nurseId],
               cellRefs: [{ nurseId: asgn.nurseId, date }],
               date,
@@ -370,7 +370,7 @@ export class ScheduleValidator {
               id: `exclusive-nc-doctor-conflict-${nurse.id}-${date}`,
               category: 'RULE_VIOLATION',
               severity: 'ERROR',
-              message: `Nurse ${nurse.fullName} is configured as an Exclusive Nurse Clinic staff member and cannot be assigned to doctor or specialty sessions on ${date}.`,
+              message: `${nurse.fullName} only works in Nurse Clinic, but is with a doctor on ${formatDate(date)}.`,
               affectedNurseIds: [nurse.id],
               cellRefs: [{ nurseId: nurse.id, date }],
               date,
@@ -397,7 +397,7 @@ export class ScheduleValidator {
             id: `role-quota-${date}-${role.acronym}`,
             category: 'RULE_VIOLATION',
             severity: 'WARN',
-            message: `${role.name} (${role.acronym}) unassigned on ${date} (quota ${quota}).`,
+            message: `Nobody does ${role.name} on ${formatDate(date)} (wanted: ${quota}).`,
             affectedNurseIds: [],
             cellRefs: [],
             date,
@@ -518,8 +518,9 @@ export class ScheduleValidator {
         findings.push({
           id: `missing-gmail-${nurse.id}`,
           category: 'DATA_ISSUE',
-          severity: 'ERROR',
-          message: `${nurse.fullName} has no valid Gmail address and will not receive published roster notifications.`,
+          // Not blocking: the roster can still be published, this nurse just isn't emailed.
+          severity: 'WARN',
+          message: `${nurse.fullName} has no email address, so they won't get the roster by email.`,
           affectedNurseIds: [nurse.id],
           cellRefs: [],
         });
@@ -562,7 +563,7 @@ export class ScheduleValidator {
             id: `h4-dup-${nurse.id}-${date}`,
             category: 'DATA_ISSUE',
             severity: 'ERROR',
-            message: `${nurse.fullName} has duplicate assignments on ${date}.`,
+            message: `${nurse.fullName} has two shifts on ${formatDate(date)}.`,
             affectedNurseIds: [nurse.id],
             cellRefs: [{ nurseId: nurse.id, date }],
             date,
@@ -580,7 +581,7 @@ export class ScheduleValidator {
             id: `dayoff-lock-${nurse.id}-${date}`,
             category: 'RULE_VIOLATION',
             severity: 'ERROR',
-            message: `${nurse.fullName} has a shift on ${formatDate(date)}, which is locked as a day off.`,
+            message: `${nurse.fullName} has a shift on ${formatDate(date)}, which is pinned as a day off.`,
             affectedNurseIds: [nurse.id],
             cellRefs: [{ nurseId: nurse.id, date }],
             date,
@@ -591,7 +592,7 @@ export class ScheduleValidator {
             id: `leave-overlap-${nurse.id}-${date}`,
             category: 'DATA_ISSUE',
             severity: 'ERROR',
-            message: `${nurse.fullName} is assigned to a shift on ${date} while having approved leave.`,
+            message: `${nurse.fullName} has a shift on ${formatDate(date)} but is on approved leave.`,
             affectedNurseIds: [nurse.id],
             cellRefs: [{ nurseId: nurse.id, date }],
             date,
@@ -611,7 +612,7 @@ export class ScheduleValidator {
                 id: `h6-phl-capability-${nurse.id}-${date}`,
                 category: 'RULE_VIOLATION',
                 severity: 'ERROR',
-                message: `${nurse.fullName} assigned to ${role.name} on ${date} but lacks certification credential.`,
+                message: `${nurse.fullName} does ${role.name} on ${formatDate(date)} but doesn't have that skill.`,
                 affectedNurseIds: [nurse.id],
                 cellRefs: [{ nurseId: nurse.id, date }],
                 date,
@@ -661,7 +662,7 @@ export class ScheduleValidator {
                   id: `h8-doctor-allocation-${nurse.id}-${date}`,
                   category: 'RULE_VIOLATION',
                   severity: 'ERROR',
-                  message: `${nurse.fullName} is scheduled to ${docName} (${docSpecName}) on ${formatDate(date)}, which is not allocated in their nurse profile.`,
+                  message: `${nurse.fullName} is with ${docName} (${docSpecName}) on ${formatDate(date)}, who isn't one of their doctors.`,
                   affectedNurseIds: [nurse.id],
                   cellRefs: [{ nurseId: nurse.id, date }],
                   date,
@@ -692,7 +693,7 @@ export class ScheduleValidator {
                   id: `h8-specialty-allocation-${nurse.id}-${date}`,
                   category: 'RULE_VIOLATION',
                   severity: 'ERROR',
-                  message: `${nurse.fullName} is scheduled to ${specName} on ${formatDate(date)}, which is not allocated in their nurse profile.`,
+                  message: `${nurse.fullName} works in ${specName} on ${formatDate(date)}, which isn't one of their specialties.`,
                   affectedNurseIds: [nurse.id],
                   cellRefs: [{ nurseId: nurse.id, date }],
                   date,
@@ -712,7 +713,7 @@ export class ScheduleValidator {
                 id: `s1-late-${nurse.id}-${date}`,
                 category: 'RULE_VIOLATION',
                 severity: s1Severity,
-                message: `${nurse.fullName}: ${consecutiveLateDuties} consecutive duties ending at 21:00 (max ${maxLateAllowed}), ${formatDate(consecutiveLateStartDay)} to ${formatDate(date)}.`,
+                message: `${nurse.fullName}: ${consecutiveLateDuties} late shifts in a row (most allowed: ${maxLateAllowed}), ${formatDate(consecutiveLateStartDay)} to ${formatDate(date)}.`,
                 affectedNurseIds: [nurse.id],
                 cellRefs: [{ nurseId: nurse.id, date }],
                 date,
@@ -729,7 +730,7 @@ export class ScheduleValidator {
               id: `h2-days-${nurse.id}-${date}`,
               category: 'RULE_VIOLATION',
               severity: h2Severity,
-              message: `${nurse.fullName}: ${consecutiveDays} consecutive working days (max ${maxConsecutiveDaysAllowed}), ending ${formatDate(date)}.`,
+              message: `${nurse.fullName}: ${consecutiveDays} working days in a row (most allowed: ${maxConsecutiveDaysAllowed}), ending ${formatDate(date)}.`,
               affectedNurseIds: [nurse.id],
               cellRefs: [{ nurseId: nurse.id, date }],
               date,
@@ -754,7 +755,7 @@ export class ScheduleValidator {
                     id: `h3-rest-${nurse.id}-${date}`,
                     category: 'RULE_VIOLATION',
                     severity: h3Severity,
-                    message: `${nurse.fullName}: Insufficient rest (${restHours}h < ${minRestRequired}h) between duty on ${formatDate(yesterdayDate)} (ends ${prevDuty.endTime}) and ${formatDate(date)} (starts ${duty.startTime}).`,
+                    message: `${nurse.fullName}: only ${restHours} h rest (needs ${minRestRequired} h) between ${formatDate(yesterdayDate)} (ends ${prevDuty.endTime}) and ${formatDate(date)} (starts ${duty.startTime}).`,
                     affectedNurseIds: [nurse.id],
                     cellRefs: [
                       { nurseId: nurse.id, date: yesterdayDate },
@@ -784,6 +785,7 @@ export class ScheduleValidator {
       const target = Math.round(effectiveFullTimeTarget * (nurse.contractPercent / 100));
       const maxAllowed = Math.max(target, Math.min(target + 8, Math.round(target * h7TolerancePct)));
       const paceRatio = target > 0 ? totalHours / target : 1;
+      const h = (n: number) => Math.round(n * 10) / 10;
 
       if (paceRatio < 0.75) {
         const delta = totalHours - target;
@@ -791,7 +793,7 @@ export class ScheduleValidator {
           id: `hours-low-${nurse.id}`,
           category: 'HOURS_IMBALANCE',
           severity: 'WARN',
-          message: `${nurse.fullName} at ${totalHours}h vs target ${target}h (${delta}h projected deficit, ${Math.round(paceRatio * 100)}% pace).`,
+          message: `${nurse.fullName}: ${h(totalHours)} / ${target} h, ${h(Math.abs(delta))} h short.`,
           affectedNurseIds: [nurse.id],
           cellRefs: [],
         });
@@ -801,9 +803,9 @@ export class ScheduleValidator {
           id: `h7-hours-over-${nurse.id}`,
           category: h7Severity === 'ERROR' ? 'RULE_VIOLATION' : 'HOURS_IMBALANCE',
           severity: h7Severity,
-          message: `${nurse.fullName} at ${totalHours}h vs target ${target}h (+${delta}h overtime, ${Math.round(paceRatio * 100)}% pace; maximum allowable limit is ${maxAllowed}h).`,
+          message: `${nurse.fullName}: ${h(totalHours)} / ${target} h, ${h(delta)} h over (most allowed: ${maxAllowed} h).`,
           affectedNurseIds: [nurse.id],
-          cellRefs: nurseAssignments.map((a) => ({ nurseId: a.nurseId, date: a.date })),
+          cellRefs: nurseAssignments.slice(0, 1).map((a) => ({ nurseId: a.nurseId, date: a.date })),
         });
       } else if (paceRatio > h7TolerancePct) {
         const delta = totalHours - target;
@@ -811,9 +813,9 @@ export class ScheduleValidator {
           id: `hours-over-${nurse.id}`,
           category: 'HOURS_IMBALANCE',
           severity: 'WARN',
-          message: `${nurse.fullName} at ${totalHours}h vs target ${target}h (+${delta}h overtime, ${Math.round(paceRatio * 100)}% pace).`,
+          message: `${nurse.fullName}: ${h(totalHours)} / ${target} h, ${h(delta)} h over.`,
           affectedNurseIds: [nurse.id],
-          cellRefs: nurseAssignments.map((a) => ({ nurseId: a.nurseId, date: a.date })),
+          cellRefs: nurseAssignments.slice(0, 1).map((a) => ({ nurseId: a.nurseId, date: a.date })),
         });
       }
     });

@@ -243,12 +243,12 @@ export class SchedulingEngine {
     const eveningSessions = scheduleSessions.filter((s) => s.endTime >= '19:00');
     let eveningCoverageAlert: string | undefined;
     if (eveningSessions.length > 0) {
-      eveningCoverageAlert = `Detected ${eveningSessions.length} evening doctor sessions ending up to 21:00. The engine will prioritize assigning nurses to Full Day (D 09:00-21:00) and Late (L 11:00-21:00) duties to avoid coverage gaps.`;
+      eveningCoverageAlert = `${eveningSessions.length} doctor session${eveningSessions.length === 1 ? ' runs' : 's run'} into the evening, so shifts that reach the evening are used for ${eveningSessions.length === 1 ? 'it' : 'them'}.`;
     }
 
     let staffingScaleWarning: string | undefined;
     if (nurses.length < doctors.length) {
-      staffingScaleWarning = `You have ${nurses.length} active nurses but ${doctors.length} clinic doctors — expect pairing float or gaps on peak clinic days.`;
+      staffingScaleWarning = `There are ${nurses.length} nurses and ${doctors.length} doctors, so on busy days some doctors may not get a nurse.`;
     }
 
     return {
@@ -978,7 +978,7 @@ export class SchedulingEngine {
           currentDay: dayIdx + 1,
           totalDays,
           currentDate: date,
-          statusText: `Optimizing Day ${dayIdx + 1} of ${totalDays} (${date})...`,
+          statusText: `Filling day ${dayIdx + 1} of ${totalDays}…`,
           percent: Math.round(((dayIdx + 1) / totalDays) * 100),
         });
         await new Promise((resolve) => setTimeout(resolve, 8));
@@ -1735,7 +1735,7 @@ export class SchedulingEngine {
         currentDay: totalDays,
         totalDays,
         currentDate: schedule.endDate,
-        statusText: 'Deterministic generation pass complete.',
+        statusText: 'Done.',
         percent: 100,
       });
     }

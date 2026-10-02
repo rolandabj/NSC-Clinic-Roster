@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Unified Export Dialog & Print Preview (Phase 11)
- * Supports a PDF of the nurses' and doctors' grids, Multi-Sheet Excel, CSV Matrix/Long, and Per-Nurse Packets.
+ * Export dialog: a PDF of the nurses' and doctors' rosters, an Excel workbook,
+ * CSV files, and a printed page for each nurse.
  */
 
 import { resolveFullTimeTarget } from '../../services/hours/hoursPolicy';
@@ -78,6 +78,9 @@ interface ExportModalProps {
 type ExportTab = 'excel' | 'csv' | 'print_roster' | 'print_packets';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** Hours as printed: at most one decimal. */
+const fmtHours = (h: number) => `${Math.round((h || 0) * 10) / 10}h`;
 
 export const ExportModal: React.FC<ExportModalProps> = ({
   clinicName,
@@ -283,10 +286,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 id={titleId} className="text-base font-bold text-slate-900">Export &amp; Print Center</h2>
+                <h2 id={titleId} className="text-base font-bold text-slate-900">Export and print</h2>
               </div>
               <p className="text-[11px] text-slate-500 font-sans mt-0.5">
-                {schedule.name} · Version v{versionNumber} ({schedule.startDate} to {schedule.endDate})
+                {schedule.name} · version {versionNumber} ({schedule.startDate} to {schedule.endDate})
               </p>
             </div>
           </div>
@@ -313,7 +316,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             }`}
           >
             <FileText className="w-4 h-4 text-rose-600" aria-hidden="true" />
-            <span>PDF (Nurses &amp; Doctors)</span>
+            <span>PDF (nurses and doctors)</span>
           </button>
 
           <button
@@ -326,7 +329,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             }`}
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" aria-hidden="true" />
-            <span>Excel (.xlsx via SheetJS)</span>
+            <span>Excel</span>
           </button>
 
           <button
@@ -339,7 +342,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             }`}
           >
             <FileText className="w-4 h-4 text-blue-600" aria-hidden="true" />
-            <span>CSV (Matrix &amp; Long)</span>
+            <span>CSV</span>
           </button>
 
           <button
@@ -352,7 +355,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             }`}
           >
             <Users className="w-4 h-4 text-purple-600" aria-hidden="true" />
-            <span>Per-Nurse Packets</span>
+            <span>A page for each nurse</span>
           </button>
         </div>
 
@@ -363,39 +366,39 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <div className="space-y-4">
               <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-lg space-y-2">
                 <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <FileSpreadsheet className="w-5 h-5 text-emerald-600 shrink-0" aria-hidden="true" />
                   <h3 className="text-sm font-bold text-emerald-950">
-                    Comprehensive Multi-Sheet Workbook (.xlsx)
+                    Excel workbook (.xlsx)
                   </h3>
                 </div>
                 <p className="text-xs text-emerald-900 leading-relaxed font-sans">
-                  Exports a structured workbook generated with SheetJS (`xlsx`) formatted with frozen headers, duty acronyms, doctor pairings, and color fills.
+                  A workbook with several sheets: shift codes, the doctor each nurse works with, and shift colours.
                 </p>
-                <div className="grid grid-cols-2 gap-2 pt-2 text-[11px] font-mono text-emerald-900">
+                <div className="grid grid-cols-2 gap-2 pt-2 text-[11px] text-emerald-900">
                   <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> 1. `Roster` Grid
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> Roster: the calendar
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> 2. `Legend` Acronyms &amp; Rules
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> Legend: shift codes and rules
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> 3. `Long` Assignment Rows
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> Long: one row per shift
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> 4. `Hours` Accounting Ledger
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> Hours: each nurse's hours
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> 5. `Doctors` Clinic Sessions
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> Doctors: doctors' clinics
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Filename: <code>{clinicName.toLowerCase().replace(/\s+/g, '_')}_{schedule.startDate}_v{versionNumber}.xlsx</code>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> File name: <code>{clinicName.toLowerCase().replace(/\s+/g, '_')}_{schedule.startDate}_v{versionNumber}.xlsx</code>
                   </span>
                 </div>
               </div>
 
               {/* Scope Radio */}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-2">
-                <span className="font-semibold text-slate-800 text-xs block">Export Scope:</span>
+                <span className="font-semibold text-slate-800 text-xs block">Days to include:</span>
                 <div className="flex items-center gap-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -405,7 +408,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                       onChange={() => setExcelScope('ALL')}
                       className="text-indigo-600"
                     />
-                    <span>All Blocks (Full Period: {allDates.length} Days)</span>
+                    <span>Whole roster ({allDates.length} days)</span>
                   </label>
 
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -416,7 +419,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                       onChange={() => setExcelScope('ACTIVE_BLOCK')}
                       className="text-indigo-600"
                     />
-                    <span>Active Block Only ({blockDates.length} Days)</span>
+                    <span>Only the days on screen ({blockDates.length} days)</span>
                   </label>
                 </div>
               </div>
@@ -427,7 +430,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
               >
                 <Download className="w-4 h-4" aria-hidden="true" />
-                <span>Download Multi-Sheet Excel (.xlsx)</span>
+                <span>Download Excel file</span>
               </button>
             </div>
           )}
@@ -439,11 +442,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 {/* Flavor 1: Matrix CSV */}
                 <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-3 shadow-2xs">
                   <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-indigo-600" />
-                    <h3 className="font-bold text-slate-900">Matrix Format CSV</h3>
+                    <FileText className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                    <h3 className="font-bold text-slate-900">Calendar layout</h3>
                   </div>
                   <p className="text-slate-500 text-[11px] leading-relaxed">
-                    Formatted exactly like the workbook grid: staff rows on the left with dates across the header columns, filled with duty acronyms and pairings.
+                    Like the roster screen: one row per nurse and one column per day, with shift codes and the doctor each nurse works with.
                   </p>
                   <button
                     type="button"
@@ -451,18 +454,18 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
                   >
                     <Download className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Download Matrix CSV</span>
+                    <span>Download calendar CSV</span>
                   </button>
                 </div>
 
                 {/* Flavor 2: Long Format CSV */}
                 <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-3 shadow-2xs">
                   <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-600" />
-                    <h3 className="font-bold text-slate-900">Long Format CSV (Relational)</h3>
+                    <FileText className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                    <h3 className="font-bold text-slate-900">One row per shift</h3>
                   </div>
                   <p className="text-slate-500 text-[11px] leading-relaxed">
-                    One row per clinical assignment including date, employee code, hours, duty times, doctor pairing, lock status, and source. Best for SQL/BI imports.
+                    Each shift on its own row: date, employee code, hours, shift times, doctor, whether it is a pinned day, and how it was set. Useful for other spreadsheets and reports.
                   </p>
                   <button
                     type="button"
@@ -470,7 +473,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
                   >
                     <Download className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Download Long CSV</span>
+                    <span>Download shifts CSV</span>
                   </button>
                 </div>
               </div>
@@ -508,7 +511,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   <legend className="px-1 font-semibold text-slate-700">Days</legend>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="radio" name="pdf-scope" checked={pdfScope === 'ALL'} onChange={() => setPdfScope('ALL')} />
-                    <span>Whole schedule ({allDates.length} days)</span>
+                    <span>Whole roster ({allDates.length} days)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -518,7 +521,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                       disabled={blockDates.length === 0}
                       onChange={() => setPdfScope('ACTIVE_BLOCK')}
                     />
-                    <span>Current block only ({blockDates.length} days)</span>
+                    <span>Only the days on screen ({blockDates.length} days)</span>
                   </label>
                 </fieldset>
                 <fieldset className="p-3 border border-slate-200 rounded space-y-1.5">
@@ -551,23 +554,23 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <div className="space-y-4">
               <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
                 <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-purple-600" />
-                  <h3 className="text-sm font-bold text-purple-950">Individual Staff Packets</h3>
+                  <Users className="w-5 h-5 text-purple-600" aria-hidden="true" />
+                  <h3 className="text-sm font-bold text-purple-950">A page for each nurse</h3>
                 </div>
                 <p className="text-xs text-purple-900 leading-relaxed font-sans">
-                  Produces clean, single-page printed shift schedules for each nurse across the whole period, including contract target, duty hours, leave credits, and chronological shifts.
+                  Prints one page per nurse for the whole roster: their hours goal, shift hours, leave hours and every day's shift in date order.
                 </p>
               </div>
 
               <div className="flex items-center gap-2 bg-slate-50 p-3 rounded border border-slate-200">
-                <span className="font-semibold text-slate-700 text-xs">Print Selection:</span>
+                <span className="font-semibold text-slate-700 text-xs">Print for:</span>
                 <select
-                  aria-label="Print selection"
+                  aria-label="Print for"
                   value={selectedNurseId}
                   onChange={(e) => setSelectedNurseId(e.target.value)}
                   className="px-2.5 py-1.5 border border-slate-300 rounded font-medium bg-white text-slate-800"
                 >
-                  <option value="ALL">All Active Nurses ({nurses.length} individual packets)</option>
+                  <option value="ALL">All nurses ({nurses.length} pages)</option>
                   {nurses.map((n) => (
                     <option key={n.id} value={n.id}>
                       {n.fullName} ({n.employeeCode})
@@ -582,7 +585,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
               >
                 <Printer className="w-4 h-4" aria-hidden="true" />
-                <span>Print Individual Staff Packet{selectedNurseId === 'ALL' ? 's' : ''}</span>
+                <span>Print {selectedNurseId === 'ALL' ? 'pages' : 'page'}</span>
               </button>
             </div>
           )}
@@ -590,8 +593,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
         {/* Footer */}
         <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <span className="text-[11px] text-slate-500 font-mono">
-            Exporting Version: v{versionNumber} · {clinicName}
+          <span className="text-[11px] text-slate-500">
+            Version {versionNumber} · {clinicName}
           </span>
           <button
             type="button"
@@ -615,11 +618,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div>
                 <h1 className="text-xl font-bold tracking-tight uppercase">{clinicName}</h1>
                 <p className="text-xs text-slate-700 mt-0.5">
-                  NURSING SHIFT ROSTER · {schedule.name} ({schedule.startDate} to {schedule.endDate})
+                  NURSES' ROSTER · {schedule.name} ({schedule.startDate} to {schedule.endDate})
                 </p>
               </div>
               <div className="text-right font-mono text-[10px]">
-                <p className="font-bold">VERSION: v{versionNumber}</p>
+                <p className="font-bold">VERSION {versionNumber}</p>
                 <p className="text-slate-600">Printed: {new Date().toLocaleString()}</p>
                 <p className="text-slate-600">Full time goal: {resolveFullTimeTarget(schedule, workingHoursPeriods).hours}h</p>
               </div>
@@ -629,8 +632,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <table className="w-full border-collapse border border-black text-[9px] font-mono">
               <thead>
                 <tr className="bg-slate-100 text-black border-b border-black">
-                  <th className="border border-black p-1 text-left">Staff Name</th>
-                  <th className="border border-black p-1 text-center w-10">FTE %</th>
+                  <th className="border border-black p-1 text-left">Nurse</th>
+                  <th className="border border-black p-1 text-center w-10">Contract</th>
                   <th className="border border-black p-1 text-center w-12">Total</th>
                   {activeDates.map((d) => {
                     const dayObj = new Date(d);
@@ -662,7 +665,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         {nurse.contractPercent}%
                       </td>
                       <td className="border border-black p-1 text-center font-bold">
-                        {acct?.totalEarnedHours || 0}h
+                        {fmtHours(acct?.totalEarnedHours || 0)}
                       </td>
                       {activeDates.map((dateStr) => {
                         const asgn = assignments.find((a) => a.nurseId === nurse.id && a.date === dateStr);
@@ -708,7 +711,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             {/* Print Legend */}
             <div className="border border-black p-2 mt-4 text-[9px] flex items-start justify-between gap-6 print-avoid-break">
               <div>
-                <span className="font-bold block uppercase mb-1">Duties:</span>
+                <span className="font-bold block uppercase mb-1">Shifts:</span>
                 <div className="flex flex-wrap gap-3">
                   {dutyWindows.map((dw) => (
                     <span key={dw.id}>
@@ -719,11 +722,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               </div>
 
               <div>
-                <span className="font-bold block uppercase mb-1">Leave Codes:</span>
+                <span className="font-bold block uppercase mb-1">Leave codes:</span>
                 <div className="flex flex-wrap gap-3">
                   {leaveTypes.map((lt) => (
                     <span key={lt.id}>
-                      <strong>[{lt.acronym}]</strong> {lt.name} ({typeof lt.creditedHours === 'number' ? `${lt.creditedHours}h` : 'match'})
+                      <strong>[{lt.acronym}]</strong> {lt.name} ({typeof lt.creditedHours === 'number' ? fmtHours(lt.creditedHours) : 'counts as the shift'})
                     </span>
                   ))}
                 </div>
@@ -747,10 +750,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   <div>
                     <h1 className="text-xl font-bold uppercase">{clinicName}</h1>
                     <h2 className="text-base font-bold text-slate-900 mt-1">
-                      Individual Staff Schedule: {item.nurse.fullName}
+                      Roster for {item.nurse.fullName}
                     </h2>
                     <p className="text-xs text-slate-600 font-mono mt-0.5">
-                      Employee Code: {item.nurse.employeeCode} · {item.seniority?.name || 'Staff Nurse'} · {item.contractPercent}% FTE
+                      Employee code: {item.nurse.employeeCode} · {item.seniority?.name || 'Staff nurse'} · {item.contractPercent}% contract
                     </p>
                   </div>
                   <div className="text-right font-mono text-[10px]">
@@ -763,25 +766,25 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 {/* Nurse Hours Summary KPI Grid */}
                 <div className="grid grid-cols-5 gap-3 my-4 p-3 border border-black font-mono text-[10px]">
                   <div>
-                    <span className="text-slate-500 block">Contract Target</span>
-                    <span className="font-bold text-sm">{item.targetHours}h</span>
+                    <span className="text-slate-500 block">Hours goal</span>
+                    <span className="font-bold text-sm">{fmtHours(item.targetHours)}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Duties Worked</span>
-                    <span className="font-bold text-sm">{item.dutyHours}h</span>
+                    <span className="text-slate-500 block">Shift hours</span>
+                    <span className="font-bold text-sm">{fmtHours(item.dutyHours)}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Leave Credited</span>
-                    <span className="font-bold text-sm">{item.leaveHours}h</span>
+                    <span className="text-slate-500 block">Leave hours</span>
+                    <span className="font-bold text-sm">{fmtHours(item.leaveHours)}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Total Earned</span>
-                    <span className="font-bold text-sm">{item.totalEarnedHours}h</span>
+                    <span className="text-slate-500 block">Total</span>
+                    <span className="font-bold text-sm">{fmtHours(item.totalEarnedHours)}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 block">Net Variance</span>
+                    <span className="text-slate-500 block">Difference from goal</span>
                     <span className="font-bold text-sm">
-                      {item.varianceHours > 0 ? `+${item.varianceHours}h` : `${item.varianceHours}h`}
+                      {item.varianceHours > 0 ? `+${fmtHours(item.varianceHours)}` : fmtHours(item.varianceHours)}
                     </span>
                   </div>
                 </div>
@@ -792,9 +795,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <tr className="bg-slate-100 border-b border-black">
                       <th className="border border-black p-1 text-left">Date</th>
                       <th className="border border-black p-1 text-left">Weekday</th>
-                      <th className="border border-black p-1 text-left">Shift / Leave Type</th>
-                      <th className="border border-black p-1 text-left">Duty Window Times</th>
-                      <th className="border border-black p-1 text-left">Assigned Doctor / Clinical Role</th>
+                      <th className="border border-black p-1 text-left">Shift or leave</th>
+                      <th className="border border-black p-1 text-left">Times</th>
+                      <th className="border border-black p-1 text-left">Doctor or job</th>
                       <th className="border border-black p-1 text-right">Hours</th>
                     </tr>
                   </thead>
@@ -808,7 +811,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                             ? `${entry.dutyWindow.name} (${entry.dutyWindow.acronym})`
                             : entry.leaveType
                             ? `${entry.leaveType.name} (${entry.leaveType.acronym})`
-                            : 'OFF / REST'}
+                            : 'Day off'}
                         </td>
                         <td className="border border-black p-1">
                           {entry.dutyWindow ? `${entry.dutyWindow.startTime}–${entry.dutyWindow.endTime}` : '—'}
@@ -819,11 +822,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                             : entry.clinicalRole
                             ? entry.clinicalRole.name
                             : entry.specialty
-                            ? `${entry.specialty.name} Pool`
+                            ? entry.specialty.name
                             : '—'}
                         </td>
                         <td className="border border-black p-1 text-right font-bold">
-                          {entry.hoursEarned > 0 ? `${entry.hoursEarned}h` : '0h'}
+                          {entry.hoursEarned > 0 ? fmtHours(entry.hoursEarned) : '0h'}
                         </td>
                       </tr>
                     ))}
@@ -836,7 +839,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <span>Nurse Signature: _______________________</span>
                   </div>
                   <div>
-                    <span>Supervisor / Charge Nurse: _______________________</span>
+                    <span>Charge nurse: _______________________</span>
                   </div>
                 </div>
               </div>

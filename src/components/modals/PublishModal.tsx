@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Schedule Publish Wizard & Email Notification Modal (Phase 13)
- * Full Validation Gate, Versioning, Per-Nurse HTML Email Preview, Diff Generation & Dispatch.
+ * Publish dialog: checks the roster for problems, saves a new version,
+ * previews each nurse's email and sends them.
  */
 
 import React, { useState, useEffect, useId, useRef } from 'react';
@@ -84,9 +84,13 @@ interface PublishModalProps {
   /** After resending failed emails (the email log changed, nothing was published). */
   onSendUpdated?: () => void;
   initialMode?: 'PUBLISH' | 'CHANGE';
+  /** Shown as a "Show problems" button when publishing is blocked; the dialog closes first. */
+  onShowProblems?: () => void;
 }
 
 type Step = 'VALIDATION' | 'DETAILS' | 'PREVIEW' | 'SENDING' | 'DONE';
+
+const TEST_MODE_TEXT = 'Test mode: nothing is actually emailed.';
 
 export const PublishModal: React.FC<PublishModalProps> = ({
   context,
@@ -110,6 +114,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   onPublishComplete,
   onSendUpdated,
   initialMode = 'PUBLISH',
+  onShowProblems,
 }) => {
   const [currentStep, setCurrentStep] = useState<Step>('VALIDATION');
   const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
@@ -200,8 +205,8 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         });
       setVersionNote(
         initialMode === 'CHANGE'
-          ? `Change Alert — Shift adjustments for ${schedule.name}`
-          : `Official Roster Release — ${schedule.name}`
+          ? `Shift changes for ${schedule.name}`
+          : `Roster for ${schedule.name}`
       );
       setGeneralBroadcastNote('');
       setProgressPercent(0);
@@ -290,12 +295,20 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   }, [isOpen, schedule.id, initialMode]);
 
   const titleId = useId();
-  // Esc does nothing while emails are being dispatched, so a stray key press can't hide a running publish.
+  // Esc does nothing while emails are being sent, so a stray key press can't hide a running publish.
   const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, () => {
     if (currentStep !== 'SENDING') onClose();
   });
 
   if (!isOpen) return null;
+
+  // Shown at the top of the preview and send steps when the clinic's email setting is in test mode.
+  const testModeBanner = emailConfig.mockMode ? (
+    <div role="status" className="p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 flex items-center gap-2 text-xs font-semibold">
+      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
+      <span>{TEST_MODE_TEXT} You can change this in Settings, Email.</span>
+    </div>
+  ) : null;
 
   // Selected nurse for preview
   const previewNurse = nurses.find((n) => n.id === previewNurseId) || nurses[0];
@@ -310,7 +323,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           scheduleId: schedule.id,
           number: (schedule.activeVersionNumber || 1) + 1,
           timestamp: new Date().toISOString(),
-          author: context.currentUser?.name || 'Administrator',
+          author: context.currentUser?.name || context.currentUser?.email || 'Planner',
           note: versionNote,
           snapshot: {
             schedule,
@@ -551,7 +564,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     onPublishComplete(run.version);
   };
 
-  const handleExecuteDispatch = async () => {
+  const handlePublishAndSend = async () => {
     setCurrentStep('SENDING');
     setProgressPercent(0);
     const logs: string[] = [];
@@ -607,17 +620,21 @@ export const PublishModal: React.FC<PublishModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 id={titleId} className="text-base font-bold text-slate-900">
-                  {publishKind === 'CHANGE' ? 'Publish Schedule Change Alerts' : 'Publish Official Duty Roster'}
+                  {publishKind === 'CHANGE' ? 'Publish roster changes' : 'Publish roster'}
                 </h2>
               </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[11px] text-slate-500 font-mono">
-                  {schedule.name} · Target: v{(schedule.activeVersionNumber || 1) + 1}
+                  {schedule.name} · will be version {(schedule.activeVersionNumber || 1) + 1}
                 </span>
                 <span className="text-slate-300">·</span>
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-semibold border border-rose-200">
-                  <Mail className="w-3 h-3 text-rose-600" />
-                  <span>Email from the clinic account ({emailConfig.mockMode ? 'Sandbox, nothing is sent' : 'Live'})</span>
+                <span
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                    emailConfig.mockMode ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-700 border-slate-200'
+                  }`}
+                >
+                  <Mail className="w-3 h-3" aria-hidden="true" />
+                  <span>{emailConfig.mockMode ? TEST_MODE_TEXT : 'Emails are sent from the clinic account'}</span>
                 </span>
               </div>
             </div>
@@ -673,13 +690,13 @@ export const PublishModal: React.FC<PublishModalProps> = ({
             </div>
           )}
 
-          {/* STEP 1: VALIDATION GATE */}
+          {/* STEP 1: CHECK FOR PROBLEMS */}
           {currentStep === 'VALIDATION' && isOwner && (
             <div className="space-y-4">
               <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-1">
-                <h3 className="font-bold text-slate-800 text-xs">Pre-Publish Clinical Rule Audit</h3>
+                <h3 className="font-bold text-slate-800 text-xs">Check the roster before publishing</h3>
                 <p className="text-slate-500 text-[11px]">
-                  Before broadcasting to nurses, ClinicRoster verifies that all hard clinical safety constraints are satisfied.
+                  Before nurses are emailed, the roster is checked against the clinic's rules. Problems that must be fixed stop publishing.
                 </p>
               </div>
 
@@ -696,7 +713,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                     >
                       <div className="text-2xl font-bold font-mono">{validationReport.errorCount}</div>
                       <div className="text-[10px] font-semibold uppercase mt-0.5">
-                        {validationReport.errorCount > 0 ? 'Hard Errors (Blocking)' : 'Zero Hard Errors'}
+                        {validationReport.errorCount > 0 ? 'Must fix before publishing' : 'Nothing that must be fixed'}
                       </div>
                     </div>
 
@@ -708,12 +725,12 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                       }`}
                     >
                       <div className="text-2xl font-bold font-mono">{validationReport.warnCount}</div>
-                      <div className="text-[10px] font-semibold uppercase mt-0.5">Warnings (Review)</div>
+                      <div className="text-[10px] font-semibold uppercase mt-0.5">To check</div>
                     </div>
 
                     <div className="p-3 rounded border border-slate-200 bg-slate-50 text-slate-700 text-center">
-                      <div className="text-2xl font-bold font-mono">{nurses.length}</div>
-                      <div className="text-[10px] font-semibold uppercase mt-0.5">Recipient Staff</div>
+                      <div className="text-2xl font-bold font-mono">{selectedNurseIds.size}</div>
+                      <div className="text-[10px] font-semibold uppercase mt-0.5">Nurses to email</div>
                     </div>
                   </div>
 
@@ -722,7 +739,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                     <div className="p-3 bg-rose-50 border border-rose-200 rounded text-rose-900 space-y-2 text-xs">
                       <div className="font-bold flex items-center gap-1.5">
                         <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <span>Hard Constraint Violations Detected:</span>
+                        <span>Must fix ({validationReport.errorCount}):</span>
                       </div>
                       <ul className="list-disc pl-5 space-y-1 text-[11px]">
                         {validationReport.findings
@@ -732,9 +749,26 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                             <li key={i}>{f.message}</li>
                           ))}
                       </ul>
-                      <p className="font-semibold text-rose-800 text-[11px] pt-1">
-                        Publishing is blocked. Please resolve errors in the Roster Grid or apply a Lock Override.
-                      </p>
+                      {validationReport.errorCount > 5 && (
+                        <p className="text-[11px]">and {validationReport.errorCount - 5} more.</p>
+                      )}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <p className="font-semibold text-rose-800 text-[11px]">
+                          You can't publish until these are fixed on the roster.
+                        </p>
+                        {onShowProblems && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onClose();
+                              onShowProblems();
+                            }}
+                            className="px-3 py-1 rounded border border-rose-300 bg-white hover:bg-rose-100 text-rose-800 font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+                          >
+                            Show problems
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -742,7 +776,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 space-y-2 text-xs">
                       <div className="font-bold flex items-center gap-1.5">
                         <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>Schedule Warnings ({validationReport.warnCount}):</span>
+                        <span>To check ({validationReport.warnCount}):</span>
                       </div>
                       <ul className="list-disc pl-5 space-y-1 text-[11px]">
                         {validationReport.findings
@@ -760,7 +794,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                             onChange={(e) => setAcknowledgeWarnings(e.target.checked)}
                             className="rounded text-indigo-600"
                           />
-                          <span>I have reviewed these {validationReport.warnCount} warnings and confirm publication</span>
+                          <span>I have checked {validationReport.warnCount === 1 ? 'this problem' : `these ${validationReport.warnCount} problems`} and want to publish</span>
                         </label>
                       </div>
                     </div>
@@ -769,7 +803,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                   {validationReport.errorCount === 0 && validationReport.warnCount === 0 && (
                     <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-emerald-900 flex items-center gap-2 text-xs">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>All clinical constraints verified. Schedule is 100% compliant and ready to publish.</span>
+                      <span>No problems found. The roster is ready to publish.</span>
                     </div>
                   )}
                 </div>
@@ -782,7 +816,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
             <div className="space-y-4">
               {/* Mode Selector */}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-2">
-                <span className="font-bold text-slate-800 text-xs block">Publishing Notification Mode:</span>
+                <span className="font-bold text-slate-800 text-xs block">What to send:</span>
                 <div className="grid grid-cols-2 gap-3">
                   <label
                     className={`p-3 rounded border cursor-pointer flex flex-col gap-1 transition-colors ${
@@ -792,7 +826,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-bold">Full Schedule Broadcast</span>
+                      <span className="font-bold">Whole roster</span>
                       <input
                         type="radio"
                         name="publishKind"
@@ -802,7 +836,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                       />
                     </div>
                     <span className="text-[11px] text-slate-500">
-                      Standard release. Each nurse receives their complete roster for the period.
+                      Each nurse gets all their shifts for the period.
                     </span>
                   </label>
 
@@ -814,7 +848,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-bold">Schedule Change Alert</span>
+                      <span className="font-bold">Changes only</span>
                       <input
                         type="radio"
                         name="publishKind"
@@ -824,7 +858,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                       />
                     </div>
                     <span className="text-[11px] text-slate-500">
-                      Revision update. Highlights personal shift changes against the previous version.
+                      Each nurse sees which of their shifts changed since the last published roster.
                     </span>
                   </label>
                 </div>
@@ -833,13 +867,13 @@ export const PublishModal: React.FC<PublishModalProps> = ({
               {/* Version Note */}
               <div className="space-y-1">
                 <label className="block font-bold text-slate-800 text-xs">
-                  Version Release Note <span className="text-rose-500">*</span>
+                  Note for this version <span className="text-rose-500" aria-hidden="true">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  aria-label="Version release note"
-                  placeholder="e.g. Official October release approved by Clinical Director"
+                  aria-label="Note for this version"
+                  placeholder="For example: October roster, agreed with the clinic lead"
                   value={versionNote}
                   onChange={(e) => setVersionNote(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded font-medium text-xs focus:ring-1 focus:ring-indigo-500"
@@ -852,12 +886,12 @@ export const PublishModal: React.FC<PublishModalProps> = ({
               {/* General Broadcast Note */}
               <div className="space-y-1">
                 <label className="block font-bold text-slate-800 text-xs">
-                  Optional Broadcast Message to Staff:
+                  Message to all nurses (optional):
                 </label>
                 <textarea
                   rows={2}
-                  aria-label="Optional broadcast message to staff"
-                  placeholder="e.g. Please note Dr. Yusuf's Thursday sessions start at 15:00. Contact supervisor for swaps."
+                  aria-label="Message to all nurses (optional)"
+                  placeholder="For example: Thursday clinics start at 15:00 this month. Ask the planner about swaps."
                   value={generalBroadcastNote}
                   onChange={(e) => setGeneralBroadcastNote(e.target.value)}
                   className="w-full p-2 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-indigo-500"
@@ -929,11 +963,17 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                           {changedIds.has(n.id) && <span className="ml-auto text-[10px] text-amber-700">changed</span>}
                         </label>
                       ))}
+                      {noEmail.map((n) => (
+                        <label key={n.id} className="flex items-center gap-2 px-2 py-1 bg-slate-50 text-slate-400 cursor-not-allowed">
+                          <input type="checkbox" checked={false} disabled className="rounded" aria-describedby={`${titleId}-noemail`} />
+                          <span>{n.fullName}</span>
+                          <span className="ml-auto text-[10px] font-semibold text-amber-700">No email address</span>
+                        </label>
+                      ))}
                     </div>
                     {noEmail.length > 0 && (
-                      <p className="text-[11px] text-amber-800">
-                        {noEmail.length} nurse{noEmail.length === 1 ? ' has' : 's have'} no email address and won't be emailed: {noEmail.map((n) => n.fullName).join(', ')}.
-                        Add it in Nurses.
+                      <p id={`${titleId}-noemail`} className="text-[11px] text-amber-800">
+                        {noEmail.length} nurse{noEmail.length === 1 ? ' has' : 's have'} no email address and won't be emailed. Add it in Nurses.
                       </p>
                     )}
                   </div>
@@ -942,16 +982,17 @@ export const PublishModal: React.FC<PublishModalProps> = ({
             </div>
           )}
 
-          {/* STEP 3: PREVIEW PER-NURSE HTML EMAIL */}
+          {/* STEP 3: PREVIEW EACH NURSE'S EMAIL */}
           {currentStep === 'PREVIEW' && (
             <div className="space-y-4">
+              {testModeBanner}
               {/* Nurse selector toolbar */}
               <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded">
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-indigo-600" />
-                  <span className="font-bold text-slate-800 text-xs">Inspect Nurse Email:</span>
+                  <span className="font-bold text-slate-800 text-xs">Preview the email for:</span>
                   <select
-                    aria-label="Inspect nurse email"
+                    aria-label="Preview the email for"
                     value={previewNurseId}
                     onChange={(e) => setPreviewNurseId(e.target.value)}
                     className="px-2.5 py-1 border border-slate-300 rounded bg-white text-xs font-semibold text-slate-800"
@@ -966,13 +1007,11 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                   </select>
                 </div>
 
-                <div className="flex items-center gap-2 text-[11px] font-mono text-slate-600">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-50 text-rose-700 font-semibold border border-rose-200">
-                    <Mail className="w-3 h-3 text-rose-600" />
-                    <span>Email from the clinic account ({emailConfig.mockMode ? 'Sandbox, nothing is sent' : 'Live'})</span>
+                <div className="flex items-center gap-2 text-[11px] text-slate-600">
+                  <span>
+                    <strong>{selectedNurseIds.size} nurse{selectedNurseIds.size === 1 ? '' : 's'}</strong>{' '}
+                    {emailConfig.mockMode ? 'would be emailed (test mode)' : 'will be emailed'}
                   </span>
-                  <span className="text-slate-400">·</span>
-                  <span><strong>{selectedNurseIds.size} staff</strong> ({emailConfig.mockMode ? 'Safe Sandbox' : 'Live Google'})</span>
                 </div>
               </div>
 
@@ -981,7 +1020,6 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 <div className="border border-slate-300 rounded-lg overflow-hidden bg-slate-100">
                   <div className="p-2.5 bg-slate-200/80 border-b border-slate-300 flex items-center justify-between text-[11px] font-mono text-slate-600">
                     <span className="truncate max-w-md">Subject: <strong>{previewPayload.subject}</strong></span>
-                    <span>Format: Responsive HTML</span>
                   </div>
 
                   <div className="p-4 max-h-[360px] overflow-y-auto bg-slate-50">
@@ -995,9 +1033,10 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           {/* STEP 4: SENDING PROGRESS */}
           {currentStep === 'SENDING' && (
             <div className="space-y-4 py-4">
+              {testModeBanner}
               <div className="flex items-center justify-between font-mono text-xs">
                 <span className="font-bold text-slate-800">
-                  {emailConfig.mockMode ? 'Test mode: nothing is really sent' : 'Sending emails'}…
+                  {emailConfig.mockMode ? 'Pretending to send emails' : 'Sending emails'}…
                 </span>
                 <span className="font-bold text-indigo-600 text-sm">{progressPercent}%</span>
               </div>
@@ -1037,9 +1076,9 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                   <h3 className="text-base font-bold text-slate-900">
                     {failed.length === 0
                       ? testMode
-                        ? `Published v${createdVersion.number} (test mode: ${sent} emails not really sent)`
-                        : `Published v${createdVersion.number} and emailed ${sent} nurse${sent === 1 ? '' : 's'}`
-                      : `Published v${createdVersion.number}: ${failed.length} email${failed.length === 1 ? '' : 's'} not sent`}
+                        ? `Published version ${createdVersion.number} (test mode: ${sent} email${sent === 1 ? '' : 's'} not actually sent)`
+                        : `Published version ${createdVersion.number} and emailed ${sent} nurse${sent === 1 ? '' : 's'}`
+                      : `Published version ${createdVersion.number}: ${failed.length} email${failed.length === 1 ? '' : 's'} not sent`}
                   </h3>
                   <p className="text-xs text-slate-600">Nurses can confirm they've seen it. Replies show on the Publish page.</p>
                 </div>
@@ -1092,7 +1131,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 onClick={() => setCurrentStep('DETAILS')}
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer disabled:opacity-40 shadow-xs"
               >
-                <span>{isClinicCheckPending ? 'Checking the roster…' : 'Continue to Version Details'}</span>
+                <span>{isClinicCheckPending ? 'Checking the roster…' : 'Continue'}</span>
               </button>
             </>
           )}
@@ -1113,7 +1152,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 onClick={() => setCurrentStep('PREVIEW')}
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer disabled:opacity-40 shadow-xs"
               >
-                <span>Preview Email Dispatches</span>
+                <span>Preview emails</span>
               </button>
             </>
           )}
@@ -1130,7 +1169,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
 
               <button
                 type="button"
-                onClick={handleExecuteDispatch}
+                onClick={handlePublishAndSend}
                 className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs transition-colors"
               >
                 <Send className="w-4 h-4" aria-hidden="true" />

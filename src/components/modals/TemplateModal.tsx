@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Roster Template Manager & "Copy Previous Period" (Phase 14.2)
- * Save schedule as recurring template · Apply template · Copy last month
+ * Templates dialog: save a roster's weekly pattern, fill a roster from a
+ * saved template, or copy the weekly pattern of an earlier roster.
  */
 
 import React, { useState, useEffect, useId } from 'react';
@@ -33,6 +33,7 @@ import {
 import { getRepository } from '../../services/repository';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog } from '../common/dialogs';
+import { authService } from '../../services/auth/authService';
 
 interface TemplateModalProps {
   schedule: Schedule;
@@ -85,7 +86,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       loadTemplates();
-      setTemplateName(`${schedule.name} Baseline Pattern`);
+      setTemplateName(`${schedule.name} weekly pattern`);
       const otherSchedules = allSchedules.filter((s) => s.id !== schedule.id);
       if (otherSchedules.length > 0) {
         setSelectedSourceScheduleId(otherSchedules[0].id);
@@ -139,12 +140,100 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
       };
 
       await repo.create('templates', newTemplate);
-      triggerToast('Template saved successfully!');
+      triggerToast('Template saved.');
       loadTemplates();
       setActiveTab('APPLY');
     } catch (err: any) {
-      notify(`Save template failed: ${err.message}`, 'error');
+      notify(`Couldn't save the template: ${err.message}`, 'error');
     }
+  };
+
+  /** The signed in planner's name for the history log. */
+  const actorName = () => {
+    const user = authService.getCurrentUser();
+    return user?.name || user?.email || 'Planner';
+  };
+
+  /**
+   * Works out what filling the roster would do, without saving anything.
+   * `shiftFor` gives the shift a nurse should have on a weekday, or nothing.
+   * Pinned days, approved leave and shifts set by hand are kept; every other
+   * existing shift is replaced.
+   */
+  const planFill = (
+    shiftFor: (nurseId: string, weekday: number) => Omit<Assignment, 'id' | 'scheduleId' | 'nurseId' | 'date' | 'locked' | 'source'> | undefined
+  ) => {
+    const lockedNurseDates = new Set(locks.map((l) => `${l.nurseId}_${l.date}`));
+    const leaveNurseDates = new Set(
+      leaveEntries.filter((le) => le.approved).flatMap((le) => {
+        const dates: string[] = [];
+        const cur = new Date(le.startDate);
+        const end = new Date(le.endDate);
+        while (cur <= end) {
+          dates.push(`${le.nurseId}_${cur.toISOString().split('T')[0]}`);
+          cur.setUTCDate(cur.getUTCDate() + 1);
+        }
+        return dates;
+      })
+    );
+
+    // Keep locked and manual assignments
+    const kept = assignments.filter((a) => a.source === 'LOCK' || a.source === 'MANUAL' || a.locked);
+    const keptKeys = new Set(kept.map((a) => `${a.nurseId}_${a.date}`));
+    const replaced = assignments.length - kept.length;
+    const knownDuties = new Set(dutyWindows.map((d) => d.id));
+    const activeNurses = nurses.filter((n) => n.active !== false);
+
+    const added: Assignment[] = [];
+    const cur = new Date(schedule.startDate);
+    const end = new Date(schedule.endDate);
+    while (cur <= end) {
+      const dateStr = cur.toISOString().split('T')[0];
+      const weekday = cur.getUTCDay();
+      for (const nurse of activeNurses) {
+        const key = `${nurse.id}_${dateStr}`;
+        if (keptKeys.has(key) || lockedNurseDates.has(key) || leaveNurseDates.has(key)) continue;
+        const shift = shiftFor(nurse.id, weekday);
+        // Only weekdays the source gives this nurse, and only shifts that still exist.
+        if (!shift || !knownDuties.has(shift.dutyWindowId)) continue;
+        added.push({
+          ...shift,
+          id: uuidv4(),
+          scheduleId: schedule.id,
+          nurseId: nurse.id,
+          date: dateStr,
+          locked: false,
+          source: 'GENERATED',
+        });
+      }
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+
+    return {
+      result: [...kept, ...added],
+      added: added.length,
+      nurseCount: new Set(added.map((a) => a.nurseId)).size,
+      replaced,
+    };
+  };
+
+  /** Asks before filling the roster, saying exactly how many shifts change. */
+  const confirmFill = (plan: ReturnType<typeof planFill>, title: string) => {
+    if (plan.added === 0 && plan.replaced === 0) {
+      notify('There is nothing to fill: no nurse has a shift on these weekdays, or every day is already pinned, on leave or set by hand.', 'info');
+      return Promise.resolve(false);
+    }
+    const fill = `This will fill ${plan.added} shift${plan.added === 1 ? '' : 's'} for ${plan.nurseCount} nurse${plan.nurseCount === 1 ? '' : 's'}`;
+    const replace =
+      plan.replaced > 0
+        ? ` and replace ${plan.replaced} existing shift${plan.replaced === 1 ? '' : 's'}`
+        : '';
+    return confirmDialog({
+      title,
+      message: `${fill}${replace}. Pinned days, leave and shifts you set by hand are kept.`,
+      confirmLabel: 'Fill the roster',
+      danger: plan.replaced > 0,
+    });
   };
 
   // 2. APPLY TEMPLATE TO CURRENT SCHEDULE
@@ -152,75 +241,41 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
     const template = savedTemplates.find((t) => t.id === selectedTemplateId);
     if (!template) return;
 
+    // One shift per nurse per weekday, as the template gives it (the first one if a template has two).
+    const byNurseWeekday = new Map<string, TemplateSlotPattern>();
+    for (const p of template.patterns || []) {
+      const key = `${p.nurseId}_${Number(p.weekday)}`;
+      if (!byNurseWeekday.has(key)) byNurseWeekday.set(key, p);
+    }
+    const plan = planFill((nurseId, weekday) => {
+      const p = byNurseWeekday.get(`${nurseId}_${weekday}`);
+      if (!p) return undefined;
+      return {
+        dutyWindowId: p.dutyWindowId,
+        kind: p.kind,
+        doctorId: p.kind === 'DOCTOR' ? p.targetRefId : undefined,
+        clinicalRoleId: p.kind === 'CLINICAL_ROLE' ? p.targetRefId : undefined,
+        specialtyId: p.kind === 'SPECIALTY' ? p.targetRefId : undefined,
+        note: `From template "${template.name}"`,
+      };
+    });
+    if (!(await confirmFill(plan, `Use template "${template.name}"?`))) return;
+
     setIsProcessing(true);
     try {
-      const lockedNurseDates = new Set(locks.map((l) => `${l.nurseId}_${l.date}`));
-      const leaveNurseDates = new Set(
-        leaveEntries.filter((le) => le.approved).flatMap((le) => {
-          const dates: string[] = [];
-          const cur = new Date(le.startDate);
-          const end = new Date(le.endDate);
-          while (cur <= end) {
-            dates.push(`${le.nurseId}_${cur.toISOString().split('T')[0]}`);
-            cur.setUTCDate(cur.getUTCDate() + 1);
-          }
-          return dates;
-        })
-      );
-
-      // Keep locked and manual assignments
-      const kept = assignments.filter((a) => a.source === 'LOCK' || a.source === 'MANUAL' || a.locked);
-      const keptKeys = new Set(kept.map((a) => `${a.nurseId}_${a.date}`));
-
-      const start = new Date(schedule.startDate);
-      const end = new Date(schedule.endDate);
-      const cur = new Date(start);
-      const newAssignments: Assignment[] = [...kept];
-
-      while (cur <= end) {
-        const dateStr = cur.toISOString().split('T')[0];
-        const weekday = cur.getUTCDay();
-
-        for (const pattern of template.patterns) {
-          // Each pattern belongs to one weekday
-          if (pattern.weekday !== weekday) continue;
-          const key = `${pattern.nurseId}_${dateStr}`;
-          if (keptKeys.has(key)) continue;
-          if (lockedNurseDates.has(key)) continue;
-          if (leaveNurseDates.has(key)) continue;
-
-          newAssignments.push({
-            id: uuidv4(),
-            scheduleId: schedule.id,
-            nurseId: pattern.nurseId,
-            date: dateStr,
-            dutyWindowId: pattern.dutyWindowId,
-            kind: pattern.kind,
-            doctorId: pattern.kind === 'DOCTOR' ? pattern.targetRefId : undefined,
-            clinicalRoleId: pattern.kind === 'CLINICAL_ROLE' ? pattern.targetRefId : undefined,
-            specialtyId: pattern.kind === 'SPECIALTY' ? pattern.targetRefId : undefined,
-            locked: false,
-            source: 'GENERATED',
-            note: `From template "${template.name}"`,
-          });
-        }
-
-        cur.setUTCDate(cur.getUTCDate() + 1);
-      }
-
       await repo.create('audit', {
-        actor: 'Roster Planner',
+        actor: actorName(),
         action: 'TEMPLATE_APPLY',
         entity: 'Schedule',
         entityId: schedule.id,
-        note: `Applied roster template "${template.name}".`,
+        note: `Applied roster template "${template.name}": ${plan.added} shifts filled, ${plan.replaced} replaced.`,
         timestamp: new Date().toISOString(),
       });
 
-      onApplyAssignments(newAssignments, `Applied template "${template.name}"`);
+      onApplyAssignments(plan.result, `Applied template "${template.name}"`);
       onClose();
     } catch (err: any) {
-      notify(`Apply template failed: ${err.message}`, 'error');
+      notify(`Couldn't use the template: ${err.message}`, 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -232,8 +287,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
     setIsProcessing(true);
 
     try {
-      const allAsgns = await repo.list('assignments');
-      const sourceAsgns = allAsgns.filter((a) => a.scheduleId === selectedSourceScheduleId);
+      const sourceAsgns = await repo.list('assignments', { field: 'scheduleId', operator: '==', value: selectedSourceScheduleId });
       const sourceSchedule = allSchedules.find((s) => s.id === selectedSourceScheduleId);
 
       // Build weekday pattern from source schedule
@@ -247,72 +301,33 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
         }
       }
 
-      const lockedNurseDates = new Set(locks.map((l) => `${l.nurseId}_${l.date}`));
-      const leaveNurseDates = new Set(
-        leaveEntries.filter((le) => le.approved).flatMap((le) => {
-          const dates: string[] = [];
-          const cur = new Date(le.startDate);
-          const end = new Date(le.endDate);
-          while (cur <= end) {
-            dates.push(`${le.nurseId}_${cur.toISOString().split('T')[0]}`);
-            cur.setUTCDate(cur.getUTCDate() + 1);
-          }
-          return dates;
-        })
-      );
-
-      const kept = assignments.filter((a) => a.source === 'LOCK' || a.source === 'MANUAL' || a.locked);
-      const keptKeys = new Set(kept.map((a) => `${a.nurseId}_${a.date}`));
-
-      const start = new Date(schedule.startDate);
-      const end = new Date(schedule.endDate);
-      const cur = new Date(start);
-      const copiedAssignments: Assignment[] = [...kept];
-
-      while (cur <= end) {
-        const dateStr = cur.toISOString().split('T')[0];
-        const weekday = cur.getUTCDay();
-
-        for (const nurse of nurses) {
-          const key = `${nurse.id}_${dateStr}`;
-          if (keptKeys.has(key)) continue;
-          if (lockedNurseDates.has(key)) continue;
-          if (leaveNurseDates.has(key)) continue;
-
-          const pattern = patternsByNurseWeekday.get(`${nurse.id}_${weekday}`);
-          if (pattern) {
-            copiedAssignments.push({
-              id: uuidv4(),
-              scheduleId: schedule.id,
-              nurseId: nurse.id,
-              date: dateStr,
-              dutyWindowId: pattern.dutyWindowId,
-              kind: pattern.kind,
-              doctorId: pattern.doctorId,
-              clinicalRoleId: pattern.clinicalRoleId,
-              specialtyId: pattern.specialtyId,
-              locked: false,
-              source: 'GENERATED',
-              note: `Copied from ${sourceSchedule?.name || 'previous period'}`,
-            });
-          }
-        }
-        cur.setUTCDate(cur.getUTCDate() + 1);
-      }
+      const plan = planFill((nurseId, weekday) => {
+        const p = patternsByNurseWeekday.get(`${nurseId}_${weekday}`);
+        if (!p) return undefined;
+        return {
+          dutyWindowId: p.dutyWindowId,
+          kind: p.kind,
+          doctorId: p.doctorId,
+          clinicalRoleId: p.clinicalRoleId,
+          specialtyId: p.specialtyId,
+          note: `Copied from ${sourceSchedule?.name || 'an earlier roster'}`,
+        };
+      });
+      if (!(await confirmFill(plan, `Copy from ${sourceSchedule?.name || 'the earlier roster'}?`))) return;
 
       await repo.create('audit', {
-        actor: 'Roster Planner',
+        actor: actorName(),
         action: 'UPDATE',
         entity: 'Schedule',
         entityId: schedule.id,
-        note: `Copied assignments from ${sourceSchedule?.name}.`,
+        note: `Copied assignments from ${sourceSchedule?.name}: ${plan.added} shifts filled, ${plan.replaced} replaced.`,
         timestamp: new Date().toISOString(),
       });
 
-      onApplyAssignments(copiedAssignments, `Copied from ${sourceSchedule?.name}`);
+      onApplyAssignments(plan.result, `Copied from ${sourceSchedule?.name}`);
       onClose();
     } catch (err: any) {
-      notify(`Copy previous period failed: ${err.message}`, 'error');
+      notify(`Couldn't copy the earlier roster: ${err.message}`, 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -321,8 +336,8 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
   const handleDeleteTemplate = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const ok = await confirmDialog({
-      title: 'Delete template',
-      message: 'Are you sure you want to delete this template?',
+      title: 'Delete template?',
+      message: 'The template is deleted. Rosters already filled from it are not changed.',
       confirmLabel: 'Delete',
       danger: true,
     });
@@ -357,11 +372,11 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 id={titleId} className="text-base font-bold text-slate-900">
-                  Roster Templates &amp; Period Replication
+                  Templates
                 </h2>
               </div>
-              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                Save recurring weekly patterns or clone previous rosters
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Save a weekly pattern, or fill this roster from a template or an earlier roster
               </p>
             </div>
           </div>
@@ -387,7 +402,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                 : 'text-slate-600 hover:bg-slate-200'
             }`}
           >
-            Save as Template
+            Save as template
           </button>
 
           <button
@@ -399,7 +414,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                 : 'text-slate-600 hover:bg-slate-200'
             }`}
           >
-            Apply Saved Template ({savedTemplates.length})
+            Use a template ({savedTemplates.length})
           </button>
 
           <button
@@ -411,7 +426,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                 : 'text-slate-600 hover:bg-slate-200'
             }`}
           >
-            Copy Previous Month
+            Copy an earlier roster
           </button>
         </div>
 
@@ -421,12 +436,12 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
           {activeTab === 'SAVE' && (
             <form onSubmit={handleSaveAsTemplate} className="space-y-4">
               <div className="p-3 bg-slate-50 border border-slate-200 rounded text-slate-600 text-[11px] leading-relaxed">
-                Extracts the weekday duty &amp; pairing pattern from <strong>{schedule.name}</strong> ({assignments.length} assignments) into a reusable template.
+                Saves which shift each nurse works on each weekday in <strong>{schedule.name}</strong> ({assignments.length} shifts), so you can use the same pattern again.
               </div>
 
               <div className="space-y-1">
                 <label className="block font-bold text-slate-800 text-xs">
-                  Template Name <span className="text-rose-500">*</span>
+                  Template name <span className="text-rose-500" aria-hidden="true">*</span>
                 </label>
                 <input
                   type="text"
@@ -440,12 +455,12 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
 
               <div className="space-y-1">
                 <label className="block font-bold text-slate-800 text-xs">
-                  Description (Optional)
+                  Description (optional)
                 </label>
                 <textarea
                   rows={2}
                   aria-label="Template description"
-                  placeholder="e.g. Standard 2-week outpatient rotation pattern for clinic"
+                  placeholder="For example: usual pattern for a normal month"
                   value={templateDescription}
                   onChange={(e) => setTemplateDescription(e.target.value)}
                   className="w-full p-2 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-indigo-500"
@@ -457,7 +472,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                 className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs"
               >
                 <Save className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Save Roster Template</span>
+                <span>Save template</span>
               </button>
             </form>
           )}
@@ -466,7 +481,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
           {activeTab === 'APPLY' && (
             <div className="space-y-4">
               <div className="p-3 bg-slate-50 border border-slate-200 rounded text-slate-600 text-[11px] leading-relaxed">
-                Pre-fills the active schedule from a saved template. Existing locked cells and approved leave days are strictly protected and never overwritten.
+                Fills this roster from a saved template. Each nurse only gets shifts on the weekdays the template gives them. Pinned days, approved leave and shifts you set by hand are kept. You will see how many shifts change before anything is saved.
               </div>
 
               {savedTemplates.length > 0 ? (
@@ -492,7 +507,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                         >
                           <span className="block font-bold">{t.name}</span>
                           <span className="block text-[11px] text-slate-500 font-mono mt-0.5">
-                            {t.patterns.length} weekly slot rules · Created {new Date(t.createdAt).toLocaleDateString()}
+                            {t.patterns.length} weekly shift{t.patterns.length === 1 ? '' : 's'} · saved {new Date(t.createdAt).toLocaleDateString()}
                           </span>
                           {t.description && (
                             <span className="block text-[11px] text-slate-600 mt-1 italic">{t.description}</span>
@@ -516,7 +531,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                 </div>
               ) : (
                 <div className="p-8 border border-slate-200 rounded text-center text-slate-400 text-xs">
-                  No saved templates found. Use "Save as Template" to capture the current schedule.
+                  No saved templates yet. Use "Save as template" to save this roster's weekly pattern.
                 </div>
               )}
 
@@ -528,7 +543,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                   className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40"
                 >
                   <Sparkles className="w-4 h-4" aria-hidden="true" />
-                  <span>Apply Selected Template to Schedule</span>
+                  <span>Fill roster from template</span>
                 </button>
               )}
             </div>
@@ -538,15 +553,15 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
           {activeTab === 'COPY_PERIOD' && (
             <div className="space-y-4">
               <div className="p-3 bg-slate-50 border border-slate-200 rounded text-slate-600 text-[11px] leading-relaxed">
-                Copies the assignments from an earlier schedule (e.g. last month's approved roster) into the current period, mapping by day-of-week and protecting current leave/locks.
+                Copies each nurse's weekly pattern from an earlier roster (for example last month's) into this one, weekday by weekday. Pinned days, approved leave and shifts you set by hand are kept. You will see how many shifts change before anything is saved.
               </div>
 
               <div className="space-y-2">
                 <label className="block font-bold text-slate-800 text-xs">
-                  Select Source Schedule to Copy:
+                  Roster to copy from:
                 </label>
                 <select
-                  aria-label="Source schedule to copy"
+                  aria-label="Roster to copy from"
                   value={selectedSourceScheduleId}
                   onChange={(e) => setSelectedSourceScheduleId(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded font-medium text-xs bg-white"
@@ -555,7 +570,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                     .filter((s) => s.id !== schedule.id)
                     .map((s) => (
                       <option key={s.id} value={s.id}>
-                        {s.name} ({s.startDate} to {s.endDate} · {s.status})
+                        {s.name} ({s.startDate} to {s.endDate} · {s.status === 'PUBLISHED' ? 'published' : s.status === 'DRAFT' ? 'draft' : s.status.toLowerCase()})
                       </option>
                     ))}
                 </select>
@@ -568,7 +583,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
                 className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40"
               >
                 <Copy className="w-4 h-4" aria-hidden="true" />
-                <span>Clone Previous Period Pattern</span>
+                <span>Copy weekly pattern</span>
               </button>
             </div>
           )}

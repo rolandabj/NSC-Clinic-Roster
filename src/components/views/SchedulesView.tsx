@@ -4,30 +4,19 @@ import { notify } from '../common/dialogs';
 import {
   CalendarRange,
   Plus,
-  Play,
-  RotateCcw,
   Sparkles,
   Download,
   Share2,
   Send,
-  FileSpreadsheet,
-  CheckCircle,
   CheckCircle2,
   Clock,
   Layers,
   AlertTriangle,
-  Info,
-  Calendar,
   ChevronRight,
-  Filter,
   Check,
   X,
   Trash2,
-  Edit2,
-  Users,
   Shield,
-  ArrowRight,
-  HelpCircle,
   Save,
   History,
   Diff,
@@ -37,8 +26,13 @@ import {
   Maximize2,
   Minimize2,
   Star,
-  Stethoscope,
+  Undo2,
+  Redo2,
+  MoreHorizontal,
 } from 'lucide-react';
+import { MenuButton } from '../common/MenuButton';
+import { PageLoading } from '../common/PageLoading';
+import { ProblemsPanel } from '../workbook/ProblemsPanel';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
 import { CollectionSyncer } from '../../services/repository/collectionSyncer';
@@ -58,11 +52,9 @@ import {
   SeniorityLevel,
   DutyWindow,
   Rule,
-  BlockWeeks,
   PublicHoliday,
   LeaveType,
   NurseHoursQuota,
-  Invitation,
   WorkingHoursPeriod,
 } from '../../types';
 import { loadClinicSetup } from '../../services/engine/clinicSetupService';
@@ -187,10 +179,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [selectedBlockIndex, setSelectedBlockIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<'roster' | 'doctors' | 'coverage' | 'warnings' | 'leave' | 'hours' | 'legend'>('roster');
 
-  // Lock Override Modal
+  // Unpin a day dialog
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
   const [activeLockToOverride, setActiveLockToOverride] = useState<LockEntry | null>(null);
-  const [overrideInput, setOverrideInput] = useState('');
 
   // Save with Note Modal
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
@@ -201,7 +192,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [publishWizardMode, setPublishWizardMode] = useState<'PUBLISH' | 'CHANGE'>('PUBLISH');
-  const [isPublishDropdownOpen, setIsPublishDropdownOpen] = useState(false);
   const [isSchedulePickerOpen, setIsSchedulePickerOpen] = useState(false);
   const [isDeleteScheduleModalOpen, setIsDeleteScheduleModalOpen] = useState(false);
   const [scheduleToDelete, setScheduleToDelete] = useState<Schedule | null>(null);
@@ -237,6 +227,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Problems side panel, and a request for the grid to show one cell ("Show in grid").
+  const [isProblemsOpen, setIsProblemsOpen] = useState(false);
+  const [focusRequest, setFocusRequest] = useState<{ nurseId: string; date: string; nonce: number } | undefined>(undefined);
+  // True until the page data first loaded, so an empty roster list isn't shown while loading.
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
 
   // Expanded View & All Days Mode
   const [isExpandedView, setIsExpandedView] = useState(false);
@@ -382,10 +378,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       }
       workspaceLoadedRef.current = true;
       loadingRef.current = false;
+      setIsFirstLoad(false);
     } catch (err: any) {
       console.error('Error loading schedule workspace:', err);
       workspaceLoadedRef.current = false;
       loadingRef.current = false;
+      setIsFirstLoad(false);
       setLoadError(err?.message || 'The schedule workspace could not be loaded.');
     }
   };
@@ -662,7 +660,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
       blocks.push({
         index: b,
-        label: `Block ${b + 1}/${numBlocks} (${formatDate(bStartStr)} – ${formatDate(bEndStr)})`,
+        label: `Part ${b + 1} of ${numBlocks} (${formatDate(bStartStr)} to ${formatDate(bEndStr)})`,
         startDay: bStartDay,
         endDay: bEndDay,
         startDate: bStartStr,
@@ -676,34 +674,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const currentBlock = blocks[selectedBlockIndex] || blocks[0];
 
   // Duration readout helper
-  const computeDurationReadout = (startStr: string, endStr: string, blockWeeks: number) => {
-    if (!startStr || !endStr) return '';
-    const start = new Date(startStr);
-    const end = new Date(endStr);
-    if (start > end) return 'Invalid date range';
-    const totalDays =
-      Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    const weeks = (totalDays / 7).toFixed(1);
-    const blockSizeDays = blockWeeks * 7;
-    const numBlocks = Math.ceil(totalDays / blockSizeDays);
-
-    return `${totalDays} days · ${weeks} weeks → ${numBlocks} block(s) (${blockWeeks}w each)`;
-  };
-
-  const computeSuggestedHours = (startStr: string, endStr: string) => {
-    const start = new Date(startStr);
-    const end = new Date(endStr);
-    const totalDays =
-      Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    return Math.round((totalDays * 8 * 5) / 7);
-  };
-
   // --- CREATE SCHEDULE FLOW ---
   const handleScheduleCreated = async (createdSchedule: Schedule, generateImmediately: boolean) => {
     openScheduleIdRef.current = createdSchedule.id;
     storeScheduleId(createdSchedule.id);
     await loadData();
-    triggerToast(`Schedule "${createdSchedule.name}" created.`);
+    triggerToast(`Roster "${createdSchedule.name}" created.`);
 
     if (generateImmediately) {
       handleOpenPreflight('GENERATE_ALL', createdSchedule);
@@ -746,7 +722,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
       setIsDeleteScheduleModalOpen(false);
       setScheduleToDelete(null);
-      triggerToast(`Schedule "${result.scheduleName}" was permanently deleted.`);
+      triggerToast(`Roster "${result.scheduleName}" was deleted.`);
 
       if (activeSchedule?.id === sched.id) {
         const nextSched = chooseScheduleToOpen(remainingSchedules, null, null);
@@ -928,7 +904,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         generationClinicSetup = await loadClinicSetup(repo, activeSchedule);
       } catch (err: any) {
         setClinicSetupError('Public holidays, opening hours and the previous roster could not be loaded.');
-        triggerToast(`Not generated: the clinic details could not be loaded (${err?.message || 'database unavailable'}). Try again.`);
+        triggerToast(`Not filled: the clinic details could not be loaded (${err?.message || 'database unavailable'}). Try again.`);
         setIsGenerating(false);
         return;
       }
@@ -1087,32 +1063,27 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       );
       setValidationReport(report);
 
-      const overtimeFindings = report.findings.filter(
+      const overtimeCount = report.findings.filter(
         (f) => f.category === 'HOURS_IMBALANCE' && f.id.startsWith('hours-over-')
-      );
-      const overtimeStatus =
-        overtimeFindings.length === 0
-          ? ` • Hours target: 100% compliant (0 overtime)`
-          : ` • Overtime alerts: ${overtimeFindings.length}`;
-
-      const pairingSummary =
-        result.doctorSessionsTotal && result.doctorSessionsTotal > 0
-          ? ` • Doctor clinic pairing: ${result.doctorPriority1PairingsCount || 0} Priority #1, ${result.doctorPriority2PairingsCount || 0} Priority #2, ${result.doctorSpecialtyPairingsCount || 0} Specialty, ${result.doctorFallbackPairingsCount || 0} fallback`
-          : '';
+      ).length;
 
       if (!generatedSaved) {
-        triggerToast('The roster was generated, but saving failed. See the message at the top; it retries automatically.');
+        triggerToast('The roster was filled, but saving failed. See the message at the top; it retries automatically.');
         setIsPreflightModalOpen(false);
         setIsGenerating(false);
         return;
       }
       triggerToast(
-        `Generated ${result.assignments.length} assignments in ${result.generationDurationMs}ms${overtimeStatus}${pairingSummary} (${result.preservedLocksCount} locks preserved).`
+        `Roster filled: ${result.assignments.length} shifts.` +
+          (overtimeCount > 0 ? ` ${overtimeCount} nurse${overtimeCount === 1 ? ' is' : 's are'} over their hours.` : '') +
+          (report.errorCount > 0 ? ` ${report.errorCount} problem${report.errorCount === 1 ? '' : 's'} to fix.` : ' No problems to fix.')
       );
+      // Show what still needs fixing next to the grid.
+      if (report.errorCount > 0) setIsProblemsOpen(true);
       setIsPreflightModalOpen(false);
       setIsGenerating(false);
     } catch (err: any) {
-      triggerToast(`Operation failed: ${err.message}`);
+      triggerToast(`Could not fill the roster: ${err.message}`);
       setIsGenerating(false);
     }
   };
@@ -1151,7 +1122,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setActiveSchedule(updatedSched);
       setSchedules((prev) => prev.map((x) => (x.id === sched.id ? updatedSched : x)));
       setVersions([created, ...saved].sort((a, b) => b.number - a.number));
-      triggerToast(`Saved a copy as v${nextVerNumber}.`);
+      triggerToast(`Kept a copy as v${nextVerNumber}.`);
       setIsSaveModalOpen(false);
       setSaveNote('');
     } catch (err: any) {
@@ -1161,11 +1132,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     }
   };
 
-  // --- LOCK OVERRIDE PROTOCOL ---
+  // --- UNPIN A DAY ---
   const handleExecuteLockOverride = async () => {
     if (!activeLockToOverride) return;
-    // The lock is only removed after the user typed OVERRIDE
-    if (overrideInput.trim().toUpperCase() !== 'OVERRIDE') return;
 
     try {
       const lock = activeLockToOverride;
@@ -1182,16 +1151,15 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         entity: 'LockEntry',
         entityId: activeLockToOverride.id,
         before: activeLockToOverride,
-        note: `User confirmed OVERRIDE protocol to unlock pinned day on ${formatDate(activeLockToOverride.date)}.`,
+        note: `Unpinned ${formatDate(activeLockToOverride.date)}.`,
         timestamp: new Date().toISOString(),
       });
 
-      triggerToast('Lock successfully removed via OVERRIDE protocol.');
+      triggerToast('Day unpinned.');
       setIsOverrideModalOpen(false);
       setActiveLockToOverride(null);
-      setOverrideInput('');
     } catch (err: any) {
-      triggerToast(`Override failed: ${err.message}`);
+      triggerToast(`Could not unpin: ${err.message}`);
     }
   };
 
@@ -1256,17 +1224,46 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Jump to cell helper
+  // "Show in grid": open the roster tab on the right days, then the grid scrolls
+  // to the cell, selects it and flashes it.
   const handleJumpToCell = (nurseId: string, date: string) => {
     setActiveTab('roster');
-    // Find block that contains this date
-    const targetBlockIdx = blocks.findIndex(
-      (b) => date >= b.startDate && date <= b.endDate
-    );
-    if (targetBlockIdx !== -1) {
-      setSelectedBlockIndex(targetBlockIdx);
+    if (!isAllDaysExpanded) {
+      const targetBlockIdx = blocks.findIndex((b) => date >= b.startDate && date <= b.endDate);
+      if (targetBlockIdx !== -1) setSelectedBlockIndex(targetBlockIdx);
     }
+    setFocusRequest({ nurseId, date, nonce: Date.now() });
   };
+
+  const hasPublished = versions.some((v) => v.isPublished && v.scheduleId === activeSchedule?.id);
+  const openPublish = (mode: 'PUBLISH' | 'CHANGE') => {
+    setPublishWizardMode(mode);
+    setIsPublishModalOpen(true);
+  };
+
+  // The step bar: create, fill, fix problems, publish. The first step not done is the current one.
+  const mustFix = validationReport.errorCount;
+  const stepState = [
+    !!activeSchedule,
+    assignments.length > 0,
+    assignments.length > 0 && mustFix === 0,
+    activeSchedule?.status === 'PUBLISHED',
+  ];
+  const currentStep = stepState.findIndex((done) => !done);
+  const steps: { label: string; done: boolean; current: boolean; onClick?: () => void }[] = [
+    { label: 'Create', onClick: undefined },
+    { label: assignments.length > 0 ? 'Filled' : 'Fill', onClick: () => handleOpenPreflight(assignments.length > 0 ? 'EMPTY_ONLY' : 'GENERATE_ALL') },
+    {
+      label: assignments.length === 0 ? 'Fix problems' : mustFix > 0 ? `Fix problems (${mustFix})` : 'No problems to fix',
+      onClick: () => {
+        setActiveTab('roster');
+        setIsProblemsOpen(true);
+      },
+    },
+    { label: activeSchedule?.status === 'PUBLISHED' ? 'Published' : 'Publish', onClick: () => openPublish(hasPublished ? 'CHANGE' : 'PUBLISH') },
+  ].map((step, i) => ({ ...step, done: stepState[i], current: i === currentStep }));
+
+  const nurseName = (id: string) => nurses.find((n) => n.id === id)?.fullName || 'Unknown nurse';
 
   // Block dates array for current block (or full month if all days expanded)
   const blockDates: string[] = [];
@@ -1299,10 +1296,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         </div>
       )}
 
-      {/* 6.1 Shared Toolbar ("Ribbon-Lite", Row 1: File & Global Ops) */}
-      <div className="bg-white border-b border-slate-200 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0 z-20">
-        <div className="flex items-center gap-2">
-          {/* Schedule Picker Button */}
+      {/* Toolbar: the roster, save status, and the few main actions (the rest under More) */}
+      <div className="bg-white border-b border-slate-200 px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 z-20">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
           <button
             onClick={() => {
               repo.list('schedules').then((schedList) => {
@@ -1311,188 +1307,52 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               });
               setIsSchedulePickerOpen(true);
             }}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-300 hover:border-indigo-400 hover:bg-slate-50 rounded text-slate-800 font-bold transition-colors cursor-pointer"
-            title="Open or switch schedules (My Schedules & Shared with me)"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-300 hover:border-indigo-400 hover:bg-slate-50 rounded text-slate-800 font-bold transition-colors cursor-pointer min-w-0"
+            title="Open another roster, or create a new one"
           >
-            <FolderOpen className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-            <span className="truncate max-w-[180px]">
-              {activeSchedule ? activeSchedule.name : 'Select Schedule'}
-            </span>
-            <span className="text-[10px] text-slate-400 font-normal">▾</span>
+            <FolderOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" aria-hidden="true" />
+            <span className="truncate max-w-[160px] sm:max-w-[220px]">{activeSchedule ? activeSchedule.name : 'Choose a roster'}</span>
+            <span className="text-[10px] text-slate-500 font-normal" aria-hidden="true">▾</span>
           </button>
 
-          {/* New Schedule Button with custom date picker */}
-          <button
-            onClick={() => setIsNewModalOpen(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-semibold rounded cursor-pointer transition-colors shadow-2xs"
-            title="Create a new schedule with custom start and end dates"
-          >
-            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>New Schedule</span>
-          </button>
-
-          <span className="text-slate-400">·</span>
-          <span className="text-slate-600 font-mono tabular-nums hidden sm:inline">
-            {activeSchedule ? `${formatDate(activeSchedule.startDate)} to ${formatDate(activeSchedule.endDate)}` : ''}
-          </span>
-          <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-mono font-bold">
-            {activeSchedule?.status || 'DRAFT'} v{activeSchedule?.activeVersionNumber || 1}
-          </span>
-
-          {activeSchedule && (() => {
-            const chip = getSchedulePeriodChip(activeSchedule);
-            return (
-              <span
-                className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold inline-flex items-center gap-1 border shadow-2xs ${
-                  chip.isExact
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                    : 'bg-indigo-50 text-indigo-800 border-indigo-200'
-                }`}
-                title={chip.tooltip}
-              >
-                <Clock className="w-3 h-3 text-indigo-600" />
-                <span>{chip.label}</span>
+          {activeSchedule && (
+            <>
+              <span className="text-slate-600 tabular-nums hidden md:inline">
+                {formatDate(activeSchedule.startDate)} to {formatDate(activeSchedule.endDate)}
               </span>
-            );
-          })()}
-
-          {context.currentUser?.role === 'EDITOR' && (
-            <span className="text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-mono font-bold">
-              EDITOR MODE
-            </span>
-          )}
-
-          {isExpandedView && (
-            <span className="text-[10px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded font-mono font-bold inline-flex items-center gap-1 border border-indigo-200">
-              <Maximize2 className="w-3 h-3 text-indigo-600" />
-              <span>FULLSCREEN WORKSPACE (ESC TO EXIT)</span>
-            </span>
-          )}
-
-          <button
-            onClick={() => setIsSaveModalOpen(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-50 rounded text-slate-700 font-medium cursor-pointer ml-1 shadow-2xs"
-            title="Save version with note"
-          >
-            <Save className="w-3 h-3 text-indigo-600" aria-hidden="true" />
-            <span>Save</span>
-          </button>
-
-          <button
-            onClick={() => setIsCompareModalOpen(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium cursor-pointer shadow-2xs"
-            title="Compare versions & audit cell diffs"
-          >
-            <Diff className="w-3 h-3 text-indigo-600" aria-hidden="true" />
-            <span>Diff History</span>
-          </button>
-
-          <button
-            onClick={() => setIsExportModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-semibold rounded cursor-pointer shadow-2xs"
-            title="Export Excel (.xlsx), CSV, A3 Landscape Print, or Per-Nurse Packets"
-          >
-            <Download className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Export ▾</span>
-          </button>
-
-          {/* Publish ▾ Dropdown (Phase 13) */}
-          <div className="relative">
-            <button
-              onClick={() => setIsPublishDropdownOpen(!isPublishDropdownOpen)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded cursor-pointer shadow-2xs transition-colors"
-              title="Publish official schedule or send change alerts to nurses"
-            >
-              <Send className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Publish ▾</span>
-            </button>
-
-            {isPublishDropdownOpen && (
-              <div
-                className="absolute left-0 mt-1 w-52 bg-white border border-slate-200 rounded-lg shadow-xl py-1 z-30 text-xs animate-in fade-in duration-100"
-                onMouseLeave={() => setIsPublishDropdownOpen(false)}
+              <span
+                className={`text-[11px] px-1.5 py-0.5 rounded font-semibold ${
+                  activeSchedule.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                }`}
+                title={`Saved copy number ${activeSchedule.activeVersionNumber || 1}`}
               >
-                <button
-                  onClick={() => {
-                    setIsPublishDropdownOpen(false);
-                    setPublishWizardMode('PUBLISH');
-                    setIsPublishModalOpen(true);
-                  }}
-                  className="w-full text-left px-3 py-2 text-slate-800 hover:bg-indigo-50 hover:text-indigo-900 flex items-center gap-2.5 cursor-pointer"
-                >
-                  <Send className="w-3.5 h-3.5 text-indigo-600 shrink-0" aria-hidden="true" />
-                  <div>
-                    <div className="font-bold">Publish Official Roster</div>
-                    <div className="text-[10px] text-slate-500">Official release &amp; email dispatch</div>
-                  </div>
-                </button>
+                {activeSchedule.status === 'PUBLISHED' ? 'Published' : 'Draft'} · v{activeSchedule.activeVersionNumber || 1}
+              </span>
+              {(() => {
+                const chip = getSchedulePeriodChip(activeSchedule);
+                return (
+                  <span
+                    className="text-[11px] px-1.5 py-0.5 rounded inline-flex items-center gap-1 border bg-slate-50 text-slate-700 border-slate-200 hidden lg:inline-flex"
+                    title={chip.tooltip}
+                  >
+                    <Clock className="w-3 h-3 text-indigo-600" aria-hidden="true" />
+                    <span>{chip.label}</span>
+                  </span>
+                );
+              })()}
+            </>
+          )}
 
-                <button
-                  onClick={() => {
-                    setIsPublishDropdownOpen(false);
-                    setPublishWizardMode('CHANGE');
-                    setIsPublishModalOpen(true);
-                  }}
-                  className="w-full text-left px-3 py-2 text-slate-800 hover:bg-amber-50 hover:text-amber-900 flex items-center gap-2.5 cursor-pointer border-t border-slate-100"
-                >
-                  <History className="w-3.5 h-3.5 text-amber-600 shrink-0" aria-hidden="true" />
-                  <div>
-                    <div className="font-bold">Send Change Alerts</div>
-                    <div className="text-[10px] text-slate-500">Notify staff of shift modifications</div>
-                  </div>
-                </button>
-              </div>
-            )}
-          </div>
-
-          <button
-            onClick={() => setIsShareModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded cursor-pointer shadow-2xs"
-            title="Share view-only links & invite editors"
-          >
-            <Share2 className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-            <span>Share</span>
-          </button>
-
-          <button
-            onClick={() => setIsFairnessModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 hover:bg-amber-100 text-amber-900 font-semibold rounded cursor-pointer shadow-2xs"
-            title="Fairness dashboard & automated parity rebalancing"
-          >
-            <Scale className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
-            <span>Fairness</span>
-          </button>
-
-          <button
-            onClick={() => setIsTemplateModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded cursor-pointer shadow-2xs"
-            title="Manage weekly roster templates & copy previous period"
-          >
-            <Layers className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-            <span>Templates</span>
-          </button>
-
-          <button
-            onClick={() => setIsSwapModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded cursor-pointer shadow-2xs"
-            title="Exchange shifts between two nurses with live safety validation"
-          >
-            <ArrowLeftRight className="w-3.5 h-3.5 text-slate-600" aria-hidden="true" />
-            <span>Swap</span>
-          </button>
-
+          {/* Save status (changes save by themselves; this says whether they did) */}
           {loadError ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">
+            <span role="alert" className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">
               <span>Could not load the roster ({loadError}). Changes will not be saved.</span>
               <button onClick={() => loadData()} className="underline cursor-pointer">
                 Reload
               </button>
             </span>
           ) : saveError ? (
-            <span
-              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1 max-w-md"
-              role="alert"
-            >
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1 max-w-md" role="alert">
               <span className="truncate" title={saveError}>{saveError}</span>
               {hasUnsavedChanges() && (
                 <button
@@ -1514,163 +1374,208 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               )}
             </span>
           ) : isSaving ? (
-            <span className="text-[10px] text-slate-400 font-mono hidden md:inline">Saving...</span>
+            <span className="text-[11px] text-slate-500" role="status">Saving…</span>
           ) : (
             lastAutosavedAt && (
-              <span
-                className="text-[10px] text-slate-400 font-mono hidden md:inline"
-                title="Every change is saved to the database as you make it"
-              >
-                Saved {lastAutosavedAt}
+              <span className="text-[11px] text-slate-500 inline-flex items-center gap-1" title={`Last saved at ${lastAutosavedAt}. Every change is saved as you make it.`}>
+                <Check className="w-3 h-3 text-emerald-600" aria-hidden="true" />
+                All changes saved
               </span>
             )
           )}
         </div>
 
-        {/* Engine Generation & Recovery Tools */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleOpenPreflight('GENERATE_ALL')}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors shadow-xs cursor-pointer"
-            title="Fills the whole roster again. Pinned days, leave and (unless you choose otherwise) your hand changes are kept."
-          >
-            <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Generate All</span>
-          </button>
-
-          <button
-            onClick={() => handleOpenPreflight('EMPTY_ONLY')}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium transition-colors cursor-pointer"
-            title="Fill only empty unassigned cells"
-          >
-            <Plus className="w-3 h-3 text-slate-500" aria-hidden="true" />
-            <span>Fill Empty</span>
-          </button>
-
-          <button
-            onClick={() => handleOpenPreflight('REBALANCE')}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium transition-colors cursor-pointer"
-            title="Re-optimize soft rules while preserving manual cells & locks"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-            <span>Rebalance</span>
-          </button>
-
-          <button
-            onClick={() => handleOpenPreflight('CLEAR_GENERATED')}
-            className="inline-flex items-center gap-1 px-2 py-1.5 border border-slate-200 hover:bg-red-50 text-red-600 rounded font-medium transition-colors cursor-pointer"
-            title="Remove generated cells (keeps pinned locks & manual edits)"
-          >
-            <Trash2 className="w-3 h-3" aria-hidden="true" />
-            <span>Clear</span>
-          </button>
-
-          <div className="h-4 w-px bg-slate-200" />
-
-          {/* Undo / Redo */}
+        <div className="flex items-center gap-1.5">
           <button
             disabled={undoStack.length === 0}
             onClick={handleUndo}
-            className="px-2 py-1 border border-slate-200 rounded disabled:opacity-30 hover:bg-slate-50 text-slate-700 cursor-pointer font-mono"
-            title="Undo the last roster change"
+            className="inline-flex items-center gap-1 px-2 py-1.5 border border-slate-200 rounded disabled:opacity-40 hover:bg-slate-50 text-slate-700 cursor-pointer disabled:cursor-not-allowed"
+            title="Undo the last change (Ctrl+Z)"
+            aria-label="Undo"
           >
-            Undo ({undoStack.length})
+            <Undo2 className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Undo</span>
           </button>
           <button
             disabled={redoStack.length === 0}
             onClick={handleRedo}
-            className="px-2 py-1 border border-slate-200 rounded disabled:opacity-30 hover:bg-slate-50 text-slate-700 cursor-pointer font-mono"
-            title="Redo the change you undid"
+            className="inline-flex items-center gap-1 px-2 py-1.5 border border-slate-200 rounded disabled:opacity-40 hover:bg-slate-50 text-slate-700 cursor-pointer disabled:cursor-not-allowed"
+            title="Redo the change you undid (Ctrl+Y)"
+            aria-label="Redo"
           >
-            Redo
+            <Redo2 className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="hidden sm:inline">Redo</span>
           </button>
 
-          <div className="h-4 w-px bg-slate-200" />
+          <MenuButton
+            align="right"
+            disabled={!activeSchedule}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+            title="Fill the roster with shifts"
+            label={
+              <>
+                <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Fill roster</span>
+                <span aria-hidden="true">▾</span>
+              </>
+            }
+            items={[
+              {
+                label: 'Fill the whole roster',
+                hint: 'Pinned days, leave and your hand changes are kept',
+                icon: <Sparkles className="w-3.5 h-3.5 text-indigo-600" />,
+                onSelect: () => handleOpenPreflight('GENERATE_ALL'),
+              },
+              {
+                label: 'Fill empty cells only',
+                hint: 'Every shift already on the roster stays',
+                icon: <Plus className="w-3.5 h-3.5 text-indigo-600" />,
+                onSelect: () => handleOpenPreflight('EMPTY_ONLY'),
+              },
+              {
+                label: 'Clear filled shifts…',
+                hint: 'Removes the shifts the app filled in',
+                icon: <Trash2 className="w-3.5 h-3.5 text-rose-600" />,
+                danger: true,
+                separatorBefore: true,
+                onSelect: () => handleOpenPreflight('CLEAR_GENERATED'),
+              },
+            ]}
+          />
 
-          {/* Expand Viewport Button */}
-          <button
-            onClick={() => setIsExpandedView(!isExpandedView)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded font-semibold text-xs transition-colors cursor-pointer shadow-2xs ${
-              isExpandedView
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                : 'bg-white border border-slate-300 hover:bg-slate-50 text-slate-700'
-            }`}
-            title={isExpandedView ? 'Exit expanded screen view (Esc)' : 'Expand schedule view to full screen'}
-          >
-            {isExpandedView ? (
+          <MenuButton
+            align="right"
+            disabled={!activeSchedule}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold transition-colors shadow-xs cursor-pointer disabled:opacity-50"
+            title="Send the roster to the nurses"
+            label={
               <>
-                <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Exit Expand</span>
+                <Send className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>Publish</span>
+                <span aria-hidden="true">▾</span>
               </>
-            ) : (
+            }
+            items={[
+              {
+                label: 'Publish the roster',
+                hint: 'Email every nurse their shifts',
+                icon: <Send className="w-3.5 h-3.5 text-emerald-600" />,
+                onSelect: () => openPublish('PUBLISH'),
+              },
+              {
+                label: 'Send changes only',
+                hint: hasPublished ? 'Email only the nurses whose shifts changed' : 'Publish the roster once first',
+                icon: <History className="w-3.5 h-3.5 text-amber-600" />,
+                disabled: !hasPublished,
+                onSelect: () => openPublish('CHANGE'),
+              },
+            ]}
+          />
+
+          <MenuButton
+            align="right"
+            ariaLabel="More actions"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-semibold cursor-pointer"
+            title="More actions"
+            label={
               <>
-                <Maximize2 className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-                <span>Expand View</span>
+                <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
+                <span className="hidden sm:inline">More</span>
               </>
-            )}
-          </button>
+            }
+            items={[
+              { label: 'New roster…', icon: <Plus className="w-3.5 h-3.5 text-indigo-600" />, onSelect: () => setIsNewModalOpen(true) },
+              {
+                label: 'Keep a copy…',
+                hint: 'Changes save by themselves; this keeps a named copy to go back to',
+                icon: <Save className="w-3.5 h-3.5 text-indigo-600" />,
+                disabled: !activeSchedule,
+                onSelect: () => setIsSaveModalOpen(true),
+              },
+              { label: 'Compare saved copies', icon: <Diff className="w-3.5 h-3.5 text-indigo-600" />, disabled: !activeSchedule, onSelect: () => setIsCompareModalOpen(true) },
+              { label: 'Export or print…', icon: <Download className="w-3.5 h-3.5 text-indigo-600" />, disabled: !activeSchedule, onSelect: () => setIsExportModalOpen(true) },
+              { label: 'Share links…', icon: <Share2 className="w-3.5 h-3.5 text-indigo-600" />, disabled: !activeSchedule, onSelect: () => setIsShareModalOpen(true) },
+              {
+                label: 'Fairness…',
+                hint: 'Weekends, late shifts and holidays per nurse',
+                icon: <Scale className="w-3.5 h-3.5 text-amber-700" />,
+                separatorBefore: true,
+                disabled: !activeSchedule,
+                onSelect: () => setIsFairnessModalOpen(true),
+              },
+              {
+                label: 'Templates and copy last roster…',
+                icon: <Layers className="w-3.5 h-3.5 text-indigo-600" />,
+                disabled: !activeSchedule,
+                onSelect: () => setIsTemplateModalOpen(true),
+              },
+              { label: 'Swap two nurses’ shifts…', icon: <ArrowLeftRight className="w-3.5 h-3.5 text-slate-600" />, disabled: !activeSchedule, onSelect: () => setIsSwapModalOpen(true) },
+              {
+                label: isExpandedView ? 'Leave full screen' : 'Full screen',
+                hint: isExpandedView ? 'Or press Esc' : undefined,
+                icon: isExpandedView ? <Minimize2 className="w-3.5 h-3.5 text-indigo-600" /> : <Maximize2 className="w-3.5 h-3.5 text-indigo-600" />,
+                separatorBefore: true,
+                onSelect: () => setIsExpandedView(!isExpandedView),
+              },
+            ]}
+          />
         </div>
       </div>
 
+      {/* Steps: where this roster is, and the next thing to do */}
+      {activeSchedule && (
+        <nav aria-label="Roster steps" className="bg-slate-50 border-b border-slate-200 px-3 sm:px-4 py-1.5 shrink-0 overflow-x-auto">
+          <ol className="flex items-center gap-1 text-[11px] whitespace-nowrap">
+            {steps.map((step, i) => (
+              <li key={step.label} className="flex items-center gap-1">
+                {i > 0 && <ChevronRight className="w-3 h-3 text-slate-400" aria-hidden="true" />}
+                <button
+                  type="button"
+                  onClick={step.onClick}
+                  disabled={!step.onClick}
+                  aria-current={step.current ? 'step' : undefined}
+                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-semibold transition-colors ${
+                    step.onClick ? 'cursor-pointer hover:bg-white' : 'cursor-default'
+                  } ${step.current ? 'bg-white text-indigo-800 ring-1 ring-indigo-300' : step.done ? 'text-emerald-800' : 'text-slate-600'}`}
+                >
+                  <span
+                    className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
+                      step.done ? 'bg-emerald-600 text-white' : step.current ? 'bg-indigo-600 text-white' : 'bg-slate-300 text-slate-700'
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {step.done ? <Check className="w-2.5 h-2.5" /> : i + 1}
+                  </span>
+                  <span>{step.label}</span>
+                  <span className="sr-only">{step.done ? '(done)' : ''}</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
+
       {clinicSetupError && (
         <div role="alert" className="mx-4 mt-2 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-          {clinicSetupError} Generating is blocked until they load.
+          {clinicSetupError} Filling the roster is blocked until they load.
         </div>
       )}
 
-      {/* Top Validation Alert Banner (Total findings count + Top 3 Plain Language Findings) */}
-      {(validationReport.errorCount > 0 || validationReport.warnCount > 0) && (
-        <button
-          type="button"
-          onClick={() => setActiveTab('warnings')}
-          className={`w-full text-left px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-3 border-b cursor-pointer transition-colors shrink-0 ${
-            validationReport.errorCount > 0
-              ? 'bg-rose-50 text-rose-900 border-rose-200 hover:bg-rose-100/80'
-              : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100/80'
-          }`}
-          title="Click to view all findings in the Warnings sheet"
-        >
-          <div className="flex items-center gap-2 overflow-hidden">
-            <AlertTriangle className={`w-4 h-4 shrink-0 ${validationReport.errorCount > 0 ? 'text-rose-600' : 'text-amber-600'}`} aria-hidden="true" />
-            <span className="font-bold">
-              {validationReport.errorCount > 0
-                ? `${validationReport.errorCount} Error${validationReport.errorCount === 1 ? '' : 's'}, ${validationReport.warnCount} Warning${validationReport.warnCount === 1 ? '' : 's'}`
-                : `${validationReport.warnCount} Validation Warning${validationReport.warnCount === 1 ? '' : 's'}`}:
-            </span>
-            <div className="flex items-center gap-2 truncate text-[11px]">
-              {validationReport.findings.slice(0, 3).map((f, i) => (
-                <span key={f.id} className="truncate max-w-sm">
-                  {i > 0 && <span className="opacity-40 mr-2">·</span>}
-                  {f.message}
-                </span>
-              ))}
-              {validationReport.findings.length > 3 && (
-                <span className="font-semibold underline ml-1">
-                  +{validationReport.findings.length - 3} more
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1 font-semibold text-indigo-700 hover:text-indigo-900 text-xs shrink-0">
-            <span>Open Warnings Sheet</span>
-            <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-          </div>
-        </button>
-      )}
-
       {/* Main Viewport: Swappable Workbook Sheets */}
-      <div className="flex-1 overflow-hidden relative">
-        {!activeSchedule ? (
+      <div className="flex-1 overflow-hidden relative flex isolate">
+        <div className="flex-1 min-w-0 overflow-hidden relative">
+        {!activeSchedule && isFirstLoad && !loadError ? (
+          <PageLoading label="Loading the roster…" />
+        ) : !activeSchedule ? (
           <div className="h-full flex items-center justify-center p-8 text-center bg-slate-50">
             <div className="max-w-md bg-white border border-slate-200 rounded-lg p-8 shadow-xs space-y-4">
               <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
                 <CalendarRange className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-slate-900">No Active Schedules Found</h3>
+                <h3 className="text-base font-bold text-slate-900">No rosters yet</h3>
                 <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  The schedule database is currently empty. You can create a new schedule period from scratch with custom dates by clicking "New Schedule".
+                  Create a roster for the dates you need, then fill it with shifts.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
@@ -1679,7 +1584,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold transition-colors shadow-xs cursor-pointer"
                 >
                   <Plus className="w-4 h-4" aria-hidden="true" />
-                  <span>Create First Schedule</span>
+                  <span>Create a roster</span>
                 </button>
               </div>
             </div>
@@ -1709,14 +1614,18 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 onLocksChange={handleLocksChange}
                 onLeaveEntriesChange={handleLeaveEntriesChange}
                 onCellEdit={(edit) => applyEdit(edit)}
-                onNavigateTab={(tab) => setActiveTab(tab)}
+                focusRequest={focusRequest}
+                onNavigateTab={(tab) => {
+                  // The grid's problem links open the side panel instead of leaving the grid.
+                  if (tab === 'warnings') setIsProblemsOpen(true);
+                  else setActiveTab(tab);
+                }}
                 isAllDaysExpanded={isAllDaysExpanded}
                 onToggleExpandDays={() => setIsAllDaysExpanded(!isAllDaysExpanded)}
                 isExpandedView={isExpandedView}
                 onToggleExpandView={() => setIsExpandedView(!isExpandedView)}
                 onOpenLockOverrideModal={(lock) => {
                   setActiveLockToOverride(lock);
-                  setOverrideInput('');
                   setIsOverrideModalOpen(true);
                 }}
               />
@@ -1790,11 +1699,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             {activeTab === 'legend' && (
               <div className="p-6 max-w-4xl mx-auto space-y-4 text-xs">
                 <h2 className="text-base font-bold text-slate-800">
-                  Clinic Workbook Acronyms, Rules &amp; Color Coding Legend
+                  Key: shift and leave codes
                 </h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-4 bg-white border border-slate-200 rounded space-y-2">
-                    <span className="font-semibold text-slate-700 block">Duty Windows:</span>
+                    <span className="font-semibold text-slate-700 block">Shifts</span>
                     {dutyWindows.map((dw) => (
                       <div key={dw.id} className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -1803,12 +1712,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                           </span>
                           <span className="font-medium text-slate-800">{dw.name}</span>
                           {dw.isPriority ? (
-                            <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
                               <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
-                              Priority Duty
+                              Filled first
                             </span>
                           ) : (
-                            <span className="text-[9px] text-slate-400 bg-slate-100 px-1 py-0.2 rounded border border-slate-200">
+                            <span className="text-[10px] text-slate-500 bg-slate-100 px-1 py-0.5 rounded border border-slate-200">
                               Standard
                             </span>
                           )}
@@ -1819,14 +1728,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   </div>
 
                   <div className="p-4 bg-white border border-slate-200 rounded space-y-2">
-                    <span className="font-semibold text-slate-700 block">Leave Types:</span>
+                    <span className="font-semibold text-slate-700 block">Leave types (hours counted per day)</span>
                     {leaveTypes.map((lt) => (
                       <div key={lt.id} className="flex items-center justify-between">
                         <span className="font-bold text-white px-2 py-0.5 rounded font-mono" style={{ backgroundColor: lt.color }}>
                           {lt.acronym}
                         </span>
                         <span className="font-medium text-slate-800">{lt.name}</span>
-                        <span className="font-mono text-slate-500">{typeof lt.creditedHours === 'number' ? `${lt.creditedHours}h` : 'match'}</span>
+                        <span className="font-mono text-slate-500">{typeof lt.creditedHours === 'number' ? `${lt.creditedHours} h` : '8 h'}</span>
                       </div>
                     ))}
                   </div>
@@ -1835,22 +1744,36 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             )}
           </>
         )}
+        </div>
+        {isProblemsOpen && activeSchedule && (
+          <ProblemsPanel
+            validationReport={validationReport}
+            nurseName={nurseName}
+            onShowInGrid={handleJumpToCell}
+            onOpenFullList={() => {
+              setIsProblemsOpen(false);
+              setActiveTab('warnings');
+            }}
+            onClose={() => setIsProblemsOpen(false)}
+          />
+        )}
       </div>
 
-      {/* Bottom Sheet Tabs (Excel Workbook Metaphor) */}
+      {/* Sheet tabs along the bottom */}
       <div className="h-9 bg-slate-200 border-t border-slate-300 px-2 flex items-center gap-1 shrink-0 overflow-x-auto select-none">
         {[
-          { id: 'roster', label: 'Roster Grid' },
-          { id: 'doctors', label: "Doctors' Schedule" },
-          { id: 'coverage', label: 'Hourly Coverage' },
-          { id: 'warnings', label: `Warnings (${validationReport.errorCount + validationReport.warnCount})` },
-          { id: 'leave', label: 'Leave & Locks' },
-          { id: 'hours', label: 'Hours & Equity' },
-          { id: 'legend', label: 'Legend' },
+          { id: 'roster', label: 'Roster' },
+          { id: 'doctors', label: 'Doctors' },
+          { id: 'coverage', label: 'Coverage by hour' },
+          { id: 'warnings', label: `Problems (${validationReport.errorCount + validationReport.warnCount})` },
+          { id: 'leave', label: 'Leave and pinned days' },
+          { id: 'hours', label: 'Hours' },
+          { id: 'legend', label: 'Key' },
         ].map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
+            aria-current={activeTab === tab.id ? 'page' : undefined}
             className={`px-3 py-1 text-xs font-medium rounded-t transition-colors cursor-pointer border-t border-x ${
               activeTab === tab.id
                 ? 'bg-white text-indigo-700 border-slate-300 shadow-xs font-bold'
@@ -1872,16 +1795,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             aria-labelledby={saveTitleId}
             className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-sm w-full p-4 space-y-3 text-xs"
           >
-            <h3 id={saveTitleId} className="font-bold text-slate-900 text-sm">Save Roster Version</h3>
+            <h3 id={saveTitleId} className="font-bold text-slate-900 text-sm">Keep a copy</h3>
             <p className="text-[11px] text-slate-500">
-              Your changes are already saved automatically. This keeps a named copy of the roster (shifts, pinned days and leave) that you can look at or go back to later.
+              Your changes are already saved. This keeps a named copy of the roster as it is now (shifts, pinned days and leave), so you can look at it or compare with it later.
             </p>
             <input
               type="text"
               value={saveNote}
               onChange={(e) => setSaveNote(e.target.value)}
-              aria-label="Version note"
-              placeholder="e.g. Swapped Dr. Ali's Thursday session"
+              aria-label="Name for this copy"
+              placeholder="For example: before moving the Thursday sessions"
               className="w-full px-3 py-1.5 border border-slate-300 rounded font-medium"
             />
             <div className="pt-2 flex items-center justify-end gap-2">
@@ -1898,14 +1821,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 disabled={isSavingVersion}
                 className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
               >
-                Save Version
+                {isSavingVersion ? 'Keeping…' : 'Keep copy'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- LOCK OVERRIDE MODAL --- */}
+      {/* --- UNPIN A DAY --- */}
       {isOverrideModalOpen && activeLockToOverride && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div
@@ -1913,91 +1836,83 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby={overrideTitleId}
-            className="bg-white rounded-lg border border-red-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-150"
+            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-150"
           >
-            <div className="flex items-center gap-2 text-red-600">
-              <Shield className="w-5 h-5 shrink-0" aria-hidden="true" />
+            <div className="flex items-center gap-2">
+              <Shield className="w-5 h-5 shrink-0 text-amber-600" aria-hidden="true" />
               <h3 id={overrideTitleId} className="text-sm font-bold text-slate-900">
-                Non-Changeable Day Override Protocol
+                Unpin this day?
               </h3>
             </div>
-
-            <div className="p-3 bg-red-50 border border-red-200 rounded text-red-900 space-y-1.5 leading-relaxed">
-              <p className="font-semibold text-xs">
-                Non-changeable day. This was pinned on {formatDate(activeLockToOverride.date)} and will not be overwritten by generation.
-              </p>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block font-medium text-slate-700">
-                  To remove this lock and permit re-scheduling, confirm below:
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setOverrideInput('OVERRIDE')}
-                  className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer underline"
-                >
-                  Quick-fill OVERRIDE
-                </button>
-              </div>
-              <input aria-label="Type OVERRIDE to confirm"
-                type="text"
-                value={overrideInput}
-                onChange={(e) => setOverrideInput(e.target.value.toUpperCase())}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleExecuteLockOverride();
-                  }
-                }}
-                placeholder="OVERRIDE"
-                className="w-full px-3 py-2 border-2 border-red-300 rounded font-mono font-bold text-center tracking-wider text-sm focus:outline-none focus:border-red-500 uppercase"
-              />
-            </div>
-
+            <p className="text-slate-700 leading-relaxed">
+              {nurseName(activeLockToOverride.nurseId)} on {formatDate(activeLockToOverride.date)} is pinned, so filling the
+              roster never changes it. If you unpin it, the shift stays for now as a hand change, and you can then edit it.
+            </p>
             <div className="pt-2 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setIsOverrideModalOpen(false)}
                 className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
               >
-                Keep Pinned
+                Keep pinned
               </button>
               <button
                 type="button"
                 onClick={handleExecuteLockOverride}
-                disabled={overrideInput.trim().toUpperCase() !== 'OVERRIDE'}
-                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-bold cursor-pointer transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold cursor-pointer transition-colors shadow-xs"
               >
-                Confirm OVERRIDE &amp; Unlock
+                Unpin
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* --- PRE-FLIGHT GENERATION MODAL --- */}
-      {isPreflightModalOpen && preflightSummary && (
+      {/* --- FILL ROSTER DIALOG --- */}
+      {isPreflightModalOpen && preflightSummary && (() => {
+        const isClear = activeGenerationMode === 'CLEAR_GENERATED';
+        const filledCount = assignments.filter((a) => a.source === 'GENERATED').length;
+        const manualCount = assignments.filter((a) => a.source === 'MANUAL').length;
+        const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+        const title = isClear
+          ? 'Clear filled shifts'
+          : activeGenerationMode === 'EMPTY_ONLY'
+          ? 'Fill empty cells only'
+          : 'Fill the whole roster';
+        const kept = [
+          plural(preflightSummary.existingLocksCount, 'pinned day'),
+          plural(preflightSummary.existingLeaveDaysCount, 'leave day'),
+        ];
+        if (activeGenerationMode === 'GENERATE_ALL' && keepManualOnGenerate && manualCount > 0) kept.push(plural(manualCount, 'hand change'));
+        const nurseClinicChoice = !preflightSummary.nurseClinicRuleEnabled
+          ? 'OFF'
+          : preflightSummary.nurseClinicRuleSeverity === 'HARD'
+          ? 'HARD'
+          : 'SOFT';
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
           <div
             ref={preflightDialogRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby={preflightTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-xl w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-150"
+            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col text-xs animate-in zoom-in-95 duration-150"
           >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                <h3 id={preflightTitleId} className="text-sm font-bold text-slate-900">
-                  Generation Pre-flight: {preflightSummary.scheduleName}
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                {isClear ? (
+                  <Trash2 className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
+                ) : (
+                  <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" aria-hidden="true" />
+                )}
+                <h3 id={preflightTitleId} className="text-sm font-bold text-slate-900 truncate">
+                  {title}: {preflightSummary.scheduleName}
                 </h3>
               </div>
               {!isGenerating && (
                 <button
                   onClick={() => setIsPreflightModalOpen(false)}
-                  className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="p-1 text-slate-500 hover:text-slate-700 cursor-pointer"
                   aria-label="Close"
                   title="Close"
                 >
@@ -2006,301 +1921,125 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               )}
             </div>
 
-            {/* Pre-flight Diagnostic Metrics / Clear Mode Details */}
-            {activeGenerationMode === 'CLEAR_GENERATED' ? (
-              <div className="space-y-3">
-                <div className="p-3 bg-red-50 border border-red-200 rounded text-red-900 text-xs flex items-start gap-2.5">
-                  <Trash2 className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-bold text-red-950">Clear Active Schedule Shifts</p>
-                    <p className="text-red-800 text-[11px] leading-relaxed">
-                      This action will wipe generated shift assignments ({assignments.filter((a) => a.source === 'GENERATED').length} shifts) from the active schedule database and persistence. Pinned locks and approved leave days are protected and will remain intact.
-                    </p>
-                  </div>
-                </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+              {isClear ? (
+                <>
+                  <p className="text-slate-800 leading-relaxed text-[13px]">
+                    This removes the {plural(filledCount, 'shift')} the app filled in.{' '}
+                    {clearIncludeManual
+                      ? `Your ${plural(manualCount, 'hand change')} are removed too.`
+                      : manualCount > 0
+                      ? `Your ${plural(manualCount, 'hand change')} stay.`
+                      : ''}{' '}
+                    Pinned days and leave always stay. You can undo this.
+                  </p>
+                  {manualCount > 0 && (
+                    <label className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded cursor-pointer text-slate-800 font-medium">
+                      <input
+                        type="checkbox"
+                        checked={clearIncludeManual}
+                        onChange={(e) => setClearIncludeManual(e.target.checked)}
+                        className="rounded border-slate-300 cursor-pointer"
+                      />
+                      <span>Also remove the {plural(manualCount, 'shift')} I changed by hand</span>
+                    </label>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-slate-800 leading-relaxed text-[13px]">
+                    <strong>Kept:</strong> {kept.join(', ')}
+                    {activeGenerationMode === 'EMPTY_ONLY' ? `, and every shift already on the roster (${assignments.length})` : ''}.{' '}
+                    {activeGenerationMode === 'GENERATE_ALL' && (
+                      <>
+                        <strong>Replaced:</strong>{' '}
+                        {plural(filledCount + (keepManualOnGenerate ? 0 : manualCount), 'shift')}
+                        {keepManualOnGenerate || manualCount === 0 ? ' the app filled in before' : ', including your hand changes'}.
+                      </>
+                    )}
+                  </p>
+                  {activeGenerationMode === 'GENERATE_ALL' && manualCount > 0 && (
+                    <label className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded cursor-pointer text-slate-800 font-medium">
+                      <input
+                        type="checkbox"
+                        checked={keepManualOnGenerate}
+                        onChange={(e) => setKeepManualOnGenerate(e.target.checked)}
+                        className="rounded border-slate-300 cursor-pointer"
+                      />
+                      <span>Keep the {plural(manualCount, 'shift')} I changed by hand</span>
+                    </label>
+                  )}
+                  <p className="text-slate-600 leading-relaxed">
+                    {plural(preflightSummary.activeNursesCount, 'nurse')} ({preflightSummary.bloodCollectionNursesCount} can take blood) and{' '}
+                    {plural(preflightSummary.doctorSessionsCount, 'doctor session')} over {plural(preflightSummary.totalDays, 'day')}. Doctors get
+                    their nurses first, then Nurse Clinic and the other jobs are filled.
+                    {preflightSummary.targetWorkingHoursFullTime
+                      ? ` A full time nurse aims for ${preflightSummary.targetWorkingHoursFullTime} h${
+                          preflightSummary.detectedPeriodName ? ` (${preflightSummary.detectedPeriodName})` : ''
+                        }.`
+                      : ''}
+                  </p>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 text-[10px] block">Active Shifts</span>
-                    <span className="font-bold text-slate-900 font-mono">
-                      {assignments.length} Shifts
-                    </span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 text-[10px] block">Pinned Locks</span>
-                    <span className="font-bold text-amber-700 font-mono">
-                      {preflightSummary.existingLocksCount} Pinned (Safe)
-                    </span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 text-[10px] block">Approved Leave</span>
-                    <span className="font-bold text-blue-700 font-mono">
-                      {preflightSummary.existingLeaveDaysCount} Days Off
-                    </span>
-                  </div>
-                </div>
-
-                <label className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded cursor-pointer text-slate-800 font-medium text-[11px]">
-                  <input
-                    type="checkbox"
-                    checked={clearIncludeManual}
-                    onChange={(e) => setClearIncludeManual(e.target.checked)}
-                    className="rounded border-slate-300 text-red-600 focus:ring-red-500 cursor-pointer"
-                  />
-                  <span>
-                    Also clear manual cell edits ({assignments.filter((a) => a.source === 'MANUAL').length} manual cells)
-                  </span>
-                </label>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {activeGenerationMode === 'GENERATE_ALL' && (() => {
-                  const manualCount = assignments.filter((a) => a.source === 'MANUAL').length;
-                  return (
-                    <div className="p-2.5 rounded border border-amber-200 bg-amber-50 text-[11px] text-amber-900 space-y-1.5">
-                      <p>
-                        Shifts the app filled in before are replaced. Pinned days and approved leave are kept.
-                      </p>
-                      {manualCount > 0 && (
-                        <label className="flex items-center gap-2 font-medium cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={keepManualOnGenerate}
-                            onChange={(e) => setKeepManualOnGenerate(e.target.checked)}
-                            className="rounded border-slate-300 cursor-pointer"
-                          />
-                          <span>
-                            Keep the {manualCount} shift{manualCount === 1 ? '' : 's'} I changed by hand
-                            {keepManualOnGenerate ? '' : ' (they will be replaced)'}
+                  <fieldset className="p-3 bg-slate-50 border border-slate-200 rounded space-y-2" disabled={isGenerating}>
+                    <legend className="font-semibold text-slate-900 px-1">A free nurse for Nurse Clinic every opening hour</legend>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                      {(
+                        [
+                          { id: 'HARD', label: 'Never broken', hint: 'Filled before the doctors’ second nurses', run: () => handleUpdateNurseClinicRule('HARD', true) },
+                          { id: 'SOFT', label: 'When possible', hint: 'Doctors first, then Nurse Clinic', run: () => handleUpdateNurseClinicRule('SOFT', true) },
+                          { id: 'OFF', label: 'Off', hint: 'No Nurse Clinic shifts', run: () => handleUpdateNurseClinicRule('SOFT', false) },
+                        ] as const
+                      ).map((opt) => (
+                        <label
+                          key={opt.id}
+                          className={`p-2 rounded border cursor-pointer ${
+                            nurseClinicChoice === opt.id ? 'bg-white border-indigo-500 ring-1 ring-indigo-500' : 'bg-white border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          <span className="flex items-center gap-1.5 font-semibold text-slate-900">
+                            <input
+                              type="radio"
+                              name="nurse-clinic-rule"
+                              checked={nurseClinicChoice === opt.id}
+                              onChange={opt.run}
+                            />
+                            {opt.label}
                           </span>
+                          <span className="block text-[11px] text-slate-500 mt-0.5 leading-tight">{opt.hint}</span>
                         </label>
-                      )}
+                      ))}
                     </div>
-                  );
-                })()}
-                <div className="p-2.5 bg-indigo-50/70 border border-indigo-200 rounded text-indigo-900 text-xs flex items-center justify-between">
-                  <span className="font-semibold flex items-center gap-1.5">
-                    <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Doctor Recurring Schedule Populated First · Nurses Paired to Assigned Doctors</span>
-                  </span>
-                  <span className="text-[10px] text-indigo-700 bg-white/80 px-2 py-0.5 rounded font-medium border border-indigo-200">
-                    Deterministic Pairing
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 text-[10px] block">Period Span</span>
-                    <span className="font-bold text-slate-900 font-mono text-xs">
-                      {preflightSummary.totalDays} Days ({preflightSummary.totalBlocks} Blocks)
-                    </span>
-                  </div>
-                  <div className="p-2 bg-emerald-50/80 rounded border border-emerald-200">
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="text-emerald-800 font-semibold">Doctor Demand</span>
-                      <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1 rounded">PRE-FILLED ✓</span>
+                  </fieldset>
+
+                  {preflightSummary.eveningCoverageAlert && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 text-[11px] flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                      <span>{preflightSummary.eveningCoverageAlert}</span>
                     </div>
-                    <span className="font-bold text-emerald-950 font-mono text-xs block mt-0.5">
-                      {preflightSummary.doctorSessionsCount} Slots
-                    </span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 text-[10px] block">Nurse Clinic Quota</span>
-                    <span className="font-bold text-teal-700 font-mono text-xs">
-                      {preflightSummary.nurseClinicSlotsCount ?? 0} Slots ({preflightSummary.nurseClinicRuleEnabled ? preflightSummary.nurseClinicRuleSeverity : 'OFF'})
-                    </span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 text-[10px] block">Can take blood</span>
-                    <span className="font-bold text-slate-900 font-mono text-xs">
-                      {preflightSummary.bloodCollectionNursesCount} Nurses
-                    </span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 text-[10px] block">Active Staff</span>
-                    <span className="font-bold text-slate-900 font-mono text-xs">
-                      {preflightSummary.activeNursesCount} Nurses
-                    </span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 text-[10px] block">Pinned Locks</span>
-                    <span className="font-bold text-amber-700 font-mono text-xs">
-                      {preflightSummary.existingLocksCount} Pinned (Safe)
-                    </span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 text-[10px] block">Approved Leave</span>
-                    <span className="font-bold text-blue-700 font-mono text-xs">
-                      {preflightSummary.existingLeaveDaysCount} Days Off
-                    </span>
-                  </div>
-                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
-                    <span className="text-slate-500 text-[10px] block">Est. Assignments</span>
-                    <span className="font-bold text-indigo-700 font-mono text-xs">
-                      ~{preflightSummary.estimatedTotalAssignments} Shifts
-                    </span>
-                  </div>
-                  <div className="p-2 bg-amber-50/70 rounded border border-amber-200">
-                    <span className="text-amber-800 text-[10px] font-semibold flex items-center gap-1 block">
-                      <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                      <span>Priority Duties</span>
-                    </span>
-                    <span className="font-bold text-amber-900 font-mono text-xs">
-                      {preflightSummary.priorityDutiesCount ?? 0} Priority / {preflightSummary.standardDutiesCount ?? 0} Std
-                    </span>
-                  </div>
-                  <div className="p-2 bg-indigo-50/80 rounded border border-indigo-200">
-                    <span className="text-indigo-800 text-[10px] font-semibold block flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-indigo-600" />
-                      <span>Target Hours (FT)</span>
-                    </span>
-                    <span className="font-bold text-indigo-950 font-mono text-xs">
-                      {preflightSummary.targetWorkingHoursFullTime ?? 160}h FT
-                    </span>
-                    <span className="text-[10px] text-indigo-700 block truncate font-medium mt-0.5">
-                      {preflightSummary.detectedPeriodName
-                        ? `${preflightSummary.detectedPeriodName} (${preflightSummary.isProratedPeriod ? 'Prorated' : 'Dedicated'})`
-                        : `${preflightSummary.totalDays}d Span`}
-                    </span>
-                  </div>
-                </div>
-
-                {preflightSummary.hoursTargetDescription && (
-                  <div className="p-2.5 bg-indigo-50/70 border border-indigo-200 rounded text-indigo-950 text-xs flex items-center gap-2">
-                    <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>
-                      <strong className="font-semibold">Period Contract Baseline:</strong> {preflightSummary.hoursTargetDescription}
-                    </span>
-                  </div>
-                )}
-
-                <div className="p-2.5 bg-amber-50/60 border border-amber-200 rounded text-amber-950 text-xs flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-600 shrink-0" />
-                    <span>
-                      <strong className="font-semibold">Priority Duty Scheduling:</strong> {preflightSummary.priorityDutiesCount ?? 0} active priority windows are evaluated first for all clinic sessions and pool requirements. If rest limits or hours targets require, the engine automatically falls back to standard windows ({preflightSummary.standardDutiesCount ?? 0}).
-                    </span>
-                  </div>
-                </div>
-
-                {/* Dedicated Nurse Clinic Rule Selection: Hard vs Soft vs Off */}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-teal-700 font-bold text-sm">🩺</span>
-                      <div>
-                        <span className="font-semibold text-slate-900 text-xs">
-                          Dedicated Nurse Clinic Rule
-                        </span>
-                        <span className="text-[11px] text-slate-500 block">
-                          Guarantee a nurse dedicated solely to Nurse Clinic (walk-ins, dressings, triage &amp; injections) who is not assigned to a doctor.
-                        </span>
-                      </div>
+                  )}
+                  {preflightSummary.staffingScaleWarning && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 text-[11px] flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+                      <span>{preflightSummary.staffingScaleWarning}</span>
                     </div>
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                        !preflightSummary.nurseClinicRuleEnabled
-                          ? 'bg-slate-200 text-slate-600'
-                          : preflightSummary.nurseClinicRuleSeverity === 'HARD'
-                          ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                          : 'bg-amber-100 text-amber-800 border border-amber-200'
-                      }`}
-                    >
-                      {!preflightSummary.nurseClinicRuleEnabled
-                        ? 'DISABLED'
-                        : `${preflightSummary.nurseClinicRuleSeverity} RULE`}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
-                    <button
-                      type="button"
-                      disabled={isGenerating}
-                      onClick={() => handleUpdateNurseClinicRule('HARD', true)}
-                      className={`p-2 rounded border text-left cursor-pointer transition-all ${
-                        preflightSummary.nurseClinicRuleEnabled &&
-                        preflightSummary.nurseClinicRuleSeverity === 'HARD'
-                          ? 'bg-rose-50 border-rose-400 text-rose-950 font-bold shadow-2xs ring-1 ring-rose-400'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="w-2 h-2 rounded-full bg-rose-600 shrink-0" />
-                        <span>Hard Rule (Mandatory)</span>
-                      </div>
-                      <p className="text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">
-                        High priority: Dedicated nurse assigned first. Doctor pairings cannot override. Gaps trigger hard violations.
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={isGenerating}
-                      onClick={() => handleUpdateNurseClinicRule('SOFT', true)}
-                      className={`p-2 rounded border text-left cursor-pointer transition-all ${
-                        preflightSummary.nurseClinicRuleEnabled &&
-                        preflightSummary.nurseClinicRuleSeverity === 'SOFT'
-                          ? 'bg-amber-50 border-amber-400 text-amber-950 font-bold shadow-2xs ring-1 ring-amber-400'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                        <span>Soft Rule (Flexible)</span>
-                      </div>
-                      <p className="text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">
-                        Optimized: Doctor clinics staffed first; remaining available nurse dedicated to Nurse Clinic. Unmet flags as warning.
-                      </p>
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={isGenerating}
-                      onClick={() => handleUpdateNurseClinicRule('SOFT', false)}
-                      className={`p-2 rounded border text-left cursor-pointer transition-all ${
-                        !preflightSummary.nurseClinicRuleEnabled
-                          ? 'bg-slate-200 border-slate-400 text-slate-900 font-bold shadow-2xs'
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
-                        <span>Disabled</span>
-                      </div>
-                      <p className="text-[10px] text-slate-500 font-normal mt-0.5 leading-tight">
-                        Do not schedule dedicated Nurse Clinic shifts during roster generation.
-                      </p>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Alerts & Progress Container */}
-            <div>
-              {preflightSummary.eveningCoverageAlert && activeGenerationMode !== 'CLEAR_GENERATED' && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 text-[11px] flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <span>{preflightSummary.eveningCoverageAlert}</span>
-                </div>
+                  )}
+                </>
               )}
 
               {isGenerating && generationProgress && (
-                <div className="space-y-2 p-3 bg-slate-50 border border-slate-200 rounded">
-                  <div className="flex items-center justify-between font-mono text-[11px]">
-                    <span className="text-slate-700 font-bold">{generationProgress.statusText}</span>
+                <div className="space-y-2 p-3 bg-slate-50 border border-slate-200 rounded" role="status">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-700 font-semibold">{generationProgress.statusText}</span>
                     <span className="text-indigo-600 font-bold">{generationProgress.percent}%</span>
                   </div>
                   <div className="w-full h-2 rounded bg-slate-200 overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-600 transition-all duration-100"
-                      style={{ width: `${generationProgress.percent}%` }}
-                    />
+                    <div className="h-full bg-indigo-600 transition-all duration-100" style={{ width: `${generationProgress.percent}%` }} />
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+            <div className="px-5 py-3 flex items-center justify-end gap-2 border-t border-slate-100 shrink-0">
               <button
                 type="button"
                 disabled={isGenerating}
@@ -2314,30 +2053,27 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 disabled={isGenerating}
                 onClick={handleExecuteGeneration}
                 className={`inline-flex items-center gap-1.5 px-4 py-1.5 ${
-                  activeGenerationMode === 'CLEAR_GENERATED'
-                    ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                } rounded font-medium cursor-pointer shadow-xs disabled:opacity-50 transition-colors`}
+                  isClear ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'
+                } text-white rounded font-semibold cursor-pointer shadow-xs disabled:opacity-50 transition-colors`}
               >
-                {activeGenerationMode === 'CLEAR_GENERATED' ? (
-                  <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                ) : (
-                  <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-                )}
+                {isClear ? <Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> : <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />}
                 <span>
                   {isGenerating
-                    ? activeGenerationMode === 'CLEAR_GENERATED'
-                      ? 'Clearing...'
-                      : 'Generating...'
-                    : activeGenerationMode === 'CLEAR_GENERATED'
-                    ? 'Confirm & Clear Schedule'
-                    : `Confirm & Run ${activeGenerationMode}`}
+                    ? isClear
+                      ? 'Clearing…'
+                      : 'Filling…'
+                    : isClear
+                    ? 'Clear shifts'
+                    : activeGenerationMode === 'EMPTY_ONLY'
+                    ? 'Fill empty cells'
+                    : 'Fill roster'}
                 </span>
               </button>
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* --- VERSION COMPARE & DIFF MODAL (Phase 10) --- */}
       {activeSchedule && (
@@ -2415,7 +2151,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           onClose={() => setIsPublishModalOpen(false)}
           onPublishComplete={() => {
             loadData();
-            setToastMessage('Schedule published and broadcast dispatched!');
+            setToastMessage('Roster published.');
             setTimeout(() => setToastMessage(null), 3000);
           }}
           initialMode={publishWizardMode}
@@ -2435,7 +2171,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <FolderOpen className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                <h3 id={pickerTitleId} className="text-sm font-bold text-slate-900">Manage &amp; Switch Schedules</h3>
+                <h3 id={pickerTitleId} className="text-sm font-bold text-slate-900">Open a roster</h3>
               </div>
               <button
                 onClick={() => setIsSchedulePickerOpen(false)}
@@ -2449,7 +2185,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
             {/* My Schedules Section */}
             <div className="space-y-2">
-              <span className="font-bold text-slate-800 text-xs block">My Clinic Schedules:</span>
+              <span className="font-bold text-slate-800 text-xs block">Rosters</span>
               <div className="space-y-1.5 max-h-48 overflow-y-auto">
                 {[...schedules].sort((a, b) => b.startDate.localeCompare(a.startDate)).map((s) => {
                   const isActive = s.id === activeSchedule?.id;
@@ -2484,15 +2220,15 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                           <span className="font-bold">{s.name}</span>
                           {isActive && (
                             <span className="px-1.5 py-0.5 rounded bg-indigo-600 text-white font-bold text-[10px]">
-                              ACTIVE
+                              Open now
                             </span>
                           )}
                           <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px]">
-                            {s.status} v{s.activeVersionNumber || 1}
+                            {s.status === 'PUBLISHED' ? 'Published' : 'Draft'} · v{s.activeVersionNumber || 1}
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          {formatDate(s.startDate)} to {formatDate(s.endDate)} ({s.blockWeeks * 7}d blocks · {s.hoursTargetFullTime}h target)
+                          {formatDate(s.startDate)} to {formatDate(s.endDate)} · full time goal {s.hoursTargetFullTime} h
                         </p>
                         {(() => {
                           const chip = getSchedulePeriodChip(s);
@@ -2522,8 +2258,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                             setIsDeleteScheduleModalOpen(true);
                           }}
                           className="p-1.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                          title={`Permanently delete schedule "${s.name}"`}
-                          aria-label={`Permanently delete schedule "${s.name}"`}
+                          title={`Delete roster "${s.name}"`}
+                          aria-label={`Delete roster "${s.name}"`}
                         >
                           <Trash2 className="w-3.5 h-3.5 text-rose-500" aria-hidden="true" />
                         </button>
@@ -2547,7 +2283,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold cursor-pointer shadow-xs"
               >
                 <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Create New Schedule</span>
+                <span>New roster</span>
               </button>
 
               <button

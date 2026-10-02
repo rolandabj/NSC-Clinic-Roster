@@ -2,9 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * CreateScheduleModal — Interactive Schedule Date Range & Configuration Modal
- * Allows clinical administrators to choose start & end dates, block divisions,
- * contract hours targets, and immediate generation options.
+ * New roster dialog: dates, how many weeks each page of the roster shows,
+ * the full time hours goal, and whether to fill the shifts straight away.
  */
 
 import React, { useState, useEffect, useMemo, useId } from 'react';
@@ -34,6 +33,7 @@ import {
   populateRecurringDoctorSessionsForSchedule,
 } from '../../services/schedule/doctorScheduleService';
 import { useDialogA11y } from '../common/useDialogA11y';
+import { authService } from '../../services/auth/authService';
 
 interface CreateScheduleModalProps {
   isOpen: boolean;
@@ -231,28 +231,28 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
     setErrorMessage(null);
 
     if (!startDate || !endDate) {
-      setErrorMessage('Please select both a Start Date and an End Date.');
+      setErrorMessage('Please choose a start date and an end date.');
       return;
     }
 
     if (startDate > endDate) {
-      setErrorMessage('The Start Date cannot be after the End Date.');
+      setErrorMessage('The start date can\'t be after the end date.');
       return;
     }
 
     if (!scheduleName.trim()) {
-      setErrorMessage('Please provide a name for this schedule.');
+      setErrorMessage('Please give this roster a name.');
       return;
     }
 
     if (metrics.totalDays < 3) {
-      setErrorMessage('A schedule must span at least 3 days.');
+      setErrorMessage('A roster must be at least 3 days long.');
       return;
     }
 
     const parsedTargetHours = parseFloat(String(hoursTarget).trim());
     if (isNaN(parsedTargetHours) || parsedTargetHours < 0) {
-      setErrorMessage('Please enter a valid target hours value (e.g. 160, 176, 227).');
+      setErrorMessage('Please enter the full time hours goal as a number (for example 160, 176 or 227).');
       return;
     }
 
@@ -260,6 +260,8 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
 
     try {
       const repo = getRepository();
+      const user = authService.getCurrentUser();
+      const author = user?.name || user?.email || 'Planner';
 
       const newSchedule = await repo.create('schedules', {
         name: scheduleName.trim(),
@@ -271,7 +273,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
         periodName: periodCalculation?.isExactMatch
           ? periodCalculation.matchedPeriod?.name
           : periodCalculation?.isProrated
-          ? `${metrics.totalDays}d Prorated · ${Math.round(parsedTargetHours)}h`
+          ? `${metrics.totalDays} days, part of a period · ${Math.round(parsedTargetHours)}h`
           : undefined,
         status: 'DRAFT',
         activeVersionNumber: 1,
@@ -284,8 +286,8 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
         scheduleId: newSchedule.id,
         number: 1,
         timestamp: new Date().toISOString(),
-        author: 'Clinical Administrator',
-        note: `Initial schedule creation (${startDate} to ${endDate})`,
+        author,
+        note: `Roster created (${startDate} to ${endDate})`,
         snapshot: {
           schedule: newSchedule,
           assignments: [],
@@ -314,7 +316,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
 
       // Log audit trail
       await repo.create('audit', {
-        actor: 'Clinical Administrator',
+        actor: author,
         action: 'CREATE',
         entity: 'Schedule',
         entityId: newSchedule.id,
@@ -329,7 +331,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
       onScheduleCreated(newSchedule, generateImmediately);
       onClose();
     } catch (err: any) {
-      setErrorMessage(`Failed to create schedule: ${err.message || 'Unknown database error'}`);
+      setErrorMessage(`Couldn't create the roster: ${err.message || 'unknown error'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -353,9 +355,9 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
               <CalendarRange className="w-4 h-4" aria-hidden="true" />
             </div>
             <div>
-              <h3 id={titleId} className="text-sm font-bold text-slate-900">Create New Schedule Period</h3>
+              <h3 id={titleId} className="text-sm font-bold text-slate-900">New roster</h3>
               <p className="text-[11px] text-slate-500">
-                Choose start and end dates, block partitioning, and nurse work hour targets.
+                Choose the dates, how many weeks each page shows, and the nurses' hours goal.
               </p>
             </div>
           </div>
@@ -374,8 +376,8 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
           {/* Error Banner */}
           {errorMessage && (
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-900 text-xs flex items-center gap-2 animate-in fade-in duration-150">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span className="font-semibold">{errorMessage}</span>
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
+              <span role="alert" className="font-semibold">{errorMessage}</span>
             </div>
           )}
 
@@ -383,10 +385,10 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
           <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-1.5">
             <div className="flex items-center justify-between">
               <label htmlFor="dedicated-period-select" className="flex items-center gap-1.5 text-indigo-950 font-bold text-xs">
-                <Clock className="w-4 h-4 text-indigo-600" />
-                <span>Quick Dedicated Period Preset:</span>
+                <Clock className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                <span>Use a saved time period:</span>
               </label>
-              <span className="text-[10px] text-indigo-600 font-medium">Auto-populates dates &amp; FT contract hours</span>
+              <span className="text-[10px] text-indigo-600 font-medium">Fills in the dates and full time hours</span>
             </div>
 
             <select
@@ -395,10 +397,10 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
               onChange={(e) => handleSelectDedicatedPeriodPreset(e.target.value)}
               className="w-full px-3 py-2 bg-white border border-indigo-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
             >
-              <option value="">Select Dedicated Period (e.g. 2026 Jan19-Feb18 [227h])...</option>
+              <option value="">Choose a time period (for example 2026 Jan 19 to Feb 18, 227h)…</option>
               {workingHoursPeriods.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.year} {p.name} ({p.startDate} → {p.endDate}) · {p.workingHours}h FT Target
+                  {p.year} {p.name} ({p.startDate} to {p.endDate}) · {p.workingHours}h full time
                 </option>
               ))}
             </select>
@@ -407,14 +409,14 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
           {/* Primary Date Selectors: Start Date & End Date */}
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
             <div className="flex items-center gap-1.5 text-indigo-900 font-bold text-xs">
-              <Calendar className="w-4 h-4 text-indigo-600" />
-              <span>Choose Start and End Date:</span>
+              <Calendar className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+              <span>Dates:</span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
-                  Start Date <span className="text-rose-500">*</span>
+                  Start date <span className="text-rose-500" aria-hidden="true">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -435,7 +437,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
 
               <div>
                 <label className="block text-slate-700 font-semibold mb-1">
-                  End Date <span className="text-rose-500">*</span>
+                  End date <span className="text-rose-500" aria-hidden="true">*</span>
                 </label>
                 <div className="relative">
                   <input
@@ -474,25 +476,25 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                   <div className="min-w-0">
                     <span className="font-bold block truncate">
                       {periodCalculation.isExactMatch ? (
-                        <>✓ Dedicated Period: {periodCalculation.matchedPeriod?.name} ({periodCalculation.targetHours}h full-time contracted target)</>
+                        <>✓ Time period: {periodCalculation.matchedPeriod?.name} ({periodCalculation.targetHours}h for a full time nurse)</>
                       ) : (
-                        <>✓ Prorated from {periodCalculation.description}</>
+                        <>✓ Worked out from {periodCalculation.description}</>
                       )}
                     </span>
                     <span className="text-[11px] text-slate-600 block mt-0.5">
                       {periodCalculation.isExactMatch
-                        ? `${periodCalculation.totalScheduleDays} calendar days matching full dedicated roster cycle`
+                        ? `${periodCalculation.totalScheduleDays} days, the whole time period`
                         : `${periodCalculation.totalScheduleDays} days = ${periodCalculation.targetHours} working hours`}
                     </span>
                   </div>
                 </div>
                 <div className="shrink-0 flex items-center gap-1.5">
                   <span className="px-2 py-0.5 rounded font-mono font-bold text-xs bg-white border border-slate-200 shadow-2xs">
-                    {periodCalculation.targetHours}h FT
+                    {periodCalculation.targetHours}h full time
                   </span>
                   {periodCalculation.isProrated && (
                     <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded">
-                      Prorated
+                      Part of a period
                     </span>
                   )}
                 </div>
@@ -504,22 +506,22 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
               <div className="pt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[11px]">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-slate-900 px-2 py-0.5 bg-white border border-slate-200 rounded font-mono">
-                    {metrics.totalDays} Days
+                    {metrics.totalDays} days
                   </span>
                   <span className="text-slate-500">·</span>
                   <span className="font-semibold text-slate-700">
-                    {metrics.weeks} Weeks
+                    {metrics.weeks} weeks
                   </span>
                   <span className="text-slate-500">→</span>
                   <span className="font-semibold text-indigo-700">
-                    {metrics.numBlocks} Block{metrics.numBlocks === 1 ? '' : 's'} ({blockWeeks}w each)
+                    {metrics.numBlocks} page{metrics.numBlocks === 1 ? '' : 's'} of {blockWeeks} week{blockWeeks === 1 ? '' : 's'}
                   </span>
                 </div>
               </div>
             ) : (
               <div className="pt-2 border-t border-slate-200 text-rose-600 font-semibold text-[11px] flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                <span>Invalid period: End Date must be after or equal to Start Date.</span>
+                <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>The end date must be on or after the start date.</span>
               </div>
             )}
 
@@ -528,8 +530,8 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
               <div className="p-2 bg-amber-50 border border-amber-200 rounded text-amber-900 text-[10px] flex items-start gap-1.5">
                 <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                 <span>
-                  Note: Dates overlap with existing schedule{' '}
-                  <strong>"{overlappingSchedule.name}"</strong> ({overlappingSchedule.startDate} to {overlappingSchedule.endDate}). You can still create this roster (e.g. for alternate scenarios or draft versions).
+                  These dates overlap the roster{' '}
+                  <strong>"{overlappingSchedule.name}"</strong> ({overlappingSchedule.startDate} to {overlappingSchedule.endDate}). You can still create it, for example to try a different plan.
                 </span>
               </div>
             )}
@@ -539,7 +541,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="block text-slate-700 font-semibold">
-                Schedule Title / Label <span className="text-rose-500">*</span>
+                Roster name <span className="text-rose-500" aria-hidden="true">*</span>
               </label>
               <button
                 type="button"
@@ -550,61 +552,60 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                 className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer underline flex items-center gap-1"
               >
                 <RefreshCw className="w-2.5 h-2.5" aria-hidden="true" />
-                <span>Reset to standard naming</span>
+                <span>Use the usual name</span>
               </button>
             </div>
             <input
               type="text"
               required
-              aria-label="Schedule title"
+              aria-label="Roster name"
               value={scheduleName}
               onChange={(e) => {
                 setScheduleName(e.target.value);
                 setIsNameManuallyEdited(true);
               }}
-              placeholder={`e.g. November 2026 — ${clinicName}`}
+              placeholder={`For example: November 2026 — ${clinicName}`}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-2xs"
             />
           </div>
 
-          {/* Grid Settings: Block Weeks & Contract Hours */}
+          {/* Page length and full time hours */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-slate-700 font-semibold mb-1">
-                Block Partition (Workbook Paging)
+                Weeks on each page
               </label>
               <select
-                aria-label="Block partition"
+                aria-label="Weeks on each page"
                 value={blockWeeks}
                 onChange={(e) => setBlockWeeks(Number(e.target.value) as BlockWeeks)}
                 className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer"
               >
-                <option value={1}>1 Week (7 Days / Block)</option>
-                <option value={2}>2 Weeks (14 Days / Block) — Recommended</option>
-                <option value={3}>3 Weeks (21 Days / Block)</option>
-                <option value={4}>4 Weeks (28 Days / Block)</option>
+                <option value={1}>1 week (7 days)</option>
+                <option value={2}>2 weeks (14 days), recommended</option>
+                <option value={3}>3 weeks (21 days)</option>
+                <option value={4}>4 weeks (28 days)</option>
               </select>
               <p className="text-[10px] text-slate-400 mt-1">
-                Splits dense roster view into comfortable paging tabs.
+                The roster screen shows this many weeks at a time.
               </p>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-slate-700 font-semibold">
-                  Full-Time Target Hours (100% Staff)
+                  Hours goal for a full time nurse
                 </label>
-                <span className="text-[10px] text-slate-400 font-medium">Any value accepted</span>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="number"
                   step="any"
                   min="0"
-                  aria-label="Full-time target hours"
+                  aria-label="Hours goal for a full time nurse"
                   value={hoursTarget}
                   onChange={(e) => setHoursTarget(e.target.value)}
-                  placeholder="e.g. 160, 176, 37.5, 80"
+                  placeholder="For example 160, 176 or 80"
                   className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 shadow-2xs transition-colors"
                 />
                 <span className="font-mono text-slate-500 shrink-0 font-medium">hrs</span>
@@ -612,8 +613,8 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
               <div className="flex items-center justify-between mt-1 text-[10px] text-slate-400">
                 <span>
                   {String(hoursTarget).trim() !== '' && !isNaN(parseFloat(String(hoursTarget)))
-                    ? `Part-time staff (50%) target: ${(parseFloat(String(hoursTarget)) * 0.5).toFixed(1).replace(/\.0$/, '')}h`
-                    : 'Enter custom contract hours target'}
+                    ? `A nurse on a 50% contract: ${(parseFloat(String(hoursTarget)) * 0.5).toFixed(1).replace(/\.0$/, '')}h`
+                    : 'Enter the hours goal'}
                 </span>
               </div>
             </div>
@@ -630,27 +631,27 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                   className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
                 />
                 <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs">
-                  <Stethoscope className="w-4 h-4 text-emerald-600" />
-                  <span>Auto-fill Recurring Doctor Schedules</span>
+                  <Stethoscope className="w-4 h-4 text-emerald-600" aria-hidden="true" />
+                  <span>Add the doctors' weekly clinics</span>
                 </div>
               </label>
 
               {autoFillDoctorSchedules && metrics.isValid && (
                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-mono font-bold border border-emerald-300">
-                  ~{estimatedDoctorSessionsCount} sessions
+                  about {estimatedDoctorSessionsCount} clinics
                 </span>
               )}
             </div>
 
             <p className="text-[11px] text-slate-600 pl-6 leading-relaxed">
-              Automatically populates all active physicians' weekly clinic patterns for the entire schedule period ({metrics.totalDays > 0 ? `${metrics.totalDays} days` : 'range'}) so doctor clinic demand and nurse coverage assignments are pre-filled.
+              Adds every active doctor's usual weekly clinics to all {metrics.totalDays > 0 ? `${metrics.totalDays} days` : 'days'} of the roster, so you can see which clinics need a nurse.
             </p>
           </div>
 
           {/* Generator Execution Strategy */}
           <div className="p-3 bg-indigo-50/40 border border-indigo-100 rounded-xl space-y-2">
             <span className="text-slate-800 font-semibold text-xs block">
-              Initial Roster State:
+              How to start:
             </span>
             <div className="space-y-1.5">
               <label className="flex items-start gap-2.5 p-2 bg-white rounded-lg border border-slate-200 hover:border-indigo-300 cursor-pointer transition-colors shadow-2xs">
@@ -663,14 +664,14 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                 />
                 <div>
                   <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Run Deterministic Scheduling Engine</span>
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
+                    <span>Fill the shifts for me</span>
                     <span className="text-[9px] bg-indigo-100 text-indigo-800 font-bold px-1.5 py-0.2 rounded">
-                      RECOMMENDED
+                      Recommended
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-500 leading-normal mt-0.5">
-                    Automatically fills shifts according to doctor sessions, clinical phlebotomy quotas, hard rest rules, and seniority balance.
+                    Fills shifts around the doctors' clinics, blood collection, rest between shifts and a senior nurse each day. You can change anything afterwards.
                   </p>
                 </div>
               </label>
@@ -685,10 +686,10 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                 />
                 <div>
                   <div className="font-bold text-slate-900">
-                    Create Blank Schedule
+                    Start with an empty roster
                   </div>
                   <p className="text-[11px] text-slate-500 leading-normal mt-0.5">
-                    Initialize an empty roster matrix for manual shift placement or applying a saved template.
+                    Add shifts yourself, or fill the roster from a saved template.
                   </p>
                 </div>
               </label>
@@ -713,17 +714,17 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
               {isSubmitting ? (
                 <>
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                  <span>Creating Schedule...</span>
+                  <span>Creating the roster…</span>
                 </>
               ) : generateImmediately ? (
                 <>
                   <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Create &amp; Generate Roster</span>
+                  <span>Create and fill roster</span>
                 </>
               ) : (
                 <>
                   <PlusCircle className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Create Blank Schedule</span>
+                  <span>Create empty roster</span>
                 </>
               )}
             </button>

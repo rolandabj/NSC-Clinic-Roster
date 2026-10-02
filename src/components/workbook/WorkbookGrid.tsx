@@ -62,6 +62,8 @@ import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { confirmDialog, notify } from '../common/dialogs';
+import { coveredMinutes, doctorSessionsOn, nurseClinicRoleOf, toMinutes } from '../../services/engine/clinicModel';
+import { QuickCellPopup, QuickWorkOption, QuickLeaveOption } from './grid/QuickCellPopup';
 
 interface WorkbookGridProps {
   schedule: Schedule;
@@ -93,7 +95,44 @@ interface WorkbookGridProps {
   onToggleExpandDays?: () => void;
   isExpandedView?: boolean;
   onToggleExpandView?: () => void;
+  /**
+   * Go to a cell from outside the grid: select it, scroll it into view and flash it.
+   * Change the nonce to ask again for the same cell. The page showing the grid makes
+   * sure the right days are shown first; the grid waits a few frames for the cell.
+   */
+  focusRequest?: { nurseId: string; date: string; nonce: number };
 }
+
+/** Everything one cell edit needs, as the big editor collects it. */
+interface CellChoice {
+  category: 'DUTY' | 'LEAVE';
+  dutyId: string;
+  kind: AssignmentKind;
+  targetRefId: string;
+  note: string;
+  leaveTypeId: string;
+  /** false = kept (pinned) when the roster is filled again. */
+  allowOverwrite: boolean;
+  /** Hours this leave day counts ('' = the leave type's default). */
+  leaveHours: string;
+}
+
+/** Hours rounded for reading: whole hours, or one decimal when needed. */
+const fmtHours = (n: number): string => String(Math.round(n * 10) / 10);
+
+/** A day as YYYY-MM-DD in the viewer's own time zone. */
+const localTodayIso = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const cellKeyOf = (nurseId: string, date: string) => `${nurseId}|${date}`;
+
+const SOURCE_WORDS: Record<string, string> = {
+  GENERATED: 'Filled in by Fill roster',
+  MANUAL: 'Changed by hand',
+  LOCK: 'Pinned by hand',
+};
 
 const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -125,21 +164,22 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   onToggleExpandDays,
   isExpandedView = false,
   onToggleExpandView,
+  focusRequest,
 }) => {
   // Navigation & Zoom (Supports 75% compact fit, 90%, 100%, 115%)
   const [zoomLevel, setZoomLevel] = useState<75 | 90 | 100 | 115>(100);
-  const [viewMode, setViewMode] = useState<'ACRONYMS' | 'FULL'>('ACRONYMS');
   const [groupBy, setGroupBy] = useState<'NONE' | 'SENIORITY'>('NONE');
   const [highlightViolations, setHighlightViolations] = useState(true);
 
   // Selection & Focus
   const [selectedCell, setSelectedCell] = useState<{ nurseId: string; date: string } | null>(null);
-  const [selectedRange, setSelectedRange] = useState<{
-    startNurseId: string;
-    startDate: string;
-    endNurseId: string;
-    endDate: string;
-  } | null>(null);
+  // Cell briefly flashed after "Go to cell"
+  const [flashCellKey, setFlashCellKey] = useState<string | null>(null);
+  const gridScrollRef = useRef<HTMLDivElement | null>(null);
+  const tableRef = useRef<HTMLTableElement | null>(null);
+
+  // Small popup next to a clicked cell (one tap choices)
+  const [quickPopup, setQuickPopup] = useState<{ nurseId: string; date: string; focusOnOpen: boolean } | null>(null);
 
   // Inline Editor Popover
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -195,6 +235,22 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     blockDates.push(d.toISOString().split('T')[0]);
   }
 
+  // Day columns: weekend (clinic setting), public holiday and today
+  const todayIso = localTodayIso();
+  const holidayByDate = new Map(holidays.map((h) => [h.date, h]));
+  const dayInfo = blockDates.map((dateStr) => {
+    const dateObj = new Date(dateStr);
+    const weekday = dateObj.getUTCDay();
+    return {
+      dateStr,
+      day: dateObj.getUTCDate(),
+      weekday,
+      isWeekend: isWeekendDay(weekday),
+      holiday: holidayByDate.get(dateStr),
+      isToday: dateStr === todayIso,
+    };
+  });
+
   // Lookup maps
   const dutyMap = useMemo(() => new Map(dutyWindows.map((d) => [d.id, d])), [dutyWindows]);
   const nurseMap = new Map(nurses.map((n) => [n.id, n]));
@@ -203,17 +259,13 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   const roleMap = new Map(roles.map((r) => [r.id, r]));
   const seniorityMap = new Map(seniorityLevels.map((s) => [s.id, s]));
 
-  // Violation cells set and messages map
-  const violationCellKeys = new Set(
-    validationReport.findings.flatMap((f) => f.cellRefs.map((r) => `${r.nurseId}_${r.date}`))
-  );
-
+  // Problem messages per cell (from the validation findings)
   const cellViolationMessages = new Map<string, string[]>();
   validationReport.findings.forEach((f) => {
     f.cellRefs.forEach((r) => {
       const k = `${r.nurseId}_${r.date}`;
       const list = cellViolationMessages.get(k) || [];
-      list.push(f.message);
+      if (!list.includes(f.message)) list.push(f.message);
       cellViolationMessages.set(k, list);
     });
   });
@@ -266,13 +318,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     return { blockTotal: h?.totalHours ?? 0, bDuty: h?.dutyHours ?? 0, bLeave: h?.leaveHours ?? 0 };
   };
 
-  // Open Cell Editor for Duty Shift or Leave
-  const openCellEditor = (nurseId: string, date: string) => {
-    setSelectedCell({ nurseId, date });
-    setSelectedRange(null);
-    setContextMenu(null);
-    setEditorTarget({ nurseId, date });
-
+  // What the big editor starts with for a cell (also the base of every one tap choice)
+  const computeEditorDefaults = (nurseId: string, date: string): CellChoice => {
     const existingLock = locks.find((l) => l.nurseId === nurseId && l.date === date);
     const existingLeave = leaveEntries.find(
       (le) => le.nurseId === nurseId && date >= le.startDate && date <= le.endDate
@@ -280,70 +327,165 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     const existingAsgn = assignments.find((a) => a.nurseId === nurseId && a.date === date);
 
     const ownHours = existingLeave?.dayHours?.[date];
-    setEditorLeaveHours(typeof ownHours === 'number' ? String(ownHours) : '');
+    const leaveHours = typeof ownHours === 'number' ? String(ownHours) : '';
     if (existingLeave) {
-      setEditorCategory('LEAVE');
-      setEditorLeaveTypeId(existingLeave.leaveTypeId);
-      setEditorAllowOverwrite(!existingLock);
-      setEditorNote(existingLeave.note || '');
-      setEditorDutyId(dutyWindows[0]?.id || '');
-      setEditorKind('DOCTOR');
-      setEditorTargetRefId(doctors[0]?.id || '');
-    } else if (existingLock?.mode === 'OFF') {
-      setEditorCategory('LEAVE');
-      setEditorLeaveTypeId(leaveTypes.find((l) => l.acronym === 'RO')?.id || leaveTypes[0]?.id || '');
-      setEditorAllowOverwrite(false);
-      setEditorNote(existingLock.note || 'Pinned Day Off');
-      setEditorDutyId(dutyWindows[0]?.id || '');
-      setEditorKind('DOCTOR');
-      setEditorTargetRefId(doctors[0]?.id || '');
-    } else if (existingAsgn) {
-      setEditorCategory('DUTY');
-      setEditorDutyId(existingAsgn.dutyWindowId);
-      setEditorKind(existingAsgn.kind);
-      setEditorTargetRefId(
-        existingAsgn.doctorId || existingAsgn.clinicalRoleId || existingAsgn.specialtyId || ''
-      );
-      setEditorNote(existingAsgn.note || '');
-      setEditorAllowOverwrite(!existingAsgn.locked && existingAsgn.source !== 'LOCK' && !existingLock);
-      setEditorLeaveTypeId(leaveTypes.find((l) => l.acronym === 'BL')?.id || leaveTypes[0]?.id || '');
-    } else {
-      // Empty cell
-      const targetNurse = nurseMap.get(nurseId);
-      const isTargetExclusiveNC = targetNurse ? isExclusiveNurseClinic(targetNurse, roles) : false;
-      const ncRole = roles.find(
-        (r) =>
-          r.id === 'role-nurse-clinic' ||
-          r.acronym === 'NC' ||
-          r.name.toLowerCase().includes('nurse clinic')
-      );
-
-      setEditorCategory('DUTY');
-      setEditorDutyId(dutyWindows[0]?.id || '');
-      if (isTargetExclusiveNC) {
-        setEditorKind('CLINICAL_ROLE');
-        setEditorTargetRefId(ncRole?.id || roles[0]?.id || '');
-        setEditorNote('Dedicated Nurse Clinic (no doctor pairing)');
-      } else {
-        setEditorKind('DOCTOR');
-        setEditorTargetRefId(doctors[0]?.id || '');
-        setEditorNote('');
-      }
-      setEditorAllowOverwrite(false); // Default to Protected / Pinned
-      setEditorLeaveTypeId(leaveTypes.find((l) => l.acronym === 'BL')?.id || leaveTypes[0]?.id || '');
+      return {
+        category: 'LEAVE',
+        leaveTypeId: existingLeave.leaveTypeId,
+        allowOverwrite: !existingLock,
+        note: existingLeave.note || '',
+        dutyId: dutyWindows[0]?.id || '',
+        kind: 'DOCTOR',
+        targetRefId: doctors[0]?.id || '',
+        leaveHours,
+      };
     }
+    if (existingLock?.mode === 'OFF') {
+      return {
+        category: 'LEAVE',
+        leaveTypeId: leaveTypes.find((l) => l.acronym === 'RO')?.id || leaveTypes[0]?.id || '',
+        allowOverwrite: false,
+        note: existingLock.note || 'Pinned Day Off',
+        dutyId: dutyWindows[0]?.id || '',
+        kind: 'DOCTOR',
+        targetRefId: doctors[0]?.id || '',
+        leaveHours,
+      };
+    }
+    if (existingAsgn) {
+      return {
+        category: 'DUTY',
+        dutyId: existingAsgn.dutyWindowId,
+        kind: existingAsgn.kind,
+        targetRefId: existingAsgn.doctorId || existingAsgn.clinicalRoleId || existingAsgn.specialtyId || '',
+        note: existingAsgn.note || '',
+        allowOverwrite: !existingAsgn.locked && existingAsgn.source !== 'LOCK' && !existingLock,
+        leaveTypeId: leaveTypes.find((l) => l.acronym === 'BL')?.id || leaveTypes[0]?.id || '',
+        leaveHours,
+      };
+    }
+    // Empty cell
+    const targetNurse = nurseMap.get(nurseId);
+    const isTargetExclusiveNC = targetNurse ? isExclusiveNurseClinic(targetNurse, roles) : false;
+    const ncRole = nurseClinicRoleOf(roles);
+    return {
+      category: 'DUTY',
+      dutyId: dutyWindows[0]?.id || '',
+      kind: isTargetExclusiveNC ? 'CLINICAL_ROLE' : 'DOCTOR',
+      targetRefId: isTargetExclusiveNC ? ncRole?.id || roles[0]?.id || '' : doctors[0]?.id || '',
+      note: isTargetExclusiveNC ? 'Dedicated Nurse Clinic (no doctor pairing)' : '',
+      allowOverwrite: false, // Default to kept (pinned)
+      leaveTypeId: leaveTypes.find((l) => l.acronym === 'BL')?.id || leaveTypes[0]?.id || '',
+      leaveHours,
+    };
+  };
+
+  // Open the big Cell Editor for Duty Shift or Leave
+  const openCellEditor = (nurseId: string, date: string) => {
+    setSelectedCell({ nurseId, date });
+    setContextMenu(null);
+    setQuickPopup(null);
+    setEditorTarget({ nurseId, date });
+
+    const d = computeEditorDefaults(nurseId, date);
+    setEditorCategory(d.category);
+    setEditorDutyId(d.dutyId);
+    setEditorKind(d.kind);
+    setEditorTargetRefId(d.targetRefId);
+    setEditorNote(d.note);
+    setEditorLeaveTypeId(d.leaveTypeId);
+    setEditorAllowOverwrite(d.allowOverwrite);
+    setEditorLeaveHours(d.leaveHours);
 
     setIsEditorOpen(true);
   };
 
-  // Cell Click / Navigation
+  // Cell Click / Navigation: a click selects the cell and opens the small popup
+  const openQuickPopup = (nurseId: string, date: string, focusOnOpen = false) => {
+    setSelectedCell({ nurseId, date });
+    setContextMenu(null);
+    setQuickPopup({ nurseId, date, focusOnOpen });
+  };
+
   const handleCellClick = (nurseId: string, date: string) => {
-    openCellEditor(nurseId, date);
+    openQuickPopup(nurseId, date);
   };
 
   const handleCellDoubleClick = (nurseId: string, date: string) => {
     openCellEditor(nurseId, date);
   };
+
+  // The popup belongs to one cell: moving the selection away closes it.
+  useEffect(() => {
+    if (quickPopup && (selectedCell?.nurseId !== quickPopup.nurseId || selectedCell?.date !== quickPopup.date)) {
+      setQuickPopup(null);
+    }
+  }, [selectedCell, quickPopup]);
+
+  // Keyboard focus follows the selection while it is in the grid (arrow keys).
+  useEffect(() => {
+    if (!selectedCell) return;
+    const active = document.activeElement as HTMLElement | null;
+    if (!active || !tableRef.current?.contains(active) || !active.dataset.cell) return;
+    const key = cellKeyOf(selectedCell.nurseId, selectedCell.date);
+    if (active.dataset.cell === key) return;
+    const cell = findCellElement(key);
+    if (cell) {
+      cell.focus({ preventScroll: true });
+      cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }, [selectedCell]);
+
+  const findCellElement = (key: string): HTMLElement | null => {
+    const root = tableRef.current;
+    if (!root) return null;
+    const sel = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(key) : key.replace(/"/g, '\\"');
+    return root.querySelector<HTMLElement>(`[data-cell="${sel}"]`);
+  };
+
+  // "Go to cell" from outside: select, scroll to the middle, focus and flash.
+  useEffect(() => {
+    if (!focusRequest) return;
+    const { nurseId, date } = focusRequest;
+    const key = cellKeyOf(nurseId, date);
+    setSelectedCell({ nurseId, date });
+    setQuickPopup(null);
+    setContextMenu(null);
+
+    let tries = 0;
+    let frame = 0;
+    let flashTimer: ReturnType<typeof setTimeout> | undefined;
+    const attempt = () => {
+      const cell = findCellElement(key);
+      const box = gridScrollRef.current;
+      if (!cell || !box) {
+        // The days may still be changing: try again on the next frames.
+        if (tries++ < 10) frame = requestAnimationFrame(attempt);
+        return;
+      }
+      // Centre the cell in the part of the grid not covered by the sticky name column and headers.
+      const boxRect = box.getBoundingClientRect();
+      const cellRect = cell.getBoundingClientRect();
+      const stickyLeft = (tableRef.current?.querySelector('tbody th') as HTMLElement | null)?.offsetWidth || 0;
+      const stickyTop = (tableRef.current?.querySelector('thead') as HTMLElement | null)?.offsetHeight || 0;
+      const visibleW = boxRect.width - stickyLeft;
+      const visibleH = boxRect.height - stickyTop;
+      box.scrollTo({
+        left: box.scrollLeft + (cellRect.left - boxRect.left - stickyLeft) - (visibleW - cellRect.width) / 2,
+        top: box.scrollTop + (cellRect.top - boxRect.top - stickyTop) - (visibleH - cellRect.height) / 2,
+        behavior: 'smooth',
+      });
+      cell.focus({ preventScroll: true });
+      setFlashCellKey(key);
+      flashTimer = setTimeout(() => setFlashCellKey((k) => (k === key ? null : k)), 1500);
+    };
+    frame = requestAnimationFrame(attempt);
+    return () => {
+      cancelAnimationFrame(frame);
+      if (flashTimer) clearTimeout(flashTimer);
+    };
+    // Only a new request (nonce) starts this.
+  }, [focusRequest?.nonce]);
 
   // Keyboard navigation (Arrows, Enter, Esc)
   useEffect(() => {
@@ -357,6 +499,15 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       // other sheets, dialogs) or while a button or link has keyboard focus.
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
+      // Tab from the cell with the popup open goes into the popup.
+      if (e.key === 'Tab' && !e.shiftKey && quickPopup && target?.dataset?.cell) {
+        const first = document.querySelector<HTMLElement>('[data-quick-popup] button');
+        if (first) {
+          e.preventDefault();
+          first.focus();
+          return;
+        }
+      }
       if (
         tag === 'INPUT' ||
         tag === 'TEXTAREA' ||
@@ -415,6 +566,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       } else if (e.key === 'Enter') {
         e.preventDefault();
         handleCellDoubleClick(selectedCell.nurseId, selectedCell.date);
+      } else if (e.key === ' ') {
+        // Space opens the small popup with its quick choices.
+        e.preventDefault();
+        openQuickPopup(selectedCell.nurseId, selectedCell.date, true);
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         handleDeleteCellAssignment(selectedCell.nurseId, selectedCell.date);
@@ -432,12 +587,13 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCell, isEditorOpen, displayNurses, blockDates, assignments, clipboardAssignment]);
+  }, [selectedCell, isEditorOpen, displayNurses, blockDates, assignments, clipboardAssignment, quickPopup]);
 
   // Context Menu
   const handleContextMenu = (e: React.MouseEvent, nurseId: string, date: string) => {
     e.preventDefault();
     setSelectedCell({ nurseId, date });
+    setQuickPopup(null);
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -552,23 +708,39 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     if (onLeaveEntriesChange) onLeaveEntriesChange(nextLeaves);
   };
 
-  // Inline Editor Save (Duty Shift or Leave)
-  const handleSaveEditorAssignment = async () => {
-    if (!editorTarget) return;
-    const { nurseId, date } = editorTarget;
+  /**
+   * Saves one choice for one cell (Duty Shift or Leave). The big editor and the
+   * popup's one tap choices both save through here. Returns false when nothing was saved.
+   */
+  const saveCellChoice = async (
+    target: { nurseId: string; date: string },
+    choice: CellChoice
+  ): Promise<boolean> => {
+    const { nurseId, date } = target;
+    const {
+      category: editorCategory,
+      dutyId: editorDutyId,
+      kind: editorKind,
+      targetRefId: editorTargetRefId,
+      note: editorNote,
+      leaveTypeId: editorLeaveTypeId,
+      allowOverwrite: editorAllowOverwrite,
+      leaveHours: editorLeaveHours,
+    } = choice;
     // Replacing a pinned day is confirmed, as clearing one is.
-    const existingLock = locks.find((l) => l.nurseId === nurseId && l.date === date);
-    if (existingLock) {
+    if (locks.some((l) => l.nurseId === nurseId && l.date === date)) {
       const ok = await confirmDialog({
         title: 'Replace a pinned day?',
         message: 'This day is pinned. Saving replaces what is pinned with your new choice.',
         confirmLabel: 'Replace',
       });
-      if (!ok) return;
+      if (!ok) return false;
     }
+    // Latest data, in case it changed while the confirmation was open.
+    const { assignments, locks: currentLocks, leaveEntries } = latestDataRef.current;
 
     const nextAssignments = assignments.filter((a) => !(a.nurseId === nurseId && a.date === date));
-    let nextLocks = locks.filter((l) => !(l.nurseId === nurseId && l.date === date));
+    const nextLocks = currentLocks.filter((l) => !(l.nurseId === nurseId && l.date === date));
     let nextLeaves = removeDateFromLeaves(leaveEntries, nurseId, date);
 
     if (editorCategory === 'DUTY') {
@@ -613,7 +785,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       const ownHours = typed === '' ? undefined : Number(typed);
       if (ownHours !== undefined && (!Number.isFinite(ownHours) || ownHours < 0 || ownHours > 24)) {
         notify('Hours for this day must be a number from 0 to 24.', 'warning');
-        return;
+        return false;
       }
       const dayHoursOverride = ownHours !== undefined && ownHours !== defaultHours ? ownHours : undefined;
       const creditedHours = dayHoursOverride ?? defaultHours;
@@ -644,8 +816,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
           });
         }
         emitCellEdit(nextAssignments, nextLocks, nextLeaves);
-        setIsEditorOpen(false);
-        return;
+        return true;
       }
 
       // Leave a planner enters is always approved (it is shown and counted, and the
@@ -679,8 +850,23 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     }
 
     emitCellEdit(nextAssignments, nextLocks, nextLeaves);
+    return true;
+  };
 
-    setIsEditorOpen(false);
+  // Big editor Save
+  const handleSaveEditorAssignment = async () => {
+    if (!editorTarget) return;
+    const saved = await saveCellChoice(editorTarget, {
+      category: editorCategory,
+      dutyId: editorDutyId,
+      kind: editorKind,
+      targetRefId: editorTargetRefId,
+      note: editorNote,
+      leaveTypeId: editorLeaveTypeId,
+      allowOverwrite: editorAllowOverwrite,
+      leaveHours: editorLeaveHours,
+    });
+    if (saved) setIsEditorOpen(false);
   };
 
   const handleDeleteCellAssignment = async (nurseId: string, date: string) => {
@@ -690,7 +876,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       (le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate
     );
     if (hasLock || hasApprovedLeave) {
-      const what = hasLock && hasApprovedLeave ? 'a pinned lock and approved leave' : hasLock ? 'a pinned lock' : 'approved leave';
+      const what = hasLock && hasApprovedLeave ? 'a pinned day and approved leave' : hasLock ? 'a pinned day' : 'approved leave';
       const ok = await confirmDialog({
         title: 'Clear this cell?',
         message: `This day has ${what}. Clear it anyway?`,
@@ -732,9 +918,174 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     onAssignmentsChange([...filtered, pasted]);
   };
 
+  /** True when a nurse's specialty preference points at one of these specialties (by id, code or name). */
+  const specialtyPrefMatches = (refId: string, specialtyIds: string[]): boolean => {
+    if (specialtyIds.includes(refId)) return true;
+    const ref = refId.toLowerCase();
+    return specialtyIds.some((sid) => {
+      const sp = specialtyMap.get(sid);
+      if (!sp) return false;
+      const code = sp.code.toLowerCase();
+      return (
+        ref === code ||
+        ref === sp.name.toLowerCase() ||
+        (code === 'pcc' && ref.includes('pcc')) ||
+        (code === 'ped' && (ref.includes('ped') || ref.includes('pedia')))
+      );
+    });
+  };
+
+  /** The shift that covers most of [start, end), keeping the current one when it covers as much. */
+  const bestDutyFor = (start: string | undefined, end: string | undefined, currentDutyId?: string): DutyWindow | undefined => {
+    const active = dutyWindows.filter((d) => d.active !== false);
+    const pool = active.length > 0 ? active : dutyWindows;
+    if (!start || !end) return pool.find((d) => d.id === currentDutyId) || pool[0];
+    const len = (d: DutyWindow) => toMinutes(d.endTime) - toMinutes(d.startTime);
+    const ranked = [...pool].sort(
+      (a, b) =>
+        coveredMinutes(b, start, end) - coveredMinutes(a, start, end) ||
+        Number(b.id === currentDutyId) - Number(a.id === currentDutyId) ||
+        len(a) - len(b) ||
+        Number(!!b.isPriority) - Number(!!a.isPriority)
+    );
+    return ranked[0] && coveredMinutes(ranked[0], start, end) > 0 ? ranked[0] : pool.find((d) => d.id === currentDutyId) || pool[0];
+  };
+
+  /** Closes the popup and puts keyboard focus back on its cell (after a choice in the popup). */
+  const closePopupToCell = () => {
+    if (quickPopup) findCellElement(cellKeyOf(quickPopup.nurseId, quickPopup.date))?.focus({ preventScroll: true });
+    setQuickPopup(null);
+  };
+
+  // The popup's one tap choices for a cell. Each makes the same change the big
+  // editor would make for that choice (same defaults, same save).
+  const buildQuickOptions = (nurseId: string, date: string) => {
+    const nurse = nurseMap.get(nurseId);
+    const base = computeEditorDefaults(nurseId, date);
+    const asgn = assignments.find((a) => a.nurseId === nurseId && a.date === date);
+    const leave = leaveEntries.find(
+      (le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate
+    );
+    const target = { nurseId, date };
+    const pick = (choice: Partial<CellChoice>) => () => {
+      closePopupToCell();
+      void saveCellChoice(target, { ...base, note: '', leaveHours: '', ...choice });
+    };
+    const shiftWords = (d?: DutyWindow) => (d ? `${d.acronym} shift ${d.startTime} to ${d.endTime}` : '');
+
+    const work: QuickWorkOption[] = [];
+    const exclusiveNC = nurse ? isExclusiveNurseClinic(nurse, roles) : false;
+
+    // Doctors in session that day: the nurse's usual doctors first (by rank), then
+    // doctors of her usual departments, then the rest.
+    if (!exclusiveNC) {
+      const prefs = nurse?.preferences || [];
+      const rankOf = (s: DoctorSession) => {
+        const docPref = prefs.find((p) => p.kind === 'DOCTOR' && p.refId === s.doctorId);
+        if (docPref) return docPref.rank;
+        const specIds = [s.specialtyId, ...(doctorMap.get(s.doctorId)?.specialtyIds || [])].filter(Boolean);
+        const specPref = prefs
+          .filter((p) => p.kind === 'SPECIALTY' && specialtyPrefMatches(p.refId, specIds))
+          .sort((a, b) => a.rank - b.rank)[0];
+        if (specPref) return 100 + specPref.rank;
+        return 1000;
+      };
+      const daySessions = doctorSessionsOn(sessions, date)
+        .filter((s) => doctorMap.has(s.doctorId))
+        .sort((a, b) => rankOf(a) - rankOf(b) || a.startTime.localeCompare(b.startTime));
+      for (const sess of daySessions.slice(0, 8)) {
+        const doc = doctorMap.get(sess.doctorId)!;
+        const duty = bestDutyFor(sess.startTime, sess.endTime, asgn?.dutyWindowId);
+        const rank = rankOf(sess);
+        work.push({
+          key: `doc-${sess.doctorId}`,
+          label: doc.fullName,
+          detail: `${sess.startTime} to ${sess.endTime}${duty ? ` · ${shiftWords(duty)}` : ''}`,
+          tag: rank < 100 ? 'Usual' : rank < 1000 ? 'Usual department' : undefined,
+          current: asgn?.kind === 'DOCTOR' && asgn.doctorId === sess.doctorId,
+          onSelect: pick({ category: 'DUTY', kind: 'DOCTOR', targetRefId: sess.doctorId, dutyId: duty?.id || base.dutyId }),
+        });
+      }
+    }
+
+    // Nurse Clinic first, then the other clinic tasks.
+    const nc = nurseClinicRoleOf(roles);
+    const orderedRoles = nc ? [nc, ...roles.filter((r) => r.id !== nc.id)] : roles;
+    for (const role of orderedRoles) {
+      const duty = asgn ? dutyMap.get(asgn.dutyWindowId) : bestDutyFor(role.defaultStartTime, role.defaultEndTime);
+      work.push({
+        key: `role-${role.id}`,
+        label: role.id === nc?.id ? 'Nurse Clinic' : role.name,
+        detail: shiftWords(duty || dutyMap.get(base.dutyId)),
+        current: asgn?.kind === 'CLINICAL_ROLE' && asgn.clinicalRoleId === role.id,
+        onSelect: pick({ category: 'DUTY', kind: 'CLINICAL_ROLE', targetRefId: role.id, dutyId: duty?.id || base.dutyId }),
+      });
+    }
+
+    // The nurse's usual departments (a department shift without a set doctor).
+    if (!exclusiveNC) {
+      const specPrefs = (nurse?.preferences || []).filter((p) => p.kind === 'SPECIALTY').sort((a, b) => a.rank - b.rank);
+      for (const p of specPrefs) {
+        const sp = specialties.find((x) => x.id === p.refId || specialtyPrefMatches(p.refId, [x.id]));
+        if (!sp || work.some((w) => w.key === `spec-${sp.id}`)) continue;
+        const duty = (asgn && dutyMap.get(asgn.dutyWindowId)) || dutyMap.get(base.dutyId);
+        work.push({
+          key: `spec-${sp.id}`,
+          label: `${sp.name} (any doctor)`,
+          detail: shiftWords(duty),
+          current: asgn?.kind === 'SPECIALTY' && asgn.specialtyId === sp.id,
+          onSelect: pick({ category: 'DUTY', kind: 'SPECIALTY', targetRefId: sp.id, dutyId: duty?.id || base.dutyId }),
+        });
+      }
+    }
+
+    const leaveOpts: QuickLeaveOption[] = leaveTypes
+      .filter((lt) => lt.active !== false)
+      .map((lt) => {
+        const isCurrent = leave?.leaveTypeId === lt.id;
+        return {
+          key: lt.id,
+          label: lt.name,
+          acronym: lt.acronym,
+          color: lt.color,
+          current: isCurrent,
+          // Choosing the leave already there keeps its own hours and note.
+          onSelect: isCurrent
+            ? pick({ category: 'LEAVE', leaveTypeId: lt.id, leaveHours: base.leaveHours, note: leave?.note || '' })
+            : pick({ category: 'LEAVE', leaveTypeId: lt.id }),
+        };
+      });
+
+    return { work, leave: leaveOpts };
+  };
+
+  /** What a cell holds, in words (for the popup and screen readers). */
+  const describeCell = (nurseId: string, date: string): string => {
+    const asgn = assignments.find((a) => a.nurseId === nurseId && a.date === date);
+    const lock = locks.find((l) => l.nurseId === nurseId && l.date === date);
+    const leave = leaveEntries.find(
+      (le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate
+    );
+    const pinned = lock ? ', pinned' : '';
+    if (leave) return `${leaveTypeMap.get(leave.leaveTypeId)?.name || 'Leave'}${pinned}`;
+    if (lock?.mode === 'OFF') return 'Day off, pinned';
+    if (!asgn) return '';
+    const duty = dutyMap.get(asgn.dutyWindowId);
+    const what = asgn.doctorId
+      ? doctorMap.get(asgn.doctorId)?.fullName || 'a doctor'
+      : asgn.clinicalRoleId
+      ? asgn.clinicalRoleId === nurseClinicRoleOf(roles)?.id
+        ? 'Nurse Clinic'
+        : roleMap.get(asgn.clinicalRoleId)?.name || 'a clinic task'
+      : asgn.specialtyId
+      ? specialtyMap.get(asgn.specialtyId)?.name || 'a department'
+      : '';
+    return `${duty ? `${duty.name} shift` : 'Shift'}${what ? ` with ${what}` : ''}${pinned}`;
+  };
+
   // Zoom sizing classes
   const cellHeightClass = zoomLevel === 75 ? 'h-6' : zoomLevel === 90 ? 'h-7' : zoomLevel === 115 ? 'h-10' : 'h-8';
-  const cellFontSizeClass = zoomLevel === 75 ? 'text-[9px]' : zoomLevel === 90 ? 'text-[10px]' : zoomLevel === 115 ? 'text-xs' : 'text-[11px]';
+  const cellFontSizeClass = zoomLevel === 75 ? 'text-[10px]' : zoomLevel === 90 ? 'text-[10px]' : zoomLevel === 115 ? 'text-xs' : 'text-[11px]';
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-slate-100 font-sans select-none">
@@ -747,8 +1098,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               disabled={isAllDaysExpanded || currentBlockIndex === 0}
               onClick={() => onBlockChange(currentBlockIndex - 1)}
               className="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 cursor-pointer"
-              title="Previous Block"
-              aria-label="Previous Block"
+              title="Show the earlier days"
+              aria-label="Show the earlier days"
             >
               <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
@@ -761,8 +1112,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               disabled={isAllDaysExpanded || currentBlockIndex >= numBlocks - 1}
               onClick={() => onBlockChange(currentBlockIndex + 1)}
               className="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 cursor-pointer"
-              title="Next Block"
-              aria-label="Next Block"
+              title="Show the later days"
+              aria-label="Show the later days"
             >
               <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
@@ -785,14 +1136,6 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
           <div className="h-4 w-px bg-slate-200" />
 
-          {/* View Toggles */}
-          <button
-            onClick={() => setViewMode(viewMode === 'ACRONYMS' ? 'FULL' : 'ACRONYMS')}
-            className="px-2 py-1 border border-slate-200 rounded hover:bg-slate-50 text-slate-700 cursor-pointer"
-          >
-            {viewMode === 'ACRONYMS' ? 'Labels: Acronyms' : 'Labels: Full Text'}
-          </button>
-
           <div className="flex items-center gap-1 text-slate-600">
             <span className="text-[11px] text-slate-400">Group:</span>
             <select
@@ -808,13 +1151,15 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
           <button
             onClick={() => setHighlightViolations(!highlightViolations)}
+            aria-pressed={highlightViolations}
+            title={highlightViolations ? 'Hide the red problem marks in the grid' : 'Show a red mark on every cell with a problem'}
             className={`px-2 py-1 rounded border text-xs cursor-pointer ${
               highlightViolations
                 ? 'bg-amber-50 border-amber-300 text-amber-900 font-medium'
                 : 'border-slate-200 text-slate-600'
             }`}
           >
-            Highlight ⚠ ({validationReport.errorCount + validationReport.warnCount})
+            Show problems ({validationReport.errorCount + validationReport.warnCount})
           </button>
         </div>
 
@@ -892,14 +1237,13 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
       {/* 6.2 ROSTER SHEET MAIN GRID VIEWPORT */}
       <div className="flex-1 flex overflow-hidden relative">
-        <div className="flex-1 overflow-auto bg-slate-200 p-px">
-          <table className="border-collapse bg-white text-xs w-max" role="grid" aria-label="Nurse roster">
+        <div ref={gridScrollRef} className="flex-1 overflow-auto bg-slate-200 p-px">
+          <table ref={tableRef} className="border-collapse bg-white text-xs w-max" role="grid" aria-label="Nurse roster">
             {/* Sticky Header Row 1: Week Spans */}
             <thead className="sticky top-0 z-30 bg-slate-100 border-b border-slate-300">
               <tr className="border-b border-slate-200">
                 <th
-                  colSpan={3}
-                  className="sticky left-0 bg-slate-100 z-40 border-r border-slate-300 py-1 px-3 text-left font-semibold text-slate-700 text-xs shadow-xs"
+                  className="sticky left-0 bg-slate-100 z-40 border-r-2 border-slate-300 py-1 px-3 text-left font-semibold text-slate-700 text-xs shadow-xs"
                 >
                   Clinical Staff Roster
                 </th>
@@ -908,165 +1252,140 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                   className="py-1 px-2 text-center font-mono text-[11px] text-slate-600 bg-slate-100 border-r border-slate-300"
                 >
                   {isAllDaysExpanded ? (
-                    <span className="font-bold text-indigo-700">
-                      Full Schedule Period ({totalDays} Days) · Continuous Month View
-                    </span>
+                    <span className="font-bold text-indigo-700">All {totalDays} days of the roster</span>
                   ) : (
                     <span>
-                      Weeks {currentBlockIndex * schedule.blockWeeks + 1}–
-                      {Math.min((currentBlockIndex + 1) * schedule.blockWeeks, Math.ceil(totalDays / 7))} · Active Period Block
+                      Weeks {currentBlockIndex * schedule.blockWeeks + 1} to{' '}
+                      {Math.min((currentBlockIndex + 1) * schedule.blockWeeks, Math.ceil(totalDays / 7))}
                     </span>
                   )}
                 </th>
                 <th className="py-1 px-2 text-center font-mono text-[11px] text-slate-600 bg-slate-100">
-                  Block Hours
+                  These days
                 </th>
               </tr>
 
               {/* Sticky Header Row 2: Day-name + Date */}
               <tr className="bg-slate-50 text-slate-700">
-                {/* Sticky Left Column 1: Nurse Name */}
-                <th className="sticky left-0 bg-slate-50 z-40 border-r border-slate-300 py-1.5 px-3 text-left font-semibold text-slate-800 w-44 shadow-xs">
-                  Nurse / Role
-                </th>
-                {/* Sticky Left Column 2: Contract % */}
-                <th className="sticky left-44 bg-slate-50 z-40 border-r border-slate-300 py-1.5 px-2 text-center font-mono text-slate-600 w-16 shadow-xs">
-                  Contract
-                </th>
-                {/* Sticky Left Column 3: Hours Progress Bar */}
-                <th className="sticky left-60 bg-slate-50 z-40 border-r-2 border-slate-300 py-1.5 px-2 text-left font-mono text-slate-600 w-32 shadow-xs">
-                  Hours Progress
+                {/* Sticky Left Column: Nurse, seniority and hours */}
+                <th className="sticky left-0 bg-slate-50 z-40 border-r-2 border-slate-300 py-1.5 px-3 text-left font-semibold text-slate-800 w-60 min-w-60 max-w-60 shadow-xs">
+                  <span className="block">Nurse</span>
+                  <span className="block text-[10px] font-normal text-slate-500">Hours worked / goal for the whole roster</span>
                 </th>
 
                 {/* Date Columns */}
-                {blockDates.map((dateStr) => {
-                  const dateObj = new Date(dateStr);
-                  const day = dateObj.getUTCDate();
-                  const weekday = dateObj.getUTCDay();
-                  const isWeekend = isWeekendDay(weekday);
-                  const holiday = holidays.find((h) => h.date === dateStr);
-
-                  return (
-                    <th
-                      key={dateStr}
-                      title={`${WEEKDAY_ABBR[weekday]} ${formatDate(dateStr)}${holiday ? ` · Holiday: ${holiday.name}` : ''}`}
-                      className={`py-1 px-1 text-center font-mono border-r border-slate-200 min-w-[50px] ${
-                        holiday
-                          ? 'bg-cyan-100 text-cyan-900 font-bold'
-                          : isWeekend
-                          ? 'bg-slate-200/70 text-slate-800'
-                          : 'bg-slate-50 text-slate-700'
-                      }`}
-                    >
-                      <div className="text-[10px] font-normal leading-tight">
-                        {WEEKDAY_ABBR[weekday]}
-                      </div>
-                      <div className="flex items-center justify-center gap-0.5 text-xs font-bold">
-                        <span>{day}</span>
-                        {holiday && (
-                          <span title={`Public Holiday: ${holiday.name}`}>
-                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-600 inline-block" />
-                          </span>
-                        )}
-                      </div>
-                    </th>
-                  );
-                })}
+                {dayInfo.map(({ dateStr, day, weekday, isWeekend, holiday, isToday }) => (
+                  <th
+                    key={dateStr}
+                    scope="col"
+                    title={`${WEEKDAY_ABBR[weekday]} ${formatDate(dateStr)}${isToday ? ' · Today' : ''}${holiday ? ` · Public holiday: ${holiday.name}` : isWeekend ? ' · Weekend' : ''}`}
+                    aria-label={`${WEEKDAY_ABBR[weekday]} ${formatDate(dateStr)}${isToday ? ', today' : ''}${holiday ? `, public holiday: ${holiday.name}` : isWeekend ? ', weekend' : ''}`}
+                    className={`py-1 px-1 text-center font-mono border-r border-slate-200 min-w-[50px] ${
+                      isToday
+                        ? 'bg-indigo-600 text-white'
+                        : holiday
+                        ? 'bg-cyan-100 text-cyan-900 font-bold'
+                        : isWeekend
+                        ? 'bg-slate-200 text-slate-800'
+                        : 'bg-slate-50 text-slate-700'
+                    }`}
+                  >
+                    <div className="text-[10px] font-normal leading-tight">
+                      {isToday ? 'Today' : WEEKDAY_ABBR[weekday]}
+                    </div>
+                    <div className="flex items-center justify-center gap-0.5 text-xs font-bold">
+                      <span>{day}</span>
+                      {holiday && (
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full inline-block ${isToday ? 'bg-white' : 'bg-cyan-600'}`}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </div>
+                  </th>
+                ))}
 
                 <th className="py-1 px-2 text-center font-mono text-[11px] text-slate-600 bg-slate-50">
-                  Total
+                  Hours
                 </th>
               </tr>
             </thead>
 
             {/* Table Body: Nurse Rows */}
             <tbody className="divide-y divide-slate-200 font-mono">
-              {displayNurses.map((nurse) => {
+              {displayNurses.map((nurse, nurseIndex) => {
                 const seniority = seniorityMap.get(nurse.seniorityLevelId);
                 const hasPhl = nurse.capabilityIds?.includes('role-phl');
                 const { totalHours, targetHours, percent } = getNurseHoursProgress(nurse);
+                const blockHours = getNurseBlockHours(nurse);
 
-                // Bar: green on goal, amber short, red over. The bar is full at the
-                // goal; going over shows in red with the hours over.
+                // Hours line: over in red, within about 2 h of the goal in green, short in amber.
                 const diff = Math.round((totalHours - targetHours) * 10) / 10;
-                // Same bands as the Hours tab: 90 to 110% is on goal.
-                const barColor = percent > 110 ? 'bg-rose-500' : percent >= 90 ? 'bg-emerald-500' : 'bg-amber-500';
+                const hoursTone = targetHours <= 0 ? 'none' : diff > 2 ? 'over' : diff < -2 ? 'short' : 'ok';
                 const hoursNote =
                   targetHours <= 0
                     ? ''
                     : diff > 0
-                    ? `${diff} h over`
+                    ? `${fmtHours(diff)} h over`
                     : diff < 0
-                    ? `${-diff} h short`
-                    : 'On goal';
+                    ? `${fmtHours(-diff)} h short`
+                    : 'on goal';
+                const hoursLine =
+                  targetHours > 0
+                    ? `${fmtHours(totalHours)} / ${fmtHours(targetHours)} h · ${hoursNote}`
+                    : `${fmtHours(totalHours)} h`;
+                const toneText =
+                  hoursTone === 'over' ? 'text-rose-700 font-semibold' : hoursTone === 'ok' ? 'text-emerald-700' : hoursTone === 'short' ? 'text-amber-700' : 'text-slate-600';
+                // Bar: when over the goal, the whole bar is the hours worked, the goal
+                // part is green and the hours over show as a red segment.
+                const overShare = totalHours > targetHours && totalHours > 0 ? (totalHours - targetHours) / totalHours : 0;
+                const fillPercent = overShare > 0 ? 100 - overShare * 100 : Math.min(100, Math.max(0, percent));
+                const barColor = hoursTone === 'short' ? 'bg-amber-500' : 'bg-emerald-500';
 
                 return (
                   <tr key={nurse.id} className="hover:bg-slate-50/60">
-                    {/* Sticky Left Column 1: Nurse Name */}
-                    <td className="sticky left-0 bg-white z-20 border-r border-slate-300 py-1 px-2.5 text-left w-44 shadow-xs">
-                      <div className="flex items-center justify-between">
-                        <div className="truncate">
-                          <span className="font-semibold text-slate-900 block truncate text-xs">
-                            {nurse.fullName}
-                          </span>
-                          <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                            {seniority && (
-                              <span
-                                className="font-medium px-1 py-0.2 rounded"
-                                style={{
-                                  backgroundColor: `${seniority.color}15`,
-                                  color: seniority.color,
-                                }}
-                              >
-                                {seniority.name}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {hasPhl && (
+                    {/* Sticky Left Column: Nurse, seniority and hours */}
+                    <th
+                      scope="row"
+                      className="sticky left-0 bg-white z-20 border-r-2 border-slate-300 py-1 px-2.5 text-left font-normal w-60 min-w-60 max-w-60 shadow-xs"
+                      title={`${nurse.fullName}${seniority ? ` · ${seniority.name}` : ''} · ${nurse.contractPercent}% of full time · Whole roster: ${hoursLine}`}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-semibold text-slate-900 truncate text-xs font-sans">{nurse.fullName}</span>
+                        {seniority && (
                           <span
-                            title="Phlebotomist / IV certified"
-                            className="text-rose-600 text-xs font-bold shrink-0"
+                            className="text-[10px] font-medium px-1 rounded shrink-0 font-sans"
+                            style={{ backgroundColor: `${seniority.color}15`, color: seniority.color }}
                           >
+                            {seniority.name}
+                          </span>
+                        )}
+                        {nurse.contractPercent !== 100 && (
+                          <span className="text-[10px] text-slate-500 shrink-0 font-sans">{nurse.contractPercent}% time</span>
+                        )}
+                        {hasPhl && (
+                          <span title="Blood collection and IV nurse" className="text-rose-600 text-xs font-bold shrink-0 ml-auto">
                             🩸
                           </span>
                         )}
                       </div>
-                    </td>
-
-                    {/* Sticky Left Column 2: Contract % */}
-                    <td className="sticky left-44 bg-white z-20 border-r border-slate-300 py-1 px-2 text-center text-xs w-16 shadow-xs font-bold text-slate-700">
-                      {nurse.contractPercent}%
-                    </td>
-
-                    {/* Sticky Left Column 3: Hours Progress Bar */}
-                    <td className="sticky left-60 bg-white z-20 border-r-2 border-slate-300 py-1 px-2 text-left w-32 shadow-xs">
-                      <div className="space-y-0.5">
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className="font-bold text-slate-800">{totalHours}h</span>
-                          <span className="text-slate-500">/ {targetHours}h</span>
-                        </div>
-                        <div
-                          className="w-full h-1.5 rounded bg-slate-100 overflow-hidden"
-                          role="img"
-                          aria-label={`${totalHours} of ${targetHours} hours${hoursNote ? `, ${hoursNote}` : ''}`}
-                        >
-                          <div className={`h-full ${barColor}`} style={{ width: `${Math.min(100, percent)}%` }} />
-                        </div>
-                        {hoursNote && (
-                          <span
-                            className={`block text-[10px] font-sans ${
-                              percent > 110 ? 'text-rose-700 font-semibold' : percent >= 90 ? 'text-emerald-700' : 'text-amber-700'
-                            }`}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-[11px] font-sans whitespace-nowrap ${toneText}`}>{hoursLine}</span>
+                        {targetHours > 0 && (
+                          <div
+                            className="flex-1 min-w-8 h-1.5 rounded bg-slate-100 overflow-hidden flex"
+                            role="img"
+                            aria-label={`${fmtHours(totalHours)} of ${fmtHours(targetHours)} hours, ${hoursNote}`}
                           >
-                            {hoursNote}
-                          </span>
+                            <div className={`h-full ${barColor}`} style={{ width: `${fillPercent}%` }} />
+                            {overShare > 0 && <div className="h-full bg-rose-500" style={{ width: `${overShare * 100}%` }} />}
+                          </div>
                         )}
                       </div>
-                    </td>
+                    </th>
 
                     {/* Matrix Cells */}
-                    {blockDates.map((dateStr) => {
+                    {dayInfo.map(({ dateStr, isWeekend, holiday, isToday }, dateIndex) => {
                       const asgn = assignments.find(
                         (a) => a.nurseId === nurse.id && a.date === dateStr
                       );
@@ -1079,10 +1398,15 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                           dateStr <= le.endDate
                       );
 
+                      const cellKey = cellKeyOf(nurse.id, dateStr);
                       const isSelected =
                         selectedCell?.nurseId === nurse.id && selectedCell?.date === dateStr;
-                      const hasViolation =
-                        highlightViolations && violationCellKeys.has(`${nurse.id}_${dateStr}`);
+                      // Without a selection the first cell is the grid's way in for the Tab key.
+                      const isTabStop = selectedCell ? isSelected : nurseIndex === 0 && dateIndex === 0;
+                      const problemMessages = cellViolationMessages.get(`${nurse.id}_${dateStr}`) || [];
+                      const hasViolation = highlightViolations && problemMessages.length > 0;
+                      const isFlashing = flashCellKey === cellKey;
+                      const isPopupCell = quickPopup?.nurseId === nurse.id && quickPopup?.date === dateStr;
 
                       const duty = asgn ? dutyMap.get(asgn.dutyWindowId) : undefined;
                       const leaveType = leave ? leaveTypes.find((l) => l.id === leave.leaveTypeId) : undefined;
@@ -1090,6 +1414,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                       let doctorName = '';
                       const isNurseClinic =
                         asgn?.clinicalRoleId === 'role-nurse-clinic' ||
+                        (!!asgn?.clinicalRoleId && asgn.clinicalRoleId === nurseClinicRoleOf(roles)?.id) ||
                         asgn?.note?.toLowerCase().includes('nurse clinic');
 
                       const isFloatPool =
@@ -1165,7 +1490,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                           if (!matchesDoc && !matchesSpec) {
                             isAllocationMismatch = true;
-                            mismatchReason = `Unallocated Pairing: Dr. ${docObj?.fullName.replace('Dr. ', '') || 'Doctor'} is not in ${nurse.fullName}'s profile.`;
+                            mismatchReason = `Dr. ${docObj?.fullName.replace('Dr. ', '') || 'Doctor'} is not one of ${nurse.fullName}'s usual doctors or departments.`;
                           }
                         } else if (asgn.kind === 'SPECIALTY' && asgn.specialtyId) {
                           const specObj = specialtyMap.get(asgn.specialtyId);
@@ -1188,17 +1513,17 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                           if (!matchesSpec) {
                             isAllocationMismatch = true;
-                            mismatchReason = `Unallocated Department: ${specObj?.name || 'Specialty'} is not in ${nurse.fullName}'s profile.`;
+                            mismatchReason = `${specObj?.name || 'This department'} is not one of ${nurse.fullName}'s usual departments.`;
                           }
                         }
                       }
 
                       const docRankBadge = isAllocationMismatch
-                        ? 'Mismatch'
+                        ? '!'
                         : docPref
-                        ? `P${docPref.rank}`
+                        ? `#${docPref.rank}`
                         : specPref
-                        ? `P${specPref.rank}`
+                        ? `#${specPref.rank}`
                         : isFloatPool
                         ? null
                         : asgn?.doctorId
@@ -1206,63 +1531,114 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                         : null;
 
                       const pairingDesc = isNurseClinic
-                        ? 'Dedicated Nurse Clinic (No doctor paired)'
+                        ? 'Nurse Clinic (no doctor)'
                         : isFloatPool || asgn?.clinicalRoleId === 'role-float'
-                        ? 'General Clinic / Float Pool'
+                        ? 'General clinic (float)'
                         : asgn?.clinicalRoleId
-                        ? `Clinical Role: ${roleMap.get(asgn.clinicalRoleId)?.name || doctorName}`
+                        ? `Clinic task: ${roleMap.get(asgn.clinicalRoleId)?.name || doctorName}`
                         : asgn?.doctorId
-                        ? `Paired Doctor: Dr. ${doctorName}${
+                        ? `With Dr. ${doctorName}${
                             docPref
-                              ? ` (Assigned Doctor Priority #${docPref.rank})`
+                              ? ` (usual doctor, choice ${docPref.rank})`
                               : specPref
-                              ? ` (Specialty Match: Priority #${specPref.rank})`
+                              ? ` (usual department, choice ${specPref.rank})`
                               : isAllocationMismatch
-                              ? ' ⚠ [ALLOCATION MISMATCH: Not in nurse profile]'
-                              : ' (General Pool Clinic Nurse)'
+                              ? ' (not one of this nurse’s usual doctors)'
+                              : ' (any nurse)'
                           }`
                         : asgn?.specialtyId
-                        ? `Specialty: ${specialtyMap.get(asgn.specialtyId)?.name || doctorName}${
+                        ? `Department: ${specialtyMap.get(asgn.specialtyId)?.name || doctorName}${
                             specPref
-                              ? ` (Specialty Match: Priority #${specPref.rank})`
+                              ? ` (usual department, choice ${specPref.rank})`
                               : isAllocationMismatch
-                              ? ' ⚠ [ALLOCATION MISMATCH: Not in nurse profile]'
-                              : ' (Specialty Pool)'
+                              ? ' (not one of this nurse’s usual departments)'
+                              : ''
                           }`
-                        : `Paired: ${doctorName}`;
+                        : doctorName;
+
+                      const isHandChange = asgn?.source === 'MANUAL';
+                      const contentWords = leave
+                        ? `${leaveType?.name || 'Leave'}: ${fmtHours(leaveCreditOnDate(leave, leaveType, dateStr))} h counted this day${
+                            leave.dayHours?.[dateStr] !== undefined ? ' (set for this day)' : ''
+                          }${lock ? ', pinned' : ''}`
+                        : lock?.mode === 'OFF'
+                        ? 'Day off, pinned'
+                        : asgn
+                        ? `${duty?.name || 'Shift'} shift${duty ? ` (${duty.startTime} to ${duty.endTime})` : ''}${
+                            duty?.isPriority ? ', used first' : ''
+                          } · ${pairingDesc} · ${SOURCE_WORDS[asgn.source] || asgn.source}${lock && asgn.source !== 'LOCK' ? ', pinned' : ''}${
+                            isAllocationMismatch ? `\n${mismatchReason}` : ''
+                          }`
+                        : 'Nothing yet';
+                      const dayWords = `${holiday ? ` (public holiday: ${holiday.name})` : isWeekend ? ' (weekend)' : ''}${isToday ? ' (today)' : ''}`;
+                      const cellTitle = `${contentWords}${
+                        problemMessages.length > 0 ? `\nProblems:\n${problemMessages.map((m) => `• ${m}`).join('\n')}` : ''
+                      }`;
+                      const cellAria = `${nurse.fullName}, ${formatDate(dateStr)}${dayWords}: ${contentWords.replace(/\n/g, '. ')}${
+                        problemMessages.length > 0 ? `. ${problemMessages.length === 1 ? 'Problem' : 'Problems'}: ${problemMessages.join('. ')}` : ''
+                      }`;
+
+                      // Column shading: today, public holiday, weekend.
+                      const dayShade = isToday
+                        ? 'bg-indigo-50/70'
+                        : holiday
+                        ? 'bg-cyan-50'
+                        : isWeekend
+                        ? 'bg-slate-100'
+                        : '';
 
                       return (
                         <td
                           key={dateStr}
+                          data-cell={cellKey}
+                          tabIndex={isTabStop ? 0 : -1}
                           onClick={() => handleCellClick(nurse.id, dateStr)}
                           onDoubleClick={() => handleCellDoubleClick(nurse.id, dateStr)}
                           onContextMenu={(e) => handleContextMenu(e, nurse.id, dateStr)}
+                          onFocus={() => {
+                            if (!isSelected) setSelectedCell({ nurseId: nurse.id, date: dateStr });
+                          }}
                           aria-selected={isSelected}
-                          className={`border-r border-b border-slate-200 p-0.5 text-center cursor-pointer relative transition-all ${cellHeightClass} ${
-                            isSelected
+                          aria-haspopup="dialog"
+                          aria-expanded={isPopupCell}
+                          aria-label={cellAria}
+                          title={cellTitle}
+                          className={`border-r border-b border-slate-200 p-0.5 text-center align-middle cursor-pointer relative transition-shadow duration-700 focus:outline-none ${cellFontSizeClass} ${
+                            isToday ? 'border-x-indigo-300' : ''
+                          } ${
+                            isFlashing
+                              ? 'ring-4 ring-amber-400 z-10 bg-amber-50 duration-150'
+                              : isSelected
                               ? 'ring-2 ring-indigo-600 z-10 bg-indigo-50/50'
-                              : 'hover:bg-slate-50'
+                              : `${dayShade} hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-indigo-400`
                           }`}
                         >
+                          {/* Problem marker: small red corner */}
+                          {hasViolation && (
+                            <span
+                              aria-hidden="true"
+                              className="absolute top-0 right-0 w-0 h-0 border-t-8 border-l-8 border-t-red-600 border-l-transparent z-10 pointer-events-none"
+                            />
+                          )}
                           {/* 1. Leave Cell Rendering */}
                           {leave ? (
                             <div
-                              className="w-full h-full rounded flex items-center justify-center font-bold text-white shadow-2xs"
+                              className={`w-full ${cellHeightClass} rounded flex items-center justify-center gap-0.5 font-bold text-white shadow-2xs`}
                               style={{ backgroundColor: leaveType?.color || '#f59e0b' }}
-                              title={`${leaveType?.name || 'Leave'}: ${Math.round(leaveCreditOnDate(leave, leaveType, dateStr) * 100) / 100} h counted this day${leave.dayHours?.[dateStr] !== undefined ? ' (set for this day)' : ''}`}
                             >
                               <span>{leaveType?.acronym || 'L'}</span>
+                              {lock && <Lock className="w-2.5 h-2.5 text-white" aria-hidden="true" />}
                             </div>
                           ) : lock?.mode === 'OFF' ? (
                             // 2. Lock Off
-                            <div className="w-full h-full rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center font-bold text-amber-900 text-[10px]">
-                              <Lock className="w-2.5 h-2.5 text-amber-600 mr-0.5" />
+                            <div className={`w-full ${cellHeightClass} rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center font-bold text-amber-900 text-[10px]`}>
+                              <Lock className="w-2.5 h-2.5 text-amber-600 mr-0.5" aria-hidden="true" />
                               <span>OFF</span>
                             </div>
                           ) : asgn ? (
                             // 3. Assignment Cell (Duty + Pairing Label)
                             <div
-                              className={`w-full h-full rounded flex flex-col items-center justify-center leading-none px-0.5 border ${
+                              className={`w-full ${cellHeightClass} rounded flex flex-col items-center justify-center leading-none px-0.5 border ${
                                 hasViolation || isAllocationMismatch
                                   ? 'ring-1.5 ring-rose-500 border-rose-400 bg-rose-50/70 shadow-xs'
                                   : isNurseClinic
@@ -1287,13 +1663,6 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                                   ? undefined
                                   : duty?.color || '#3b82f6',
                               }}
-                              title={`Duty: ${duty?.name}${duty?.isPriority ? ' ★ [Priority Duty]' : ''} (${duty?.startTime}–${duty?.endTime}) | ${pairingDesc} | Source: ${asgn.source}${
-                                cellViolationMessages.has(`${nurse.id}_${dateStr}`)
-                                  ? `\n⚠ VIOLATIONS:\n${cellViolationMessages.get(`${nurse.id}_${dateStr}`)?.join('\n')}`
-                                  : isAllocationMismatch
-                                  ? `\n⚠ ALLOCATION WARNING:\n${mismatchReason}`
-                                  : ''
-                              }`}
                             >
                               <div className="flex items-center gap-0.5">
                                 <span
@@ -1307,18 +1676,16 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                                   {duty?.acronym || 'D'}
                                 </span>
                                 {duty?.isPriority && (
-                                  <span className="text-[8px] text-amber-500 font-bold leading-none" title="Priority Duty">
+                                  <span className="text-[10px] text-amber-500 font-bold leading-none" aria-hidden="true">
                                     ★
                                   </span>
                                 )}
-                                {lock && <Lock className="w-2.5 h-2.5 text-amber-600" />}
-                                {(hasViolation || isAllocationMismatch) && (
-                                  <span className="text-red-500 text-[9px] font-bold" title={isAllocationMismatch ? mismatchReason : 'Validation violation'}>⚠</span>
-                                )}
+                                {lock && <Lock className="w-2.5 h-2.5 text-amber-600" aria-hidden="true" />}
+                                {isHandChange && !lock && <Edit2 className="w-2.5 h-2.5 text-slate-500" aria-hidden="true" />}
                               </div>
                               <div className="flex items-center gap-0.5 max-w-[48px] justify-center">
                                 <span
-                                  className={`text-[9px] font-semibold truncate ${
+                                  className={`text-[10px] font-semibold truncate ${
                                     isAllocationMismatch
                                       ? 'text-rose-900 font-bold'
                                       : isNurseClinic
@@ -1332,16 +1699,16 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                                 </span>
                                 {docRankBadge && (
                                   <span
-                                    className={`text-[7px] font-bold px-0.5 rounded leading-none shrink-0 ${
-                                      docRankBadge === 'Mismatch'
+                                    aria-hidden="true"
+                                    className={`text-[10px] font-bold px-0.5 rounded leading-none shrink-0 ${
+                                      docRankBadge === '!'
                                         ? 'bg-rose-100 text-rose-800 border border-rose-300 font-extrabold'
-                                        : docRankBadge === 'P1'
+                                        : docRankBadge === '#1'
                                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                        : docRankBadge === 'P2'
+                                        : docRankBadge === '#2'
                                         ? 'bg-blue-100 text-blue-800 border border-blue-300'
                                         : 'bg-slate-100 text-slate-700 border border-slate-300'
                                     }`}
-                                    title={docRankBadge === 'Mismatch' ? mismatchReason : docPref ? `Assigned Doctor Priority #${docPref.rank}` : 'General Pool'}
                                   >
                                     {docRankBadge}
                                   </span>
@@ -1350,7 +1717,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                             </div>
                           ) : (
                             // 4. Empty Cell
-                            <div className="w-full h-full flex items-center justify-center text-slate-300">
+                            <div className={`w-full ${cellHeightClass} flex items-center justify-center text-slate-300`} aria-hidden="true">
                               —
                             </div>
                           )}
@@ -1358,14 +1725,14 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                       );
                     })}
 
-                    {/* Block Total Column */}
+                    {/* Hours inside the days shown */}
                     <td
                       className="py-1 px-2 text-center text-xs font-bold text-slate-800 bg-slate-50 border-b border-slate-200"
-                      title={`Block ${currentBlockIndex + 1}: ${getNurseBlockHours(nurse).bDuty}h duty + ${getNurseBlockHours(nurse).bLeave}h leave | Period Total: ${totalHours}h / ${targetHours}h`}
+                      title={`These days: ${fmtHours(blockHours.bDuty)} h shifts + ${fmtHours(blockHours.bLeave)} h leave. Whole roster: ${hoursLine}`}
                     >
-                      <span>{getNurseBlockHours(nurse).blockTotal}h</span>
-                      <span className="block text-[9px] font-normal text-slate-400">
-                        {totalHours}h tot
+                      <span>{fmtHours(blockHours.blockTotal)} h</span>
+                      <span className="block text-[10px] font-normal text-slate-500">
+                        {fmtHours(totalHours)} h in all
                       </span>
                     </td>
                   </tr>
@@ -1375,11 +1742,11 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
           </table>
         </div>
 
-        {/* 6.6 Collapsible Right Drawer: Interactive Legend */}
+        {/* 6.6 Collapsible Right Drawer: the one Legend */}
         {isLegendDrawerOpen && (
-          <div className="w-64 bg-white border-l border-slate-200 flex flex-col shrink-0 text-xs shadow-lg animate-in slide-in-from-right duration-150 z-30">
+          <div className="w-72 bg-white border-l border-slate-200 flex flex-col shrink-0 text-xs shadow-lg animate-in slide-in-from-right duration-150 z-30" role="region" aria-label="Legend">
             <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <span className="font-bold text-slate-800">Workbook Legend</span>
+              <span className="font-bold text-slate-800">Legend</span>
               <button
                 onClick={() => setIsLegendDrawerOpen(false)}
                 className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
@@ -1392,29 +1759,29 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               <div>
-                <h4 className="font-semibold text-slate-700 mb-1.5 font-mono text-[10px] uppercase">
-                  Duty Windows
+                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+                  Shifts
                 </h4>
                 <div className="space-y-1">
                   {dutyWindows.map((dw) => (
                     <div key={dw.id} className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <span
-                          className="w-4 h-4 rounded text-white font-mono font-bold text-[9px] flex items-center justify-center"
+                          className="min-w-5 h-5 px-0.5 rounded text-white font-mono font-bold text-[10px] flex items-center justify-center"
                           style={{ backgroundColor: dw.color }}
                         >
                           {dw.acronym}
                         </span>
                         <span className="text-slate-800 font-medium">{dw.name}</span>
                         {dw.isPriority && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">
-                            <Star className="w-2 h-2 fill-amber-500 text-amber-500" />
-                            Priority
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">
+                            <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" aria-hidden="true" />
+                            Used first
                           </span>
                         )}
                       </div>
-                      <span className="font-mono text-slate-400 text-[10px]">
-                        {dw.startTime}–{dw.endTime}
+                      <span className="font-mono text-slate-500 text-[10px]">
+                        {dw.startTime} to {dw.endTime}
                       </span>
                     </div>
                   ))}
@@ -1422,15 +1789,15 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               </div>
 
               <div>
-                <h4 className="font-semibold text-slate-700 mb-1.5 font-mono text-[10px] uppercase">
-                  Leave Types
+                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+                  Leave and days off
                 </h4>
                 <div className="space-y-1">
                   {leaveTypes.map((lt) => (
                     <div key={lt.id} className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <span
-                          className="w-4 h-4 rounded text-white font-mono font-bold text-[9px] flex items-center justify-center"
+                          className="min-w-5 h-5 px-0.5 rounded text-white font-mono font-bold text-[10px] flex items-center justify-center"
                           style={{ backgroundColor: lt.color }}
                         >
                           {lt.acronym}
@@ -1438,7 +1805,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                         <span className="text-slate-800">{lt.name}</span>
                       </div>
                       <span className="font-mono text-slate-500 text-[10px]">
-                        {typeof lt.creditedHours === 'number' ? `${lt.creditedHours}h` : 'match'}
+                        {typeof lt.creditedHours === 'number' ? `${lt.creditedHours} h a day` : '8 h a day'}
                       </span>
                     </div>
                   ))}
@@ -1446,27 +1813,98 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               </div>
 
               <div>
-                <h4 className="font-semibold text-slate-700 mb-1.5 font-mono text-[10px] uppercase">
-                  Special Badges &amp; Symbols
+                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+                  Marks in a cell
                 </h4>
                 <div className="space-y-1.5 text-[11px] text-slate-600">
                   <div className="flex items-center gap-2">
-                    <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <span>Non-changeable Pinned Lock</span>
+                    <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" aria-hidden="true" />
+                    <span>Pinned: kept when the roster is filled again</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-rose-600 font-bold">🩸</span>
-                    <span>Blood Collection &amp; IV Nurse</span>
+                    <span className="w-6 h-5 rounded border border-dashed border-amber-400 bg-amber-50 text-amber-900 font-bold text-[10px] flex items-center justify-center shrink-0">
+                      OFF
+                    </span>
+                    <span>Pinned day off</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="w-5 h-4 rounded text-teal-900 font-mono font-bold text-[9px] flex items-center justify-center bg-teal-100 border border-teal-300">
+                    <Edit2 className="w-3.5 h-3.5 text-slate-500 shrink-0" aria-hidden="true" />
+                    <span>Hand change (not pinned)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="relative w-6 h-5 rounded border border-slate-300 bg-white shrink-0" aria-hidden="true">
+                      <span className="absolute top-0 right-0 w-0 h-0 border-t-8 border-l-8 border-t-red-600 border-l-transparent" />
+                    </span>
+                    <span>Problem: tap or point at the cell to read it</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-500 font-bold w-3.5 text-center shrink-0" aria-hidden="true">★</span>
+                    <span>Shift used first when filling</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-5 rounded text-teal-900 font-mono font-bold text-[10px] flex items-center justify-center bg-teal-100 border border-teal-300 shrink-0">
                       NC
                     </span>
-                    <span>Dedicated Nurse Clinic (No doctor paired)</span>
+                    <span>Nurse Clinic (no doctor)</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-red-500 font-bold">⚠</span>
-                    <span>Rule or Coverage Violation</span>
+                    <span className="text-[10px] font-bold px-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">#1</span>
+                    <span>One of the nurse’s usual doctors (1 = first choice)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold px-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300 shrink-0">Pool</span>
+                    <span>Doctor shared by any nurse</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-extrabold px-1 rounded bg-rose-100 text-rose-800 border border-rose-300 shrink-0">!</span>
+                    <span>Not one of the nurse’s usual doctors</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-rose-600 font-bold" aria-hidden="true">🩸</span>
+                    <span>Blood collection and IV nurse</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+                  Days
+                </h4>
+                <div className="space-y-1.5 text-[11px] text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-5 rounded bg-slate-200 border border-slate-300 shrink-0" aria-hidden="true" />
+                    <span>Weekend</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-5 rounded bg-cyan-100 border border-cyan-300 shrink-0" aria-hidden="true" />
+                    <span>Public holiday (point at the date for its name)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-5 rounded bg-indigo-600 shrink-0" aria-hidden="true" />
+                    <span>Today</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+                  Hours
+                </h4>
+                <div className="space-y-1.5 text-[11px] text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-1.5 rounded bg-emerald-500 shrink-0" aria-hidden="true" />
+                    <span>Within about 2 h of the goal</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-1.5 rounded bg-amber-500 shrink-0" aria-hidden="true" />
+                    <span>Short of the goal</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-1.5 rounded overflow-hidden flex shrink-0" aria-hidden="true">
+                      <span className="w-4 bg-emerald-500" />
+                      <span className="w-2 bg-rose-500" />
+                    </span>
+                    <span>Over the goal (red part = hours over)</span>
                   </div>
                 </div>
               </div>
@@ -1487,7 +1925,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               <span>{formatDate(selectedCell.date)}</span>
             </div>
           ) : (
-            <span className="text-slate-400">Click any cell to navigate</span>
+            <span className="text-slate-500">Click a cell to change it</span>
           )}
         </div>
 
@@ -1530,11 +1968,13 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                 ? 'bg-amber-50 text-amber-800 font-bold hover:bg-amber-100 border border-amber-200'
                 : 'text-slate-600 hover:bg-slate-100'
             }`}
-            title="Click to view all warnings and rule violations in Warnings tab"
+            title="Open the Problems tab"
           >
-            <span className="text-slate-400">Audit Status:</span>
+            <span className="text-slate-500">Problems:</span>
             <span>
-              {validationReport.errorCount} errors · {validationReport.warnCount} warnings
+              {validationReport.errorCount + validationReport.warnCount === 0
+                ? 'none'
+                : `${validationReport.errorCount} must fix · ${validationReport.warnCount} to check`}
             </span>
           </button>
         </div>
@@ -1562,7 +2002,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                   </span>
                 </div>
                 <span className="text-[11px] text-slate-500 block mt-0.5">
-                  Configure duty shift or leave entry, and set whether automatic generation can overwrite it.
+                  Choose a shift or leave for this day.
                 </span>
               </div>
               <button
@@ -1587,7 +2027,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                 }`}
               >
                 <Stethoscope className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Assign Duty Shift</span>
+                <span>Shift</span>
               </button>
               <button
                 type="button"
@@ -1599,7 +2039,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Leave / Day Off</span>
+                <span>Leave or day off</span>
               </button>
             </div>
 
@@ -1608,7 +2048,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               <div className="space-y-3.5 animate-in fade-in duration-100">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1.5">
-                    1. Select Duty Window / Shift
+                    1. Choose the shift
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {dutyWindows.map((dw) => {
@@ -1632,16 +2072,14 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                               {dw.name} ({dw.acronym})
                             </span>
                             {dw.isPriority ? (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-amber-700 bg-amber-100/80 border border-amber-200 px-1.5 py-0.2 rounded">
-                                <Star className="w-2 h-2 fill-amber-500 text-amber-500" aria-hidden="true" />
-                                Priority
+                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100/80 border border-amber-200 px-1.5 py-0.2 rounded">
+                                <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" aria-hidden="true" />
+                                Used first
                               </span>
-                            ) : (
-                              <span className="text-[9px] text-slate-400">Standard</span>
-                            )}
+                            ) : null}
                           </div>
                           <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
-                            {dw.startTime} – {dw.endTime}
+                            {dw.startTime} to {dw.endTime}
                           </span>
                         </button>
                       );
@@ -1651,7 +2089,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1.5">
-                    2. Assignment Target (Doctor / Role / Specialty)
+                    2. Who or what the nurse works with
                   </label>
                   {(() => {
                     const activeNurse = editorTarget ? nurseMap.get(editorTarget.nurseId) : undefined;
@@ -1664,10 +2102,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                             <div>
                               <span className="font-semibold block text-[11px]">
-                                Exclusive Nurse Clinic Warning
+                                Works in Nurse Clinic only
                               </span>
                               <span className="text-[10px] text-amber-800 leading-tight block">
-                                {activeNurse?.fullName} is designated as Exclusive Nurse Clinic (no doctor pairings). Assigning them to a doctor or specialty will trigger a schedule validation error.
+                                {activeNurse?.fullName} works in Nurse Clinic only, with no doctor. Putting them with a doctor or a department will show as a problem.
                               </span>
                             </div>
                           </div>
@@ -1707,7 +2145,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                               if (!matchesDoc && !matchesSpec) {
                                 isMismatch = true;
-                                warnText = `${activeNurse?.fullName} is allocated to other departments in their profile. Assigning to Dr. ${selDoc?.fullName.replace('Dr. ', '') || 'Doctor'} will trigger an allocation audit error.`;
+                                warnText = `Dr. ${selDoc?.fullName.replace('Dr. ', '') || 'Doctor'} is not one of ${activeNurse?.fullName}'s usual doctors or departments. This will show as a problem.`;
                               }
                             } else if (editorKind === 'SPECIALTY') {
                               const selSpec = specialties.find((s) => s.id === editorTargetRefId);
@@ -1730,7 +2168,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                               if (!matchesSpec) {
                                 isMismatch = true;
-                                warnText = `${activeNurse?.fullName} is allocated to other departments in their profile. Assigning to ${selSpec?.name || 'this specialty'} will trigger an allocation audit error.`;
+                                warnText = `${selSpec?.name || 'This department'} is not one of ${activeNurse?.fullName}'s usual departments. This will show as a problem.`;
                               }
                             }
 
@@ -1740,7 +2178,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                                   <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                                   <div>
                                     <span className="font-semibold block text-[11px]">
-                                      Profile Allocation Mismatch
+                                      Not one of this nurse’s usual doctors
                                     </span>
                                     <span className="text-[10px] text-rose-800 leading-tight block">
                                       {warnText}
@@ -1769,7 +2207,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                                   : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                               }`}
                             >
-                              {k === 'CLINICAL_ROLE' ? (isTargetExclusiveNC ? 'Clinical Role (NC)' : 'Clinical Role') : k === 'DOCTOR' ? 'Doctor Session' : 'Specialty Pool'}
+                              {k === 'CLINICAL_ROLE' ? (isTargetExclusiveNC ? 'Clinic task (Nurse Clinic)' : 'Clinic task') : k === 'DOCTOR' ? 'With a doctor' : 'Department (any doctor)'}
                             </button>
                           ))}
                         </div>
@@ -1778,7 +2216,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                   })()}
 
                   <select
-                    aria-label="Assignment target"
+                    aria-label="Who or what the nurse works with"
                     value={editorTargetRefId}
                     onChange={(e) => setEditorTargetRefId(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium text-slate-800"
@@ -1792,13 +2230,13 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                     {editorKind === 'CLINICAL_ROLE' &&
                       roles.map((r) => (
                         <option key={r.id} value={r.id}>
-                          {r.name} ({r.acronym}) · {r.defaultStartTime || '09:00'}–{r.defaultEndTime || '13:00'}
+                          {r.name} ({r.acronym}) · {r.defaultStartTime || '09:00'} to {r.defaultEndTime || '13:00'}
                         </option>
                       ))}
                     {editorKind === 'SPECIALTY' &&
                       specialties.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.name} ({s.code}) Pool
+                          {s.name} ({s.code}), any doctor
                         </option>
                       ))}
                   </select>
@@ -1819,7 +2257,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                       }).join(', ');
                       return (
                         <div className="mt-1 text-[10px] text-indigo-700 bg-indigo-50/60 rounded px-2 py-0.5 border border-indigo-100">
-                          <strong>Profile Allocations:</strong> {tags}
+                          <strong>Usually works with:</strong> {tags}
                         </div>
                       );
                     }
@@ -1834,7 +2272,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               <div className="space-y-3.5 animate-in fade-in duration-100">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1.5">
-                    1. Select Leave / Off Type
+                    1. Choose the leave or day off
                   </label>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {leaveTypes.map((lt) => {
@@ -1913,52 +2351,23 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               </div>
             )}
 
-            {/* AUTOMATIC GENERATION OVERWRITE SETTING */}
+            {/* Kept when the roster is filled again (pinned) */}
             <div className="pt-2 border-t border-slate-100">
-              <label className="block font-semibold text-slate-800 mb-1.5">
-                Automatic Generation Overwrite Rule
+              <label htmlFor="editor-keep-cell" className="flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
+                <input
+                  id="editor-keep-cell"
+                  type="checkbox"
+                  checked={!editorAllowOverwrite}
+                  onChange={(e) => setEditorAllowOverwrite(!e.target.checked)}
+                  aria-describedby="editor-keep-cell-help"
+                  className="w-4 h-4 accent-amber-600 cursor-pointer"
+                />
+                <Lock className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
+                <span>Keep this when the roster is filled again</span>
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditorAllowOverwrite(false)}
-                  className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all flex items-start gap-2 ${
-                    !editorAllowOverwrite
-                      ? 'border-amber-400 bg-amber-50/70 ring-1 ring-amber-400'
-                      : 'border-slate-200 hover:bg-slate-50 opacity-70'
-                  }`}
-                >
-                  <Lock className={`w-4 h-4 shrink-0 mt-0.5 ${!editorAllowOverwrite ? 'text-amber-600' : 'text-slate-400'}`} aria-hidden="true" />
-                  <div>
-                    <span className="font-bold text-slate-900 block text-xs">
-                      🔒 Pinned (Protected)
-                    </span>
-                    <span className="text-[10px] text-slate-600 block leading-tight mt-0.5">
-                      Automatic generation will <strong className="text-amber-800 font-bold">NEVER</strong> overwrite or alter this cell.
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setEditorAllowOverwrite(true)}
-                  className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all flex items-start gap-2 ${
-                    editorAllowOverwrite
-                      ? 'border-indigo-500 bg-indigo-50/70 ring-1 ring-indigo-500'
-                      : 'border-slate-200 hover:bg-slate-50 opacity-70'
-                  }`}
-                >
-                  <Unlock className={`w-4 h-4 shrink-0 mt-0.5 ${editorAllowOverwrite ? 'text-indigo-600' : 'text-slate-400'}`} aria-hidden="true" />
-                  <div>
-                    <span className="font-bold text-slate-900 block text-xs">
-                      ⚡ Flexible (Allow Overwrite)
-                    </span>
-                    <span className="text-[10px] text-slate-600 block leading-tight mt-0.5">
-                      Automatic generation <strong className="text-indigo-800 font-bold">CAN</strong> rebalance or replace this cell.
-                    </span>
-                  </div>
-                </button>
-              </div>
+              <p id="editor-keep-cell-help" className="text-[11px] text-slate-500 mt-1 ml-6">
+                Ticked, this day is pinned and Fill roster leaves it as it is. Not ticked, Fill roster may change it.
+              </p>
             </div>
 
             {/* Note */}
@@ -1988,7 +2397,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                 className="text-red-600 hover:text-red-700 font-semibold cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded hover:bg-red-50 transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Clear Cell</span>
+                <span>Clear</span>
               </button>
 
               <div className="flex items-center gap-2">
@@ -2005,7 +2414,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                   className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer shadow-xs transition-colors"
                 >
                   <Check className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Save Cell</span>
+                  <span>Save</span>
                 </button>
               </div>
             </div>
@@ -2028,7 +2437,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             className="w-full text-left px-3 py-1.5 hover:bg-slate-100 text-slate-700 cursor-pointer flex items-center gap-2"
           >
             <Edit2 className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-            <span>Edit Assignment...</span>
+            <span>More options…</span>
           </button>
           <button
             onClick={() => {
@@ -2041,7 +2450,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             className="w-full text-left px-3 py-1.5 hover:bg-slate-100 text-slate-700 cursor-pointer flex items-center gap-2"
           >
             <Copy className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-            <span>Copy Cell</span>
+            <span>Copy</span>
           </button>
           <button
             disabled={!clipboardAssignment}
@@ -2052,7 +2461,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             className="w-full text-left px-3 py-1.5 hover:bg-slate-100 text-slate-700 disabled:opacity-40 cursor-pointer flex items-center gap-2"
           >
             <ClipboardPaste className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-            <span>Paste Cell</span>
+            <span>Paste</span>
           </button>
           <div className="h-px bg-slate-100 my-1" />
           <button
@@ -2063,10 +2472,56 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 cursor-pointer flex items-center gap-2"
           >
             <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Clear Cell</span>
+            <span>Clear</span>
           </button>
         </div>
       )}
+
+      {/* --- SMALL POPUP NEXT TO A CLICKED CELL --- */}
+      {quickPopup && !isEditorOpen && (() => {
+        const { nurseId, date } = quickPopup;
+        const lock = locks.find((l) => l.nurseId === nurseId && l.date === date);
+        const hasContent =
+          !!lock ||
+          assignments.some((a) => a.nurseId === nurseId && a.date === date) ||
+          leaveEntries.some((le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate);
+        const options = lock ? { work: [], leave: [] } : buildQuickOptions(nurseId, date);
+        return (
+          <QuickCellPopup
+            cellKey={cellKeyOf(nurseId, date)}
+            nurseName={nurseMap.get(nurseId)?.fullName || 'Nurse'}
+            dateLabel={formatDate(date)}
+            currentLabel={describeCell(nurseId, date)}
+            problems={cellViolationMessages.get(`${nurseId}_${date}`) || []}
+            pinned={!!lock}
+            onUnpin={
+              lock && onOpenLockOverrideModal
+                ? () => {
+                    closePopupToCell();
+                    onOpenLockOverrideModal(lock);
+                  }
+                : undefined
+            }
+            workOptions={options.work}
+            leaveOptions={options.leave}
+            onClear={
+              hasContent
+                ? () => {
+                    closePopupToCell();
+                    void handleDeleteCellAssignment(nurseId, date);
+                  }
+                : undefined
+            }
+            onMore={() => {
+              // Focus the cell first so closing the editor brings focus back to it.
+              closePopupToCell();
+              openCellEditor(nurseId, date);
+            }}
+            onClose={() => setQuickPopup(null)}
+            focusOnOpen={quickPopup.focusOnOpen}
+          />
+        );
+      })()}
     </div>
   );
 };

@@ -84,14 +84,14 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 id={titleId} className="text-base font-bold text-slate-900">
-                  Delete Schedule
+                  Delete roster
                 </h2>
-                <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-bold font-mono text-[10px]">
-                  {schedule.status}
+                <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-bold text-[10px]">
+                  {schedule.status === 'PUBLISHED' ? 'Published' : schedule.status === 'DRAFT' ? 'Draft' : 'Archived'}
                 </span>
               </div>
               <p className="text-[11px] text-rose-800 mt-0.5 font-medium">
-                Permanent schedule deletion verification
+                This cannot be undone
               </p>
             </div>
           </div>
@@ -111,7 +111,7 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
         {/* Content Body */}
         <div className="p-6 space-y-4">
           <p className="text-slate-700 leading-relaxed text-xs">
-            Are you sure you want to permanently delete the schedule <strong className="text-slate-900">&ldquo;{schedule.name}&rdquo;</strong>?
+            Are you sure you want to delete the roster <strong className="text-slate-900">&ldquo;{schedule.name}&rdquo;</strong>?
           </p>
 
           {/* Schedule Summary Card */}
@@ -119,7 +119,7 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
             <div className="flex items-start justify-between gap-2 border-b border-slate-200/80 pb-2">
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">
-                  Schedule Roster Name
+                  Roster
                 </span>
                 <span className="font-semibold text-slate-900 text-xs">
                   {schedule.name}
@@ -133,11 +133,11 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
             <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 pt-1 font-mono">
               <div className="flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>{schedule.blockWeeks * 7}d block cycles</span>
+                <span>{schedule.blockWeeks} week{schedule.blockWeeks === 1 ? '' : 's'} per page</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>{schedule.hoursTargetFullTime}h full-time target</span>
+                <span>{schedule.hoursTargetFullTime}h goal for a full time nurse</span>
               </div>
             </div>
 
@@ -146,13 +146,13 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
               {shiftCount !== undefined && (
                 <span className="flex items-center gap-1">
                   <Layers className="w-3 h-3 text-slate-400" />
-                  <strong>{shiftCount}</strong> assigned shifts
+                  <strong>{shiftCount}</strong> shift{shiftCount === 1 ? '' : 's'}
                 </span>
               )}
               {versionCount !== undefined && (
                 <span className="flex items-center gap-1">
                   <History className="w-3 h-3 text-slate-400" />
-                  <strong>{versionCount}</strong> version checkpoints
+                  <strong>{versionCount}</strong> saved version{versionCount === 1 ? '' : 's'}
                 </span>
               )}
             </div>
@@ -162,9 +162,9 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
           <div className="p-3 bg-rose-50/80 border border-rose-200 rounded-lg flex items-start gap-2.5 text-xs text-rose-900">
             <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
             <div className="leading-snug space-y-1">
-              <strong className="font-bold">Cascading Deletion:</strong>
+              <strong className="font-bold">Everything in this roster is deleted:</strong>
               <p>
-                Deleting this schedule will permanently erase all associated shift assignments, version history snapshots, share links, and publish logs. It will be removed from the schedule switcher and all clinic reports.
+                All its shifts, saved versions, share links and the record of emails sent. It also disappears from the roster list and from all reports.
               </p>
             </div>
           </div>
@@ -179,7 +179,7 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
               className="mt-0.5 rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-4 h-4 cursor-pointer"
             />
             <span className="text-slate-800 text-xs font-medium leading-relaxed">
-              I confirm that I want to permanently delete schedule &ldquo;{schedule.name}&rdquo; and all of its associated shifts and history.
+              I want to delete the roster &ldquo;{schedule.name}&rdquo; with all its shifts and history.
             </span>
           </label>
         </div>
@@ -204,12 +204,12 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
             {isDeleting ? (
               <>
                 <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Deleting Schedule...</span>
+                <span>Deleting…</span>
               </>
             ) : (
               <>
                 <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Permanently Delete Schedule</span>
+                <span>Delete roster</span>
               </>
             )}
           </button>

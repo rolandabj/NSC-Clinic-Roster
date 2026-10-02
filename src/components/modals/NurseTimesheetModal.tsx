@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Individual Nurse Timesheet & Hours Audit Modal (Phase 9)
+ * Timesheet dialog: one nurse's hours day by day, with leave and their hours goal.
  */
 
 import React, { useId, useState } from 'react';
@@ -26,6 +26,25 @@ import { Schedule } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
 import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
 import { useDialogA11y } from '../common/useDialogA11y';
+
+/** Hours as shown to people: at most one decimal. */
+const fmtHours = (h: number) => `${Math.round((h || 0) * 10) / 10}h`;
+
+const STATUS_LABELS: Record<string, string> = {
+  OPTIMAL: 'On goal',
+  UNDER: 'A little short',
+  CRITICAL_UNDER: 'Very short',
+  OVER: 'A little over',
+  CRITICAL_OVER: 'Too many hours',
+};
+
+const SOURCE_LABELS: Record<string, string> = {
+  GENERATED: 'Filled automatically',
+  MANUAL: 'Set by hand',
+  LOCK: 'Pinned day',
+  APPROVED_LEAVE: 'Approved leave',
+  REST_DAY: 'Day off',
+};
 
 interface NurseTimesheetModalProps {
   schedule: Schedule;
@@ -76,15 +95,15 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
   const handleExportNurseCsv = () => {
     const headers = [
       'Date',
-      'Day of Week',
-      'Is Weekend',
-      'Entry Type',
-      'Duty Window',
-      'Duty Hours',
-      'Assigned Doctor / Role',
-      'Leave Type',
-      'Hours Credited',
-      'Source',
+      'Day',
+      'Weekend',
+      'Type',
+      'Shift',
+      'Shift hours',
+      'Doctor or job',
+      'Type of leave',
+      'Hours counted',
+      'How it was set',
       'Notes',
     ];
 
@@ -95,20 +114,20 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
         : item.clinicalRole
         ? item.clinicalRole.name
         : item.specialty
-        ? `${item.specialty.name} Pool`
+        ? item.specialty.name
         : '';
 
       rows.push([
         formatDate(item.date),
         item.weekdayName,
-        item.isWeekend ? 'YES' : 'NO',
-        item.type,
+        item.isWeekend ? 'Yes' : 'No',
+        item.type === 'DUTY' ? 'Shift' : item.type === 'LEAVE' ? 'Leave' : 'Day off',
         item.dutyWindow ? `${item.dutyWindow.name} (${item.dutyWindow.acronym})` : '',
-        item.dutyWindow ? item.hoursEarned : 0,
+        item.dutyWindow ? Math.round(item.hoursEarned * 10) / 10 : 0,
         doctorOrRole,
         item.leaveType ? `${item.leaveType.name} (${item.leaveType.acronym})` : '',
-        item.hoursEarned,
-        item.source || '',
+        Math.round(item.hoursEarned * 10) / 10,
+        item.source ? SOURCE_LABELS[item.source] || item.source : '',
         item.notes || '',
       ]);
     });
@@ -156,7 +175,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5 font-sans">
-                {nurse.gmail} · {contractPercent}% Contract Proportion ({targetHours}h contracted in {schedule.name})
+                {nurse.gmail ? `${nurse.gmail} · ` : ''}{contractPercent}% contract ({fmtHours(targetHours)} goal in {schedule.name})
               </p>
             </div>
           </div>
@@ -168,7 +187,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 hover:bg-slate-100 rounded text-xs font-medium text-slate-700 transition-colors cursor-pointer"
             >
               <Download className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-              <span>Export Timesheet</span>
+              <span>Download timesheet (CSV)</span>
             </button>
             <button
               type="button"
@@ -184,47 +203,47 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
         {/* Top KPI Cards */}
         <div className="p-6 bg-slate-50/50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-6 gap-3">
           <div className="bg-white p-3 rounded border border-slate-200 shadow-2xs">
-            <span className="text-[10px] font-medium text-slate-500 block">Contract Target</span>
+            <span className="text-[10px] font-medium text-slate-500 block">Hours goal</span>
             <span className="text-lg font-bold font-mono text-slate-900 mt-0.5 block">
-              {targetHours}h
+              {fmtHours(targetHours)}
             </span>
             <span className="text-[10px] text-slate-400 font-mono block">
-              {contractPercent}% FTE
+              {contractPercent}% contract
             </span>
           </div>
 
           <div className="bg-white p-3 rounded border border-slate-200 shadow-2xs">
-            <span className="text-[10px] font-medium text-slate-500 block">Clinical Duties</span>
+            <span className="text-[10px] font-medium text-slate-500 block">Shifts</span>
             <span className="text-lg font-bold font-mono text-indigo-600 mt-0.5 block">
-              {dutyHours}h
+              {fmtHours(dutyHours)}
             </span>
             <span className="text-[10px] text-slate-400 font-mono block">
-              {totalShiftsCount} shifts
+              {totalShiftsCount} shift{totalShiftsCount === 1 ? '' : 's'}
             </span>
           </div>
 
           <div className="bg-white p-3 rounded border border-slate-200 shadow-2xs">
-            <span className="text-[10px] font-medium text-slate-500 block">Credited Leave</span>
+            <span className="text-[10px] font-medium text-slate-500 block">Leave</span>
             <span className="text-lg font-bold font-mono text-amber-600 mt-0.5 block">
-              {leaveHours}h
+              {fmtHours(leaveHours)}
             </span>
             <span className="text-[10px] text-slate-400 font-mono block">
-              {Object.keys(leaveBreakdown).length} leave types
+              {Object.keys(leaveBreakdown).length} type{Object.keys(leaveBreakdown).length === 1 ? '' : 's'} of leave
             </span>
           </div>
 
           <div className="bg-white p-3 rounded border border-slate-200 shadow-2xs">
-            <span className="text-[10px] font-medium text-slate-500 block">Total Earned</span>
+            <span className="text-[10px] font-medium text-slate-500 block">Total</span>
             <span className="text-lg font-bold font-mono text-slate-900 mt-0.5 block">
-              {totalEarnedHours}h
+              {fmtHours(totalEarnedHours)}
             </span>
             <span className="text-[10px] text-slate-400 font-mono block">
-              Duty + Leave
+              Shifts and leave
             </span>
           </div>
 
           <div className="bg-white p-3 rounded border border-slate-200 shadow-2xs">
-            <span className="text-[10px] font-medium text-slate-500 block">Net Variance</span>
+            <span className="text-[10px] font-medium text-slate-500 block">Difference from goal</span>
             <span
               className={`text-lg font-bold font-mono mt-0.5 block ${
                 varianceHours > 0
@@ -234,15 +253,15 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                   : 'text-slate-600'
               }`}
             >
-              {varianceHours > 0 ? `+${varianceHours}h` : `${varianceHours}h`}
+              {varianceHours > 0 ? `+${fmtHours(varianceHours)}` : fmtHours(varianceHours)}
             </span>
             <span className="text-[10px] text-slate-400 font-mono block">
-              {varianceHours > 0 ? 'Overtime' : varianceHours < 0 ? 'Deficit' : 'Balanced'}
+              {varianceHours > 0 ? 'Over the goal' : varianceHours < 0 ? 'Under the goal' : 'On the goal'}
             </span>
           </div>
 
           <div className="bg-white p-3 rounded border border-slate-200 shadow-2xs">
-            <span className="text-[10px] font-medium text-slate-500 block">Pace &amp; Status</span>
+            <span className="text-[10px] font-medium text-slate-500 block">Share of goal</span>
             <span className="text-lg font-bold font-mono text-slate-900 mt-0.5 block">
               {pacePercent}%
             </span>
@@ -255,21 +274,21 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                   : 'bg-indigo-50 text-indigo-700'
               }`}
             >
-              {status}
+              {STATUS_LABELS[status] || status}
             </span>
           </div>
         </div>
 
-        {/* Additional Equity Context Badges */}
+        {/* Weekends and late shifts */}
         <div className="px-6 py-2 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-4 text-slate-600">
             <div className="flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-              <span>Weekend Duties: <strong className="font-mono text-slate-800">{weekendShiftsCount}</strong></span>
+              <Calendar className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+              <span>Weekend shifts: <strong className="font-mono text-slate-800">{weekendShiftsCount}</strong></span>
             </div>
             <div className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <span>Late Shifts (21:00 finish): <strong className="font-mono text-slate-800">{lateDutiesCount}</strong></span>
+              <Clock className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
+              <span>Late shifts (ending 21:00): <strong className="font-mono text-slate-800">{lateDutiesCount}</strong></span>
             </div>
           </div>
 
@@ -284,7 +303,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              All Days ({timeline.length})
+              All days ({timeline.length})
             </button>
             <button
               type="button"
@@ -295,7 +314,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Duties Only ({totalShiftsCount})
+              Shifts only ({totalShiftsCount})
             </button>
             <button
               type="button"
@@ -306,7 +325,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Leaves Only
+              Leave only
             </button>
             <button
               type="button"
@@ -330,10 +349,10 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                 <th className="py-2 px-4">Date</th>
                 <th className="py-2 px-3">Day</th>
                 <th className="py-2 px-3">Type</th>
-                <th className="py-2 px-3">Duty / Leave Window</th>
-                <th className="py-2 px-3">Assigned Clinical Context</th>
+                <th className="py-2 px-3">Shift or leave</th>
+                <th className="py-2 px-3">Doctor or job</th>
                 <th className="py-2 px-3">Hours</th>
-                <th className="py-2 px-3">Source</th>
+                <th className="py-2 px-3">How it was set</th>
                 <th className="py-2 px-4 text-right">Notes</th>
               </tr>
             </thead>
@@ -368,16 +387,16 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                     <td className="py-2 px-3">
                       {isDuty && (
                         <span className="inline-flex items-center gap-1 text-indigo-700 font-bold text-[10px] bg-indigo-50 px-1.5 py-0.5 rounded">
-                          DUTY
+                          Shift
                         </span>
                       )}
                       {isLeave && (
                         <span className="inline-flex items-center gap-1 text-amber-800 font-bold text-[10px] bg-amber-50 px-1.5 py-0.5 rounded">
-                          LEAVE
+                          Leave
                         </span>
                       )}
                       {!isDuty && !isLeave && (
-                        <span className="text-slate-400 text-[10px]">REST / OFF</span>
+                        <span className="text-slate-400 text-[10px]">Day off</span>
                       )}
                     </td>
 
@@ -421,12 +440,12 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                       )}
                       {item.clinicalRole && (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-bold">
-                          🩸 {item.clinicalRole.name}
+                          <span aria-hidden="true">🩸</span> {item.clinicalRole.name}
                         </span>
                       )}
                       {item.specialty && (
                         <span className="text-slate-600 font-sans text-[11px]">
-                          {item.specialty.name} Pool
+                          {item.specialty.name}
                         </span>
                       )}
                       {!item.doctor && !item.clinicalRole && !item.specialty && (
@@ -441,7 +460,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                             isDuty ? 'text-indigo-600' : 'text-amber-600'
                           }
                         >
-                          +{item.hoursEarned}h
+                          +{fmtHours(item.hoursEarned)}
                         </span>
                       ) : (
                         <span className="text-slate-300">0h</span>
@@ -451,10 +470,10 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                     <td className="py-2 px-3 text-[10px] text-slate-500">
                       {item.assignment?.locked ? (
                         <span className="inline-flex items-center gap-0.5 text-amber-700 font-bold">
-                          <Lock className="w-2.5 h-2.5" /> LOCK
+                          <Lock className="w-2.5 h-2.5" aria-hidden="true" /> Pinned day
                         </span>
                       ) : (
-                        <span>{item.source}</span>
+                        <span>{item.source ? SOURCE_LABELS[item.source] || item.source : ''}</span>
                       )}
                     </td>
 
@@ -472,7 +491,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
         {quotas && quotas.length > 0 && (
           <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-[11px]">
             <div className="flex items-center gap-3">
-              <span className="font-semibold text-slate-700">Annual Quota Balances:</span>
+              <span className="font-semibold text-slate-700">Leave left this year:</span>
               {quotas
                 .filter((q) => q.annualQuotaHours > 0)
                 .map((q) => (
@@ -482,7 +501,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                   >
                     <span className="font-bold">{q.leaveTypeName}:</span>
                     <span>
-                      {q.usedHours}h used / {q.annualQuotaHours}h ({q.remainingHours}h remaining)
+                      {fmtHours(q.usedHours)} used of {fmtHours(q.annualQuotaHours)} ({fmtHours(q.remainingHours)} left)
                     </span>
                   </span>
                 ))}
@@ -493,7 +512,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
               onClick={onClose}
               className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-medium transition-colors cursor-pointer"
             >
-              Close Timesheet
+              Close
             </button>
           </div>
         )}
