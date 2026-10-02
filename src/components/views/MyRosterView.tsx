@@ -342,7 +342,8 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
         )}
 
         <footer className="pt-2 text-xs text-slate-500">
-          Updated {new Date(state.doc.updatedAt).toLocaleString()}. Questions about a shift? Ask your planner.
+          {!Number.isNaN(Date.parse(state.doc.updatedAt)) && <>Updated {new Date(state.doc.updatedAt).toLocaleString()}. </>}
+          Questions about a shift? Ask your planner.
         </footer>
       </div>
     </main>
