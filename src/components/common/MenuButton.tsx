@@ -82,6 +82,10 @@ export const MenuButton: React.FC<MenuButtonProps> = ({ label, ariaLabel, items,
           if (e.key === 'ArrowDown' && !open) {
             e.preventDefault();
             setOpen(true);
+          } else if (e.key === 'Escape' && open) {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(false);
           }
         }}
         className={className}
@@ -104,6 +108,12 @@ export const MenuButton: React.FC<MenuButtonProps> = ({ label, ariaLabel, items,
             } else if (e.key === 'ArrowUp') {
               e.preventDefault();
               move(index < 0 ? 0 : index, -1);
+            } else if (e.key === 'Home') {
+              e.preventDefault();
+              move(-1, 1);
+            } else if (e.key === 'End') {
+              e.preventDefault();
+              move(items.length, -1);
             } else if (e.key === 'Tab') {
               setOpen(false);
             }

@@ -156,7 +156,7 @@ export const WarningsSheet: React.FC<WarningsSheetProps> = ({
 
                   <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500">
                     {finding.date && <span>Date: {formatDate(finding.date)}</span>}
-                    {finding.hour && <span>Time: {finding.hour}</span>}
+                    {finding.hour && !finding.message.includes(finding.hour) && <span>Time: {finding.hour}</span>}
                     {finding.affectedNurseIds.length > 0 && (
                       <span>
                         {finding.affectedNurseIds.length} nurse{finding.affectedNurseIds.length === 1 ? '' : 's'}

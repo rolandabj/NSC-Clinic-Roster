@@ -1233,7 +1233,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       if (targetBlockIdx !== -1) setSelectedBlockIndex(targetBlockIdx);
     }
     setFocusRequest({ nurseId, date, nonce: Date.now() });
+    // On a phone the panel covers the grid, so it closes to show the cell.
+    if (typeof window !== 'undefined' && !window.matchMedia('(min-width: 640px)').matches) setIsProblemsOpen(false);
   };
+
+  // A handled "Show in grid" must not run again when the Roster tab is opened later.
+  useEffect(() => {
+    if (activeTab !== 'roster') setFocusRequest(undefined);
+  }, [activeTab]);
 
   const hasPublished = versions.some((v) => v.isPublished && v.scheduleId === activeSchedule?.id);
   const openPublish = (mode: 'PUBLISH' | 'CHANGE') => {
@@ -1297,7 +1304,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       )}
 
       {/* Toolbar: the roster, save status, and the few main actions (the rest under More) */}
-      <div className="bg-white border-b border-slate-200 px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 z-20">
+      <div className="relative bg-white border-b border-slate-200 px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 z-[45]">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           <button
             onClick={() => {
@@ -1562,7 +1569,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       )}
 
       {/* Main Viewport: Swappable Workbook Sheets */}
-      <div className="flex-1 overflow-hidden relative flex isolate">
+      <div className="flex-1 overflow-hidden relative flex">
         <div className="flex-1 min-w-0 overflow-hidden relative">
         {!activeSchedule && isFirstLoad && !loadError ? (
           <PageLoading label="Loading the roster…" />

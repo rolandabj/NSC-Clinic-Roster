@@ -127,6 +127,8 @@ export const QuickCellPopup: React.FC<QuickCellPopupProps> = ({
       if (e.key !== 'Escape') return;
       // A dialog on top (a confirmation) handles its own Escape.
       if (document.querySelector('[aria-modal="true"]')) return;
+      // Only the popup closes (not full screen as well).
+      e.stopPropagation();
       const inside = !!ref.current?.contains(document.activeElement);
       onCloseRef.current();
       if (inside) findCell(cellKey)?.focus({ preventScroll: true });
@@ -135,13 +137,13 @@ export const QuickCellPopup: React.FC<QuickCellPopupProps> = ({
     document.addEventListener('touchstart', onPointerDown, true);
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', onResize);
-    window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
     return () => {
       document.removeEventListener('mousedown', onPointerDown, true);
       document.removeEventListener('touchstart', onPointerDown, true);
       window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onResize);
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey, true);
     };
   }, [cellKey]);
 

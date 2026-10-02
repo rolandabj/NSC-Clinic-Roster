@@ -134,6 +134,9 @@ const SOURCE_WORDS: Record<string, string> = {
   LOCK: 'Pinned by hand',
 };
 
+/** A doctor's name with "Dr" in front, unless it already has it. */
+const withDr = (name: string) => (/^dr\.?\s/i.test(name) ? name : `Dr ${name}`);
+
 const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
@@ -271,6 +274,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   });
 
   // Group nurses if requested
+  // The selected cell may be on days not shown now (after paging); then the first cell takes Tab.
+  const selectedCellShown =
+    !!selectedCell && blockDates.includes(selectedCell.date) && nurses.some((n) => n.id === selectedCell.nurseId);
   const displayNurses = [...nurses].sort((a, b) => {
     if (groupBy === 'SENIORITY') {
       const rankA = seniorityMap.get(a.seniorityLevelId)?.rank || 99;
@@ -345,7 +351,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
         category: 'LEAVE',
         leaveTypeId: leaveTypes.find((l) => l.acronym === 'RO')?.id || leaveTypes[0]?.id || '',
         allowOverwrite: false,
-        note: existingLock.note || 'Pinned Day Off',
+        note: existingLock.note || 'Pinned day off',
         dutyId: dutyWindows[0]?.id || '',
         kind: 'DOCTOR',
         targetRefId: doctors[0]?.id || '',
@@ -373,7 +379,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       dutyId: dutyWindows[0]?.id || '',
       kind: isTargetExclusiveNC ? 'CLINICAL_ROLE' : 'DOCTOR',
       targetRefId: isTargetExclusiveNC ? ncRole?.id || roles[0]?.id || '' : doctors[0]?.id || '',
-      note: isTargetExclusiveNC ? 'Dedicated Nurse Clinic (no doctor pairing)' : '',
+      note: isTargetExclusiveNC ? 'Nurse Clinic only (not with a doctor)' : '',
       allowOverwrite: false, // Default to kept (pinned)
       leaveTypeId: leaveTypes.find((l) => l.acronym === 'BL')?.id || leaveTypes[0]?.id || '',
       leaveHours,
@@ -969,7 +975,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     const target = { nurseId, date };
     const pick = (choice: Partial<CellChoice>) => () => {
       closePopupToCell();
-      void saveCellChoice(target, { ...base, note: '', leaveHours: '', ...choice });
+      // A quick choice is a hand change, not a pinned day (pinning is in More options),
+      // so a wrong tap can be changed with another tap.
+      void saveCellChoice(target, { ...base, note: '', leaveHours: '', allowOverwrite: true, ...choice });
     };
     const shiftWords = (d?: DutyWindow) => (d ? `${d.acronym} shift ${d.startTime} to ${d.endTime}` : '');
 
@@ -1145,7 +1153,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               className="px-1.5 py-1 border border-slate-200 rounded bg-white text-xs"
             >
               <option value="NONE">None</option>
-              <option value="SENIORITY">By Seniority</option>
+              <option value="SENIORITY">By seniority</option>
             </select>
           </div>
 
@@ -1171,7 +1179,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
                 zoomLevel === 75 ? 'bg-indigo-600 text-white font-bold' : 'text-slate-600'
               }`}
-              title="75% Zoom (compact fit full month)"
+              title="Smaller, to fit more days"
             >
               75%
             </button>
@@ -1222,12 +1230,12 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
               {isExpandedView ? (
                 <>
                   <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Collapse View</span>
+                  <span>Leave full screen</span>
                 </>
               ) : (
                 <>
                   <Maximize2 className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-                  <span>Expand View</span>
+                  <span>Full screen</span>
                 </>
               )}
             </button>
@@ -1245,7 +1253,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                 <th
                   className="sticky left-0 bg-slate-100 z-40 border-r-2 border-slate-300 py-1 px-3 text-left font-semibold text-slate-700 text-xs shadow-xs"
                 >
-                  Clinical Staff Roster
+                  Nurses
                 </th>
                 <th
                   colSpan={blockDates.length}
@@ -1402,7 +1410,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                       const isSelected =
                         selectedCell?.nurseId === nurse.id && selectedCell?.date === dateStr;
                       // Without a selection the first cell is the grid's way in for the Tab key.
-                      const isTabStop = selectedCell ? isSelected : nurseIndex === 0 && dateIndex === 0;
+                      const isTabStop = selectedCellShown ? isSelected : nurseIndex === 0 && dateIndex === 0;
                       const problemMessages = cellViolationMessages.get(`${nurse.id}_${dateStr}`) || [];
                       const hasViolation = highlightViolations && problemMessages.length > 0;
                       const isFlashing = flashCellKey === cellKey;
@@ -1424,7 +1432,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                       if (asgn?.doctorId) {
                         const d = doctorMap.get(asgn.doctorId);
-                        doctorName = d ? d.fullName.replace('Dr. ', '') : '';
+                        doctorName = d ? d.fullName.replace(/^dr\.?\s+/i, '') : '';
                       } else if (asgn?.clinicalRoleId) {
                         const r = roleMap.get(asgn.clinicalRoleId);
                         if (asgn.clinicalRoleId === 'role-float') {
@@ -1490,7 +1498,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                           if (!matchesDoc && !matchesSpec) {
                             isAllocationMismatch = true;
-                            mismatchReason = `Dr. ${docObj?.fullName.replace('Dr. ', '') || 'Doctor'} is not one of ${nurse.fullName}'s usual doctors or departments.`;
+                            mismatchReason = `${docObj ? withDr(docObj.fullName) : 'This doctor'} is not one of ${nurse.fullName}'s usual doctors or departments.`;
                           }
                         } else if (asgn.kind === 'SPECIALTY' && asgn.specialtyId) {
                           const specObj = specialtyMap.get(asgn.specialtyId);
@@ -1537,7 +1545,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                         : asgn?.clinicalRoleId
                         ? `Clinic task: ${roleMap.get(asgn.clinicalRoleId)?.name || doctorName}`
                         : asgn?.doctorId
-                        ? `With Dr. ${doctorName}${
+                        ? `With Dr ${doctorName}${
                             docPref
                               ? ` (usual doctor, choice ${docPref.rank})`
                               : specPref
@@ -2145,7 +2153,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                               if (!matchesDoc && !matchesSpec) {
                                 isMismatch = true;
-                                warnText = `Dr. ${selDoc?.fullName.replace('Dr. ', '') || 'Doctor'} is not one of ${activeNurse?.fullName}'s usual doctors or departments. This will show as a problem.`;
+                                warnText = `${selDoc ? withDr(selDoc.fullName) : 'This doctor'} is not one of ${activeNurse?.fullName}'s usual doctors or departments. This will show as a problem.`;
                               }
                             } else if (editorKind === 'SPECIALTY') {
                               const selSpec = specialties.find((s) => s.id === editorTargetRefId);
@@ -2249,7 +2257,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                       const tags = nurseSpecificPrefs.map((p) => {
                         if (p.kind === 'DOCTOR') {
                           const doc = doctorMap.get(p.refId);
-                          return `Dr. ${doc ? doc.fullName.replace('Dr. ', '') : 'Doctor'} (#${p.rank})`;
+                          return `${doc ? withDr(doc.fullName) : 'A doctor'} (#${p.rank})`;
                         } else {
                           const sp = specialtyMap.get(p.refId);
                           return `${sp ? sp.name : 'Specialty'} (#${p.rank})`;
@@ -2373,14 +2381,14 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             {/* Note */}
             <div>
               <label className="block font-medium text-slate-700 mb-1">
-                Note (Optional)
+                Note (optional)
               </label>
               <input
                 type="text"
                 value={editorNote}
                 onChange={(e) => setEditorNote(e.target.value)}
-                aria-label="Note (Optional)"
-                placeholder="e.g. Birthday celebration, swapped shift, or specific doctor assignment"
+                aria-label="Note (optional)"
+                placeholder="For example: swapped with Fatma"
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
               />
             </div>

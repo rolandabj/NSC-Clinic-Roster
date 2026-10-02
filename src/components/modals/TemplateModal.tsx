@@ -209,11 +209,18 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
       cur.setUTCDate(cur.getUTCDate() + 1);
     }
 
+    // Filled shifts that go: on a day that gets a new shift they are replaced,
+    // otherwise they are only removed.
+    const addedKeys = new Set(added.map((a) => `${a.nurseId}_${a.date}`));
+    const dropped = assignments.filter((a) => !kept.includes(a));
+    const replacedOnly = dropped.filter((a) => addedKeys.has(`${a.nurseId}_${a.date}`)).length;
     return {
       result: [...kept, ...added],
       added: added.length,
       nurseCount: new Set(added.map((a) => a.nurseId)).size,
       replaced,
+      replacedOnly,
+      removedOnly: dropped.length - replacedOnly,
     };
   };
 
@@ -224,10 +231,10 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
       return Promise.resolve(false);
     }
     const fill = `This will fill ${plan.added} shift${plan.added === 1 ? '' : 's'} for ${plan.nurseCount} nurse${plan.nurseCount === 1 ? '' : 's'}`;
+    const plural = (n: number) => `${n} shift${n === 1 ? '' : 's'}`;
     const replace =
-      plan.replaced > 0
-        ? ` and replace ${plan.replaced} existing shift${plan.replaced === 1 ? '' : 's'}`
-        : '';
+      (plan.replacedOnly > 0 ? `, replacing ${plural(plan.replacedOnly)} filled in before` : '') +
+      (plan.removedOnly > 0 ? `, and remove ${plural(plan.removedOnly)} filled in before on days it leaves empty` : '');
     return confirmDialog({
       title,
       message: `${fill}${replace}. Pinned days, leave and shifts you set by hand are kept.`,

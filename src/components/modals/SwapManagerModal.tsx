@@ -127,18 +127,20 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
   const validation = useMemo(() => {
     const issuesA: string[] = [];
     const issuesB: string[] = [];
+    // Shown but not blocking (rules set to "followed when possible").
+    const notes: string[] = [];
 
     if (!selectedAsgnA || !selectedAsgnB) {
-      return { isValid: false, issuesA: ['Choose a shift for both nurses'], issuesB: [] };
+      return { isValid: false, issuesA: ['Choose a shift for both nurses'], issuesB: [], notes: [] };
     }
 
     if (nurseAId === nurseBId) {
-      return { isValid: false, issuesA: ['Choose two different nurses'], issuesB: [] };
+      return { isValid: false, issuesA: ['Choose two different nurses'], issuesB: [], notes: [] };
     }
 
     const nurseA = nurseMap.get(nurseAId);
     const nurseB = nurseMap.get(nurseBId);
-    if (!nurseA || !nurseB) return { isValid: false, issuesA: ['One of these nurses could not be found'], issuesB: [] };
+    if (!nurseA || !nurseB) return { isValid: false, issuesA: ['One of these nurses could not be found'], issuesB: [], notes: [] };
 
     // Pinned shifts cannot be given away
     const isPinned = (asgn: Assignment) =>
@@ -169,13 +171,15 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
       };
       const hasSenior = (list: Assignment[], date: string) => list.some((a) => a.date === date && isSenior(a.nurseId));
       const lostSenior = (date: string) => hasSenior(assignments, date) && !hasSenior(afterSwap, date);
+      // A rule set to "followed when possible" only warns, as in the roster check.
+      const blocking = seniorRule?.severity !== 'SOFT';
       if (lostSenior(selectedAsgnA.date)) {
-        issuesA.push(
+        (blocking ? issuesA : notes).push(
           `After the swap there would be no senior nurse on duty on ${formatDate(selectedAsgnA.date)}. Each day needs one senior nurse.`
         );
       }
       if (selectedAsgnB.date !== selectedAsgnA.date && lostSenior(selectedAsgnB.date)) {
-        issuesB.push(
+        (blocking ? issuesB : notes).push(
           `After the swap there would be no senior nurse on duty on ${formatDate(selectedAsgnB.date)}. Each day needs one senior nurse.`
         );
       }
@@ -185,6 +189,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
       isValid: issuesA.length === 0 && issuesB.length === 0,
       issuesA,
       issuesB,
+      notes,
     };
   }, [selectedAsgnA, selectedAsgnB, nurseAId, nurseBId, nurseMap, seniorityMap, locks, leaveEntries, assignments, nurses, dutyWindows, roles, rules]);
 
@@ -477,6 +482,14 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             />
           </div>
         </div>
+
+        {validation.notes.length > 0 && (
+          <div role="status" className="mx-4 mb-3 p-2.5 rounded border border-amber-200 bg-amber-50 text-amber-900 text-xs space-y-1">
+            {validation.notes.map((msg, i) => (
+              <p key={i}>{msg} You can still swap, because this rule is followed when possible.</p>
+            ))}
+          </div>
+        )}
 
         {/* Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
