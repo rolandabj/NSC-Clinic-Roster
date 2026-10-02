@@ -8,7 +8,11 @@
 import { CollectionName, EntityForCollection } from '../../types';
 
 export type Unsubscribe = () => void;
-export type SubscribeCallback<T> = (items: T[]) => void;
+export type SubscribeCallback<T> = (
+  items: T[],
+  /** fromThisDevice: the change is this browser's own write, not yet saved on the server. */
+  info?: { fromThisDevice: boolean }
+) => void;
 
 export interface IRepository {
   /**
@@ -77,10 +81,12 @@ export interface IRepository {
   ): Promise<void>;
 
   /**
-   * Subscribe to real-time changes in a collection
+   * Subscribe to real-time changes in a collection, optionally only the
+   * documents matching one field equality filter.
    */
   subscribe<T extends CollectionName>(
     collection: T,
-    callback: SubscribeCallback<EntityForCollection<T>>
+    callback: SubscribeCallback<EntityForCollection<T>>,
+    filter?: { field: string; operator: '=='; value: any }
   ): Unsubscribe;
 }

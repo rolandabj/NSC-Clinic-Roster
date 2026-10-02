@@ -12,6 +12,7 @@
 
 import {
   Assignment,
+  AvailabilityRequest,
   ClinicalRole,
   Doctor,
   DoctorSession,
@@ -46,6 +47,8 @@ export interface ExplainDayInput {
   doctors?: Doctor[];
   /** Shifts from the roster just before this one, for rest and days in a row at its start. */
   priorAssignments?: Assignment[];
+  /** The nurses' requests for this roster (a day off or a shift). Wishes only: they never block a shift. */
+  availabilityRequests?: AvailabilityRequest[];
 }
 
 export interface ExplainNurseDayInput extends ExplainDayInput {
@@ -86,6 +89,71 @@ export interface NurseDayExplanation {
   /** worked = total hours now, goal = her hours goal, afterShift = total after the shortest possible shift. */
   hours: { worked: number; goal: number; afterShift?: number };
   isSenior: boolean;
+  /** She asked for this day off, or has leave waiting for approval on it (listed after the other free nurses). */
+  askedOff?: boolean;
+}
+
+/** Leave a nurse asked for that is not decided yet (the same test as the requests page). */
+export function isPendingLeave(le: LeaveEntry): boolean {
+  return le.status === 'PENDING' || (le.status === undefined && le.approved === false);
+}
+
+/** Leave waiting for approval on that day, if any. */
+export function pendingLeaveOn(leaveEntries: LeaveEntry[], nurseId: string, date: string): LeaveEntry | undefined {
+  return leaveEntries.find((le) => le.nurseId === nurseId && isPendingLeave(le) && date >= le.startDate && date <= le.endDate);
+}
+
+/**
+ * The nurse's request for that day that still counts: a day off or a shift,
+ * approved or waiting for approval (refused ones are left out). An approved one
+ * comes first, then the newest.
+ */
+export function requestOn(
+  requests: AvailabilityRequest[] | undefined,
+  nurseId: string,
+  date: string
+): AvailabilityRequest | undefined {
+  const list = (requests || []).filter(
+    (r) => r.nurseId === nurseId && r.date === date && r.status !== 'REJECTED' && (!r.available || !!r.preferredDutyWindowId)
+  );
+  const rank = (r: AvailabilityRequest) => (r.status === 'APPROVED' ? 0 : 1);
+  return list.sort((a, b) => rank(a) - rank(b) || (b.submittedAt || '').localeCompare(a.submittedAt || ''))[0];
+}
+
+export interface RequestWords {
+  /** e.g. "Asked for the Late shift (waiting for approval), has Early". */
+  text: string;
+  /** The day does not follow the request: a shift on a day off wish, or another shift than the one asked for. */
+  mismatch: boolean;
+  dayOff: boolean;
+  pending: boolean;
+}
+
+/**
+ * A request in plain words, for the cell the request is on. `givenDutyId` is
+ * the shift the nurse has that day (undefined when she has none).
+ */
+export function describeRequest(req: AvailabilityRequest, dutyWindows: DutyWindow[], givenDutyId?: string): RequestWords {
+  const pending = req.status === 'PENDING';
+  const wait = pending ? ' (waiting for approval)' : '';
+  const given = givenDutyId ? dutyWindows.find((d) => d.id === givenDutyId) : undefined;
+  const givenName = given?.name || 'another shift';
+  if (!req.available) {
+    return {
+      text: `Asked for this day off${wait}${givenDutyId ? `, has ${givenName}` : ''}`,
+      mismatch: !!givenDutyId,
+      dayOff: true,
+      pending,
+    };
+  }
+  const wanted = dutyWindows.find((d) => d.id === req.preferredDutyWindowId);
+  const mismatch = !!givenDutyId && givenDutyId !== req.preferredDutyWindowId;
+  return {
+    text: `Asked for ${wanted ? `the ${wanted.name} shift` : 'a set shift'}${wait}${mismatch ? `, has ${givenName}` : ''}`,
+    mismatch,
+    dayOff: false,
+    pending,
+  };
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -167,6 +235,21 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
     hours: { worked, goal },
     isSenior,
   };
+
+  // Requests and leave waiting for approval are wishes: noted, never blocking.
+  const request = requestOn(input.availabilityRequests, nurseId, date);
+  const wantedDuty = request?.available && request.preferredDutyWindowId ? dutyMap.get(request.preferredDutyWindowId) : undefined;
+  const waitingLeave = pendingLeaveOn(leaveEntries, nurseId, date);
+  const wishNotes: string[] = [];
+  if (request && !request.available) {
+    wishNotes.push(request.status === 'PENDING' ? 'Asked for this day off (waiting for approval).' : 'Asked for this day off.');
+  }
+  if (waitingLeave) {
+    const waitingName = leaveTypes.find((t) => t.id === waitingLeave.leaveTypeId)?.name;
+    wishNotes.push(waitingName ? `Has leave waiting for approval on this day (${waitingName}).` : 'Has leave waiting for approval on this day.');
+  }
+  base.notes = wishNotes;
+  base.askedOff = (!!request && !request.available) || !!waitingLeave;
   if (assignments.some((a) => a.nurseId === nurseId && a.date === date)) return base;
 
   const prior = input.priorAssignments || [];
@@ -256,7 +339,18 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
     return { ...base, status: 'BLOCKED', reasons: unique(blocked.flatMap((b) => b.reasons)), blockedShifts: blocked };
   }
 
-  const notes: string[] = [];
+  // The shift she asked for comes first.
+  if (wantedDuty) {
+    const i = possible.findIndex((p) => p.dutyWindowId === wantedDuty.id);
+    if (i > 0) possible.unshift(...possible.splice(i, 1));
+  }
+
+  const notes: string[] = [...wishNotes];
+  if (wantedDuty) {
+    const wait = request?.status === 'PENDING' ? ' (waiting for approval)' : '';
+    const possibleHere = possible.some((p) => p.dutyWindowId === wantedDuty.id);
+    notes.push(`Asked for the ${wantedDuty.name} shift${wait}${possibleHere ? '' : ', but it is not possible this day'}.`);
+  }
   const afterShift = Math.min(...possible.map((p) => p.hoursAfter));
   if (goal > 0 && worked >= goal) {
     notes.push(`Already at their hours goal (${round1(worked)} / ${goal} h); this shift would make ${afterShift} h.`);
@@ -280,7 +374,8 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
 
 /**
  * Every active nurse who is not working on the day: free nurses first (the most
- * hours short of their goal first), then nurses who can't work, by name.
+ * hours short of their goal first, those who asked for the day off last), then
+ * nurses who can't work, by name.
  */
 export function explainDay(date: string, input: ExplainDayInput): NurseDayExplanation[] {
   const results = input.nurses
@@ -290,6 +385,8 @@ export function explainDay(date: string, input: ExplainDayInput): NurseDayExplan
   const short = (r: NurseDayExplanation) => r.hours.goal - r.hours.worked;
   return results.sort((a, b) => {
     if (a.status !== b.status) return a.status === 'AVAILABLE' ? -1 : 1;
+    // Nurses who asked for the day off come after the other free nurses.
+    if (a.status === 'AVAILABLE' && !!a.askedOff !== !!b.askedOff) return a.askedOff ? 1 : -1;
     if (a.status === 'AVAILABLE' && short(a) !== short(b)) return short(b) - short(a);
     return a.nurseName.localeCompare(b.nurseName);
   });

@@ -112,6 +112,32 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------------
+    // A nurse's private page: the document id is the nurse's random token, so
+    // anyone holding the link reads that one page (never a list). It holds only
+    // that nurse's own published shifts. The tokens themselves are for editors.
+    // ---------------------------------------------------------------------
+    match /nurseRosters/{token} {
+      allow get: if resource.data.revoked != true || isEditor();
+      allow list: if false;
+      allow write: if isEditor();
+    }
+    match /nurseLinks/{nurseId} {
+      allow read, write: if isEditor();
+    }
+
+    // ---------------------------------------------------------------------
+    // Who has which roster open: approved users read all, and write only
+    // their own record (the document id is their user id).
+    // ---------------------------------------------------------------------
+    match /presence/{uid} {
+      allow read: if isApproved();
+      allow create, update: if isApproved() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['id', 'name', 'email', 'scheduleId', 'at'])
+        && request.resource.data.id == uid;
+      allow delete: if isApproved() && request.auth.uid == uid;
+    }
+
+    // ---------------------------------------------------------------------
     // Staff self service: an approved user linked to a nurse profile may file
     // and cancel their own PENDING leave and availability requests. Managers
     // and editors decide them.
@@ -167,7 +193,8 @@ service cloud.firestore {
 
     // Collections with their own rules above; the catch all below never applies to them.
     function SPECIAL_COLLECTIONS() {
-      return ['userAccess', 'acknowledgments', 'emailLog', 'audit', 'publicRosters', 'leaveEntries', 'availabilityRequests', 'locks'];
+      return ['userAccess', 'acknowledgments', 'emailLog', 'audit', 'publicRosters', 'leaveEntries', 'availabilityRequests', 'locks',
+        'nurseRosters', 'nurseLinks', 'presence'];
     }
 
     // ---------------------------------------------------------------------

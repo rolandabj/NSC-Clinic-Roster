@@ -12,6 +12,8 @@
  * 3. RULE_VIOLATION: H1 (Senior on duty), H2 (Consecutive days <= 6), H3 (11h rest), H6 (Phlebotomy capability & quota), S1 (Consecutive late ends >= 21:00).
  * 4. HOURS_IMBALANCE: Nurse pacing < 75% or > 105%.
  * 5. DATA_ISSUE: Missing Gmail, unassigned doctor sessions, duplicate duties on same day, leave overlapping assignments.
+ *    Also notes (INFO, never blocking) where the roster does not follow a nurse's request
+ *    (a day off or a shift she asked for) or has a shift on leave waiting for approval.
  */
 
 import { summarizeNurseHours } from '../reports/hoursAccounting';
@@ -30,12 +32,14 @@ import {
   WorkingHoursPeriod,
   Specialty,
   Doctor,
+  AvailabilityRequest,
 } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../engine/nurseClinicUtils';
 import { resolveFullTimeTarget, leaveCreditInRange } from '../hours/hoursPolicy';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
 import { resolveRule, LATE_DUTY_RULE_WORDS } from '../engine/SchedulingEngine';
+import { pendingLeaveOn, requestOn } from '../engine/explainCell';
 import {
   ClinicSetup,
   bloodCollectionRole,
@@ -106,7 +110,9 @@ export class ScheduleValidator {
     specialties: Specialty[] = [],
     doctors: Doctor[] = [],
     leaveTypes: LeaveType[] = [],
-    clinicSetup?: ClinicSetup
+    clinicSetup?: ClinicSetup,
+    /** The nurses' requests (a day off or a shift): only noted (INFO) when the roster does not follow them. */
+    availabilityRequests: AvailabilityRequest[] = []
   ): ValidationReport {
     const findings: ValidationFinding[] = [];
     const clinic = resolveClinicSetup(clinicSetup);
@@ -604,6 +610,53 @@ export class ScheduleValidator {
             cellRefs: [{ nurseId: nurse.id, date }],
             date,
           });
+        }
+
+        // Wishes (INFO, never blocking): leave waiting for approval and the nurse's requests.
+        const waitingLeave = !onLeave ? pendingLeaveOn(leaveEntries, nurse.id, date) : undefined;
+        if (waitingLeave && asgnsToday.length > 0) {
+          const leaveName = leaveTypes.find((t) => t.id === waitingLeave.leaveTypeId)?.name || 'leave';
+          findings.push({
+            id: `pending-leave-shift-${nurse.id}-${date}`,
+            category: 'DATA_ISSUE',
+            severity: 'INFO',
+            message: `${nurse.fullName} has ${leaveName} waiting for approval on ${formatDate(date)} but has a shift.`,
+            affectedNurseIds: [nurse.id],
+            cellRefs: [{ nurseId: nurse.id, date }],
+            date,
+          });
+        }
+        const request = requestOn(availabilityRequests, nurse.id, date);
+        const wait = request?.status === 'PENDING' ? ' (waiting for approval)' : '';
+        // An approved day off is already a pinned day off (reported above when broken).
+        if (request && !request.available && asgnsToday.length > 0 && !(dayOffLock && request.status === 'APPROVED')) {
+          findings.push({
+            id: `request-dayoff-shift-${nurse.id}-${date}`,
+            category: 'DATA_ISSUE',
+            severity: 'INFO',
+            message: `${nurse.fullName} asked for ${formatDate(date)} off${wait} but has a shift.`,
+            affectedNurseIds: [nurse.id],
+            cellRefs: [{ nurseId: nurse.id, date }],
+            date,
+          });
+        }
+        if (request?.available && request.preferredDutyWindowId && !onLeave && !dayOffLock) {
+          const wanted = dutyMap.get(request.preferredDutyWindowId);
+          const givenDutyId = asgnsToday[0]?.dutyWindowId;
+          if (wanted && givenDutyId !== wanted.id) {
+            const given = givenDutyId ? dutyMap.get(givenDutyId) : undefined;
+            findings.push({
+              id: `request-shift-${nurse.id}-${date}`,
+              category: 'DATA_ISSUE',
+              severity: 'INFO',
+              message: `${nurse.fullName} asked for the ${wanted.name} shift on ${formatDate(date)}${wait} but has ${
+                givenDutyId ? (given ? `the ${given.name} shift` : 'another shift') : 'no shift'
+              }.`,
+              affectedNurseIds: [nurse.id],
+              cellRefs: [{ nurseId: nurse.id, date }],
+              date,
+            });
+          }
         }
 
         if (asgnsToday.length === 1) {
