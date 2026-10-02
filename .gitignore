@@ -9,3 +9,4 @@ coverage/
 
 # Runtime data written by the server (never commit staff data)
 data/db/
+graphify-out/
