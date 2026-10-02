@@ -144,9 +144,13 @@ interface NurseDayState {
   totalDutyHoursEarned: number;
   leaveHoursCredited?: number;
   initialLockedHours?: number;
-  weekendsWorked: number;
+  // Fairness counters. Each starts from this roster's kept shifts plus a small
+  // head start from earlier rosters this year (see yearToDateSeeds), so they
+  // can be below zero.
+  weekendsWorked: number; // weekend days
   holidaysWorked: number;
   nurseClinicCount: number;
+  lateShiftsWorked: number; // shifts ending at or after the late time
   lastDutyEndTime?: string; // 'YYYY-MM-DD HH:mm'
 }
 

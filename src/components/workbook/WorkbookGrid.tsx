@@ -55,6 +55,7 @@ import {
   AssignmentKind,
   AssignmentSource,
   WorkingHoursPeriod,
+  AvailabilityRequest,
 } from '../../types';
 import { ValidationReport, ValidationFinding } from '../../services/validation/ScheduleValidator';
 import { calculateDutyDurationHours, summarizeNurseHours, NurseHoursSummary } from '../../services/reports/hoursAccounting';
@@ -63,8 +64,8 @@ import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { confirmDialog, notify } from '../common/dialogs';
 import { coveredMinutes, doctorSessionsOn, nurseClinicRoleOf, toMinutes } from '../../services/engine/clinicModel';
-import { QuickCellPopup, QuickWorkOption, QuickLeaveOption, QuickDayNote } from './grid/QuickCellPopup';
-import { explainNurseDay } from '../../services/engine/explainCell';
+import { QuickCellPopup, QuickWorkOption, QuickLeaveOption, QuickDayNote, QuickWish } from './grid/QuickCellPopup';
+import { describeRequest, explainNurseDay, pendingLeaveOn, requestOn, RequestWords } from '../../services/engine/explainCell';
 
 interface WorkbookGridProps {
   schedule: Schedule;
@@ -106,6 +107,8 @@ interface WorkbookGridProps {
    * sure the right days are shown first; the grid waits a few frames for the cell.
    */
   focusRequest?: { nurseId: string; date: string; nonce: number };
+  /** The nurses' requests for this roster (a day off or a shift), shown as small marks in the cells. */
+  availabilityRequests?: AvailabilityRequest[];
 }
 
 /** Everything one cell edit needs, as the big editor collects it. */
@@ -175,6 +178,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   isExpandedView = false,
   onToggleExpandView,
   focusRequest,
+  availabilityRequests = [],
 }) => {
   // Navigation & Zoom (Supports 75% compact fit, 90%, 100%, 115%)
   const [zoomLevel, setZoomLevel] = useState<75 | 90 | 100 | 115>(100);
@@ -272,6 +276,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   // Problem messages per cell (from the validation findings)
   const cellViolationMessages = new Map<string, string[]>();
   validationReport.findings.forEach((f) => {
+    // Notes (requests not followed, leave waiting for approval) have their own marks, not the red one.
+    if (f.severity === 'INFO') return;
     f.cellRefs.forEach((r) => {
       const k = `${r.nurseId}_${r.date}`;
       const list = cellViolationMessages.get(k) || [];
@@ -1096,6 +1102,25 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     return { work, leave: leaveOpts };
   };
 
+  /**
+   * A nurse's wishes for a day: leave waiting for approval (unless approved leave
+   * is already there) and her request (a day off or a shift), in plain words.
+   */
+  const wishesOn = (nurseId: string, date: string) => {
+    const hasApprovedLeave = leaveEntries.some(
+      (le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate
+    );
+    const pendingLeave = hasApprovedLeave ? undefined : pendingLeaveOn(leaveEntries, nurseId, date);
+    const pendingLeaveType = pendingLeave ? leaveTypeMap.get(pendingLeave.leaveTypeId) : undefined;
+    const pendingLeaveText = pendingLeave
+      ? `Leave asked for, waiting for approval: ${pendingLeaveType?.name || 'Leave'}`
+      : '';
+    const request = requestOn(availabilityRequests, nurseId, date);
+    const givenDutyId = assignments.find((a) => a.nurseId === nurseId && a.date === date)?.dutyWindowId;
+    const requestWords: RequestWords | undefined = request ? describeRequest(request, dutyWindows, givenDutyId) : undefined;
+    return { pendingLeave, pendingLeaveType, pendingLeaveText, request, requestWords };
+  };
+
   /** What a cell holds, in words (for the popup and screen readers). */
   const describeCell = (nurseId: string, date: string): string => {
     const asgn = assignments.find((a) => a.nurseId === nurseId && a.date === date);
@@ -1447,6 +1472,12 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                       const duty = asgn ? dutyMap.get(asgn.dutyWindowId) : undefined;
                       const leaveType = leave ? leaveTypes.find((l) => l.id === leave.leaveTypeId) : undefined;
+                      const { pendingLeave, pendingLeaveType, pendingLeaveText, requestWords } = wishesOn(nurse.id, dateStr);
+                      const pendingLeaveColor = pendingLeaveType?.color || '#f59e0b';
+                      // Leave waiting for approval: diagonal stripes behind whatever the cell shows.
+                      const pendingHatch = pendingLeave
+                        ? `repeating-linear-gradient(135deg, ${pendingLeaveColor}40 0 3px, transparent 3px 7px)`
+                        : undefined;
 
                       let doctorName = '';
                       const isNurseClinic =
@@ -1607,11 +1638,14 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                             isAllocationMismatch ? `\n${mismatchReason}` : ''
                           }`
                         : 'Nothing yet';
+                      const wishWords = [pendingLeaveText, requestWords?.text].filter(Boolean).join('\n');
                       const dayWords = `${holiday ? ` (public holiday: ${holiday.name})` : isWeekend ? ' (weekend)' : ''}${isToday ? ' (today)' : ''}`;
-                      const cellTitle = `${contentWords}${
+                      const cellTitle = `${contentWords}${wishWords ? `\n${wishWords}` : ''}${
                         problemMessages.length > 0 ? `\nProblems:\n${problemMessages.map((m) => `• ${m}`).join('\n')}` : ''
                       }`;
                       const cellAria = `${nurse.fullName}, ${formatDate(dateStr)}${dayWords}: ${contentWords.replace(/\n/g, '. ')}${
+                        wishWords ? `. ${wishWords.replace(/\n/g, '. ')}` : ''
+                      }${
                         problemMessages.length > 0 ? `. ${problemMessages.length === 1 ? 'Problem' : 'Problems'}: ${problemMessages.join('. ')}` : ''
                       }`;
 
@@ -1640,6 +1674,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                           aria-expanded={isPopupCell}
                           aria-label={cellAria}
                           title={cellTitle}
+                          style={pendingHatch ? { backgroundImage: pendingHatch } : undefined}
                           className={`border-r border-b border-slate-200 p-0.5 text-center align-middle cursor-pointer relative transition-shadow duration-700 focus:outline-none ${cellFontSizeClass} ${
                             isToday ? 'border-x-indigo-300' : ''
                           } ${
@@ -1655,6 +1690,30 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                             <span
                               aria-hidden="true"
                               className="absolute top-0 right-0 w-0 h-0 border-t-8 border-l-8 border-t-red-600 border-l-transparent z-10 pointer-events-none"
+                            />
+                          )}
+                          {/* Request mark, top left: round for a day off, square for a shift; hollow while waiting for approval; amber when not followed. */}
+                          {requestWords && (
+                            <span
+                              aria-hidden="true"
+                              className={`absolute top-0.5 left-0.5 w-1.5 h-1.5 z-10 pointer-events-none border ${
+                                requestWords.dayOff ? 'rounded-full' : 'rounded-[1px]'
+                              } ${
+                                requestWords.mismatch
+                                  ? requestWords.pending
+                                    ? 'border-amber-500 bg-white'
+                                    : 'border-amber-500 bg-amber-500'
+                                  : requestWords.pending
+                                  ? 'border-sky-600 bg-white'
+                                  : 'border-sky-600 bg-sky-600'
+                              }`}
+                            />
+                          )}
+                          {/* Leave waiting for approval under a shift or a pinned day off */}
+                          {pendingLeave && (asgn || lock?.mode === 'OFF' || leave) && (
+                            <Clock
+                              aria-hidden="true"
+                              className="absolute bottom-0.5 left-0.5 w-2 h-2 z-10 pointer-events-none text-slate-600"
                             />
                           )}
                           {/* 1. Leave Cell Rendering */}
@@ -1752,8 +1811,17 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                                 )}
                               </div>
                             </div>
+                          ) : pendingLeave ? (
+                            // 4. Leave waiting for approval (shown lighter, on stripes)
+                            <div
+                              className={`w-full ${cellHeightClass} rounded border border-dashed flex items-center justify-center font-bold text-[10px] opacity-80`}
+                              style={{ borderColor: pendingLeaveColor, color: pendingLeaveColor }}
+                              aria-hidden="true"
+                            >
+                              <span className="bg-white/80 px-0.5 rounded">{pendingLeaveType?.acronym || 'L'}</span>
+                            </div>
                           ) : (
-                            // 4. Empty Cell
+                            // 5. Empty Cell
                             <div className={`w-full ${cellHeightClass} flex items-center justify-center text-slate-300`} aria-hidden="true">
                               —
                             </div>
@@ -1946,6 +2014,41 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                       <span className="absolute top-0 right-0 w-0 h-0 border-t-8 border-l-8 border-t-red-600 border-l-transparent" />
                     </span>
                     <span>Problem: tap or point at the cell to read it</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-6 h-5 rounded border border-dashed border-amber-500 text-amber-600 font-bold text-[10px] flex items-center justify-center shrink-0"
+                      style={{ backgroundImage: 'repeating-linear-gradient(135deg, #f59e0b40 0 3px, transparent 3px 7px)' }}
+                      aria-hidden="true"
+                    >
+                      AL
+                    </span>
+                    <span>Leave asked for, waiting for approval</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-3.5 h-3.5 text-slate-600 shrink-0" aria-hidden="true" />
+                    <span>Leave waiting for approval on a day with a shift</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3.5 flex items-center justify-center gap-0.5 shrink-0" aria-hidden="true">
+                      <span className="w-1.5 h-1.5 rounded-full border border-sky-600 bg-sky-600" />
+                      <span className="w-1.5 h-1.5 rounded-full border border-sky-600 bg-white" />
+                    </span>
+                    <span>Asked for this day off (hollow: waiting for approval)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3.5 flex items-center justify-center gap-0.5 shrink-0" aria-hidden="true">
+                      <span className="w-1.5 h-1.5 rounded-[1px] border border-sky-600 bg-sky-600" />
+                      <span className="w-1.5 h-1.5 rounded-[1px] border border-sky-600 bg-white" />
+                    </span>
+                    <span>Asked for a shift (point at the cell to see which)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3.5 flex items-center justify-center gap-0.5 shrink-0" aria-hidden="true">
+                      <span className="w-1.5 h-1.5 rounded-full border border-amber-500 bg-amber-500" />
+                      <span className="w-1.5 h-1.5 rounded-[1px] border border-amber-500 bg-amber-500" />
+                    </span>
+                    <span>Request not followed: a shift on a day asked off, or another shift than the one asked for</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-amber-500 font-bold w-3.5 text-center shrink-0" aria-hidden="true">★</span>
@@ -2644,7 +2747,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             sessions,
             doctors,
             priorAssignments,
+            availabilityRequests,
           });
+          // Requests and leave waiting for approval are shown in their own line at the top.
+          const notes = why.notes.filter((n) => !/^(Asked for this day off|Has leave waiting for approval)/.test(n));
           if (why.status === 'BLOCKED') {
             dayNote = { tone: 'off', title: 'Why this nurse is off:', lines: why.reasons };
           } else if (why.status === 'AVAILABLE') {
@@ -2652,9 +2758,20 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             dayNote = {
               tone: 'free',
               title: `Free to work: ${why.possibleShifts.map((p) => p.label).join(', ')} (${h})`,
-              lines: why.notes,
+              lines: notes,
             };
           }
+        }
+        const wish = wishesOn(nurseId, date);
+        const wishes: QuickWish[] = [];
+        if (wish.pendingLeave) {
+          wishes.push({ text: `${wish.pendingLeaveText}${wish.pendingLeave.note ? `: ${wish.pendingLeave.note}` : ''}`, notFollowed: false });
+        }
+        if (wish.request && wish.requestWords) {
+          wishes.push({
+            text: `${wish.requestWords.text}${wish.request.note ? `: ${wish.request.note}` : ''}`,
+            notFollowed: wish.requestWords.mismatch,
+          });
         }
         return (
           <QuickCellPopup
@@ -2665,6 +2782,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             currentLabel={describeCell(nurseId, date)}
             problems={cellViolationMessages.get(`${nurseId}_${date}`) || []}
             dayNote={dayNote}
+            wishes={wishes}
             pinned={!!lock}
             onUnpin={
               lock && onOpenLockOverrideModal
