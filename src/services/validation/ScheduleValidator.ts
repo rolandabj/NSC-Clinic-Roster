@@ -132,6 +132,15 @@ export class ScheduleValidator {
     const seniorLevelIds = new Set((seniorityLevels || []).filter((s) => s.isSenior).map((s) => s.id));
     const dutyMap = new Map((dutyWindows || []).map((d) => [d.id, d]));
     const nurseMap = new Map((nurses || []).map((n) => [n.id, n]));
+    // Requests that still count, per nurse and day (refused ones never do), built once.
+    const requestsByCell = new Map<string, AvailabilityRequest[]>();
+    for (const r of availabilityRequests || []) {
+      if (r.status === 'REJECTED') continue;
+      const k = `${r.nurseId}_${r.date}`;
+      const list = requestsByCell.get(k);
+      if (list) list.push(r);
+      else requestsByCell.set(k, [r]);
+    }
 
     const start = new Date(schedule.startDate);
     const end = new Date(schedule.endDate);
@@ -626,7 +635,7 @@ export class ScheduleValidator {
             date,
           });
         }
-        const request = requestOn(availabilityRequests, nurse.id, date);
+        const request = requestOn(requestsByCell.get(`${nurse.id}_${date}`), nurse.id, date);
         const wait = request?.status === 'PENDING' ? ' (waiting for approval)' : '';
         // An approved day off is already a pinned day off (reported above when broken).
         if (request && !request.available && asgnsToday.length > 0 && !(dayOffLock && request.status === 'APPROVED')) {

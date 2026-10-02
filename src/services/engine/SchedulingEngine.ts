@@ -54,6 +54,7 @@ import {
   doctorSessionsOn,
 } from './clinicModel';
 import { yearToDateSeeds } from '../fairness/yearSeed';
+import { isPendingLeave } from './leaveStatus';
 
 /**
  * Resiliently finds a rule by templateKey, id, or semantic keywords in its name.
@@ -662,8 +663,7 @@ export class SchedulingEngine {
     const pendingDayOff = new Set(pendingDayOffRequests.map((r) => `${r.nurseId}_${r.date}`));
     const pendingLeave = leaveEntries.filter(
       (le) =>
-        !le.approved &&
-        (le.status === 'PENDING' || le.status === undefined) &&
+        isPendingLeave(le) &&
         nurseMap.has(le.nurseId) &&
         !(le.endDate < schedule.startDate || le.startDate > schedule.endDate)
     );

@@ -28,6 +28,7 @@ import {
 } from '../../types';
 import { checkAssignment, AssignmentCheckContext } from './assignmentChecks';
 import { resolveRule } from './SchedulingEngine';
+import { isPendingLeave } from './leaveStatus';
 import { calculateDutyDurationHours, summarizeNurseHours } from '../reports/hoursAccounting';
 
 export interface ExplainDayInput {
@@ -93,10 +94,7 @@ export interface NurseDayExplanation {
   askedOff?: boolean;
 }
 
-/** Leave a nurse asked for that is not decided yet (the same test as the requests page). */
-export function isPendingLeave(le: LeaveEntry): boolean {
-  return le.status === 'PENDING' || (le.status === undefined && le.approved === false);
-}
+export { isPendingLeave };
 
 /** Leave waiting for approval on that day, if any. */
 export function pendingLeaveOn(leaveEntries: LeaveEntry[], nurseId: string, date: string): LeaveEntry | undefined {
