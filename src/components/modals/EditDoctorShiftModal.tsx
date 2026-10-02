@@ -105,14 +105,14 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
         setEndTime(existingSession.endTime);
         setRoom(existingSession.room || 'Suite 101');
         setSpecialtyId(existingSession.specialtyId || doctor.specialtyIds[0] || '');
-        // If it was already a recurring pattern, default to showing the recurring option, but let user choose
-        setUpdateScope(existingSession.source === 'PATTERN' ? 'RECURRING_ALL_MATCHING_DAYS' : 'THIS_DATE_ONLY');
+        // A change starts as "this date only"; changing every matching weekday is a deliberate choice.
+        setUpdateScope('THIS_DATE_ONLY');
       } else if (recurringPatternSlot) {
         setStartTime(recurringPatternSlot.startTime);
         setEndTime(recurringPatternSlot.endTime);
         setRoom(recurringPatternSlot.room || 'Suite 101');
         setSpecialtyId(doctor.specialtyIds[0] || (specialties[0]?.id ?? ''));
-        setUpdateScope('RECURRING_ALL_MATCHING_DAYS');
+        setUpdateScope('THIS_DATE_ONLY');
       } else {
         setStartTime('09:00');
         setEndTime('13:00');
@@ -147,6 +147,10 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!startTime || !endTime) return;
+    if (endTime <= startTime) {
+      notify('The end time must be after the start time.', 'warning');
+      return;
+    }
     setIsSaving(true);
     try {
       await onSaveShift({

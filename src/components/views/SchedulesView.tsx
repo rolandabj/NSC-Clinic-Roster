@@ -41,7 +41,8 @@ import {
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
-import { syncScheduleAssignments } from '../../services/repository/assignmentSync';
+import { CollectionSyncer } from '../../services/repository/collectionSyncer';
+import { chooseScheduleToOpen } from '../../services/schedule/openSchedule';
 import { quotaTracker, QuotaExceededError } from '../../services/firebase/quotaTracker';
 import {
   Schedule,
@@ -93,6 +94,33 @@ import { deleteEntireSchedule } from '../../services/schedule/scheduleDeletionSe
 import { populateRecurringDoctorSessionsForSchedule } from '../../services/schedule/doctorScheduleService';
 import { formatDate } from '../../utils/dateUtils';
 
+/** One undo step: the roster's shifts, pinned days and leave at that moment. */
+interface RosterSnapshot {
+  scheduleId: string;
+  assignments: Assignment[];
+  locks: LockEntry[];
+  leaveEntries: LeaveEntry[];
+}
+
+const OPEN_SCHEDULE_KEY = 'clinic_roster_active_schedule_id';
+
+function readStoredScheduleId(): string | null {
+  try {
+    return localStorage.getItem(OPEN_SCHEDULE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeScheduleId(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(OPEN_SCHEDULE_KEY, id);
+    else localStorage.removeItem(OPEN_SCHEDULE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 interface SchedulesViewProps {
   context: ClinicContextState;
   onOpenSharePreview?: (token: string) => void;
@@ -106,6 +134,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 }) => {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
+  const activeScheduleRef = useRef<Schedule | null>(null);
+  activeScheduleRef.current = activeSchedule;
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [nurses, setNurses] = useState<Nurse[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -150,6 +180,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeGenerationMode, setActiveGenerationMode] = useState<RegenerateMode>('GENERATE_ALL');
   const [clearIncludeManual, setClearIncludeManual] = useState(false);
+  // Generate All keeps cells changed by hand unless this is unticked.
+  const [keepManualOnGenerate, setKeepManualOnGenerate] = useState(true);
 
   // Active Block & Tab selection in Workbook View
   const [selectedBlockIndex, setSelectedBlockIndex] = useState(0);
@@ -173,25 +205,32 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [isSchedulePickerOpen, setIsSchedulePickerOpen] = useState(false);
   const [isDeleteScheduleModalOpen, setIsDeleteScheduleModalOpen] = useState(false);
   const [scheduleToDelete, setScheduleToDelete] = useState<Schedule | null>(null);
+  // Counts shown in the delete dialog, for the roster being deleted (not the open one).
+  const [deleteCounts, setDeleteCounts] = useState<{ shifts: number; versions: number } | null>(null);
   const [isFairnessModalOpen, setIsFairnessModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
   const [isSwapModalOpen, setIsSwapModalOpen] = useState(false);
-  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [lastAutosavedAt, setLastAutosavedAt] = useState<string | null>(null);
   // Save status shown in the toolbar: saving, saved, or why the last save failed.
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Set when the clinic details (holidays, opening hours, previous roster) could not be loaded.
+  const [clinicSetupError, setClinicSetupError] = useState<string | null>(null);
   // Changes are only written after the workspace loaded completely; otherwise a
   // partly loaded (empty) roster could overwrite the real one.
   const workspaceLoadedRef = useRef(false);
-  // The latest roster that could not be saved, retried by the autosave timer.
-  const pendingSaveRef = useRef<{ scheduleId: string; assignments: Assignment[] } | null>(null);
+  // The roster that is open, kept across reloads of the page data (and in this
+  // browser), so saving or publishing never switches to another roster.
+  const openScheduleIdRef = useRef<string | null>(readStoredScheduleId());
+  // Guards against an older "open roster" load finishing after a newer one.
+  const openRequestRef = useRef(0);
   const [workingHoursPeriods, setWorkingHoursPeriods] = useState<WorkingHoursPeriod[]>([]);
 
-  // Undo/Redo stack (50 steps)
-  const [undoStack, setUndoStack] = useState<Assignment[][]>([]);
-  const [redoStack, setRedoStack] = useState<Assignment[][]>([]);
+  // Undo/Redo (50 steps). Each step holds the shifts, pinned days and leave
+  // together, and the roster it belongs to, so it can never be applied to another roster.
+  const [undoStack, setUndoStack] = useState<RosterSnapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<RosterSnapshot[]>([]);
 
   // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -227,12 +266,33 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   const repo = getRepository();
 
+  // Saving: only what changed since it was loaded or last saved is written, one
+  // save at a time, and records this browser never saw are never deleted.
+  const [, setSyncTick] = useState(0);
+  const syncersRef = useRef<{
+    assignments: CollectionSyncer<'assignments'>;
+    locks: CollectionSyncer<'locks'>;
+    leaveEntries: CollectionSyncer<'leaveEntries'>;
+  } | null>(null);
+  if (!syncersRef.current) {
+    const onChange = () => setSyncTick((t) => t + 1);
+    syncersRef.current = {
+      assignments: new CollectionSyncer(repo, 'assignments', onChange),
+      locks: new CollectionSyncer(repo, 'locks', onChange),
+      leaveEntries: new CollectionSyncer(repo, 'leaveEntries', onChange),
+    };
+  }
+  const syncers = syncersRef.current;
+  const hasUnsavedChanges = () =>
+    syncers.assignments.hasUnsaved() || syncers.locks.hasUnsaved() || syncers.leaveEntries.hasUnsaved();
+
   const loadData = async () => {
     try {
       setLoadError(null);
+      // Edits still being saved finish first, so the reload doesn't undo them on screen.
+      await Promise.all([syncers.assignments.idle(), syncers.locks.idle(), syncers.leaveEntries.idle()]);
       const [
         schedList,
-        asgnList,
         nList,
         dList,
         sessList,
@@ -246,12 +306,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         rList,
         hList,
         qList,
-        vList,
-        invList,
         whpList,
       ] = await Promise.all([
         repo.list('schedules'),
-        repo.list('assignments'),
+        // Shifts and versions are loaded for the open roster only (see openSchedule).
         repo.list('nurses'),
         repo.list('doctors'),
         repo.list('doctorSessions'),
@@ -265,8 +323,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         repo.list('rules'),
         repo.list('holidays'),
         repo.list('quotas'),
-        repo.list('versions'),
-        repo.list('invitations'),
         repo.list('workingHoursPeriods'),
       ]);
 
@@ -279,12 +335,13 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
       const uniqueSchedules = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
       setSchedules(uniqueSchedules);
-      setInvitations(invList);
       setNurses(nList.filter((n) => n.active));
       setDoctors(dList.filter((d) => d.active));
       setSessions(sessList);
       setLocks(lkList);
       setLeaveEntries(activeLeaveList);
+      syncers.locks.remember(lkList);
+      syncers.leaveEntries.remember(activeLeaveList);
       setLeaveTypes(ltList);
       setClinicalRoles(crList);
       setSpecialties(spList);
@@ -294,38 +351,26 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setHolidays(hList);
       setQuotas(qList);
 
-      if (schedList.length > 0) {
-        const current = schedList.find((s) => s.id === context.activeScheduleId) || schedList[0];
-        setActiveSchedule(current);
-        const schedAssignments = asgnList.filter((a) => a.scheduleId === current.id);
-        setAssignments(schedAssignments);
-
-        const schedVersions = vList
-          .filter((v) => v.scheduleId === current.id)
-          .sort((a, b) => b.number - a.number);
-        setVersions(schedVersions);
-
-        // Run validation
-        const initialClinicSetup = await loadClinicSetup(repo, current).catch(() => undefined);
-        clinicSetupRef.current = initialClinicSetup;
-        const report = ScheduleValidator.validate(
-          current,
-          schedAssignments,
-          nList.filter((n) => n.active),
-          sList,
-          dwList,
-          sessList,
-          leList,
-          lkList,
-          crList,
-          rList,
-          sortedWhp,
-          spList,
-          dList,
-          ltList,
-          initialClinicSetup
-        );
-        setValidationReport(report);
+      const current = chooseScheduleToOpen(uniqueSchedules, openScheduleIdRef.current, context.activeScheduleId);
+      if (current) {
+        await openSchedule(current, {
+          nurses: nList.filter((n) => n.active),
+          seniorityLevels: sList,
+          dutyWindows: dwList,
+          sessions: sessList,
+          leaveEntries: leList,
+          locks: lkList,
+          roles: crList,
+          rules: rList,
+          workingHoursPeriods: sortedWhp,
+          specialties: spList,
+          doctors: dList,
+          leaveTypes: ltList,
+        });
+      } else {
+        setActiveSchedule(null);
+        setAssignments([]);
+        setVersions([]);
       }
       workspaceLoadedRef.current = true;
     } catch (err: any) {
@@ -335,53 +380,175 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     }
   };
 
+  /** Everything the checker needs, taken from the current state unless given. */
+  type CheckInputs = {
+    nurses: Nurse[];
+    seniorityLevels: SeniorityLevel[];
+    dutyWindows: DutyWindow[];
+    sessions: DoctorSession[];
+    leaveEntries: LeaveEntry[];
+    locks: LockEntry[];
+    roles: ClinicalRole[];
+    rules: Rule[];
+    workingHoursPeriods: WorkingHoursPeriod[];
+    specialties: Specialty[];
+    doctors: Doctor[];
+    leaveTypes: LeaveType[];
+  };
+  const currentCheckInputs = (): CheckInputs => ({
+    nurses,
+    seniorityLevels,
+    dutyWindows,
+    sessions,
+    leaveEntries,
+    locks,
+    roles,
+    rules,
+    workingHoursPeriods,
+    specialties,
+    doctors,
+    leaveTypes,
+  });
+
+  const runValidation = (sched: Schedule, list: Assignment[], overrides: Partial<CheckInputs> = {}) => {
+    const x = { ...currentCheckInputs(), ...overrides };
+    setValidationReport(
+      ScheduleValidator.validate(
+        sched,
+        list,
+        x.nurses,
+        x.seniorityLevels,
+        x.dutyWindows,
+        x.sessions,
+        x.leaveEntries,
+        x.locks,
+        x.roles,
+        x.rules,
+        x.workingHoursPeriods,
+        x.specialties,
+        x.doctors,
+        x.leaveTypes,
+        clinicSetupRef.current
+      )
+    );
+  };
+
   /**
-   * Saves a roster and reports the outcome in the toolbar. A failed save is
-   * kept and retried by the autosave timer; nothing is silently dropped.
+   * Opens one roster: loads its shifts and versions, resets undo and the
+   * problem list, and remembers it so later reloads stay on it.
    */
-  const persistAssignments = async (scheduleId: string, list: Assignment[]): Promise<boolean> => {
-    if (!workspaceLoadedRef.current) {
-      setSaveError('Not saved: the workspace did not load completely. Reload the page before editing.');
-      return false;
+  const openSchedule = async (sched: Schedule, inputs?: CheckInputs) => {
+    const request = ++openRequestRef.current;
+    const switching = openScheduleIdRef.current !== sched.id || activeScheduleRef.current?.id !== sched.id;
+    openScheduleIdRef.current = sched.id;
+    storeScheduleId(sched.id);
+    setActiveSchedule(sched);
+    if (switching) {
+      // Undo steps and the problem list belong to the roster they were made on.
+      setUndoStack([]);
+      setRedoStack([]);
+      setSelectedBlockIndex(0);
+      setValidationReport((prev) => ({ ...prev, scheduleId: sched.id, findings: [], errorCount: 0, warnCount: 0, infoCount: 0 }));
     }
+    // Let edits that are still being saved finish first, so the reload includes them.
+    await Promise.all([syncers.assignments.idle(), syncers.locks.idle(), syncers.leaveEntries.idle()]);
+    const [list, vList, setup] = await Promise.all([
+      repo.list('assignments', { field: 'scheduleId', operator: '==', value: sched.id }),
+      repo.list('versions', { field: 'scheduleId', operator: '==', value: sched.id }),
+      loadClinicSetup(repo, sched).catch((err) => {
+        console.error('Could not load the clinic details for this roster:', err);
+        return undefined;
+      }),
+    ]);
+    if (request !== openRequestRef.current) return; // a newer roster was opened meanwhile
+    syncers.assignments.remember(list);
+    clinicSetupRef.current = setup;
+    setClinicSetupError(
+      setup ? null : 'Public holidays, opening hours and the previous roster could not be loaded. Reload the page before generating.'
+    );
+    setAssignments(list);
+    setVersions([...vList].sort((a, b) => b.number - a.number));
+    runValidation(sched, list, inputs);
+  };
+
+  /** Runs a save and shows its outcome in the toolbar. */
+  const trackSave = async (save: Promise<boolean>, what: string): Promise<boolean> => {
     setIsSaving(true);
-    try {
-      await syncScheduleAssignments(repo, scheduleId, list);
-      if (pendingSaveRef.current?.scheduleId === scheduleId) pendingSaveRef.current = null;
-      setSaveError(null);
-      setLastAutosavedAt(
-        new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-      );
-      return true;
-    } catch (err: any) {
-      console.error('Failed to save assignments:', err);
-      pendingSaveRef.current = { scheduleId, assignments: list };
+    const ok = await save;
+    const failed = [syncers.assignments, syncers.locks, syncers.leaveEntries].find((x) => x.lastError !== null);
+    setIsSaving(hasUnsavedChanges() && !failed);
+    if (failed) {
+      const err: any = failed.lastError;
       setSaveError(
         err instanceof QuotaExceededError
           ? err.message
-          : `Not saved: ${err?.message || 'the database could not be reached'}. Retrying automatically.`
+          : `${what} not saved: ${err?.message || 'the database could not be reached'}. Retrying automatically.`
       );
-      return false;
-    } finally {
-      setIsSaving(false);
+    } else if (ok) {
+      setSaveError(null);
+      setLastAutosavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     }
+    return ok;
+  };
+
+  const notLoadedMessage = 'Not saved: the workspace did not load completely. Reload the page before editing.';
+
+  /** Saves a roster's shifts (only the changed ones). */
+  const persistAssignments = async (scheduleId: string, list: Assignment[]): Promise<boolean> => {
+    if (!workspaceLoadedRef.current) {
+      setSaveError(notLoadedMessage);
+      return false;
+    }
+    const withSchedule = list.map((a) => (a.scheduleId ? a : { ...a, scheduleId }));
+    return trackSave(syncers.assignments.save(withSchedule, (a) => a.scheduleId === scheduleId), 'Shifts');
+  };
+
+  const persistLocks = (next: LockEntry[]) => {
+    if (!workspaceLoadedRef.current) {
+      setSaveError(notLoadedMessage);
+      return Promise.resolve(false);
+    }
+    return trackSave(syncers.locks.save(next), 'Pinned days');
+  };
+
+  const persistLeave = (next: LeaveEntry[]) => {
+    if (!workspaceLoadedRef.current) {
+      setSaveError(notLoadedMessage);
+      return Promise.resolve(false);
+    }
+    return trackSave(syncers.leaveEntries.save(next), 'Leave');
   };
 
   useEffect(() => {
     loadData();
   }, []);
 
-  // Every edit is saved immediately. This timer only retries a save that
-  // failed (for example while offline or when the daily quota is used up), so
-  // it costs no database reads while everything is saved.
+  // Every edit is saved straight away. This timer only retries a save that
+  // failed (for example while offline or when the daily quota is used up).
   useEffect(() => {
     const retryTimer = setInterval(() => {
-      const pending = pendingSaveRef.current;
-      if (pending && !quotaTracker.isQuotaExceeded()) {
-        void persistAssignments(pending.scheduleId, pending.assignments);
+      if (quotaTracker.isQuotaExceeded()) return;
+      for (const [what, syncer] of [
+        ['Shifts', syncers.assignments],
+        ['Pinned days', syncers.locks],
+        ['Leave', syncers.leaveEntries],
+      ] as const) {
+        const retry = syncer.retry();
+        if (retry) void trackSave(retry, what);
       }
     }, 30000);
     return () => clearInterval(retryTimer);
+  }, []);
+
+  // Warn before closing the tab while a change is still being saved (or failed).
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges()) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
 
   const triggerToast = (msg: string) => {
@@ -392,154 +559,53 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // Debounce timer ref for live validation
   const validationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Re-run validation debounced (300ms) whenever assignments change
-  const handleAssignmentsChange = (next: Assignment[]) => {
-    setUndoStack((prev) => [assignments, ...prev].slice(0, 50));
-    setRedoStack([]);
-    setAssignments(next);
+  const snapshotNow = (): RosterSnapshot | null =>
+    activeSchedule ? { scheduleId: activeSchedule.id, assignments, locks, leaveEntries } : null;
 
-    // Save to repository and clean up any deleted assignments
-    if (activeSchedule) {
-      void persistAssignments(activeSchedule.id, next);
-
-      if (validationTimerRef.current) {
-        clearTimeout(validationTimerRef.current);
-      }
-      validationTimerRef.current = setTimeout(() => {
-        const report = ScheduleValidator.validate(
-          activeSchedule,
-          next,
-          nurses,
-          seniorityLevels,
-          dutyWindows,
-          sessions,
-          leaveEntries,
-          locks,
-          roles,
-          rules,
-          workingHoursPeriods,
-          specialties,
-          doctors,
-          leaveTypes,
-          clinicSetupRef.current
-        );
-        setValidationReport(report);
-      }, 300);
+  /**
+   * Applies one edit (shifts, pinned days and leave together): one undo step,
+   * one save per changed list, and one check with all three.
+   */
+  const applyEdit = (
+    edit: { assignments?: Assignment[]; locks?: LockEntry[]; leaveEntries?: LeaveEntry[] },
+    options: { recordUndo?: boolean } = {}
+  ) => {
+    if (!activeSchedule) return;
+    const sched = activeSchedule;
+    if (options.recordUndo !== false) {
+      const before = snapshotNow();
+      if (before) setUndoStack((prev) => [before, ...prev].slice(0, 50));
+      setRedoStack([]);
     }
+    const nextAssignments = edit.assignments ?? assignments;
+    const nextLocks = edit.locks ?? locks;
+    const nextLeave = edit.leaveEntries ?? leaveEntries;
+    if (edit.assignments) {
+      setAssignments(nextAssignments);
+      void persistAssignments(sched.id, nextAssignments);
+    }
+    if (edit.locks) {
+      setLocks(nextLocks);
+      void persistLocks(nextLocks);
+    }
+    if (edit.leaveEntries) {
+      setLeaveEntries(nextLeave);
+      void persistLeave(nextLeave);
+    }
+    if (validationTimerRef.current) clearTimeout(validationTimerRef.current);
+    validationTimerRef.current = setTimeout(
+      () => runValidation(sched, nextAssignments, { locks: nextLocks, leaveEntries: nextLeave }),
+      300
+    );
   };
 
-  const handleLocksChange = async (nextLocks: LockEntry[]) => {
-    setLocks(nextLocks);
-    if (!workspaceLoadedRef.current) {
-      setSaveError('Not saved: the workspace did not load completely. Reload the page before editing.');
-      return;
-    }
-    try {
-      const existing = await repo.list('locks');
-      const nextIds = new Set(nextLocks.map((l) => l.id));
-      const toDelete = existing.filter((l) => !nextIds.has(l.id)).map((l) => l.id);
-      if (toDelete.length > 0) {
-        await repo.bulkRemove('locks', toDelete);
-      }
-      if (nextLocks.length > 0) {
-        await repo.bulkUpsert('locks', nextLocks);
-      }
-
-      if (activeSchedule) {
-        const report = ScheduleValidator.validate(
-          activeSchedule,
-          assignments,
-          nurses,
-          seniorityLevels,
-          dutyWindows,
-          sessions,
-          leaveEntries,
-          nextLocks,
-          roles,
-          rules,
-          workingHoursPeriods,
-          specialties,
-          doctors,
-          leaveTypes,
-          clinicSetupRef.current
-        );
-        setValidationReport(report);
-      }
-    } catch (err: any) {
-      console.error('Failed to sync locks:', err);
-      setSaveError(
-        err instanceof QuotaExceededError ? err.message : `Lock change not saved: ${err?.message || 'database unavailable'}.`
-      );
-    }
-  };
-
-  const handleLeaveEntriesChange = async (nextLeaves: LeaveEntry[]) => {
-    setLeaveEntries(nextLeaves);
-    if (!workspaceLoadedRef.current) {
-      setSaveError('Not saved: the workspace did not load completely. Reload the page before editing.');
-      return;
-    }
-    try {
-      const existing = await repo.list('leaveEntries');
-      const nextIds = new Set(nextLeaves.map((l) => l.id));
-      const toDelete = existing.filter((l) => !nextIds.has(l.id)).map((l) => l.id);
-      if (toDelete.length > 0) {
-        await repo.bulkRemove('leaveEntries', toDelete);
-      }
-      if (nextLeaves.length > 0) {
-        await repo.bulkUpsert('leaveEntries', nextLeaves);
-      }
-
-      if (activeSchedule) {
-        const report = ScheduleValidator.validate(
-          activeSchedule,
-          assignments,
-          nurses,
-          seniorityLevels,
-          dutyWindows,
-          sessions,
-          nextLeaves,
-          locks,
-          roles,
-          rules,
-          workingHoursPeriods,
-          specialties,
-          doctors,
-          leaveTypes,
-          clinicSetupRef.current
-        );
-        setValidationReport(report);
-      }
-    } catch (err: any) {
-      console.error('Failed to sync leave entries:', err);
-      setSaveError(
-        err instanceof QuotaExceededError ? err.message : `Leave change not saved: ${err?.message || 'database unavailable'}.`
-      );
-    }
-  };
+  const handleAssignmentsChange = (next: Assignment[]) => applyEdit({ assignments: next });
+  const handleLocksChange = (next: LockEntry[]) => applyEdit({ locks: next });
+  const handleLeaveEntriesChange = (next: LeaveEntry[]) => applyEdit({ leaveEntries: next });
 
   const handleSessionsChange = (nextSessions: DoctorSession[]) => {
     setSessions(nextSessions);
-    if (activeSchedule) {
-      const report = ScheduleValidator.validate(
-        activeSchedule,
-        assignments,
-        nurses,
-        seniorityLevels,
-        dutyWindows,
-        nextSessions,
-        leaveEntries,
-        locks,
-        roles,
-        rules,
-        workingHoursPeriods,
-        specialties,
-        doctors,
-          leaveTypes,
-          clinicSetupRef.current
-      );
-      setValidationReport(report);
-    }
+    if (activeSchedule) runValidation(activeSchedule, assignments, { sessions: nextSessions });
   };
 
   // Calculate blocks for active schedule
@@ -605,15 +671,38 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   // --- CREATE SCHEDULE FLOW ---
   const handleScheduleCreated = async (createdSchedule: Schedule, generateImmediately: boolean) => {
+    openScheduleIdRef.current = createdSchedule.id;
+    storeScheduleId(createdSchedule.id);
     await loadData();
-    setActiveSchedule(createdSchedule);
-    setSelectedBlockIndex(0);
     triggerToast(`Schedule "${createdSchedule.name}" created.`);
 
     if (generateImmediately) {
       handleOpenPreflight('GENERATE_ALL', createdSchedule);
     }
   };
+
+  useEffect(() => {
+    if (!scheduleToDelete) {
+      setDeleteCounts(null);
+      return;
+    }
+    if (scheduleToDelete.id === activeSchedule?.id) {
+      setDeleteCounts({ shifts: assignments.length, versions: versions.length });
+      return;
+    }
+    let cancelled = false;
+    const by = { field: 'scheduleId', operator: '==' as const, value: scheduleToDelete.id };
+    Promise.all([repo.list('assignments', by), repo.list('versions', by)])
+      .then(([a, v]) => {
+        if (!cancelled) setDeleteCounts({ shifts: a.length, versions: v.length });
+      })
+      .catch(() => {
+        if (!cancelled) setDeleteCounts(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scheduleToDelete?.id]);
 
   // --- DELETE SCHEDULE FLOW ---
   const handleConfirmDeleteSchedule = async (sched: Schedule) => {
@@ -628,18 +717,17 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       triggerToast(`Schedule "${result.scheduleName}" was permanently deleted.`);
 
       if (activeSchedule?.id === sched.id) {
-        if (remainingSchedules.length > 0) {
-          const nextSched = remainingSchedules[0];
-          setActiveSchedule(nextSched);
-          setSelectedBlockIndex(0);
-          const asgns = await repo.list('assignments');
-          setAssignments(asgns.filter((a) => a.scheduleId === nextSched.id));
-          const vList = await repo.list('versions');
-          setVersions(vList.filter((v) => v.scheduleId === nextSched.id).sort((a, b) => b.number - a.number));
+        const nextSched = chooseScheduleToOpen(remainingSchedules, null, null);
+        if (nextSched) {
+          await openSchedule(nextSched);
         } else {
+          openScheduleIdRef.current = null;
+          storeScheduleId(null);
           setActiveSchedule(null);
           setAssignments([]);
           setVersions([]);
+          setUndoStack([]);
+          setRedoStack([]);
         }
       }
     } catch (err: any) {
@@ -688,9 +776,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     let cancelled = false;
     loadClinicSetup(repo, activeSchedule)
       .then((setup) => {
-        if (!cancelled) clinicSetupRef.current = setup;
+        if (cancelled) return;
+        clinicSetupRef.current = setup;
+        setClinicSetupError(null);
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.error('Could not load the clinic details:', err);
+        if (!cancelled) setClinicSetupError('Public holidays, opening hours and the previous roster could not be loaded. Reload the page before generating.');
+      });
     return () => {
       cancelled = true;
     };
@@ -703,22 +796,20 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
     let currentSessions = sessions;
 
-    // STEP 1: Always guarantee the doctor's recurring schedule is filled first for the schedule duration
-    if (sched.startDate && sched.endDate && doctors.length > 0) {
+    // The doctors' weekly sessions are only added when the run starts. Here they
+    // are worked out without saving, so cancelling this dialog changes nothing.
+    if (mode !== 'CLEAR_GENERATED' && sched.startDate && sched.endDate && doctors.length > 0) {
       try {
-        const fillResult = await populateRecurringDoctorSessionsForSchedule({
+        const preview = await populateRecurringDoctorSessionsForSchedule({
           repo,
           startDate: sched.startDate,
           endDate: sched.endDate,
           doctors,
+          dryRun: true,
         });
-
-        if (fillResult.createdCount > 0) {
-          currentSessions = await repo.list('doctorSessions');
-          setSessions(currentSessions);
-        }
+        if (preview.newSessions.length > 0) currentSessions = [...sessions, ...preview.newSessions];
       } catch (err) {
-        console.error('Failed to auto-populate doctor recurring schedule on pre-flight:', err);
+        console.error('Could not check the doctors\' weekly sessions:', err);
       }
     }
 
@@ -737,6 +828,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
     setActiveGenerationMode(mode);
     setClearIncludeManual(false);
+    setKeepManualOnGenerate(true);
     setPreflightSummary(summary);
     setGenerationProgress(null);
     setIsPreflightModalOpen(true);
@@ -797,10 +889,21 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     setIsGenerating(true);
 
     try {
-      // Fresh clinic details for this roster (holidays or the previous roster may have changed)
-      const generationClinicSetup = await loadClinicSetup(repo, activeSchedule).catch(() => clinicSetupRef.current);
+      // Fresh clinic details for this roster (holidays or the previous roster may have changed).
+      // Without them the generator would ignore public holidays and the previous roster.
+      let generationClinicSetup: ClinicSetup;
+      try {
+        generationClinicSetup = await loadClinicSetup(repo, activeSchedule);
+      } catch (err: any) {
+        setClinicSetupError('Public holidays, opening hours and the previous roster could not be loaded.');
+        triggerToast(`Not generated: the clinic details could not be loaded (${err?.message || 'database unavailable'}). Try again.`);
+        setIsGenerating(false);
+        return;
+      }
       clinicSetupRef.current = generationClinicSetup;
-      setUndoStack((prev) => [assignments, ...prev].slice(0, 50));
+      setClinicSetupError(null);
+      const beforeRun = snapshotNow();
+      if (beforeRun) setUndoStack((prev) => [beforeRun, ...prev].slice(0, 50));
       setRedoStack([]);
 
       if (activeGenerationMode === 'CLEAR_GENERATED') {
@@ -831,8 +934,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           finalAssignments = finalAssignments.filter((a) => a.source === 'LOCK');
         }
 
-        await persistAssignments(activeSchedule.id, finalAssignments);
         setAssignments(finalAssignments);
+        const clearSaved = await persistAssignments(activeSchedule.id, finalAssignments);
 
         const report = ScheduleValidator.validate(
           activeSchedule,
@@ -855,7 +958,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
         const clearedCount = assignments.length - finalAssignments.length;
         triggerToast(
-          `Schedule cleared: removed ${clearedCount} shift assignments (${finalAssignments.length} locked shifts preserved).`
+          clearSaved
+            ? `Cleared ${clearedCount} shifts. ${finalAssignments.length} shifts kept (pinned${clearIncludeManual ? '' : ' or changed by hand'}).`
+            : `Cleared ${clearedCount} shifts on screen, but saving failed. See the message at the top.`
         );
         setIsPreflightModalOpen(false);
         setIsGenerating(false);
@@ -900,7 +1005,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         workingHoursPeriods,
         doctors,
           leaveTypes,
-          generationClinicSetup
+          generationClinicSetup,
+          { keepManual: activeGenerationMode !== 'GENERATE_ALL' || keepManualOnGenerate }
       );
 
       // If engine resolved an authoritative period target, synchronize the schedule record
@@ -927,8 +1033,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         );
       }
 
-      await persistAssignments(effectiveSchedule.id, result.assignments);
       setAssignments(result.assignments);
+      const generatedSaved = await persistAssignments(effectiveSchedule.id, result.assignments);
 
       const report = ScheduleValidator.validate(
         effectiveSchedule,
@@ -962,6 +1068,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           ? ` • Doctor clinic pairing: ${result.doctorPriority1PairingsCount || 0} Priority #1, ${result.doctorPriority2PairingsCount || 0} Priority #2, ${result.doctorSpecialtyPairingsCount || 0} Specialty, ${result.doctorFallbackPairingsCount || 0} fallback`
           : '';
 
+      if (!generatedSaved) {
+        triggerToast('The roster was generated, but saving failed. See the message at the top; it retries automatically.');
+        setIsPreflightModalOpen(false);
+        setIsGenerating(false);
+        return;
+      }
       triggerToast(
         `Generated ${result.assignments.length} assignments in ${result.generationDurationMs}ms${overtimeStatus}${pairingSummary} (${result.preservedLocksCount} locks preserved).`
       );
@@ -973,73 +1085,47 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     }
   };
 
-  // --- SAVE VERSION WITH NOTE (Phase 10: 5-minute checkpoint replacement) ---
+  // --- SAVE A NAMED COPY (VERSION) ---
+  const [isSavingVersion, setIsSavingVersion] = useState(false);
   const handleSaveVersion = async () => {
-    if (!activeSchedule) return;
+    if (!activeSchedule || isSavingVersion) return;
+    setIsSavingVersion(true);
     try {
-      const allVersions = await repo.list('versions');
-      const schedVersions = allVersions
-        .filter((v) => v.scheduleId === activeSchedule.id)
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-      const latestVer = schedVersions[0];
-      const now = new Date();
-      const fiveMinMs = 5 * 60 * 1000;
-      const isWithin5Min =
-        latestVer &&
-        !latestVer.isPublished &&
-        now.getTime() - new Date(latestVer.timestamp).getTime() < fiveMinMs;
-
-      if (isWithin5Min) {
-        // Replace existing version checkpoint within 5 minutes
-        await repo.update('versions', latestVer.id, {
-          timestamp: now.toISOString(),
-          note: saveNote.trim() || latestVer.note || 'Manual save checkpoint',
-          author: context.currentUser?.name || latestVer.author,
-          snapshot: {
-            schedule: activeSchedule,
-            assignments,
-            leaveEntries,
-            locks,
-            rulesSnapshot: rules,
-          },
-        });
-        await repo.update('schedules', activeSchedule.id, {
-          updatedAt: now.toISOString(),
-        });
-        triggerToast(`Updated checkpoint v${latestVer.number} (within 5m window).`);
-      } else {
-        // Create brand new version
-        const nextVerNumber = (activeSchedule.activeVersionNumber || 1) + 1;
-        await repo.update('schedules', activeSchedule.id, {
-          activeVersionNumber: nextVerNumber,
-          updatedAt: now.toISOString(),
-        });
-
-        await repo.create('versions', {
-          scheduleId: activeSchedule.id,
-          number: nextVerNumber,
-          timestamp: now.toISOString(),
-          author: context.currentUser?.name || 'Dr. Fatima (Admin)',
-          note: saveNote.trim() || 'Manual save checkpoint',
-          snapshot: {
-            schedule: activeSchedule,
-            assignments,
-            leaveEntries,
-            locks,
-            rulesSnapshot: rules,
-          },
-          isPublished: false,
-        });
-
-        triggerToast(`Roster saved as v${nextVerNumber}.`);
-      }
-
+      const sched = activeSchedule;
+      // The number comes from the versions saved so far, read fresh, so two saves
+      // (or two planners) don't get the same number.
+      const saved = await repo.list('versions', { field: 'scheduleId', operator: '==', value: sched.id });
+      const nextVerNumber = Math.max(sched.activeVersionNumber || 1, ...saved.map((v) => v.number || 0)) + 1;
+      const now = new Date().toISOString();
+      // Only the leave and pinned days of this roster's dates are kept with it.
+      const inRange = (start: string, end: string) => end >= sched.startDate && start <= sched.endDate;
+      const created = await repo.create('versions', {
+        scheduleId: sched.id,
+        number: nextVerNumber,
+        timestamp: now,
+        author: context.currentUser?.name || context.currentUser?.email || 'Planner',
+        note: saveNote.trim() || 'Saved copy',
+        snapshot: {
+          schedule: sched,
+          assignments,
+          leaveEntries: leaveEntries.filter((l) => inRange(l.startDate, l.endDate)),
+          locks: locks.filter((l) => inRange(l.date, l.date)),
+          rulesSnapshot: rules,
+        },
+        isPublished: false,
+      });
+      await repo.update('schedules', sched.id, { activeVersionNumber: nextVerNumber, updatedAt: now });
+      const updatedSched = { ...sched, activeVersionNumber: nextVerNumber, updatedAt: now };
+      setActiveSchedule(updatedSched);
+      setSchedules((prev) => prev.map((x) => (x.id === sched.id ? updatedSched : x)));
+      setVersions([created, ...saved].sort((a, b) => b.number - a.number));
+      triggerToast(`Saved a copy as v${nextVerNumber}.`);
       setIsSaveModalOpen(false);
       setSaveNote('');
-      loadData();
     } catch (err: any) {
       notify(`Save failed: ${err.message}`, 'error');
+    } finally {
+      setIsSavingVersion(false);
     }
   };
 
@@ -1050,7 +1136,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (overrideInput.trim().toUpperCase() !== 'OVERRIDE') return;
 
     try {
-      await repo.remove('locks', activeLockToOverride.id);
+      const lock = activeLockToOverride;
+      // The pinned shift becomes a normal hand edit, so later fills may change it.
+      const unpinned = assignments.map((a) =>
+        a.nurseId === lock.nurseId && a.date === lock.date && (a.locked || a.source === 'LOCK')
+          ? { ...a, locked: false, source: 'MANUAL' as const }
+          : a
+      );
+      applyEdit({ locks: locks.filter((l) => l.id !== lock.id), assignments: unpinned });
       await repo.create('audit', {
         actor: context.currentUser?.name || 'Admin',
         action: 'OVERRIDE_LOCK',
@@ -1065,38 +1158,71 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setIsOverrideModalOpen(false);
       setActiveLockToOverride(null);
       setOverrideInput('');
-      loadData();
     } catch (err: any) {
       triggerToast(`Override failed: ${err.message}`);
     }
   };
 
-  // Undo / Redo
-  const handleUndo = async () => {
-    if (undoStack.length === 0 || !activeSchedule) return;
+  // Undo / Redo: a step restores shifts, pinned days and leave together, and
+  // only ever on the roster it was recorded for.
+  const restoreSnapshot = (target: RosterSnapshot) => {
+    applyEdit(
+      { assignments: target.assignments, locks: target.locks, leaveEntries: target.leaveEntries },
+      { recordUndo: false }
+    );
+  };
+
+  const handleUndo = () => {
     const previous = undoStack[0];
-    const nextUndo = undoStack.slice(1);
-
-    setRedoStack((prev) => [assignments, ...prev].slice(0, 50));
-    setUndoStack(nextUndo);
-
-    await persistAssignments(activeSchedule.id, previous);
-    setAssignments(previous);
-    triggerToast('Undo applied.');
+    const now = snapshotNow();
+    if (!previous || !now) return;
+    if (previous.scheduleId !== now.scheduleId) {
+      setUndoStack([]);
+      setRedoStack([]);
+      return;
+    }
+    setRedoStack((prev) => [now, ...prev].slice(0, 50));
+    setUndoStack(undoStack.slice(1));
+    restoreSnapshot(previous);
+    triggerToast('Undone.');
   };
 
-  const handleRedo = async () => {
-    if (redoStack.length === 0 || !activeSchedule) return;
+  const handleRedo = () => {
     const next = redoStack[0];
-    const nextRedo = redoStack.slice(1);
-
-    setUndoStack((prev) => [assignments, ...prev].slice(0, 50));
-    setRedoStack(nextRedo);
-
-    await persistAssignments(activeSchedule.id, next);
-    setAssignments(next);
-    triggerToast('Redo applied.');
+    const now = snapshotNow();
+    if (!next || !now) return;
+    if (next.scheduleId !== now.scheduleId) {
+      setUndoStack([]);
+      setRedoStack([]);
+      return;
+    }
+    setUndoStack((prev) => [now, ...prev].slice(0, 50));
+    setRedoStack(redoStack.slice(1));
+    restoreSnapshot(next);
+    triggerToast('Redone.');
   };
+
+  // Ctrl/Cmd+Z undoes, Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z redoes (not while typing in a box).
+  const undoRedoRef = useRef({ handleUndo, handleRedo });
+  undoRedoRef.current = { handleUndo, handleRedo };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undoRedoRef.current.handleUndo();
+      } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        undoRedoRef.current.handleRedo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   // Jump to cell helper
   const handleJumpToCell = (nurseId: string, date: string) => {
@@ -1336,13 +1462,18 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               role="alert"
             >
               <span className="truncate" title={saveError}>{saveError}</span>
-              {pendingSaveRef.current && (
+              {hasUnsavedChanges() && (
                 <button
                   onClick={() => {
-                    const pending = pendingSaveRef.current;
-                    if (!pending) return;
                     quotaTracker.reset();
-                    void persistAssignments(pending.scheduleId, pending.assignments);
+                    for (const [what, syncer] of [
+                      ['Shifts', syncers.assignments],
+                      ['Pinned days', syncers.locks],
+                      ['Leave', syncers.leaveEntries],
+                    ] as const) {
+                      const retry = syncer.retry();
+                      if (retry) void trackSave(retry, what);
+                    }
                   }}
                   className="underline cursor-pointer shrink-0"
                 >
@@ -1369,7 +1500,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           <button
             onClick={() => handleOpenPreflight('GENERATE_ALL')}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors shadow-xs cursor-pointer"
-            title="Wipes generated cells and places deterministic nurse assignments"
+            title="Fills the whole roster again. Pinned days, leave and (unless you choose otherwise) your hand changes are kept."
           >
             <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Generate All</span>
@@ -1448,6 +1579,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           </button>
         </div>
       </div>
+
+      {clinicSetupError && (
+        <div role="alert" className="mx-4 mt-2 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+          {clinicSetupError} Generating is blocked until they load.
+        </div>
+      )}
 
       {/* Top Validation Alert Banner (Total findings count + Top 3 Plain Language Findings) */}
       {(validationReport.errorCount > 0 || validationReport.warnCount > 0) && (
@@ -1539,6 +1676,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 onAssignmentsChange={handleAssignmentsChange}
                 onLocksChange={handleLocksChange}
                 onLeaveEntriesChange={handleLeaveEntriesChange}
+                onCellEdit={(edit) => applyEdit(edit)}
                 onNavigateTab={(tab) => setActiveTab(tab)}
                 isAllDaysExpanded={isAllDaysExpanded}
                 onToggleExpandDays={() => setIsAllDaysExpanded(!isAllDaysExpanded)}
@@ -1704,7 +1842,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           >
             <h3 id={saveTitleId} className="font-bold text-slate-900 text-sm">Save Roster Version</h3>
             <p className="text-[11px] text-slate-500">
-              Creates an immutable version checkpoint with a snapshot of all assignments, locks, and leave.
+              Your changes are already saved automatically. This keeps a named copy of the roster (shifts, pinned days and leave) that you can look at or go back to later.
             </p>
             <input
               type="text"
@@ -1725,6 +1863,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               <button
                 type="button"
                 onClick={handleSaveVersion}
+                disabled={isSavingVersion}
                 className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
               >
                 Save Version
@@ -1883,6 +2022,30 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               </div>
             ) : (
               <div className="space-y-2.5">
+                {activeGenerationMode === 'GENERATE_ALL' && (() => {
+                  const manualCount = assignments.filter((a) => a.source === 'MANUAL').length;
+                  return (
+                    <div className="p-2.5 rounded border border-amber-200 bg-amber-50 text-[11px] text-amber-900 space-y-1.5">
+                      <p>
+                        Shifts the app filled in before are replaced. Pinned days and approved leave are kept.
+                      </p>
+                      {manualCount > 0 && (
+                        <label className="flex items-center gap-2 font-medium cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={keepManualOnGenerate}
+                            onChange={(e) => setKeepManualOnGenerate(e.target.checked)}
+                            className="rounded border-slate-300 cursor-pointer"
+                          />
+                          <span>
+                            Keep the {manualCount} shift{manualCount === 1 ? '' : 's'} I changed by hand
+                            {keepManualOnGenerate ? '' : ' (they will be replaced)'}
+                          </span>
+                        </label>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className="p-2.5 bg-indigo-50/70 border border-indigo-200 rounded text-indigo-900 text-xs flex items-center justify-between">
                   <span className="font-semibold flex items-center gap-1.5">
                     <Stethoscope className="w-3.5 h-3.5 text-indigo-600" />
@@ -2227,7 +2390,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         />
       )}
 
-      {/* --- SCHEDULE PICKER & "SHARED WITH ME" MODAL (Phase 12) --- */}
+      {/* --- SCHEDULE PICKER --- */}
       {isSchedulePickerOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none animate-in fade-in duration-150">
           <div
@@ -2256,17 +2419,13 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             <div className="space-y-2">
               <span className="font-bold text-slate-800 text-xs block">My Clinic Schedules:</span>
               <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                {schedules.map((s) => {
+                {[...schedules].sort((a, b) => b.startDate.localeCompare(a.startDate)).map((s) => {
                   const isActive = s.id === activeSchedule?.id;
                   const pickSchedule = () => {
-                    setActiveSchedule(s);
-                    repo.list('assignments').then((asgns) => {
-                      setAssignments(asgns.filter((a) => a.scheduleId === s.id));
-                    });
-                    repo.list('versions').then((vList) => {
-                      setVersions(vList.filter((v) => v.scheduleId === s.id).sort((a, b) => b.number - a.number));
-                    });
                     setIsSchedulePickerOpen(false);
+                    if (s.id !== activeSchedule?.id) {
+                      openSchedule(s).catch((err) => notify(`Could not open "${s.name}": ${err?.message || err}`, 'error'));
+                    }
                   };
                   return (
                     // Not a <button>: it holds the delete button
@@ -2344,63 +2503,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               </div>
             </div>
 
-            {/* Shared With Me Section (Phase 12) */}
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-800 text-xs block">
-                  Shared With Me (Collaborative Rosters):
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  {invitations.length} invite{invitations.length === 1 ? '' : 's'}
-                </span>
-              </div>
-
-              {invitations.length > 0 ? (
-                <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                  {invitations.map((inv) => {
-                    const linkedSched = schedules.find((s) => s.id === inv.scheduleId);
-                    return (
-                      <button
-                        type="button"
-                        key={inv.id}
-                        onClick={() => {
-                          if (linkedSched) {
-                            setActiveSchedule(linkedSched);
-                            setIsSchedulePickerOpen(false);
-                          }
-                        }}
-                        className="w-full text-left p-2.5 rounded border border-purple-200 bg-purple-50/40 hover:bg-purple-100/50 cursor-pointer transition-colors flex items-center justify-between"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-slate-900">
-                              {linkedSched ? linkedSched.name : `Shared Schedule (${inv.scheduleId})`}
-                            </span>
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                inv.role === 'EDITOR'
-                                  ? 'bg-purple-200 text-purple-900'
-                                  : 'bg-slate-200 text-slate-800'
-                              }`}
-                            >
-                              {inv.role}
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-                            Invited: {inv.email} · {inv.status}
-                          </p>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-purple-400" aria-hidden="true" />
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded text-slate-500 text-[11px] text-center">
-                  No rosters shared with your email yet. Ask the schedule owner to invite you via the "Share" button.
-                </div>
-              )}
-            </div>
 
             {/* Modal Actions */}
             <div className="pt-2 flex items-center justify-between border-t border-slate-100">
@@ -2507,8 +2609,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       <DeleteScheduleModal
         isOpen={isDeleteScheduleModalOpen}
         schedule={scheduleToDelete}
-        shiftCount={assignments.length}
-        versionCount={versions.length}
+        shiftCount={deleteCounts?.shifts ?? 0}
+        versionCount={deleteCounts?.versions ?? 0}
         onClose={() => {
           setIsDeleteScheduleModalOpen(false);
           setScheduleToDelete(null);

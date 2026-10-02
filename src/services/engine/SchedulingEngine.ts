@@ -358,9 +358,12 @@ export class SchedulingEngine {
     workingHoursPeriods?: WorkingHoursPeriod[],
     doctors: Doctor[] = [],
     leaveTypes: LeaveType[] = [],
-    clinicSetup?: ClinicSetup
+    clinicSetup?: ClinicSetup,
+    options: { keepManual?: boolean } = {}
   ): Promise<GenerationResult> {
     const startTimeMs = performance.now();
+    // Hand edits are kept unless the planner asks to replace them (GENERATE_ALL only).
+    const keepManual = options.keepManual !== false;
 
     // 1. Sort inputs deterministically
     const sortedNurses = [...nurses].sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -510,6 +513,15 @@ export class SchedulingEngine {
         unmetSlotsCount: 0,
         generationDurationMs: Math.round(performance.now() - startTimeMs),
       };
+    }
+
+    if (mode === 'GENERATE_ALL' && keepManual) {
+      existingAssignments.forEach((a) => {
+        if (a.source === 'MANUAL') {
+          resultAssignmentsMap.set(`${a.nurseId}_${a.date}`, a);
+          preservedManualCount++;
+        }
+      });
     }
 
     if (mode === 'EMPTY_ONLY' || mode === 'REBALANCE') {

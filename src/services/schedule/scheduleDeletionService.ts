@@ -4,7 +4,7 @@
  * 
  * Schedule Deletion Service
  * Permanently removes a schedule and cascades deletion to all associated
- * assignments, versions, publish logs, acknowledgments, share links, and invitations.
+ * shifts, versions, publish logs, read receipts, share links, invitations and swaps.
  */
 
 import { removePublicRoster } from '../publish/publicRosterService';
@@ -25,91 +25,78 @@ export async function deleteEntireSchedule(
 ): Promise<ScheduleDeleteResult> {
   const schedule = await repo.get('schedules', scheduleId);
   const scheduleName = schedule?.name || `Schedule (${scheduleId})`;
+  const bySchedule = { field: 'scheduleId', operator: '==' as const, value: scheduleId };
+  const failed: string[] = [];
 
   let purgedAssignmentsCount = 0;
   let purgedVersionsCount = 0;
 
-  // 1. Delete all assignments for this schedule
-  try {
-    const allAssignments = await repo.list('assignments');
-    const schedAssignments = allAssignments.filter((a) => a.scheduleId === scheduleId);
-    if (schedAssignments.length > 0) {
-      await repo.bulkRemove('assignments', schedAssignments.map((a) => a.id));
-      purgedAssignmentsCount = schedAssignments.length;
+  /** Removes one kind of record that belongs to this roster; a failure is collected, not hidden. */
+  const purge = async (label: string, run: () => Promise<number | void>) => {
+    try {
+      return (await run()) || 0;
+    } catch (err) {
+      console.error(`Could not delete the ${label} of schedule ${scheduleId}:`, err);
+      failed.push(label);
+      return 0;
     }
-  } catch (err) {
-    console.warn('Error purging assignments for schedule:', err);
-  }
+  };
 
-  // 2. Delete all versions for this schedule
-  try {
-    const allVersions = await repo.list('versions');
-    const schedVersions = allVersions.filter((v) => v.scheduleId === scheduleId);
-    for (const v of schedVersions) {
-      await repo.remove('versions', v.id);
-    }
-    purgedVersionsCount = schedVersions.length;
-  } catch (err) {
-    console.warn('Error purging versions for schedule:', err);
-  }
+  purgedAssignmentsCount = await purge('shifts', async () => {
+    const list = await repo.list('assignments', bySchedule);
+    if (list.length > 0) await repo.bulkRemove('assignments', list.map((a) => a.id));
+    return list.length;
+  });
 
-  // 3. Delete share links
-  try {
-    const allShareLinks = await repo.list('shareLinks');
-    const schedLinks = allShareLinks.filter((l) => l.scheduleId === scheduleId);
-    for (const l of schedLinks) {
-      // Remove the public snapshot first: it cannot be found once the link is gone.
+  // Public snapshots first: they can't be found once their share link is gone.
+  await purge('share links', async () => {
+    const links = await repo.list('shareLinks', bySchedule);
+    for (const l of links) {
       if (l.token) await removePublicRoster(l.token);
-      await repo.remove('shareLinks', l.id);
     }
-  } catch (err) {
-    console.warn('Error purging shareLinks:', err);
-  }
+    if (links.length > 0) await repo.bulkRemove('shareLinks', links.map((l) => l.id));
+  });
 
-  // 4. Delete invitations
-  try {
-    const allInvs = await repo.list('invitations');
-    const schedInvs = allInvs.filter((i) => i.scheduleId === scheduleId);
-    for (const inv of schedInvs) {
-      await repo.remove('invitations', inv.id);
-    }
-  } catch (err) {
-    console.warn('Error purging invitations:', err);
-  }
+  purgedVersionsCount = await purge('versions', async () => {
+    const list = await repo.list('versions', bySchedule);
+    if (list.length > 0) await repo.bulkRemove('versions', list.map((v) => v.id));
+    return list.length;
+  });
 
-  // 5. Delete publish email logs
-  try {
-    const allLogs = await repo.list('emailLog');
-    const schedLogs = allLogs.filter((p) => p.scheduleId === scheduleId);
-    for (const log of schedLogs) {
-      await repo.remove('emailLog', log.id);
-    }
-  } catch (err) {
-    console.warn('Error purging emailLog:', err);
-  }
+  await purge('invitations', async () => {
+    const list = await repo.list('invitations', bySchedule);
+    if (list.length > 0) await repo.bulkRemove('invitations', list.map((x) => x.id));
+  });
 
-  // 6. Delete acknowledgments
-  try {
-    const allAcks = await repo.list('acknowledgments');
-    const schedAcks = allAcks.filter((a) => a.scheduleId === scheduleId);
-    for (const ack of schedAcks) {
-      await repo.remove('acknowledgments', ack.id);
-    }
-  } catch (err) {
-    console.warn('Error purging acknowledgments:', err);
-  }
+  await purge('email log', async () => {
+    const list = await repo.list('emailLog', bySchedule);
+    if (list.length > 0) await repo.bulkRemove('emailLog', list.map((x) => x.id));
+  });
 
-  // 7. Delete the schedule record itself
+  await purge('read receipts', async () => {
+    const list = await repo.list('acknowledgments', bySchedule);
+    if (list.length > 0) await repo.bulkRemove('acknowledgments', list.map((x) => x.id));
+  });
+
+  await purge('shift swaps', async () => {
+    const list = await repo.list('swaps', bySchedule);
+    if (list.length > 0) await repo.bulkRemove('swaps', list.map((x) => x.id));
+  });
+
+  // The roster itself is only deleted when everything that belongs to it is gone,
+  // so a failed clean up can be retried instead of leaving hidden leftovers.
+  if (failed.length > 0) {
+    throw new Error(`Some parts could not be deleted (${failed.join(', ')}), so the roster was kept. Try again.`);
+  }
   await repo.remove('schedules', scheduleId);
 
-  // 8. Record audit trail event
   try {
     await repo.create('audit', {
       actor: actorName,
       action: 'DELETE',
       entity: 'Schedule',
       entityId: scheduleId,
-      note: `Permanently deleted schedule "${scheduleName}" and cascaded deletion of ${purgedAssignmentsCount} assignments and ${purgedVersionsCount} version checkpoints.`,
+      note: `Permanently deleted schedule "${scheduleName}" with ${purgedAssignmentsCount} shifts and ${purgedVersionsCount} versions.`,
       timestamp: new Date().toISOString(),
     });
   } catch (err) {

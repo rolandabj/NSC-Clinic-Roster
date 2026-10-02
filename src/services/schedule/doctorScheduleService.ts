@@ -162,6 +162,9 @@ export async function saveDoctorShift(
         const curIsoDate = cur.toISOString().split('T')[0];
         const existing = sessionsByDate.get(curIsoDate);
 
+        // A change or removal made for that one date is kept.
+        if (existing && (existing.source === 'MANUAL' || existing.cancelled)) continue;
+
         if (existing) {
           await repo.update('doctorSessions', existing.id, {
             startTime,
@@ -217,8 +220,9 @@ export async function deleteDoctorShift(
   let currentDoctor = doctor;
 
   if (deleteScope === 'THIS_DATE_ONLY') {
+    // Kept as a cancelled session, so filling from the weekly pattern doesn't add it back.
     if (sessionId) {
-      await repo.remove('doctorSessions', sessionId);
+      await repo.update('doctorSessions', sessionId, { cancelled: true, source: 'MANUAL' });
     }
   } else {
     // 1. Remove from weekly pattern
@@ -247,7 +251,8 @@ export async function deleteDoctorShift(
 
     for (const s of docSessions) {
       if (s.date >= rangeStart && s.date <= rangeEnd) {
-        if (getWeekdayFromIsoDate(s.date) === weekdayIndex) {
+        // Sessions changed for one date only are left as they are.
+        if (getWeekdayFromIsoDate(s.date) === weekdayIndex && s.source !== 'MANUAL') {
           await repo.remove('doctorSessions', s.id);
         }
       }
@@ -319,7 +324,10 @@ export interface PopulateRecurringDoctorSessionsParams {
   startDate: string;
   endDate: string;
   doctors?: Doctor[];
+  /** Re-apply the pattern to sessions it created before (never to one-date changes). */
   overwriteExisting?: boolean;
+  /** Work out what would be added without saving anything. */
+  dryRun?: boolean;
 }
 
 export interface PopulateRecurringDoctorSessionsResult {
@@ -330,13 +338,16 @@ export interface PopulateRecurringDoctorSessionsResult {
 }
 
 /**
- * Expands and persists recurring weekly doctor sessions across a schedule duration.
- * By default, this is non-destructive and preserves existing manual sessions and cancellations.
+ * Adds the weekly pattern sessions that are missing in a date range.
+ *
+ * A doctor's day that already has any session (including one moved, added or
+ * cancelled for that date) is left alone, so one-date changes are never undone.
+ * Public holidays are skipped: only the on call doctor works then.
  */
 export async function populateRecurringDoctorSessionsForSchedule(
   params: PopulateRecurringDoctorSessionsParams
 ): Promise<PopulateRecurringDoctorSessionsResult> {
-  const { repo, startDate, endDate, overwriteExisting = false } = params;
+  const { repo, startDate, endDate, overwriteExisting = false, dryRun = false } = params;
   const doctors = params.doctors || (await repo.list('doctors'));
 
   const candidateSessions = generateDoctorSessionsForDateRange(startDate, endDate, doctors);
@@ -344,35 +355,32 @@ export async function populateRecurringDoctorSessionsForSchedule(
     return { createdCount: 0, existingCount: 0, totalSessions: 0, newSessions: [] };
   }
 
-  // Fetch existing sessions in the system to avoid duplicates
-  const allExistingSessions = await repo.list('doctorSessions');
-  const existingMap = new Map<string, DoctorSession>();
+  const [allExistingSessions, holidays] = await Promise.all([repo.list('doctorSessions'), repo.list('holidays')]);
+  const holidayDates = new Set(holidays.map((h) => h.date));
+  const byDoctorDay = new Map<string, DoctorSession[]>();
   for (const s of allExistingSessions) {
-    // Unique key: doctorId + date + startTime
-    existingMap.set(`${s.doctorId}_${s.date}_${s.startTime}`, s);
+    const key = `${s.doctorId}_${s.date}`;
+    byDoctorDay.set(key, [...(byDoctorDay.get(key) || []), s]);
   }
 
   const sessionsToUpsert: DoctorSession[] = [];
   let existingCount = 0;
 
   for (const cand of candidateSessions) {
-    const key = `${cand.doctorId}_${cand.date}_${cand.startTime}`;
-    const existing = existingMap.get(key);
-
-    if (existing) {
-      existingCount++;
-      if (overwriteExisting) {
-        sessionsToUpsert.push({
-          ...cand,
-          id: existing.id,
-        });
-      }
-    } else {
+    if (holidayDates.has(cand.date)) continue;
+    const sameDay = byDoctorDay.get(`${cand.doctorId}_${cand.date}`) || [];
+    if (sameDay.length === 0) {
       sessionsToUpsert.push(cand);
+      continue;
     }
+    existingCount++;
+    if (!overwriteExisting) continue;
+    // Only a session this pattern made (same start, not changed or cancelled by hand) is refreshed.
+    const own = sameDay.find((x) => x.startTime === cand.startTime && x.source !== 'MANUAL' && !x.cancelled);
+    if (own) sessionsToUpsert.push({ ...cand, id: own.id });
   }
 
-  if (sessionsToUpsert.length > 0) {
+  if (!dryRun && sessionsToUpsert.length > 0) {
     await repo.bulkUpsert('doctorSessions', sessionsToUpsert);
   }
 

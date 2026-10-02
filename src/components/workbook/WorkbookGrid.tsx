@@ -84,6 +84,8 @@ interface WorkbookGridProps {
   onAssignmentsChange: (next: Assignment[]) => void;
   onLocksChange?: (next: LockEntry[]) => void;
   onLeaveEntriesChange?: (next: LeaveEntry[]) => void;
+  /** One cell edit that changes shifts, pinned days and leave together (one save, one undo step). */
+  onCellEdit?: (edit: { assignments: Assignment[]; locks: LockEntry[]; leaveEntries: LeaveEntry[] }) => void;
   onJumpToCell?: (nurseId: string, date: string) => void;
   onOpenLockOverrideModal?: (lock: LockEntry) => void;
   onNavigateTab?: (tab: 'roster' | 'doctors' | 'coverage' | 'warnings' | 'leave' | 'legend') => void;
@@ -116,6 +118,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   onAssignmentsChange,
   onLocksChange,
   onLeaveEntriesChange,
+  onCellEdit,
   onOpenLockOverrideModal,
   onNavigateTab,
   isAllDaysExpanded = false,
@@ -487,7 +490,14 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     const result: LeaveEntry[] = [];
 
     for (const entry of entries) {
-      if (entry.nurseId !== nurseId || targetDate < entry.startDate || targetDate > entry.endDate) {
+      // Only approved leave is shown in the grid, so only approved leave is changed here.
+      // Pending and rejected requests are left for the manager to decide.
+      if (
+        !entry.approved ||
+        entry.nurseId !== nurseId ||
+        targetDate < entry.startDate ||
+        targetDate > entry.endDate
+      ) {
         result.push(entry);
         continue;
       }
@@ -509,7 +519,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
         result.push({
           ...entry,
           startDate: newStart,
-          hoursCredited: Math.round(remainingDays * hoursPerDay),
+          hoursCredited: Math.round(remainingDays * hoursPerDay * 100) / 100,
         });
       } else if (entry.endDate === targetDate) {
         // Remove only the last day of the span
@@ -518,7 +528,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
         result.push({
           ...entry,
           endDate: newEnd,
-          hoursCredited: Math.round(remainingDays * hoursPerDay),
+          hoursCredited: Math.round(remainingDays * hoursPerDay * 100) / 100,
         });
       } else {
         // Target is in the middle: split into two separate valid leave entries
@@ -529,7 +539,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
           id: `${entry.id}-p1-${Date.now()}`,
           startDate: entry.startDate,
           endDate: end1,
-          hoursCredited: Math.round(days1 * hoursPerDay),
+          hoursCredited: Math.round(days1 * hoursPerDay * 100) / 100,
         });
 
         const start2 = addDaysToIso(targetDate, 1);
@@ -539,7 +549,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
           id: `${entry.id}-p2-${Date.now()}`,
           startDate: start2,
           endDate: entry.endDate,
-          hoursCredited: Math.round(days2 * hoursPerDay),
+          hoursCredited: Math.round(days2 * hoursPerDay * 100) / 100,
         });
       }
     }
@@ -547,10 +557,31 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     return result;
   };
 
+  /** Sends one cell edit up (as a single change when the page supports it). */
+  const emitCellEdit = (nextAssignments: Assignment[], nextLocks: LockEntry[], nextLeaves: LeaveEntry[]) => {
+    if (onCellEdit) {
+      onCellEdit({ assignments: nextAssignments, locks: nextLocks, leaveEntries: nextLeaves });
+      return;
+    }
+    onAssignmentsChange(nextAssignments);
+    if (onLocksChange) onLocksChange(nextLocks);
+    if (onLeaveEntriesChange) onLeaveEntriesChange(nextLeaves);
+  };
+
   // Inline Editor Save (Duty Shift or Leave)
-  const handleSaveEditorAssignment = () => {
+  const handleSaveEditorAssignment = async () => {
     if (!editorTarget) return;
     const { nurseId, date } = editorTarget;
+    // Replacing a pinned day is confirmed, as clearing one is.
+    const existingLock = locks.find((l) => l.nurseId === nurseId && l.date === date);
+    if (existingLock) {
+      const ok = await confirmDialog({
+        title: 'Replace a pinned day?',
+        message: 'This day is pinned. Saving replaces what is pinned with your new choice.',
+        confirmLabel: 'Replace',
+      });
+      if (!ok) return;
+    }
 
     const nextAssignments = assignments.filter((a) => !(a.nurseId === nurseId && a.date === date));
     let nextLocks = locks.filter((l) => !(l.nurseId === nurseId && l.date === date));
@@ -595,13 +626,16 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       const isProtected = !editorAllowOverwrite;
       const creditedHours = typeof lt?.creditedHours === 'number' ? lt.creditedHours : 8;
 
+      // Leave a planner enters is always approved (it is shown and counted). "Allow
+      // overwrite" only means it is not pinned, so a later fill may replace it.
       const newLeave: LeaveEntry = {
         id: `leave-${nurseId}-${date}-${Date.now()}`,
         nurseId,
         leaveTypeId: lt ? lt.id : 'leave-ro',
         startDate: date,
         endDate: date,
-        approved: isProtected,
+        approved: true,
+        status: 'APPROVED',
         hoursCredited: creditedHours,
         note: editorNote.trim() || undefined,
       };
@@ -620,9 +654,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       }
     }
 
-    onAssignmentsChange(nextAssignments);
-    if (onLocksChange) onLocksChange(nextLocks);
-    if (onLeaveEntriesChange) onLeaveEntriesChange(nextLeaves);
+    emitCellEdit(nextAssignments, nextLocks, nextLeaves);
 
     setIsEditorOpen(false);
   };
@@ -649,9 +681,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     // Remove ONLY the selected date from leave entries, preserving all other days/leaves
     const nextLeaves = removeDateFromLeaves(latest.leaveEntries, nurseId, date);
 
-    onAssignmentsChange(nextAssignments);
-    if (onLocksChange) onLocksChange(nextLocks);
-    if (onLeaveEntriesChange) onLeaveEntriesChange(nextLeaves);
+    emitCellEdit(nextAssignments, nextLocks, nextLeaves);
 
     setIsEditorOpen(false);
   };
