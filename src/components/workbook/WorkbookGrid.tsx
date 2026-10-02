@@ -65,7 +65,7 @@ import { useDialogA11y } from '../common/useDialogA11y';
 import { confirmDialog, notify } from '../common/dialogs';
 import { coveredMinutes, doctorSessionsOn, nurseClinicRoleOf, toMinutes } from '../../services/engine/clinicModel';
 import { QuickCellPopup, QuickWorkOption, QuickLeaveOption, QuickDayNote, QuickWish } from './grid/QuickCellPopup';
-import { describeRequest, explainNurseDay, pendingLeaveOn, requestOn, RequestWords } from '../../services/engine/explainCell';
+import { describeRequest, explainNurseDay, isPendingLeave, pendingLeaveOn, requestOn, RequestWords } from '../../services/engine/explainCell';
 
 interface WorkbookGridProps {
   schedule: Schedule;
@@ -331,6 +331,69 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     }
     return map;
   }, [nurses, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods, blockStart, blockEnd]);
+
+  // Per cell lookups, keyed `${nurseId}_${date}`, so each cell does not scan every list.
+  const rosterStart = schedule.startDate;
+  const rosterEnd = schedule.endDate;
+  const inRosterDates = (date: string) => date >= rosterStart && date <= rosterEnd;
+  const assignmentByCell = useMemo(() => {
+    const map = new Map<string, Assignment>();
+    for (const a of assignments) {
+      const k = `${a.nurseId}_${a.date}`;
+      if (!map.has(k)) map.set(k, a);
+    }
+    return map;
+  }, [assignments]);
+  const lockByCell = useMemo(() => {
+    const map = new Map<string, LockEntry>();
+    for (const l of locks) {
+      const k = `${l.nurseId}_${l.date}`;
+      if (!map.has(k)) map.set(k, l);
+    }
+    return map;
+  }, [locks]);
+  /** Approved and waiting leave on each day of this roster (the first entry in the list wins, as with find). */
+  const leaveByCell = useMemo(() => {
+    const approved = new Map<string, LeaveEntry>();
+    const pending = new Map<string, LeaveEntry>();
+    for (const le of leaveEntries) {
+      const isApproved = !!le.approved;
+      const waiting = isPendingLeave(le);
+      if (!isApproved && !waiting) continue;
+      const from = le.startDate > rosterStart ? le.startDate : rosterStart;
+      const to = le.endDate < rosterEnd ? le.endDate : rosterEnd;
+      for (let day = from, i = 0; day <= to && i < 400; i++) {
+        const k = `${le.nurseId}_${day}`;
+        if (isApproved && !approved.has(k)) approved.set(k, le);
+        if (waiting && !pending.has(k)) pending.set(k, le);
+        const [y, m, d] = day.split('-').map(Number);
+        day = new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
+      }
+    }
+    return { approved, pending };
+  }, [leaveEntries, rosterStart, rosterEnd]);
+  /** Requests on this roster's dates that still count (refused ones are left out). */
+  const requestsByCell = useMemo(() => {
+    const map = new Map<string, AvailabilityRequest[]>();
+    for (const r of availabilityRequests) {
+      if (r.status === 'REJECTED' || !inRosterDates(r.date)) continue;
+      const k = `${r.nurseId}_${r.date}`;
+      const list = map.get(k);
+      if (list) list.push(r);
+      else map.set(k, [r]);
+    }
+    return map;
+  }, [availabilityRequests, rosterStart, rosterEnd]);
+  const assignmentOn = (nurseId: string, date: string) => assignmentByCell.get(`${nurseId}_${date}`);
+  const lockOn = (nurseId: string, date: string) => lockByCell.get(`${nurseId}_${date}`);
+  const approvedLeaveOn = (nurseId: string, date: string) =>
+    inRosterDates(date)
+      ? leaveByCell.approved.get(`${nurseId}_${date}`)
+      : leaveEntries.find((le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate);
+  const waitingLeaveOn = (nurseId: string, date: string) =>
+    inRosterDates(date) ? leaveByCell.pending.get(`${nurseId}_${date}`) : pendingLeaveOn(leaveEntries, nurseId, date);
+  const cellRequestOn = (nurseId: string, date: string) =>
+    requestOn(inRosterDates(date) ? requestsByCell.get(`${nurseId}_${date}`) : availabilityRequests, nurseId, date);
 
   const getNurseBlockHours = (nurse: Nurse) => {
     const h = blockHoursByNurse.get(nurse.id);
@@ -1106,17 +1169,15 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
    * A nurse's wishes for a day: leave waiting for approval (unless approved leave
    * is already there) and her request (a day off or a shift), in plain words.
    */
-  const wishesOn = (nurseId: string, date: string) => {
-    const hasApprovedLeave = leaveEntries.some(
-      (le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate
-    );
-    const pendingLeave = hasApprovedLeave ? undefined : pendingLeaveOn(leaveEntries, nurseId, date);
+  const wishesOn = (nurseId: string, date: string, asgn?: Assignment) => {
+    const hasApprovedLeave = !!approvedLeaveOn(nurseId, date);
+    const pendingLeave = hasApprovedLeave ? undefined : waitingLeaveOn(nurseId, date);
     const pendingLeaveType = pendingLeave ? leaveTypeMap.get(pendingLeave.leaveTypeId) : undefined;
     const pendingLeaveText = pendingLeave
       ? `Leave asked for, waiting for approval: ${pendingLeaveType?.name || 'Leave'}`
       : '';
-    const request = requestOn(availabilityRequests, nurseId, date);
-    const givenDutyId = assignments.find((a) => a.nurseId === nurseId && a.date === date)?.dutyWindowId;
+    const request = cellRequestOn(nurseId, date);
+    const givenDutyId = (asgn || assignmentOn(nurseId, date))?.dutyWindowId;
     const requestWords: RequestWords | undefined = request ? describeRequest(request, dutyWindows, givenDutyId) : undefined;
     return { pendingLeave, pendingLeaveType, pendingLeaveText, request, requestWords };
   };
@@ -1448,17 +1509,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                     {/* Matrix Cells */}
                     {dayInfo.map(({ dateStr, isWeekend, holiday, isToday }, dateIndex) => {
-                      const asgn = assignments.find(
-                        (a) => a.nurseId === nurse.id && a.date === dateStr
-                      );
-                      const lock = locks.find((l) => l.nurseId === nurse.id && l.date === dateStr);
-                      const leave = leaveEntries.find(
-                        (le) =>
-                          le.nurseId === nurse.id &&
-                          le.approved &&
-                          dateStr >= le.startDate &&
-                          dateStr <= le.endDate
-                      );
+                      const asgn = assignmentOn(nurse.id, dateStr);
+                      const lock = lockOn(nurse.id, dateStr);
+                      const leave = approvedLeaveOn(nurse.id, dateStr);
 
                       const cellKey = cellKeyOf(nurse.id, dateStr);
                       const isSelected =
@@ -1472,7 +1525,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                       const duty = asgn ? dutyMap.get(asgn.dutyWindowId) : undefined;
                       const leaveType = leave ? leaveTypes.find((l) => l.id === leave.leaveTypeId) : undefined;
-                      const { pendingLeave, pendingLeaveType, pendingLeaveText, requestWords } = wishesOn(nurse.id, dateStr);
+                      const { pendingLeave, pendingLeaveType, pendingLeaveText, requestWords } = wishesOn(nurse.id, dateStr, asgn);
                       const pendingLeaveColor = pendingLeaveType?.color || '#f59e0b';
                       // Leave waiting for approval: diagonal stripes behind whatever the cell shows.
                       const pendingHatch = pendingLeave

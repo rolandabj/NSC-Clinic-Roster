@@ -83,7 +83,12 @@ function newToken(): string {
   return `nr_${crypto.randomUUID()}`;
 }
 
-/** The nurse's private link: reused while it works, otherwise a new one is made. */
+/**
+ * The nurse's private link: reused while it works, otherwise a new one is made.
+ * The repository has no transactions, so after making a link it is read back:
+ * when two editors made one at the same time, the link saved last wins and the
+ * page written for the losing token (if any) is removed.
+ */
 export async function ensureNurseLink(repo: IRepository, nurseId: string): Promise<NurseLink> {
   const existing = await repo.get('nurseLinks', nurseId);
   if (existing && !existing.revoked && existing.token) return existing;
@@ -95,6 +100,11 @@ export async function ensureNurseLink(repo: IRepository, nurseId: string): Promi
     revoked: false,
   };
   await repo.create('nurseLinks', link);
+  const saved = await repo.get('nurseLinks', nurseId);
+  if (saved && !saved.revoked && saved.token && saved.token !== link.token) {
+    await removeNurseRoster(repo, link.token).catch(() => undefined);
+    return saved;
+  }
   return link;
 }
 
@@ -116,13 +126,23 @@ export async function revokeNurseLink(repo: IRepository, nurseId: string): Promi
   await repo.update('nurseLinks', nurseId, { revoked: true });
 }
 
+export interface RegenerateNurseLinkResult {
+  link: NurseLink;
+  /** Set when the new link was made but her page could not be written. */
+  syncError?: string;
+}
+
 /** Replaces the nurse's private link: the old one stops working, the new one shows her shifts. */
-export async function regenerateNurseLink(repo: IRepository, nurseId: string): Promise<NurseLink> {
+export async function regenerateNurseLink(repo: IRepository, nurseId: string): Promise<RegenerateNurseLinkResult> {
   await revokeNurseLink(repo, nurseId);
   const link = await ensureNurseLink(repo, nurseId);
-  const result = await syncNurseRosters(repo, [nurseId]);
-  if (result.failed.length > 0) throw new Error(result.failed[0]);
-  return link;
+  try {
+    const result = await syncNurseRosters(repo, [nurseId]);
+    if (result.failed.length > 0) return { link, syncError: result.failed[0] };
+  } catch (err: any) {
+    return { link, syncError: String(err?.message || err) };
+  }
+  return { link };
 }
 
 // ---------------------------------------------------------------------------
@@ -290,6 +310,8 @@ export function formatRosterAsText(
 
 export interface SyncNurseRostersResult {
   synced: number;
+  /** The nurses whose page was written. */
+  syncedIds: string[];
   /** One plain message per nurse whose page could not be written. */
   failed: string[];
 }
@@ -328,7 +350,7 @@ export async function syncNurseRosters(repo: IRepository, nurseIds?: string[]): 
     ? nurseIds.filter((id) => nurseMap.has(id))
     : nurses.filter((n) => n.active && linkMap.has(n.id)).map((n) => n.id);
 
-  const result: SyncNurseRostersResult = { synced: 0, failed: [] };
+  const result: SyncNurseRostersResult = { synced: 0, syncedIds: [], failed: [] };
   const nowIso = new Date().toISOString();
   for (const nurseId of targets) {
     const link = linkMap.get(nurseId);
@@ -351,6 +373,7 @@ export async function syncNurseRosters(repo: IRepository, nurseIds?: string[]): 
       // create() replaces the whole document.
       await repo.create('nurseRosters', doc);
       result.synced++;
+      result.syncedIds.push(nurseId);
     } catch (err: any) {
       result.failed.push(`${nurse.fullName}: ${err?.message || err}`);
     }

@@ -10,6 +10,7 @@ import { IRepository } from '../repository/IRepository';
 import { SEED_WORKING_HOURS_PERIODS } from './seedData';
 import { CollectionName } from '../../types';
 import { removePublicRoster } from '../publish/publicRosterService';
+import { revokeNurseLink } from '../publish/nurseRosterService';
 
 export const ALL_COLLECTIONS: CollectionName[] = [
   'clinics',
@@ -40,6 +41,8 @@ export const ALL_COLLECTIONS: CollectionName[] = [
   'availabilityRequests',
   'systemMetadata',
   'workingHoursPeriods',
+  'nurseLinks',
+  'presence',
 ];
 
 /**
@@ -117,6 +120,16 @@ export async function clearDatabase(repo: IRepository, options?: { keepAudit?: b
   } catch (e) {
     console.warn('[ClinicRoster] Could not remove public roster snapshots:', e);
     failed.push('public roster links');
+  }
+
+  // Nurses' private pages can't be listed either: remove them through their links,
+  // so links already sent by email stop working.
+  try {
+    const nurseLinks = await repo.list('nurseLinks');
+    for (const link of nurseLinks) await revokeNurseLink(repo, link.nurseId || link.id);
+  } catch (e) {
+    console.warn('[ClinicRoster] Could not remove the nurses\' private pages:', e);
+    failed.push('nurse private links');
   }
 
   // 2. Wipe the clinic data collections.

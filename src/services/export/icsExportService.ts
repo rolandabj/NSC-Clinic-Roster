@@ -8,7 +8,7 @@
  * calendar app understands without extra time zone definitions.
  */
 
-import type { Assignment, DutyWindow, Doctor, ClinicalRole, Specialty, NurseRosterDoc } from '../../types';
+import type { Assignment, DutyWindow, Doctor, ClinicalRole, Specialty, NurseRosterDoc, NurseRosterShift } from '../../types';
 
 interface IcsParams {
   calendarName: string;
@@ -69,18 +69,48 @@ function escapeIcsText(value: string): string {
     .replace(/\r?\n/g, '\\n');
 }
 
-/** Folds lines longer than 75 octets per RFC 5545. */
-function foldLine(line: string): string {
-  if (line.length <= 74) return line;
+const utf8 = new TextEncoder();
+
+/**
+ * Folds lines longer than 75 octets of UTF-8 per RFC 5545. Each continuation
+ * line starts with a space, which counts toward its 75 octets, and a character
+ * is never split across lines.
+ */
+export function foldLine(line: string): string {
+  if (utf8.encode(line).length <= 75) return line;
   const chunks: string[] = [];
-  let rest = line;
-  chunks.push(rest.slice(0, 74));
-  rest = rest.slice(74);
-  while (rest.length > 0) {
-    chunks.push(' ' + rest.slice(0, 73));
-    rest = rest.slice(73);
+  let current = '';
+  let size = 0;
+  let limit = 75;
+  for (const ch of line) {
+    const n = utf8.encode(ch).length;
+    if (size + n > limit) {
+      chunks.push(current);
+      current = ' ';
+      size = 1;
+      limit = 75;
+    }
+    current += ch;
+    size += n;
   }
+  chunks.push(current);
   return chunks.join('\r\n');
+}
+
+/** A short stable hash (FNV-1a, base 36) so event ids stay the same between feeds. */
+export function shortHash(value: string): string {
+  let h = 0x811c9dc5;
+  for (const byte of utf8.encode(value)) {
+    h ^= byte;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
+
+/** The event id of a shift on a nurse's page: two shifts on the same day and time never share one. */
+export function nurseShiftUid(nurseId: string, s: Pick<NurseRosterShift, 'date' | 'startTime' | 'acronym' | 'detail'>): string {
+  const acronym = String(s.acronym || '').replace(/[^A-Za-z0-9]/g, '') || 'shift';
+  return `${nurseId}-${s.date}-${s.startTime.replace(':', '')}-${acronym}-${shortHash(s.detail || '')}@clinicroster`;
 }
 
 export function buildNurseIcs(params: IcsParams): string {
@@ -185,7 +215,7 @@ export function buildNurseRosterIcs(doc: NurseRosterIcsInput): string {
     const summary = s.detail ? `${s.acronym} ${s.shiftName} · ${s.detail}` : `${s.acronym} ${s.shiftName}`;
     lines.push(
       'BEGIN:VEVENT',
-      `UID:${escapeIcsText(`${doc.nurseId}-${s.date}-${s.startTime.replace(':', '')}@clinicroster`)}`,
+      `UID:${escapeIcsText(nurseShiftUid(doc.nurseId, s))}`,
       `DTSTAMP:${stamp}`,
       `DTSTART:${formatIcsDate(start)}`,
       `DTEND:${formatIcsDate(end)}`,

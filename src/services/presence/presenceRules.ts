@@ -7,11 +7,18 @@
 
 import { PresenceRecord } from '../../types';
 
-/** A record not refreshed for this long belongs to a closed tab. */
-export const STALE_MS = 75 * 1000;
+/** A record not refreshed for this long belongs to a closed or hidden tab. */
+export const STALE_MS = 150 * 1000;
 
-/** People other than me who have this roster open now. */
-export function othersOnRoster(records: PresenceRecord[], myId: string | undefined, scheduleId: string | null, now = Date.now()) {
+/** Other people (not my own other tabs) who have this roster open now, one entry per person. */
+export function othersOnRoster(records: PresenceRecord[], myUid: string | undefined, scheduleId: string | null, now = Date.now()) {
   if (!scheduleId) return [];
-  return records.filter((p) => p.id !== myId && p.scheduleId === scheduleId && now - Date.parse(p.at) < STALE_MS);
+  const byPerson = new Map<string, PresenceRecord>();
+  for (const p of records) {
+    if (p.uid === myUid || p.scheduleId !== scheduleId) continue;
+    const age = now - Number(p.at);
+    if (!(age < STALE_MS && age > -STALE_MS)) continue;
+    byPerson.set(p.uid, p);
+  }
+  return [...byPerson.values()];
 }

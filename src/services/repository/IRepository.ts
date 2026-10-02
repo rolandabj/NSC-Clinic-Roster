@@ -87,6 +87,8 @@ export interface IRepository {
   subscribe<T extends CollectionName>(
     collection: T,
     callback: SubscribeCallback<EntityForCollection<T>>,
-    filter?: { field: string; operator: '=='; value: any }
+    filter?: { field: string; operator: '=='; value: any },
+    /** Also called when this browser's own write is confirmed by the server. */
+    options?: { includeMetadataChanges?: boolean }
   ): Unsubscribe;
 }

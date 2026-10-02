@@ -443,8 +443,11 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           linkFailures++;
         }
       }
-      run.nurseTokens = nurseTokens;
-      const synced = await syncNurseRosters(repo, Object.keys(nurseTokens));
+      // Every nurse with a link is refreshed, so a nurse taken off this roster loses its old shifts too.
+      const synced = await syncNurseRosters(repo);
+      // Only pages that were written are linked in the emails.
+      const written = new Set(synced.syncedIds);
+      run.nurseTokens = Object.fromEntries(Object.entries(nurseTokens).filter(([id]) => written.has(id)));
       if (linkFailures > 0 || synced.failed.length > 0) {
         addWarning(
           `${linkFailures + synced.failed.length} nurse private page(s) couldn't be updated. Open Publish, Private links, to update them.`

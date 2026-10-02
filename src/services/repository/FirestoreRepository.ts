@@ -243,12 +243,14 @@ export class FirestoreRepository implements IRepository {
   subscribe<T extends CollectionName>(
     colName: T,
     callback: SubscribeCallback<EntityForCollection<T>>,
-    filter?: { field: string; operator: '=='; value: any }
+    filter?: { field: string; operator: '=='; value: any },
+    options?: { includeMetadataChanges?: boolean }
   ): Unsubscribe {
     const colRef = collection(this.db, colName);
     const target = filter ? query(colRef, where(filter.field, filter.operator, filter.value)) : colRef;
     return onSnapshot(
       target,
+      { includeMetadataChanges: !!options?.includeMetadataChanges },
       (snapshot) => {
         const items = snapshot.docs.map((docSnap) => ({
           id: docSnap.id,

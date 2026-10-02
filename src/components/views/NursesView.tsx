@@ -39,6 +39,7 @@ import {
 import { BulkImportModal } from '../modals/BulkImportModal';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog } from '../common/dialogs';
+import { revokeNurseLink } from '../../services/publish/nurseRosterService';
 
 interface NursesViewProps {
   context: ClinicContextState;
@@ -297,6 +298,10 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
           notes: formData.notes,
           updatedAt: new Date().toISOString(),
         });
+        // A nurse made inactive no longer has a private page.
+        if (!formData.active && nurses.find((n) => n.id === formData.id)?.active) {
+          await revokeNurseLink(repo, formData.id).catch((err) => console.warn('Could not stop the private link:', err));
+        }
         triggerNotification(`Updated profile for ${formData.fullName}.`);
       } else {
         await repo.create('nurses', {
@@ -332,6 +337,8 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
       danger: true,
     });
     if (ok) {
+      // Her private link stops working too (it would otherwise keep showing her shifts).
+      await revokeNurseLink(repo, id).catch((err) => console.warn('Could not stop the private link:', err));
       await repo.remove('nurses', id);
       triggerNotification(`Nurse ${name} removed.`);
       loadAllData();

@@ -21,6 +21,9 @@ import { calendarRouter } from './routes/calendar';
 
 export async function startServer() {
   const app = express();
+  // The app runs behind one hosting proxy: use the visitor's address it passes on,
+  // so each visitor gets their own rate limit instead of everyone sharing one.
+  app.set('trust proxy', 1);
   const PORT = parseInt(process.env.PORT || '3000', 10);
   const isProduction = process.env.NODE_ENV === 'production';
 

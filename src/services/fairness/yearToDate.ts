@@ -87,11 +87,48 @@ export function earlierRostersThisYear(schedule: Schedule, schedules: Schedule[]
   );
 }
 
+type LoadedRoster = { schedule: Schedule; assignments: Assignment[] };
+
+/**
+ * The earlier rosters' shifts, kept for this browser session. The key holds each
+ * earlier roster's updatedAt and version number, so publishing one again (or
+ * adding or removing a roster) loads them fresh.
+ */
+const loadedRostersCache = new Map<string, Promise<LoadedRoster[]>>();
+
+/** Forgets the cached year to date rosters (the next load reads them again). */
+export function clearYearToDateCache(): void {
+  loadedRostersCache.clear();
+}
+
+function cacheKey(schedule: Schedule, earlier: Schedule[]): string {
+  const parts = earlier
+    .map((s) => `${s.id}:${s.updatedAt || ''}:${s.activeVersionNumber ?? ''}:${s.status}:${s.startDate}:${s.endDate}`)
+    .sort();
+  return `${schedule.id}|${parts.join('|')}`;
+}
+
+async function loadEarlierRosters(repo: IRepository, earlier: Schedule[]): Promise<LoadedRoster[]> {
+  const rosters = await Promise.all(
+    earlier.map(async (s) => {
+      const bySchedule = { field: 'scheduleId', operator: '==' as const, value: s.id };
+      // The repository takes one filter, so backup copies are read but never counted.
+      const versions = (await repo.list('versions', bySchedule)).filter((v) => v.kind !== 'BACKUP');
+      const published = latestPublishedVersion(versions);
+      if (published) return { schedule: s, assignments: published.snapshot.assignments };
+      if (s.status === 'PUBLISHED') return { schedule: s, assignments: await repo.list('assignments', bySchedule) };
+      return null;
+    })
+  );
+  return rosters.filter((r): r is LoadedRoster => !!r);
+}
+
 /**
  * Year to date totals for the nurses before `schedule` starts. Each earlier
  * roster this year counts as last published; a roster marked published without
  * a published version counts with its current shifts; a roster that was never
- * published is left out.
+ * published is left out. The earlier rosters are cached for the session (see
+ * clearYearToDateCache).
  */
 export async function loadYearToDate(
   repo: IRepository,
@@ -106,17 +143,19 @@ export async function loadYearToDate(
   } = {}
 ): Promise<YearToDate> {
   const earlier = earlierRostersThisYear(schedule, options.schedules || (await repo.list('schedules')));
-  const rosters = await Promise.all(
-    earlier.map(async (s) => {
-      const bySchedule = { field: 'scheduleId', operator: '==' as const, value: s.id };
-      const published = latestPublishedVersion(await repo.list('versions', bySchedule));
-      if (published) return { schedule: s, assignments: published.snapshot.assignments };
-      if (s.status === 'PUBLISHED') return { schedule: s, assignments: await repo.list('assignments', bySchedule) };
-      return null;
-    })
-  );
+  const key = cacheKey(schedule, earlier);
+  let pending = loadedRostersCache.get(key);
+  if (!pending) {
+    pending = loadEarlierRosters(repo, earlier);
+    loadedRostersCache.set(key, pending);
+    // A failed load is not kept, so the next open tries again.
+    pending.catch(() => {
+      if (loadedRostersCache.get(key) === pending) loadedRostersCache.delete(key);
+    });
+  }
+  const rosters = await pending;
   return computeYearToDate({
-    rosters: rosters.filter((r): r is { schedule: Schedule; assignments: Assignment[] } => !!r),
+    rosters,
     dutyWindows,
     holidayDates,
     lateThreshold: options.lateThreshold,

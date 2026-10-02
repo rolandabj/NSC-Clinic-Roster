@@ -384,9 +384,10 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
     if (!ok) return;
     setBusyLinkNurseId(nurse.id);
     try {
-      const link = await regenerateNurseLink(repo, nurse.id);
+      const { link, syncError } = await regenerateNurseLink(repo, nurse.id);
       rememberLink(link);
       await copyText(nurseLinkUrl(link.token), `New private link for ${nurse.fullName} copied. The old link no longer works.`);
+      if (syncError) notify(`The new link was made, but her page couldn't be filled: ${syncError}`, 'warning');
     } catch (err: any) {
       notify(`Couldn't make a new link: ${err?.message || err}`, 'error');
     } finally {

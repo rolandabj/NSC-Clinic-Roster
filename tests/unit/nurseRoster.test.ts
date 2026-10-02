@@ -6,8 +6,10 @@ import {
   shiftDetail,
   latestPublishedVersions,
   NURSE_TOKEN_PATTERN,
+  ensureNurseLink,
 } from '../../src/services/publish/nurseRosterService';
-import { buildNurseRosterIcs } from '../../src/services/export/icsExportService';
+import { buildNurseRosterIcs, foldLine, nurseShiftUid } from '../../src/services/export/icsExportService';
+import type { IRepository } from '../../src/services/repository/IRepository';
 import type { Assignment, ScheduleVersion, Schedule, LeaveEntry } from '../../src/types';
 
 const refs = {
@@ -161,7 +163,7 @@ test('calendar feed has stable events in UTC and leave as all day', () => {
     leaveDays: ['2026-12-31'],
   });
   assert.match(ics, /DTSTART:20261201T050000Z/);
-  assert.match(ics, /UID:n1-2026-12-01-0900@clinicroster/);
+  assert.match(ics, /UID:n1-2026-12-01-0900-E-[0-9a-z]+@clinicroster/);
   assert.match(ics, /DTSTART;VALUE=DATE:20261231\r\nDTEND;VALUE=DATE:20270101/);
   assert.equal(ics.includes('nr_'), false);
 });
@@ -190,4 +192,71 @@ test('Firestore REST values become plain JSON', async () => {
     empty: [],
     shifts: [{ date: '2026-12-01', note: null }],
   });
+});
+
+test('two shifts on the same day and start time get different event ids', () => {
+  const base = { date: '2026-12-01', startTime: '09:00', endTime: '17:00', shiftName: 'Early', scheduleName: 'December' };
+  const a = nurseShiftUid('n1', { ...base, acronym: 'E', detail: 'With Dr Amal' });
+  const b = nurseShiftUid('n1', { ...base, acronym: 'E', detail: 'Nurse Clinic' });
+  const c = nurseShiftUid('n1', { ...base, acronym: 'E2', detail: 'With Dr Amal' });
+  assert.notEqual(a, b);
+  assert.notEqual(a, c);
+  // Stable between feeds
+  assert.equal(a, nurseShiftUid('n1', { ...base, acronym: 'E', detail: 'With Dr Amal' }));
+  const ics = buildNurseRosterIcs({
+    nurseId: 'n1',
+    nurseName: 'Fatma Ali',
+    clinicName: 'Al Shifa',
+    timezone: 'Asia/Dubai',
+    shifts: [
+      { ...base, acronym: 'E', detail: 'With Dr Amal' },
+      { ...base, acronym: 'E', detail: 'Nurse Clinic' },
+    ],
+    leaveDays: [],
+  });
+  const uids = ics.match(/^UID:.*$/gm) || [];
+  assert.equal(uids.length, 2);
+  assert.notEqual(uids[0], uids[1]);
+});
+
+test('lines fold at 75 octets of UTF-8 without splitting a character', () => {
+  const enc = new TextEncoder();
+  assert.equal(foldLine('SUMMARY:short'), 'SUMMARY:short');
+  for (const text of ['a'.repeat(200), 'é'.repeat(120), '·'.repeat(90) + 'x', '😀'.repeat(60), 'SUMMARY:' + 'عيادة '.repeat(30)]) {
+    const folded = foldLine(text);
+    const lines = folded.split('\r\n');
+    for (const line of lines) {
+      assert.ok(enc.encode(line).length <= 75, `line too long: ${enc.encode(line).length}`);
+      assert.equal(line.includes('\uFFFD'), false);
+    }
+    lines.slice(1).forEach((line) => assert.equal(line[0], ' '));
+    // Unfolding gives the text back unchanged
+    assert.equal(folded.replace(/\r\n /g, ''), text);
+  }
+});
+
+test('a private link made twice at once settles on one token', async () => {
+  const store: Record<string, Map<string, any>> = { nurseLinks: new Map(), nurseRosters: new Map() };
+  const repo = {
+    get: async (c: string, id: string) => store[c].get(id) || null,
+    create: async (c: string, data: any) => {
+      // Another editor saves her link just before ours lands, and hers wins.
+      if (c === 'nurseLinks' && !store.nurseLinks.has('n1')) {
+        store.nurseLinks.set('n1', { ...data, token: 'nr_other' });
+        return data;
+      }
+      store[c].set(data.id, data);
+      return data;
+    },
+    update: async (c: string, id: string, data: any) => {
+      store[c].set(id, { ...store[c].get(id), ...data });
+      return store[c].get(id);
+    },
+    remove: async (c: string, id: string) => {
+      store[c].delete(id);
+    },
+  } as unknown as IRepository;
+  const link = await ensureNurseLink(repo, 'n1');
+  assert.equal(link.token, 'nr_other');
+  assert.equal(store.nurseLinks.get('n1').token, 'nr_other');
 });

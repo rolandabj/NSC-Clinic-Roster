@@ -124,15 +124,18 @@ await t('editor reads nurse links', true, getDoc(doc(editor, 'nurseLinks/n1')));
 await t('editor lists nurse links', true, getDocs(collection(editor, 'nurseLinks')));
 await t('editor writes nurse links', true, setDoc(doc(editor, 'nurseLinks/n2'), { id: 'n2', nurseId: 'n2', token: 'nr_new2', revoked: false }));
 
-// presence: everyone approved reads, each user writes only their own record
-const pres = (id) => ({ id, name: 'V', email: 'viewer@x.com', scheduleId: 'sch1', at: '2026-10-02T10:00:00Z' });
-await t('viewer writes own presence', true, setDoc(doc(viewer, 'presence/v'), pres('v')));
-await t("viewer cannot write another user's presence", false, setDoc(doc(viewer, 'presence/e'), pres('e')));
-await t('viewer cannot add other fields to presence', false, setDoc(doc(viewer, 'presence/v'), { ...pres('v'), role: 'OWNER' }));
+// presence: everyone approved reads, each user writes only their own records
+const pres = (id, extra = {}) => ({ id, uid: 'v', name: 'V', email: 'viewer@x.com', scheduleId: 'sch1', at: Date.now(), ...extra });
+await t('viewer writes own presence', true, setDoc(doc(viewer, 'presence/v_tab1'), pres('v_tab1')));
+await t("viewer cannot write another user's presence", false, setDoc(doc(viewer, 'presence/e_tab1'), pres('e_tab1', { uid: 'e' })));
+await t('viewer cannot claim another email', false, setDoc(doc(viewer, 'presence/v_tab2'), pres('v_tab2', { email: 'editor@x.com' })));
+await t('viewer cannot set a time far from now', false, setDoc(doc(viewer, 'presence/v_tab3'), pres('v_tab3', { at: Date.now() + 3600000 })));
+await t('viewer cannot add other fields to presence', false, setDoc(doc(viewer, 'presence/v_tab4'), pres('v_tab4', { role: 'OWNER' })));
 await t('editor reads presence', true, getDocs(collection(editor, 'presence')));
 await t('anon cannot read presence', false, getDocs(collection(anon, 'presence')));
-await t('stranger cannot write presence', false, setDoc(doc(stranger, 'presence/s'), pres('s')));
-await t('viewer deletes own presence', true, deleteDoc(doc(viewer, 'presence/v')));
+await t('stranger cannot write presence', false, setDoc(doc(stranger, 'presence/s_tab1'), pres('s_tab1', { uid: 's', email: 'new@x.com' })));
+await t("editor cannot delete another user's presence", false, deleteDoc(doc(editor, 'presence/v_tab1')));
+await t('viewer deletes own presence', true, deleteDoc(doc(viewer, 'presence/v_tab1')));
 
 for (const r of results) console.log(r.join('  '));
 console.log(results.filter(r => r[0] === 'FAIL').length + ' failed of ' + results.length);

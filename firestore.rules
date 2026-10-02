@@ -127,14 +127,23 @@ service cloud.firestore {
 
     // ---------------------------------------------------------------------
     // Who has which roster open: approved users read all, and write only
-    // their own record (the document id is their user id).
+    // their own records (one per browser tab, the id starts with their user
+    // id), with their own email and the server's time.
     // ---------------------------------------------------------------------
-    match /presence/{uid} {
+    match /presence/{docId} {
       allow read: if isApproved();
-      allow create, update: if isApproved() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['id', 'name', 'email', 'scheduleId', 'at'])
-        && request.resource.data.id == uid;
-      allow delete: if isApproved() && request.auth.uid == uid;
+      allow create, update: if isApproved()
+        && docId.matches(request.auth.uid + '_[A-Za-z0-9]{1,40}')
+        && request.resource.data.keys().hasOnly(['id', 'uid', 'name', 'email', 'scheduleId', 'at'])
+        && request.resource.data.id == docId
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.name is string && request.resource.data.name.size() <= 100
+        && (request.resource.data.scheduleId == null
+          || (request.resource.data.scheduleId is string && request.resource.data.scheduleId.size() <= 128))
+        && request.resource.data.at is int
+        && math.abs(request.resource.data.at - request.time.toMillis()) < 120000;
+      allow delete: if isApproved() && resource.data.uid == request.auth.uid;
     }
 
     // ---------------------------------------------------------------------

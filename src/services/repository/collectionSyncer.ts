@@ -67,12 +67,19 @@ export class CollectionSyncer<C extends CollectionName> {
   /** States that failed to save, per scope, with the reason. */
   private failed = new Map<string, Desired<EntityForCollection<C>> & { error: unknown }>();
   private running: Promise<void> | null = null;
+  /** The scope being written now (it is no longer pending, but not yet saved). */
+  private writingScope: string | null = null;
 
   constructor(
     private readonly repo: IRepository,
     private readonly collection: C,
     private readonly onChange?: () => void
   ) {}
+
+  /** True when a save for this scope failed and waits for a retry. */
+  hasFailed(scope: string): boolean {
+    return this.failed.has(scope);
+  }
 
   /** Why the oldest unresolved save failed (null when nothing failed). */
   get lastError(): unknown {
@@ -115,7 +122,7 @@ export class CollectionSyncer<C extends CollectionName> {
 
   /** True while a save is running, waiting, or failed and not yet retried. */
   hasUnsaved(scope?: string): boolean {
-    if (scope !== undefined) return this.pending.has(scope) || this.failed.has(scope);
+    if (scope !== undefined) return this.pending.has(scope) || this.failed.has(scope) || this.writingScope === scope;
     return this.pending.size > 0 || this.running !== null || this.failed.size > 0;
   }
 
@@ -160,12 +167,15 @@ export class CollectionSyncer<C extends CollectionName> {
     while (this.pending.size > 0) {
       const [scope, desired] = this.pending.entries().next().value as [string, Desired<EntityForCollection<C>>];
       this.pending.delete(scope);
+      this.writingScope = scope;
       try {
         await this.write(desired.items, desired.inScope);
       } catch (err) {
         console.error(`[CollectionSyncer] Saving ${this.collection} (${scope}) failed:`, err);
         // Kept for a retry, unless a newer state for this scope is already waiting.
         if (!this.pending.has(scope)) this.failed.set(scope, { ...desired, error: err });
+      } finally {
+        this.writingScope = null;
       }
     }
   }

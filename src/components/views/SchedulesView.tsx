@@ -1309,9 +1309,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   };
 
   // --- LIVE UPDATES ---
-  // Other planners' changes to this roster's shifts arrive as they are saved.
-  // With nothing unsaved here they are shown at once; otherwise a notice asks
-  // to reload once this browser's own changes are saved.
+  // Other planners' changes to this roster's shifts arrive as they are saved,
+  // and are shown once this browser's own changes are saved. Only when a save
+  // here failed does a notice ask to reload.
   const [remoteChange, setRemoteChange] = useState(false);
   const othersHere = usePresence(activeSchedule?.id ?? null);
   const liveRef = useRef({ isGenerating, runValidation, triggerToast });
@@ -1321,27 +1321,49 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (!sched) return;
     setRemoteChange(false);
     const inScope = (a: Assignment) => a.scheduleId === sched.id;
-    return repo.subscribe(
+    let latest: Assignment[] | null = null;
+    let retry: number | undefined;
+    // Compares the latest copy from the database with what this browser saved,
+    // once nothing is being saved here (so this browser's own save isn't
+    // mistaken for someone else's change, and theirs isn't lost meanwhile).
+    const reconcile = () => {
+      window.clearTimeout(retry);
+      const list = latest;
+      if (!list || activeScheduleRef.current?.id !== sched.id) return;
+      if (syncers.assignments.hasFailed(sched.id)) {
+        // This browser's change isn't saved: ask before showing theirs.
+        if (syncers.assignments.differsFromKnown(list, inScope)) setRemoteChange(true);
+        return;
+      }
+      if (loadingRef.current || liveRef.current.isGenerating || syncers.assignments.hasUnsaved(sched.id)) {
+        retry = window.setTimeout(reconcile, 1000);
+        return;
+      }
+      if (!syncers.assignments.differsFromKnown(list, inScope)) return; // what this browser saved
+      syncers.assignments.replaceKnown(list, inScope);
+      setAssignments(list);
+      setRemoteChange(false);
+      // Undo steps hold the whole list from before; using one now would undo their change.
+      setUndoStack([]);
+      setRedoStack([]);
+      liveRef.current.runValidation(activeScheduleRef.current || sched, list);
+      liveRef.current.triggerToast('Updated with a change made by someone else.');
+    };
+    const stop = repo.subscribe(
       'assignments',
       (items, info) => {
-        if (info?.fromThisDevice) return; // this browser's own edit, already on screen
-        if (loadingRef.current || activeScheduleRef.current?.id !== sched.id) return;
-        const list = items as Assignment[];
-        if (!syncers.assignments.differsFromKnown(list, inScope)) return; // what this browser saved
-        if (syncers.assignments.hasUnsaved(sched.id) || liveRef.current.isGenerating) {
-          setRemoteChange(true);
-          return;
-        }
-        syncers.assignments.replaceKnown(list, inScope);
-        setAssignments(list);
-        // Undo steps hold the whole list from before; using one now would undo their change.
-        setUndoStack([]);
-        setRedoStack([]);
-        liveRef.current.runValidation(activeScheduleRef.current || sched, list);
-        liveRef.current.triggerToast('Updated with a change made by someone else.');
+        // Wait for the server's copy (this browser's own pending edit is already on screen).
+        if (info?.fromThisDevice) return;
+        latest = items as Assignment[];
+        reconcile();
       },
-      { field: 'scheduleId', operator: '==', value: sched.id }
+      { field: 'scheduleId', operator: '==', value: sched.id },
+      { includeMetadataChanges: true }
     );
+    return () => {
+      window.clearTimeout(retry);
+      stop();
+    };
   }, [activeSchedule?.id]);
 
   // Undo / Redo: a step restores shifts, pinned days and leave together, and
@@ -1817,7 +1839,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
       {remoteChange && (
         <div role="status" className="mx-4 mt-2 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 flex flex-wrap items-center justify-between gap-2">
-          <span>Someone else changed this roster while you were editing. Reload to see their change (yours are saved first).</span>
+          <span>Someone else changed this roster, and your last change isn't saved yet. Use Retry now at the top to save it, then Reload to see their change.</span>
           <button
             type="button"
             onClick={() => {

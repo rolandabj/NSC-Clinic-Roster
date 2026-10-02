@@ -520,14 +520,15 @@ export interface NurseRosterDoc {
   leaveDays: string[];
 }
 
-/** presence/{uid}: who has which roster open (updated every 30 seconds while open). */
+/** presence/{uid}_{tab}: who has which roster open, one record per browser tab (refreshed every minute while visible). */
 export interface PresenceRecord {
-  id: string; // the Firebase user id
+  id: string; // `${uid}_${tabId}`
+  uid: string; // the Firebase user id
   name: string;
   email: string;
   scheduleId: string | null;
-  /** ISO time of the last heartbeat. */
-  at: string;
+  /** Time of the last heartbeat in milliseconds (the database rules check it against the server clock). */
+  at: number;
 }
 
 // Repository Collection Key Map
