@@ -63,7 +63,8 @@ import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { confirmDialog, notify } from '../common/dialogs';
 import { coveredMinutes, doctorSessionsOn, nurseClinicRoleOf, toMinutes } from '../../services/engine/clinicModel';
-import { QuickCellPopup, QuickWorkOption, QuickLeaveOption } from './grid/QuickCellPopup';
+import { QuickCellPopup, QuickWorkOption, QuickLeaveOption, QuickDayNote } from './grid/QuickCellPopup';
+import { explainNurseDay } from '../../services/engine/explainCell';
 
 interface WorkbookGridProps {
   schedule: Schedule;
@@ -81,6 +82,8 @@ interface WorkbookGridProps {
   specialties: Specialty[];
   holidays: PublicHoliday[];
   validationReport: ValidationReport;
+  /** The roster rules, so "why is this cell empty" follows the same limits (defaults are used without them). */
+  rules?: Rule[];
   currentBlockIndex: number;
   onBlockChange: (index: number) => void;
   onAssignmentsChange: (next: Assignment[]) => void;
@@ -155,6 +158,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   specialties,
   holidays,
   validationReport,
+  rules = [],
   currentBlockIndex,
   onBlockChange,
   onAssignmentsChange,
@@ -324,6 +328,27 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     return { blockTotal: h?.totalHours ?? 0, bDuty: h?.dutyHours ?? 0, bLeave: h?.leaveHours ?? 0 };
   };
 
+  // Day totals under the grid: doctors in session, nurses on duty, hours without a free nurse, senior on duty.
+  const dayTotals = useMemo(() => {
+    const seniorIds = new Set(seniorityLevels.filter((s) => s.isSenior).map((s) => s.id));
+    const levelById = new Map(nurses.map((n) => [n.id, n.seniorityLevelId]));
+    return new Map(
+      blockDates.map((date) => {
+        const onDuty = new Set(assignments.filter((a) => a.date === date).map((a) => a.nurseId));
+        const hours = validationReport.hourlyCoverageMap?.[date];
+        return [
+          date,
+          {
+            doctors: doctorSessionsOn(sessions, date).length,
+            nurses: onDuty.size,
+            gapHours: hours ? Object.values(hours).filter((h) => h.deficit > 0).length : undefined,
+            hasSenior: seniorIds.size === 0 ? undefined : [...onDuty].some((id) => seniorIds.has(levelById.get(id) || '')),
+          },
+        ] as const;
+      })
+    );
+  }, [blockDates.join(','), assignments, sessions, nurses, seniorityLevels, validationReport]);
+
   // What the big editor starts with for a cell (also the base of every one tap choice)
   const computeEditorDefaults = (nurseId: string, date: string): CellChoice => {
     const existingLock = locks.find((l) => l.nurseId === nurseId && l.date === date);
@@ -475,7 +500,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       const stickyLeft = (tableRef.current?.querySelector('tbody th') as HTMLElement | null)?.offsetWidth || 0;
       const stickyTop = (tableRef.current?.querySelector('thead') as HTMLElement | null)?.offsetHeight || 0;
       const visibleW = boxRect.width - stickyLeft;
-      const visibleH = boxRect.height - stickyTop;
+      const stickyBottom = (tableRef.current?.querySelector('tfoot') as HTMLElement | null)?.offsetHeight || 0;
+      const visibleH = boxRect.height - stickyTop - stickyBottom;
       box.scrollTo({
         left: box.scrollLeft + (cellRect.left - boxRect.left - stickyLeft) - (visibleW - cellRect.width) / 2,
         top: box.scrollTop + (cellRect.top - boxRect.top - stickyTop) - (visibleH - cellRect.height) / 2,
@@ -1245,7 +1271,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
       {/* 6.2 ROSTER SHEET MAIN GRID VIEWPORT */}
       <div className="flex-1 flex overflow-hidden relative">
-        <div ref={gridScrollRef} className="flex-1 overflow-auto bg-slate-200 p-px">
+        <div ref={gridScrollRef} className="flex-1 overflow-auto bg-slate-200 p-px scroll-pb-16">
           <table ref={tableRef} className="border-collapse bg-white text-xs w-max" role="grid" aria-label="Nurse roster">
             {/* Sticky Header Row 1: Week Spans */}
             <thead className="sticky top-0 z-30 bg-slate-100 border-b border-slate-300">
@@ -1747,6 +1773,79 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                 );
               })}
             </tbody>
+
+            {/* Day totals: stays at the bottom while the nurse rows scroll */}
+            <tfoot className="sticky bottom-0 z-30 bg-slate-50 border-t-2 border-slate-300 font-sans">
+              <tr>
+                <th
+                  scope="row"
+                  className="sticky left-0 bg-slate-100 z-40 border-r-2 border-slate-300 py-1 px-2.5 text-left font-normal w-60 min-w-60 max-w-60 shadow-xs"
+                >
+                  <span className="block text-xs font-semibold text-slate-800">Day totals</span>
+                  <span className="block text-[10px] text-slate-500 leading-tight">
+                    Doctors · nurses · hours without a free nurse · senior
+                  </span>
+                </th>
+                {dayInfo.map(({ dateStr, isWeekend, holiday }) => {
+                  const t = dayTotals.get(dateStr);
+                  if (!t) return <td key={dateStr} />;
+                  const gapWords =
+                    t.gapHours === undefined
+                      ? ''
+                      : t.gapHours === 0
+                      ? 'a free nurse every opening hour'
+                      : `${t.gapHours} ${t.gapHours === 1 ? 'hour' : 'hours'} without a free nurse`;
+                  const seniorWords = t.hasSenior === undefined ? '' : t.hasSenior ? 'a senior nurse on duty' : 'no senior nurse on duty';
+                  const summary = [
+                    `${formatDate(dateStr)}: ${t.doctors} ${t.doctors === 1 ? 'doctor' : 'doctors'} in session`,
+                    `${t.nurses} ${t.nurses === 1 ? 'nurse' : 'nurses'} on duty`,
+                    gapWords,
+                    seniorWords,
+                  ]
+                    .filter(Boolean)
+                    .join(', ');
+                  return (
+                    <td
+                      key={dateStr}
+                      title={summary}
+                      className={`py-0.5 px-0.5 text-center border-r border-slate-200 text-[10px] leading-tight align-top ${
+                        holiday ? 'bg-cyan-50' : isWeekend ? 'bg-slate-100' : 'bg-slate-50'
+                      }`}
+                    >
+                      <span className="sr-only">{summary}</span>
+                      <span aria-hidden="true" className="flex flex-col items-center gap-px">
+                        <span className="flex items-center gap-1 text-slate-700 font-mono">
+                          <span className="inline-flex items-center gap-px">
+                            <Stethoscope className="w-2.5 h-2.5 text-slate-400" />
+                            {t.doctors}
+                          </span>
+                          <span className="inline-flex items-center gap-px">
+                            <Users className="w-2.5 h-2.5 text-slate-400" />
+                            {t.nurses}
+                          </span>
+                        </span>
+                        {t.gapHours !== undefined &&
+                          (t.gapHours === 0 ? (
+                            <Check className="w-3 h-3 text-emerald-600" />
+                          ) : (
+                            <span className="inline-flex items-center gap-px font-bold text-rose-700">
+                              <Clock className="w-2.5 h-2.5" />
+                              {t.gapHours} h
+                            </span>
+                          ))}
+                        {t.hasSenior !== undefined &&
+                          (t.hasSenior ? (
+                            <span className="text-emerald-700 font-semibold">✓ Senior</span>
+                          ) : (
+                            <span className="text-rose-700 font-bold whitespace-nowrap">No senior</span>
+                          ))}
+                      </span>
+                    </td>
+                  );
+                })}
+                <td className="bg-slate-50" />
+              </tr>
+            </tfoot>
           </table>
         </div>
 
@@ -1890,6 +1989,34 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                   <div className="flex items-center gap-2">
                     <span className="w-6 h-5 rounded bg-indigo-600 shrink-0" aria-hidden="true" />
                     <span>Today</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+                  Day totals (under the grid)
+                </h4>
+                <div className="space-y-1.5 text-[11px] text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <Stethoscope className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                    <span>Doctors in session that day</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+                    <span>Nurses on duty</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-px text-[10px] font-bold text-rose-700 shrink-0">
+                      <Clock className="w-2.5 h-2.5" aria-hidden="true" />2 h
+                    </span>
+                    <span>
+                      Opening hours without a free nurse (<Check className="inline w-3 h-3 text-emerald-600" aria-label="check mark" /> when every hour has one)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-rose-700 whitespace-nowrap shrink-0">No senior</span>
+                    <span>No senior nurse on duty that day</span>
                   </div>
                 </div>
               </div>
@@ -2494,13 +2621,46 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
           assignments.some((a) => a.nurseId === nurseId && a.date === date) ||
           leaveEntries.some((le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate);
         const options = lock ? { work: [], leave: [] } : buildQuickOptions(nurseId, date);
+        // An empty cell says why: the nurse is off, or which shifts she is free for.
+        let dayNote: QuickDayNote | undefined;
+        if (!hasContent) {
+          const why = explainNurseDay({
+            nurseId,
+            date,
+            schedule,
+            assignments,
+            nurses,
+            dutyWindows,
+            leaveEntries,
+            locks,
+            roles,
+            rules,
+            seniorityLevels,
+            workingHoursPeriods,
+            leaveTypes,
+            sessions,
+            doctors,
+          });
+          if (why.status === 'BLOCKED') {
+            dayNote = { tone: 'off', title: 'Why this nurse is off:', lines: why.reasons };
+          } else if (why.status === 'AVAILABLE') {
+            const h = why.hours.goal > 0 ? `${fmtHours(why.hours.worked)} / ${fmtHours(why.hours.goal)} h` : `${fmtHours(why.hours.worked)} h`;
+            dayNote = {
+              tone: 'free',
+              title: `Free to work: ${why.possibleShifts.map((p) => p.label).join(', ')} (${h})`,
+              lines: why.notes,
+            };
+          }
+        }
         return (
           <QuickCellPopup
+            key={cellKeyOf(nurseId, date)}
             cellKey={cellKeyOf(nurseId, date)}
             nurseName={nurseMap.get(nurseId)?.fullName || 'Nurse'}
             dateLabel={formatDate(date)}
             currentLabel={describeCell(nurseId, date)}
             problems={cellViolationMessages.get(`${nurseId}_${date}`) || []}
+            dayNote={dayNote}
             pinned={!!lock}
             onUnpin={
               lock && onOpenLockOverrideModal

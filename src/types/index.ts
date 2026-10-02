@@ -353,6 +353,8 @@ export interface ScheduleVersion {
   };
   isPublished: boolean;
   publishedAt?: string;
+  /** 'BACKUP': kept automatically before the roster was filled or cleared (only the last few are kept). */
+  kind?: 'BACKUP';
 }
 
 // 16. ShareLink

@@ -10,7 +10,7 @@
  */
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AlertTriangle, Check, Lock, Edit2, Trash2, Unlock, X } from 'lucide-react';
+import { AlertTriangle, Check, CircleCheck, CircleSlash, Lock, Edit2, Trash2, Unlock, X } from 'lucide-react';
 
 export interface QuickWorkOption {
   key: string;
@@ -32,6 +32,15 @@ export interface QuickLeaveOption {
   onSelect: () => void;
 }
 
+/** Why an empty cell is empty: the nurse is off (with reasons) or free to work (with her shifts). */
+export interface QuickDayNote {
+  tone: 'off' | 'free';
+  /** e.g. "Why this nurse is off:" or "Free to work: E, L (152 / 160 h)". */
+  title: string;
+  /** Plain sentences shown under the title. */
+  lines: string[];
+}
+
 interface QuickCellPopupProps {
   /** The data-cell value of the cell the popup belongs to. */
   cellKey: string;
@@ -40,6 +49,8 @@ interface QuickCellPopupProps {
   /** What the cell holds now, in words ('' when empty). */
   currentLabel: string;
   problems: string[];
+  /** Shown at the top for an empty cell. */
+  dayNote?: QuickDayNote;
   pinned: boolean;
   onUnpin?: () => void;
   workOptions: QuickWorkOption[];
@@ -65,6 +76,7 @@ export const QuickCellPopup: React.FC<QuickCellPopupProps> = ({
   dateLabel,
   currentLabel,
   problems,
+  dayNote,
   pinned,
   onUnpin,
   workOptions,
@@ -76,6 +88,7 @@ export const QuickCellPopup: React.FC<QuickCellPopupProps> = ({
 }) => {
   const ref = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
   const openedAtRef = useRef(Date.now());
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -97,7 +110,7 @@ export const QuickCellPopup: React.FC<QuickCellPopupProps> = ({
     if (top + h > vh - MARGIN) top = vh - h - MARGIN;
     if (top < MARGIN) top = MARGIN;
     setPos({ top, left });
-  }, [cellKey, workOptions.length, leaveOptions.length, problems.length, pinned]);
+  }, [cellKey, workOptions.length, leaveOptions.length, problems.length, pinned, dayNote?.lines.length, noteOpen]);
 
   // Keyboard users who opened the popup land on its first choice.
   useEffect(() => {
@@ -203,6 +216,41 @@ export const QuickCellPopup: React.FC<QuickCellPopupProps> = ({
           <X className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
       </div>
+
+      {dayNote && (
+        <div
+          className={`mx-2 mt-2 p-2 rounded border text-[11px] ${
+            dayNote.tone === 'off' ? 'border-slate-200 bg-slate-50 text-slate-700' : 'border-emerald-200 bg-emerald-50 text-emerald-900'
+          }`}
+          role="note"
+        >
+          <span className="flex items-center gap-1 font-semibold">
+            {dayNote.tone === 'off' ? (
+              <CircleSlash className="w-3.5 h-3.5 text-slate-500 shrink-0" aria-hidden="true" />
+            ) : (
+              <CircleCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
+            )}
+            {dayNote.title}
+          </span>
+          {dayNote.lines.length > 0 && (
+            <span id={`${cellKey}-day-note`} className={`block leading-snug mt-0.5 ${noteOpen ? '' : 'line-clamp-2'}`}>
+              {dayNote.lines.join(' ')}
+            </span>
+          )}
+          {/* Long lists are cut to two lines until asked for. */}
+          {(dayNote.lines.length > 2 || dayNote.lines.join(' ').length > 90) && (
+            <button
+              type="button"
+              onClick={() => setNoteOpen((v) => !v)}
+              aria-expanded={noteOpen}
+              aria-controls={`${cellKey}-day-note`}
+              className="mt-0.5 text-[11px] font-semibold text-indigo-700 hover:underline cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded"
+            >
+              {noteOpen ? 'Show less' : 'Show more'}
+            </button>
+          )}
+        </div>
+      )}
 
       {problems.length > 0 && (
         <div className="mx-2 mt-2 p-2 rounded border border-rose-200 bg-rose-50 text-rose-800 text-[11px] space-y-0.5" role="note">

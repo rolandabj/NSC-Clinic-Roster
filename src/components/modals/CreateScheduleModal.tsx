@@ -34,6 +34,7 @@ import {
 } from '../../services/schedule/doctorScheduleService';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { authService } from '../../services/auth/authService';
+import { suggestNewRosterDates } from '../../services/schedule/newRosterDates';
 
 interface CreateScheduleModalProps {
   isOpen: boolean;
@@ -41,6 +42,8 @@ interface CreateScheduleModalProps {
   onScheduleCreated: (createdSchedule: Schedule, generateImmediately: boolean) => void;
   clinicName?: string;
   existingSchedules?: Schedule[];
+  /** Opens a roster that already covers these dates instead of making a new one. */
+  onOpenExisting?: (schedule: Schedule) => void;
 }
 
 export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
@@ -49,14 +52,14 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
   onScheduleCreated,
   clinicName = (typeof window !== 'undefined' ? localStorage.getItem('clinic_roster_clinic_name') : null) || 'American Hospital Nad Al Sheba OutPatient clinic',
   existingSchedules = [],
+  onOpenExisting,
 }) => {
-  // Current date reference for smart defaults (defaulting to next month from seed Oct 2026 -> Nov 2026)
-  const defaultStartDate = '2026-11-01';
-  const defaultEndDate = '2026-11-30';
+  // The new roster starts the day after the last one ends.
+  const [suggested] = useState(() => suggestNewRosterDates(existingSchedules));
 
-  const [startDate, setStartDate] = useState(defaultStartDate);
-  const [endDate, setEndDate] = useState(defaultEndDate);
-  const [scheduleName, setScheduleName] = useState(() => `November 2026 — ${clinicName}`);
+  const [startDate, setStartDate] = useState(suggested.start);
+  const [endDate, setEndDate] = useState(suggested.end);
+  const [scheduleName, setScheduleName] = useState('');
   const [isNameManuallyEdited, setIsNameManuallyEdited] = useState(false);
   const [blockWeeks, setBlockWeeks] = useState<BlockWeeks>(2);
   const [hoursTarget, setHoursTarget] = useState<string | number>('');
@@ -79,6 +82,9 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
     repo.list('workingHoursPeriods').then((list) => {
       const sorted = [...list].sort((a, b) => a.startDate.localeCompare(b.startDate));
       setWorkingHoursPeriods(sorted);
+      // A working hours period that starts on the suggested date gives the end date.
+      const period = sorted.find((p) => p.startDate === suggested.start);
+      if (period) setEndDate((current) => (current === suggested.end ? period.endDate : current));
     }).catch((err) => {
       console.error('Failed to load working hours periods:', err);
     });
@@ -532,6 +538,18 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                 <span>
                   These dates overlap the roster{' '}
                   <strong>"{overlappingSchedule.name}"</strong> ({overlappingSchedule.startDate} to {overlappingSchedule.endDate}). You can still create it, for example to try a different plan.
+                  {onOpenExisting && (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        onClick={() => onOpenExisting(overlappingSchedule)}
+                        className="font-semibold underline cursor-pointer"
+                      >
+                        Open "{overlappingSchedule.name}" instead
+                      </button>
+                    </>
+                  )}
                 </span>
               </div>
             )}

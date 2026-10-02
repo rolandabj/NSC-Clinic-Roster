@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useId } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { notify } from '../common/dialogs';
+import { notify, confirmDialog } from '../common/dialogs';
 import {
   CalendarRange,
   Plus,
@@ -28,6 +28,7 @@ import {
   Star,
   Undo2,
   Redo2,
+  RotateCcw,
   MoreHorizontal,
 } from 'lucide-react';
 import { MenuButton } from '../common/MenuButton';
@@ -174,6 +175,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [clearIncludeManual, setClearIncludeManual] = useState(false);
   // Generate All keeps cells changed by hand unless this is unticked.
   const [keepManualOnGenerate, setKeepManualOnGenerate] = useState(true);
+  // Fill only these dates (the rest of the roster stays as it is).
+  const [fillRange, setFillRange] = useState<{ enabled: boolean; start: string; end: string }>({ enabled: false, start: '', end: '' });
 
   // Active Block & Tab selection in Workbook View
   const [selectedBlockIndex, setSelectedBlockIndex] = useState(0);
@@ -837,6 +840,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     setActiveGenerationMode(mode);
     setClearIncludeManual(false);
     setKeepManualOnGenerate(true);
+    setFillRange({ enabled: false, start: sched.startDate, end: sched.endDate });
     setPreflightSummary(summary);
     setGenerationProgress(null);
     setIsPreflightModalOpen(true);
@@ -910,6 +914,28 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       }
       clinicSetupRef.current = generationClinicSetup;
       setClinicSetupError(null);
+
+      // A backup copy of the roster as it is now, so a fill or clear can be undone
+      // even after leaving the page (More > Backup copies).
+      let backupKept = false;
+      if (assignments.length > 0) {
+        try {
+          await saveBackup(activeSchedule, activeGenerationMode === 'CLEAR_GENERATED' ? 'Before clearing' : 'Before filling');
+          backupKept = true;
+        } catch (err: any) {
+          const goOn = await confirmDialog({
+            title: 'No backup copy',
+            message: `A backup copy of the roster couldn't be saved (${err?.message || err}). Go on anyway? Undo still works until you leave the page.`,
+            confirmLabel: 'Go on',
+            danger: true,
+          });
+          if (!goOn) {
+            setIsGenerating(false);
+            return;
+          }
+        }
+      }
+      const backupNote = backupKept ? ' A backup copy was kept (More, Backup copies).' : '';
       const beforeRun = snapshotNow();
       if (beforeRun) setUndoStack((prev) => [beforeRun, ...prev].slice(0, 50));
       setRedoStack([]);
@@ -967,7 +993,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         const clearedCount = assignments.length - finalAssignments.length;
         triggerToast(
           clearSaved
-            ? `Cleared ${clearedCount} shifts. ${finalAssignments.length} shifts kept (pinned${clearIncludeManual ? '' : ' or changed by hand'}).`
+            ? `Cleared ${clearedCount} shifts. ${finalAssignments.length} shifts kept (pinned${clearIncludeManual ? '' : ' or changed by hand'}).${backupNote}`
             : `Cleared ${clearedCount} shifts on screen, but saving failed. See the message at the top.`
         );
         setIsPreflightModalOpen(false);
@@ -994,10 +1020,22 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         }
       }
 
-      const result = await SchedulingEngine.generate(
+      // Filling only some dates: shifts outside them are passed in as hand changes, so
+      // they stay and still count for hours and rest, and are put back unchanged after.
+      const useRange = fillRange.enabled && !!fillRange.start && !!fillRange.end;
+      const inRange = (date: string) => !useRange || (date >= fillRange.start && date <= fillRange.end);
+      const engineInput = useRange
+        ? assignments
+            .filter(
+              (a) => !inRange(a.date) || activeGenerationMode !== 'GENERATE_ALL' || keepManualOnGenerate || a.source !== 'MANUAL'
+            )
+            .map((a) => (inRange(a.date) ? a : { ...a, source: 'MANUAL' as const }))
+        : assignments;
+
+      const engineResult = await SchedulingEngine.generate(
         activeSchedule,
         activeGenerationMode,
-        assignments,
+        engineInput,
         nurses,
         seniorityLevels,
         dutyWindows,
@@ -1014,8 +1052,17 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         doctors,
           leaveTypes,
           generationClinicSetup,
-          { keepManual: activeGenerationMode !== 'GENERATE_ALL' || keepManualOnGenerate }
+          { keepManual: useRange || activeGenerationMode !== 'GENERATE_ALL' || keepManualOnGenerate }
       );
+      const result = useRange
+        ? {
+            ...engineResult,
+            assignments: [
+              ...assignments.filter((a) => !inRange(a.date)),
+              ...engineResult.assignments.filter((a) => inRange(a.date)),
+            ],
+          }
+        : engineResult;
 
       // If engine resolved an authoritative period target, synchronize the schedule record
       let effectiveSchedule = activeSchedule;
@@ -1076,7 +1123,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       triggerToast(
         `Roster filled: ${result.assignments.length} shifts.` +
           (overtimeCount > 0 ? ` ${overtimeCount} nurse${overtimeCount === 1 ? ' is' : 's are'} over their hours.` : '') +
-          (report.errorCount > 0 ? ` ${report.errorCount} problem${report.errorCount === 1 ? '' : 's'} to fix.` : ' No problems to fix.')
+          (report.errorCount > 0 ? ` ${report.errorCount} problem${report.errorCount === 1 ? '' : 's'} to fix.` : ' No problems to fix.') +
+          backupNote
       );
       // Show what still needs fixing next to the grid.
       if (report.errorCount > 0) setIsProblemsOpen(true);
@@ -1086,6 +1134,61 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       triggerToast(`Could not fill the roster: ${err.message}`);
       setIsGenerating(false);
     }
+  };
+
+  // --- BACKUP COPIES ---
+  const BACKUPS_KEPT = 5;
+  /** Keeps a copy of the roster as it is now; only the last few backups are kept. */
+  const saveBackup = async (sched: Schedule, note: string) => {
+    const saved = await repo.list('versions', { field: 'scheduleId', operator: '==', value: sched.id });
+    const number = Math.max(sched.activeVersionNumber || 1, ...saved.map((v) => v.number || 0)) + 1;
+    const inRange = (start: string, end: string) => end >= sched.startDate && start <= sched.endDate;
+    const created = await repo.create('versions', {
+      scheduleId: sched.id,
+      number,
+      timestamp: new Date().toISOString(),
+      author: context.currentUser?.name || context.currentUser?.email || 'Planner',
+      note,
+      kind: 'BACKUP',
+      snapshot: {
+        schedule: sched,
+        assignments,
+        leaveEntries: leaveEntries.filter((l) => inRange(l.startDate, l.endDate)),
+        locks: locks.filter((l) => inRange(l.date, l.date)),
+        rulesSnapshot: rules,
+      },
+      isPublished: false,
+    });
+    const older = saved
+      .filter((v) => v.kind === 'BACKUP')
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .slice(BACKUPS_KEPT - 1);
+    // Removing old backups is tidying up; a failure here doesn't matter.
+    await Promise.all(older.map((v) => repo.remove('versions', v.id).catch(() => {})));
+    const gone = new Set(older.map((v) => v.id));
+    setVersions((prev) => [created, ...prev.filter((v) => !gone.has(v.id))].sort((a, b) => b.number - a.number));
+  };
+
+  const [isBackupsOpen, setIsBackupsOpen] = useState(false);
+  const backupsTitleId = useId();
+  const backupsDialogRef = useDialogA11y<HTMLDivElement>(isBackupsOpen, () => setIsBackupsOpen(false));
+  const backups = versions
+    .filter((v) => v.kind === 'BACKUP' && v.scheduleId === activeSchedule?.id)
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+  /** Puts a backup's shifts back (pinned days and leave are not changed by filling, so they stay). Undo works. */
+  const handleRestoreBackup = async (backup: ScheduleVersion) => {
+    if (!activeSchedule) return;
+    const ok = await confirmDialog({
+      title: 'Restore this backup?',
+      message: `The roster's shifts go back to how they were on ${new Date(backup.timestamp).toLocaleString()} (${backup.snapshot.assignments.length} shift${backup.snapshot.assignments.length === 1 ? '' : 's'}). Pinned days and leave stay as they are now. You can undo this.`,
+      confirmLabel: 'Restore',
+      danger: true,
+    });
+    if (!ok) return;
+    applyEdit({ assignments: backup.snapshot.assignments.map((a) => ({ ...a, scheduleId: activeSchedule.id })) });
+    setIsBackupsOpen(false);
+    triggerToast('Backup restored.');
   };
 
   // --- SAVE A NAMED COPY (VERSION) ---
@@ -1243,6 +1346,27 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   }, [activeTab]);
 
   const hasPublished = versions.some((v) => v.isPublished && v.scheduleId === activeSchedule?.id);
+
+  // Cells that differ from the last published version (what "Send changes" would send).
+  const lastPublished = versions
+    .filter((v) => v.isPublished && v.scheduleId === activeSchedule?.id)
+    .sort((a, b) => b.number - a.number)[0];
+  const changedSincePublish = (() => {
+    if (!lastPublished) return 0;
+    const sig = (a: Assignment) =>
+      `${a.dutyWindowId}|${a.kind}|${a.doctorId || ''}|${a.clinicalRoleId || ''}|${a.specialtyId || ''}`;
+    const cells = (list: Assignment[]) => {
+      const m = new Map<string, string>();
+      for (const a of list) m.set(`${a.nurseId}|${a.date}`, sig(a));
+      return m;
+    };
+    const before = cells(lastPublished.snapshot.assignments);
+    const now = cells(assignments);
+    let changed = 0;
+    for (const [key, value] of now) if (before.get(key) !== value) changed++;
+    for (const key of before.keys()) if (!now.has(key)) changed++;
+    return changed;
+  })();
   const openPublish = (mode: 'PUBLISH' | 'CHANGE') => {
     setPublishWizardMode(mode);
     setIsPublishModalOpen(true);
@@ -1254,7 +1378,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     !!activeSchedule,
     assignments.length > 0,
     assignments.length > 0 && mustFix === 0,
-    activeSchedule?.status === 'PUBLISHED',
+    activeSchedule?.status === 'PUBLISHED' && changedSincePublish === 0,
   ];
   const currentStep = stepState.findIndex((done) => !done);
   const steps: { label: string; done: boolean; current: boolean; onClick?: () => void }[] = [
@@ -1267,7 +1391,15 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         setIsProblemsOpen(true);
       },
     },
-    { label: activeSchedule?.status === 'PUBLISHED' ? 'Published' : 'Publish', onClick: () => openPublish(hasPublished ? 'CHANGE' : 'PUBLISH') },
+    {
+      label:
+        hasPublished && changedSincePublish > 0
+          ? `Send changes (${changedSincePublish})`
+          : activeSchedule?.status === 'PUBLISHED'
+          ? 'Published'
+          : 'Publish',
+      onClick: () => openPublish(hasPublished ? 'CHANGE' : 'PUBLISH'),
+    },
   ].map((step, i) => ({ ...step, done: stepState[i], current: i === currentStep }));
 
   const nurseName = (id: string) => nurses.find((n) => n.id === id)?.fullName || 'Unknown nurse';
@@ -1471,7 +1603,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               },
               {
                 label: 'Send changes only',
-                hint: hasPublished ? 'Email only the nurses whose shifts changed' : 'Publish the roster once first',
+                hint: hasPublished
+                  ? changedSincePublish > 0
+                    ? `${changedSincePublish} cell${changedSincePublish === 1 ? '' : 's'} changed since the last publish`
+                    : 'Nothing has changed since the last publish'
+                  : 'Publish the roster once first',
                 icon: <History className="w-3.5 h-3.5 text-amber-600" />,
                 disabled: !hasPublished,
                 onSelect: () => openPublish('CHANGE'),
@@ -1498,6 +1634,13 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 icon: <Save className="w-3.5 h-3.5 text-indigo-600" />,
                 disabled: !activeSchedule,
                 onSelect: () => setIsSaveModalOpen(true),
+              },
+              {
+                label: 'Backup copies…',
+                hint: 'Kept by themselves before each fill or clear',
+                icon: <RotateCcw className="w-3.5 h-3.5 text-indigo-600" />,
+                disabled: !activeSchedule,
+                onSelect: () => setIsBackupsOpen(true),
               },
               { label: 'Compare saved copies', icon: <Diff className="w-3.5 h-3.5 text-indigo-600" />, disabled: !activeSchedule, onSelect: () => setIsCompareModalOpen(true) },
               { label: 'Export or print…', icon: <Download className="w-3.5 h-3.5 text-indigo-600" />, disabled: !activeSchedule, onSelect: () => setIsExportModalOpen(true) },
@@ -1835,6 +1978,57 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         </div>
       )}
 
+      {/* --- BACKUP COPIES --- */}
+      {isBackupsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+          <div
+            ref={backupsDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={backupsTitleId}
+            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-4 space-y-3 text-xs"
+          >
+            <div className="flex items-center justify-between">
+              <h3 id={backupsTitleId} className="font-bold text-slate-900 text-sm">Backup copies</h3>
+              <button
+                type="button"
+                onClick={() => setIsBackupsOpen(false)}
+                className="p-1 text-slate-500 hover:text-slate-700 cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-600">
+              A copy is kept by itself each time the roster is filled or cleared. The last {BACKUPS_KEPT} are kept.
+            </p>
+            {backups.length === 0 ? (
+              <p className="p-4 text-center text-slate-500 border border-dashed border-slate-300 rounded">No backup copies yet.</p>
+            ) : (
+              <ul className="space-y-1.5 max-h-80 overflow-y-auto">
+                {backups.map((b) => (
+                  <li key={b.id} className="flex items-center justify-between gap-2 p-2 border border-slate-200 rounded">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-800">{b.note}</p>
+                      <p className="text-[11px] text-slate-500">
+                        {new Date(b.timestamp).toLocaleString()} · {b.snapshot.assignments.length} shift{b.snapshot.assignments.length === 1 ? '' : 's'} · {b.author}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRestoreBackup(b)}
+                      className="shrink-0 px-2.5 py-1 border border-slate-300 rounded hover:bg-slate-50 font-semibold text-indigo-700 cursor-pointer"
+                    >
+                      Restore
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* --- UNPIN A DAY --- */}
       {isOverrideModalOpen && activeLockToOverride && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
@@ -1976,6 +2170,45 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                       <span>Keep the {plural(manualCount, 'shift')} I changed by hand</span>
                     </label>
                   )}
+                  <fieldset className="p-2 bg-slate-50 border border-slate-200 rounded space-y-2" disabled={isGenerating}>
+                    <label className="flex items-center gap-2 cursor-pointer text-slate-800 font-medium">
+                      <input
+                        type="checkbox"
+                        checked={fillRange.enabled}
+                        onChange={(e) => setFillRange((r) => ({ ...r, enabled: e.target.checked }))}
+                        className="rounded border-slate-300 cursor-pointer"
+                      />
+                      <span>Only fill some dates</span>
+                    </label>
+                    {fillRange.enabled && (
+                      <div className="flex flex-wrap items-center gap-2 pl-6">
+                        <label className="flex items-center gap-1.5">
+                          <span className="text-slate-600">From</span>
+                          <input
+                            type="date"
+                            value={fillRange.start}
+                            min={preflightSummary.startDate}
+                            max={preflightSummary.endDate}
+                            onChange={(e) => setFillRange((r) => ({ ...r, start: e.target.value }))}
+                            className="px-2 py-1 border border-slate-300 rounded bg-white"
+                          />
+                        </label>
+                        <label className="flex items-center gap-1.5">
+                          <span className="text-slate-600">to</span>
+                          <input
+                            type="date"
+                            value={fillRange.end}
+                            min={fillRange.start || preflightSummary.startDate}
+                            max={preflightSummary.endDate}
+                            onChange={(e) => setFillRange((r) => ({ ...r, end: e.target.value }))}
+                            className="px-2 py-1 border border-slate-300 rounded bg-white"
+                          />
+                        </label>
+                        <span className="text-[11px] text-slate-500 basis-full">Every shift outside these dates stays as it is.</span>
+                      </div>
+                    )}
+                  </fieldset>
+
                   <p className="text-slate-600 leading-relaxed">
                     {plural(preflightSummary.activeNursesCount, 'nurse')} ({preflightSummary.bloodCollectionNursesCount} can take blood) and{' '}
                     {plural(preflightSummary.doctorSessionsCount, 'doctor session')} over {plural(preflightSummary.totalDays, 'day')}. Doctors get
@@ -2057,7 +2290,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               </button>
               <button
                 type="button"
-                disabled={isGenerating}
+                disabled={isGenerating || (!isClear && fillRange.enabled && (!fillRange.start || !fillRange.end || fillRange.start > fillRange.end))}
                 onClick={handleExecuteGeneration}
                 className={`inline-flex items-center gap-1.5 px-4 py-1.5 ${
                   isClear ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'
@@ -2383,6 +2616,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           onScheduleCreated={handleScheduleCreated}
           clinicName={context.clinicName}
           existingSchedules={schedules}
+          onOpenExisting={(s) => {
+            setIsNewModalOpen(false);
+            if (s.id !== activeSchedule?.id) {
+              openSchedule(s).catch((err) => notify(`Could not open "${s.name}": ${err?.message || err}`, 'error'));
+            }
+          }}
         />
       )}
 
