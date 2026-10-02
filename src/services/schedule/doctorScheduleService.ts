@@ -88,9 +88,15 @@ export async function saveDoctorShift(
   let currentDoctor = doctor;
 
   if (updateScope === 'THIS_DATE_ONLY') {
-    // 1. Update or create single session for this specific date
-    if (existingSession) {
-      await repo.update('doctorSessions', existingSession.id, {
+    // 1. Update or create single session for this specific date. A session cancelled
+    // for this date earlier is brought back, so there is never more than one record.
+    const target =
+      existingSession ||
+      (
+        await repo.list('doctorSessions', { field: 'doctorId', operator: '==', value: doctor.id })
+      ).find((x) => x.date === date && x.cancelled);
+    if (target) {
+      await repo.update('doctorSessions', target.id, {
         startTime,
         endTime,
         room,
@@ -162,8 +168,9 @@ export async function saveDoctorShift(
         const curIsoDate = cur.toISOString().split('T')[0];
         const existing = sessionsByDate.get(curIsoDate);
 
-        // A change or removal made for that one date is kept.
-        if (existing && (existing.source === 'MANUAL' || existing.cancelled)) continue;
+        // A change or removal made for another single date is kept; the date being
+        // edited always takes the new times.
+        if (existing && curIsoDate !== date && (existing.source === 'MANUAL' || existing.cancelled)) continue;
 
         if (existing) {
           await repo.update('doctorSessions', existing.id, {
@@ -340,8 +347,9 @@ export interface PopulateRecurringDoctorSessionsResult {
 /**
  * Adds the weekly pattern sessions that are missing in a date range.
  *
- * A doctor's day that already has any session (including one moved, added or
- * cancelled for that date) is left alone, so one-date changes are never undone.
+ * A doctor's day that was changed, added or cancelled by hand for that date is
+ * left alone, so one-date changes are never undone. Pattern slots already
+ * there (same start time) aren't added twice.
  * Public holidays are skipped: only the on call doctor works then.
  */
 export async function populateRecurringDoctorSessionsForSchedule(
@@ -369,15 +377,19 @@ export async function populateRecurringDoctorSessionsForSchedule(
   for (const cand of candidateSessions) {
     if (holidayDates.has(cand.date)) continue;
     const sameDay = byDoctorDay.get(`${cand.doctorId}_${cand.date}`) || [];
-    if (sameDay.length === 0) {
+    // A doctor day changed or cancelled by hand for that date is left as it is.
+    if (sameDay.some((x) => x.source === 'MANUAL' || x.cancelled)) {
+      existingCount++;
+      continue;
+    }
+    const sameStart = sameDay.find((x) => x.startTime === cand.startTime);
+    if (!sameStart) {
       sessionsToUpsert.push(cand);
       continue;
     }
     existingCount++;
-    if (!overwriteExisting) continue;
-    // Only a session this pattern made (same start, not changed or cancelled by hand) is refreshed.
-    const own = sameDay.find((x) => x.startTime === cand.startTime && x.source !== 'MANUAL' && !x.cancelled);
-    if (own) sessionsToUpsert.push({ ...cand, id: own.id });
+    // Re-applying the pattern refreshes the sessions it made before.
+    if (overwriteExisting) sessionsToUpsert.push({ ...cand, id: sameStart.id });
   }
 
   if (!dryRun && sessionsToUpsert.length > 0) {

@@ -76,7 +76,7 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
       locks.some((l: any) => l.targetRefId === id || l.specialtyId === id) ||
       templates.some((t: any) => JSON.stringify(t).includes(`"${id}"`));
     const doctorsUsing = doctors.filter((d) => (d.specialtyIds || []).includes(id));
-    const upcoming = sessions.filter((x) => x.date >= today);
+    const upcoming = sessions.filter((x) => x.date >= today && !x.cancelled);
     const nursesUsing = nurses.filter((n) => (n.preferences || []).some((p) => p.kind === 'SPECIALTY' && p.refId === id));
     const uses = [
       doctorsUsing.length ? `${doctorsUsing.length} doctor${doctorsUsing.length === 1 ? '' : 's'} (${doctorsUsing.slice(0, 3).map((d) => d.fullName).join(', ')}${doctorsUsing.length > 3 ? ', …' : ''})` : '',

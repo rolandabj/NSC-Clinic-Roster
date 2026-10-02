@@ -192,3 +192,37 @@ test('checking the weekly pattern before generating saves nothing', async () => 
   assert.equal(col('doctorSessions').size, 0);
   assert.deepEqual(stats.written, []);
 });
+
+test("a failed save for one roster survives saving another roster", async () => {
+  const shift = (id: string, scheduleId: string) => ({ id, scheduleId, nurseId: 'n1', date: '2026-10-05', dutyWindowId: 'd', kind: 'FLOAT', locked: false, source: 'MANUAL' }) as unknown as Assignment;
+  const { repo, col, stats } = fakeRepo({ assignments: [] });
+  const syncer = new CollectionSyncer(repo, 'assignments');
+  stats.failNext = true;
+  assert.equal(await syncer.save([shift('a1', 'A')], (a) => a.scheduleId === 'A', 'A'), false);
+  // Switch to roster B and edit it: B saves, A must still be waiting for its retry.
+  assert.equal(await syncer.save([shift('b1', 'B')], (a) => a.scheduleId === 'B', 'B'), true);
+  assert.equal(syncer.hasUnsaved(), true);
+  assert.equal(await syncer.retry(), true);
+  assert.ok(col('assignments').has('a1'));
+  assert.ok(col('assignments').has('b1'));
+  assert.equal(syncer.hasUnsaved(), false);
+});
+
+test('a fresh load replaces what is known, so records deleted elsewhere are not deleted again', async () => {
+  const { repo, stats } = fakeRepo({ leaveEntries: [leave('a')] });
+  const syncer = new CollectionSyncer(repo, 'leaveEntries');
+  syncer.remember([leave('a'), leave('gone')]);
+  syncer.replaceKnown([leave('a')]);
+  await syncer.save([leave('a')]);
+  assert.deepEqual(stats.removed, []);
+});
+
+test('a second weekly slot on the same day is still added', async () => {
+  const twoSlots = { ...DOCTOR, weeklyPattern: [
+    { weekday: 1, startTime: '09:00', endTime: '13:00' },
+    { weekday: 1, startTime: '14:00', endTime: '18:00' },
+  ] } as unknown as Doctor;
+  const { repo } = fakeRepo({ doctorSessions: [session('2026-10-05', { endTime: '13:00' })], holidays: [] });
+  const result = await populateRecurringDoctorSessionsForSchedule({ repo, startDate: '2026-10-05', endDate: '2026-10-05', doctors: [twoSlots] });
+  assert.deepEqual(result.newSessions.map((x) => x.startTime), ['14:00']);
+});

@@ -201,8 +201,12 @@ export class SchedulingEngine {
           .filter((s) => s.date >= schedule.startDate && s.date <= schedule.endDate)
           .map((s) => `${s.doctorId}_${s.date}_${s.startTime}`)
       );
+      // A doctor day changed or cancelled by hand for that date gets nothing from the pattern.
+      const handChangedDays = new Set(
+        sessions.filter((s) => s.source === 'MANUAL' || s.cancelled).map((s) => `${s.doctorId}_${s.date}`)
+      );
       const missingRecurring = recurringSessions.filter(
-        (s) => !existingKeySet.has(`${s.doctorId}_${s.date}_${s.startTime}`)
+        (s) => !existingKeySet.has(`${s.doctorId}_${s.date}_${s.startTime}`) && !handChangedDays.has(`${s.doctorId}_${s.date}`)
       );
       if (missingRecurring.length > 0) {
         scheduleSessions = [...scheduleSessions, ...missingRecurring];
@@ -549,7 +553,7 @@ export class SchedulingEngine {
       const key = `${lock.nurseId}_${lock.date}`;
       if (lock.mode === 'ASSIGNMENT' && lock.dutyWindowId) {
         const lockAssignment: Assignment = {
-          id: `asgn-lock-${lock.nurseId}-${lock.date}`,
+          id: `asgn-lock-${schedule.id}-${lock.nurseId}-${lock.date}`,
           scheduleId: schedule.id,
           nurseId: lock.nurseId,
           date: lock.date,
@@ -1014,7 +1018,7 @@ export class SchedulingEngine {
           }
           placeShift(
             {
-              id: `asgn-gen-${best.nurse.id}-${date}-HOL`,
+              id: `asgn-gen-${schedule.id}-${best.nurse.id}-${date}-HOL`,
               scheduleId: schedule.id,
               nurseId: best.nurse.id,
               date,
@@ -1357,7 +1361,7 @@ export class SchedulingEngine {
 
         placeShift(
           {
-            id: `asgn-gen-${bestNurse.id}-${date}-${slot.kind}${isNurseClinicSlot ? '-nc' : ''}`,
+            id: `asgn-gen-${schedule.id}-${bestNurse.id}-${date}-${slot.kind}${isNurseClinicSlot ? '-nc' : ''}`,
             scheduleId: schedule.id,
             nurseId: bestNurse.id,
             date,
@@ -1416,7 +1420,7 @@ export class SchedulingEngine {
           const doctorName = doctors.find((d) => d.id === sess.doctorId)?.fullName || 'the doctor';
           placeShift(
             {
-              id: `asgn-gen-${best.nurse.id}-${date}-DOCTOR-gap`,
+              id: `asgn-gen-${schedule.id}-${best.nurse.id}-${date}-DOCTOR-gap`,
               scheduleId: schedule.id,
               nurseId: best.nurse.id,
               date,
@@ -1499,7 +1503,7 @@ export class SchedulingEngine {
           if (!added) break; // nobody qualified is free: the validator will flag the gap
           placeShift(
             {
-              id: `asgn-gen-${added.nurse.id}-${date}-free`,
+              id: `asgn-gen-${schedule.id}-${added.nurse.id}-${date}-free`,
               scheduleId: schedule.id,
               nurseId: added.nurse.id,
               date,
@@ -1545,7 +1549,7 @@ export class SchedulingEngine {
           const free = canBeFreeNurse(senior, roles);
           placeShift(
             {
-              id: `asgn-gen-${senior.id}-${date}-SENIOR`,
+              id: `asgn-gen-${schedule.id}-${senior.id}-${date}-SENIOR`,
               scheduleId: schedule.id,
               nurseId: senior.id,
               date,
@@ -1595,7 +1599,7 @@ export class SchedulingEngine {
               if (!fitsHardRules(senior, date, duty, calculateDutyDurationHours(duty))) continue;
               removeShift(asgn, isWeekend);
               placeShift(
-                { ...asgn, id: `asgn-gen-${senior.id}-${date}-H1SWAP`, nurseId: senior.id },
+                { ...asgn, id: `asgn-gen-${schedule.id}-${senior.id}-${date}-H1SWAP`, nurseId: senior.id },
                 isWeekend,
                 false,
                 isNurseClinicAssignment(asgn)
@@ -1615,7 +1619,7 @@ export class SchedulingEngine {
             const free = canBeFreeNurse(senior, roles);
             placeShift(
               {
-                id: `asgn-gen-${senior.id}-${date}-SENIOR`,
+                id: `asgn-gen-${schedule.id}-${senior.id}-${date}-SENIOR`,
                 scheduleId: schedule.id,
                 nurseId: senior.id,
                 date,
@@ -1681,7 +1685,7 @@ export class SchedulingEngine {
         const spec = specPref ? specialties.find((s) => specialtyMatchesPref(specPref.refId, s)) : null;
         placeShift(
           {
-            id: `asgn-gen-${nurse.id}-${date}-POOL`,
+            id: `asgn-gen-${schedule.id}-${nurse.id}-${date}-POOL`,
             scheduleId: schedule.id,
             nurseId: nurse.id,
             date,

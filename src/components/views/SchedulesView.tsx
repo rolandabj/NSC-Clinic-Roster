@@ -225,6 +225,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const openScheduleIdRef = useRef<string | null>(readStoredScheduleId());
   // Guards against an older "open roster" load finishing after a newer one.
   const openRequestRef = useRef(0);
+  // True while a roster (or the page data) is loading: edits wait, so nothing is
+  // edited on a list that is about to be replaced.
+  const loadingRef = useRef(true);
   const [workingHoursPeriods, setWorkingHoursPeriods] = useState<WorkingHoursPeriod[]>([]);
 
   // Undo/Redo (50 steps). Each step holds the shifts, pinned days and leave
@@ -289,8 +292,13 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const loadData = async () => {
     try {
       setLoadError(null);
+      loadingRef.current = true;
       // Edits still being saved finish first, so the reload doesn't undo them on screen.
       await Promise.all([syncers.assignments.idle(), syncers.locks.idle(), syncers.leaveEntries.idle()]);
+      // Undo steps hold whole lists from before the reload; applying one now could
+      // remove or revert changes other people made meanwhile.
+      setUndoStack([]);
+      setRedoStack([]);
       const [
         schedList,
         nList,
@@ -340,8 +348,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setSessions(sessList);
       setLocks(lkList);
       setLeaveEntries(activeLeaveList);
-      syncers.locks.remember(lkList);
-      syncers.leaveEntries.remember(activeLeaveList);
+      syncers.locks.replaceKnown(lkList);
+      syncers.leaveEntries.replaceKnown(activeLeaveList);
       setLeaveTypes(ltList);
       setClinicalRoles(crList);
       setSpecialties(spList);
@@ -373,9 +381,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         setVersions([]);
       }
       workspaceLoadedRef.current = true;
+      loadingRef.current = false;
     } catch (err: any) {
       console.error('Error loading schedule workspace:', err);
       workspaceLoadedRef.current = false;
+      loadingRef.current = false;
       setLoadError(err?.message || 'The schedule workspace could not be loaded.');
     }
   };
@@ -440,6 +450,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const openSchedule = async (sched: Schedule, inputs?: CheckInputs) => {
     const request = ++openRequestRef.current;
     const switching = openScheduleIdRef.current !== sched.id || activeScheduleRef.current?.id !== sched.id;
+    loadingRef.current = true;
     openScheduleIdRef.current = sched.id;
     storeScheduleId(sched.id);
     setActiveSchedule(sched);
@@ -448,20 +459,34 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setUndoStack([]);
       setRedoStack([]);
       setSelectedBlockIndex(0);
+      setAssignments([]); // never show (or edit) the old roster's shifts under the new one
       setValidationReport((prev) => ({ ...prev, scheduleId: sched.id, findings: [], errorCount: 0, warnCount: 0, infoCount: 0 }));
     }
     // Let edits that are still being saved finish first, so the reload includes them.
     await Promise.all([syncers.assignments.idle(), syncers.locks.idle(), syncers.leaveEntries.idle()]);
-    const [list, vList, setup] = await Promise.all([
-      repo.list('assignments', { field: 'scheduleId', operator: '==', value: sched.id }),
-      repo.list('versions', { field: 'scheduleId', operator: '==', value: sched.id }),
-      loadClinicSetup(repo, sched).catch((err) => {
-        console.error('Could not load the clinic details for this roster:', err);
-        return undefined;
-      }),
-    ]);
+    let list: Assignment[];
+    let vList: ScheduleVersion[];
+    let setup: ClinicSetup | undefined;
+    try {
+      [list, vList, setup] = await Promise.all([
+        repo.list('assignments', { field: 'scheduleId', operator: '==', value: sched.id }),
+        repo.list('versions', { field: 'scheduleId', operator: '==', value: sched.id }),
+        loadClinicSetup(repo, sched).catch((err) => {
+          console.error('Could not load the clinic details for this roster:', err);
+          return undefined;
+        }),
+      ]);
+    } catch (err) {
+      if (request === openRequestRef.current) {
+        workspaceLoadedRef.current = false;
+        loadingRef.current = false;
+      }
+      throw err;
+    }
     if (request !== openRequestRef.current) return; // a newer roster was opened meanwhile
-    syncers.assignments.remember(list);
+    // What is saved for this roster is exactly what was just loaded.
+    syncers.assignments.replaceKnown(list, (a) => a.scheduleId === sched.id);
+    loadingRef.current = false;
     clinicSetupRef.current = setup;
     setClinicSetupError(
       setup ? null : 'Public holidays, opening hours and the previous roster could not be loaded. Reload the page before generating.'
@@ -500,7 +525,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       return false;
     }
     const withSchedule = list.map((a) => (a.scheduleId ? a : { ...a, scheduleId }));
-    return trackSave(syncers.assignments.save(withSchedule, (a) => a.scheduleId === scheduleId), 'Shifts');
+    return trackSave(syncers.assignments.save(withSchedule, (a) => a.scheduleId === scheduleId, scheduleId), 'Shifts');
   };
 
   const persistLocks = (next: LockEntry[]) => {
@@ -571,6 +596,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     options: { recordUndo?: boolean } = {}
   ) => {
     if (!activeSchedule) return;
+    if (loadingRef.current) {
+      triggerToast('The roster is still loading. Try again in a moment.');
+      return;
+    }
     const sched = activeSchedule;
     if (options.recordUndo !== false) {
       const before = snapshotNow();
@@ -707,7 +736,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // --- DELETE SCHEDULE FLOW ---
   const handleConfirmDeleteSchedule = async (sched: Schedule) => {
     try {
+      // A save still running for this roster would write its shifts back after the delete.
+      await syncers.assignments.idle();
       const result = await deleteEntireSchedule(repo, sched.id, context.currentUser?.name || 'Admin');
+      syncers.assignments.forgetScope(sched.id, (a) => a.scheduleId === sched.id);
 
       const remainingSchedules = schedules.filter((s) => s.id !== sched.id);
       setSchedules(remainingSchedules);

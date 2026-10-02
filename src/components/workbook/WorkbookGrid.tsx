@@ -626,8 +626,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       const isProtected = !editorAllowOverwrite;
       const creditedHours = typeof lt?.creditedHours === 'number' ? lt.creditedHours : 8;
 
-      // Leave a planner enters is always approved (it is shown and counted). "Allow
-      // overwrite" only means it is not pinned, so a later fill may replace it.
+      // Leave a planner enters is always approved (it is shown and counted, and the
+      // generator never puts a shift on it). Pinning also adds a day off lock, which
+      // keeps the day off even if the leave is later removed.
       const newLeave: LeaveEntry = {
         id: `leave-${nurseId}-${date}-${Date.now()}`,
         nurseId,

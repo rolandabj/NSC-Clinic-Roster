@@ -623,7 +623,7 @@ export class ScheduleValidator {
           if (hasSpecificAllocations) {
             if (currentAsgn.kind === 'DOCTOR' && currentAsgn.doctorId) {
               const docObj = doctors.find((d) => d.id === currentAsgn.doctorId);
-              const docSession = sessions.find((s) => s.doctorId === currentAsgn.doctorId && s.date === date);
+              const docSession = sessions.find((s) => s.doctorId === currentAsgn.doctorId && s.date === date && !s.cancelled);
               const docSpecId = docSession?.specialtyId || docObj?.specialtyIds?.[0];
               const docSpecIds = docObj?.specialtyIds || (docSpecId ? [docSpecId] : []);
 

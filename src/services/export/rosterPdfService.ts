@@ -295,7 +295,10 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
         const row: string[] = [`${dr.fullName}${specialty ? `\n${specialty}` : ''}`];
         let count = 0;
         dates.forEach((date, i) => {
-          const sess = sessions.find((s) => s.doctorId === dr.id && s.date === date);
+          // An active session wins over a cancelled one left from an earlier change.
+          const sess =
+            sessions.find((s) => s.doctorId === dr.id && s.date === date && !s.cancelled) ||
+            sessions.find((s) => s.doctorId === dr.id && s.date === date);
           if (!sess) return row.push('');
           if (sess.cancelled) {
             fills.set(`${dr.id}_${i}`, { fill: WEEKEND_FILL, text: MUTED });

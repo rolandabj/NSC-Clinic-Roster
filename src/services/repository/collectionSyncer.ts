@@ -10,8 +10,9 @@
  * page opened was then deleted by the next click. Here a record is only
  * deleted when this browser had it and the user removed it.
  *
- * Saves run one at a time. While one runs, newer edits wait and only the
- * latest state is saved next. A failed save is kept and can be retried.
+ * Saves run one at a time. Each scope (for shifts: one roster) keeps its own
+ * latest unsaved state, so a newer save for one roster never replaces an
+ * unsaved one for another. A failed save is kept until it is retried.
  */
 
 import { IRepository } from './IRepository';
@@ -54,13 +55,18 @@ export function planSync<T extends { id: string }>(
   return { removeIds, upserts };
 }
 
+interface Desired<T> {
+  items: T[];
+  inScope: (item: T) => boolean;
+}
+
 export class CollectionSyncer<C extends CollectionName> {
   private known = new Map<string, Known<EntityForCollection<C>>>();
-  private desired: { items: EntityForCollection<C>[]; inScope: (item: EntityForCollection<C>) => boolean } | null = null;
-  private dirty = false;
+  /** Latest unsaved state per scope, waiting to be written. */
+  private pending = new Map<string, Desired<EntityForCollection<C>>>();
+  /** States that failed to save, per scope, with the reason. */
+  private failed = new Map<string, Desired<EntityForCollection<C>> & { error: unknown }>();
   private running: Promise<void> | null = null;
-  /** Why the last save failed (cleared by the next successful save). */
-  lastError: unknown = null;
 
   constructor(
     private readonly repo: IRepository,
@@ -68,28 +74,49 @@ export class CollectionSyncer<C extends CollectionName> {
     private readonly onChange?: () => void
   ) {}
 
+  /** Why the oldest unresolved save failed (null when nothing failed). */
+  get lastError(): unknown {
+    const first = this.failed.values().next();
+    return first.done ? null : first.value.error;
+  }
+
   /** Records now known to be saved (just loaded from the database). */
   remember(items: EntityForCollection<C>[]): void {
     for (const item of items) this.known.set(item.id, { item, print: fingerprint(item) });
   }
 
-  /** True while a save is running, waiting, or failed and not yet retried. */
-  hasUnsaved(): boolean {
-    return this.dirty || this.running !== null || this.lastError !== null;
+  /**
+   * Replaces what is known to be saved for one scope with a fresh load, so
+   * records deleted elsewhere are forgotten instead of deleted again later.
+   */
+  replaceKnown(items: EntityForCollection<C>[], inScope: (item: EntityForCollection<C>) => boolean = () => true): void {
+    for (const [id, k] of this.known) if (inScope(k.item)) this.known.delete(id);
+    this.remember(items);
   }
 
-  /** Saves the desired state; resolves true when it (and anything queued) is saved. */
-  save(items: EntityForCollection<C>[], inScope: (item: EntityForCollection<C>) => boolean = () => true): Promise<boolean> {
-    this.desired = { items, inScope };
-    this.dirty = true;
-    if (!this.running) {
-      this.running = this.loop().finally(() => {
-        this.running = null;
-        this.onChange?.();
-      });
-      this.onChange?.();
-    }
-    return this.running.then(() => this.lastError === null);
+  /** Drops a scope entirely (e.g. a deleted roster): nothing more is saved for it. */
+  forgetScope(scope: string, inScope: (item: EntityForCollection<C>) => boolean): void {
+    this.pending.delete(scope);
+    this.failed.delete(scope);
+    for (const [id, k] of this.known) if (inScope(k.item)) this.known.delete(id);
+    this.onChange?.();
+  }
+
+  /** True while a save is running, waiting, or failed and not yet retried. */
+  hasUnsaved(scope?: string): boolean {
+    if (scope !== undefined) return this.pending.has(scope) || this.failed.has(scope);
+    return this.pending.size > 0 || this.running !== null || this.failed.size > 0;
+  }
+
+  /** Saves the desired state of one scope; resolves true when it is saved. */
+  save(
+    items: EntityForCollection<C>[],
+    inScope: (item: EntityForCollection<C>) => boolean = () => true,
+    scope = 'all'
+  ): Promise<boolean> {
+    this.pending.set(scope, { items, inScope });
+    this.failed.delete(scope); // the newer state replaces the failed one for this scope
+    return this.run().then(() => !this.failed.has(scope) && !this.pending.has(scope));
   }
 
   /** Resolves when no save is running (a failed one stays failed). */
@@ -97,23 +124,37 @@ export class CollectionSyncer<C extends CollectionName> {
     while (this.running) await this.running;
   }
 
-  /** Tries the last failed save again. */
+  /** Tries every failed save again; null when nothing failed. */
   retry(): Promise<boolean> | null {
-    if (!this.desired || this.lastError === null) return null;
-    return this.save(this.desired.items, this.desired.inScope);
+    if (this.failed.size === 0) return null;
+    for (const [scope, f] of this.failed) {
+      if (!this.pending.has(scope)) this.pending.set(scope, { items: f.items, inScope: f.inScope });
+    }
+    this.failed.clear();
+    return this.run().then(() => this.failed.size === 0);
+  }
+
+  private run(): Promise<void> {
+    if (!this.running) {
+      this.running = this.loop().finally(() => {
+        this.running = null;
+        this.onChange?.();
+      });
+      this.onChange?.();
+    }
+    return this.running;
   }
 
   private async loop(): Promise<void> {
-    while (this.dirty && this.desired) {
-      this.dirty = false;
-      const { items, inScope } = this.desired;
+    while (this.pending.size > 0) {
+      const [scope, desired] = this.pending.entries().next().value as [string, Desired<EntityForCollection<C>>];
+      this.pending.delete(scope);
       try {
-        await this.write(items, inScope);
-        this.lastError = null;
+        await this.write(desired.items, desired.inScope);
       } catch (err) {
-        this.lastError = err;
-        console.error(`[CollectionSyncer] Saving ${this.collection} failed:`, err);
-        return;
+        console.error(`[CollectionSyncer] Saving ${this.collection} (${scope}) failed:`, err);
+        // Kept for a retry, unless a newer state for this scope is already waiting.
+        if (!this.pending.has(scope)) this.failed.set(scope, { ...desired, error: err });
       }
     }
   }
