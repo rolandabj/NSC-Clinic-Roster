@@ -110,10 +110,12 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
       // Drop its yearly allowance from the nurses' profiles.
       const nurses = await repo.list('nurses');
       const withQuota = nurses.filter((n) => n.leaveQuotas && id in n.leaveQuotas);
-      for (const n of withQuota) {
+      // A merge write would keep the removed key, so the whole nurse is written back.
+      const cleaned = withQuota.map((n) => {
         const { [id]: _removed, ...rest } = n.leaveQuotas!;
-        await repo.update('nurses', n.id, { leaveQuotas: rest } as any);
-      }
+        return { ...n, leaveQuotas: rest };
+      });
+      if (cleaned.length > 0) await repo.bulkUpsert('nurses', cleaned, { replace: true });
       triggerSaveNotification(`Leave type "${name}" deleted.`);
       loadData();
     }

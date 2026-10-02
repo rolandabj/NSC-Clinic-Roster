@@ -16,7 +16,6 @@ import {
   Edit2,
   Trash2,
   RefreshCw,
-  Search,
   CheckCircle2,
   AlertTriangle,
   Info,
@@ -38,6 +37,7 @@ import {
   getInclusiveDays,
   getPeriodDailyRate,
 } from '../../services/periods/workingHoursPeriodService';
+import { localTodayIso } from '../../utils/dateUtils';
 
 interface WorkingHoursPeriodsPanelProps {
   onNotify?: (message: string) => void;
@@ -131,7 +131,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
     });
   }, [sortedPeriods, yearFilter]);
 
-  // Days no period covers use 40 hours a week. Show the gaps between periods,
+  // Days no period covers fall back to the roster's own target or 40 hours a week. Show the gaps between periods,
   // and warn when the periods run out within the next three months.
   const coverageWarnings = useMemo(() => {
     const warnings: string[] = [];
@@ -150,13 +150,13 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
         warnings.push(`No period covers ${dayAfter(prevEnd)} to ${dayBefore(next.startDate)}.`);
       }
     }
-    const today = new Date().toISOString().split('T')[0];
+    const today = localTodayIso();
     const lastEnd = sortedPeriods.reduce((max, p) => (p.endDate > max ? p.endDate : max), '');
-    const soon = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
-    if (!lastEnd) warnings.push('There are no periods, so every roster uses 40 hours a week.');
+    const soon = localTodayIso(90);
+    if (!lastEnd) warnings.push('There are no periods, so every roster uses its own hours target, or 40 hours a week.');
     else if (lastEnd < soon) {
       warnings.push(
-        `${lastEnd < today ? 'The periods ended' : 'The periods end'} on ${lastEnd}. Add the next ones, or rosters after that date use 40 hours a week.`
+        `${lastEnd < today ? 'The periods ended' : 'The periods end'} on ${lastEnd}. Add the next ones, or days after that use the roster's own hours target, or 40 hours a week.`
       );
     }
     return warnings;
@@ -220,6 +220,10 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
     }
     if (isNaN(hoursNum) || hoursNum <= 0 || hoursNum > 1000) {
       setFormError('Working hours must be a number above 0.');
+      return;
+    }
+    if (loadError) {
+      setFormError('The periods could not be loaded, so overlaps can\'t be checked. Refresh the page first.');
       return;
     }
     const overlap = periods.find(
@@ -303,6 +307,8 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
     try {
       setIsLoading(true);
       const repo = getRepository();
+      // Read the current list again, so a stale or failed load can't hide the clinic's own periods.
+      const periods = await repo.list('workingHoursPeriods');
       // Standard periods that would overlap one of the clinic's own periods are skipped.
       const seedIds = new Set(SEED_WORKING_HOURS_PERIODS.map((p) => p.id));
       const own = periods.filter((p) => !seedIds.has(p.id));
@@ -369,6 +375,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
           <button
             type="button"
             onClick={() => setIsRestoreConfirmOpen(true)}
+            disabled={!!loadError || isLoading}
             className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Load all 12 standard periods from 2025-2026 clinic roster baseline"
           >
@@ -379,6 +386,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
           <button
             type="button"
             onClick={handleOpenCreateModal}
+            disabled={!!loadError || isLoading}
             className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" aria-hidden="true" />
@@ -395,7 +403,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
 
       {!isLoading && !loadError && coverageWarnings.length > 0 && (
         <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs space-y-1">
-          <p className="font-semibold">Days without a period use 40 hours a week as the full time target.</p>
+          <p className="font-semibold">Days without a period use the roster's own hours target, or 40 hours a week.</p>
           <ul className="list-disc pl-5 space-y-0.5">
             {coverageWarnings.map((w) => (
               <li key={w}>{w}</li>
@@ -863,7 +871,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
               <span id={deleteTitleId}>Delete Dedicated Period?</span>
             </div>
             <p className="text-slate-600 text-xs">
-              Are you sure you want to delete <b>{deletingPeriod.name} ({deletingPeriod.year})</b> with {deletingPeriod.workingHours}h target? Rosters covering these dates will then use 40 hours a week as the full time target.
+              Are you sure you want to delete <b>{deletingPeriod.name} ({deletingPeriod.year})</b> with {deletingPeriod.workingHours}h target? Rosters covering these dates will then use their own hours target, or 40 hours a week.
             </p>
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button

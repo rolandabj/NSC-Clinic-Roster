@@ -9,6 +9,7 @@ import React, { useId, useState } from 'react';
 import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { PublicHoliday } from '../../../types';
+import { localTodayIso } from '../../../utils/dateUtils';
 import { notify, confirmDialog } from '../../common/dialogs';
 import { SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
 
@@ -26,7 +27,7 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
   const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
   const [showPast, setShowPast] = useState(false);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = localTodayIso();
   const thisYear = today.slice(0, 4);
   const sorted = [...holidays].sort((a, b) => a.date.localeCompare(b.date));
   const pastCount = sorted.filter((h) => h.date.slice(0, 4) < thisYear).length;

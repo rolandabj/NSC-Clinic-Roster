@@ -9,6 +9,7 @@ import React, { useId, useState } from 'react';
 import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { Specialty } from '../../../types';
+import { localTodayIso } from '../../../utils/dateUtils';
 import { notify, confirmDialog } from '../../common/dialogs';
 import { SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
 
@@ -63,12 +64,17 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
 
   const handleDeleteSpecialty = withSaveErrors('delete the specialty', async (id: string, name: string) => {
     // Doctors, upcoming sessions and nurse preferences that still point at it would break.
-    const today = new Date().toISOString().split('T')[0];
-    const [doctors, sessions, nurses] = await Promise.all([
+    const today = localTodayIso();
+    const [doctors, sessions, nurses, locks, templates] = await Promise.all([
       repo.list('doctors'),
       repo.list('doctorSessions', { field: 'specialtyId', operator: '==', value: id }),
       repo.list('nurses'),
+      repo.list('locks'),
+      repo.list('templates'),
     ]);
+    const inLocksOrTemplates =
+      locks.some((l: any) => l.targetRefId === id || l.specialtyId === id) ||
+      templates.some((t: any) => JSON.stringify(t).includes(`"${id}"`));
     const doctorsUsing = doctors.filter((d) => (d.specialtyIds || []).includes(id));
     const upcoming = sessions.filter((x) => x.date >= today);
     const nursesUsing = nurses.filter((n) => (n.preferences || []).some((p) => p.kind === 'SPECIALTY' && p.refId === id));
@@ -76,6 +82,7 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
       doctorsUsing.length ? `${doctorsUsing.length} doctor${doctorsUsing.length === 1 ? '' : 's'} (${doctorsUsing.slice(0, 3).map((d) => d.fullName).join(', ')}${doctorsUsing.length > 3 ? ', …' : ''})` : '',
       upcoming.length ? `${upcoming.length} upcoming session${upcoming.length === 1 ? '' : 's'}` : '',
       nursesUsing.length ? `the preferences of ${nursesUsing.length} nurse${nursesUsing.length === 1 ? '' : 's'}` : '',
+      inLocksOrTemplates ? 'pinned shifts or a template' : '',
     ].filter(Boolean);
     if (uses.length > 0) {
       notify(`"${name}" is still used by ${uses.join(', ')}. Change those first, then delete it.`, 'warning');

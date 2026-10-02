@@ -110,12 +110,15 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
   const handleDeleteDuty = withSaveErrors('delete the shift', async (duty: DutyWindow) => {
     // A shift used in a roster, a pinned shift or a template is archived instead,
     // so those rosters keep showing it.
-    const [assignments, locks, templates] = await Promise.all([
+    const [assignments, locks, templates, requests] = await Promise.all([
       repo.list('assignments', { field: 'dutyWindowId', operator: '==', value: duty.id }),
       repo.list('locks'),
       repo.list('templates'),
+      repo.list('availabilityRequests'),
     ]);
-    const inLocks = locks.some((l: any) => l.dutyWindowId === duty.id);
+    const inLocks =
+      locks.some((l: any) => l.dutyWindowId === duty.id) ||
+      requests.some((r: any) => r.preferredDutyWindowId === duty.id || r.dutyWindowId === duty.id);
     const inTemplates = templates.some((t: any) => JSON.stringify(t).includes(`"${duty.id}"`));
     if (assignments.length > 0 || inLocks || inTemplates) {
       const where = [
@@ -125,7 +128,7 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
       ]
         .filter(Boolean)
         .join(', ');
-      if (!duty.active) {
+      if (duty.active === false) {
         notify(`"${duty.name}" is used in ${where}, so it can't be deleted. It is already archived.`, 'info');
         return;
       }
@@ -264,12 +267,12 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
                     <td className="py-2.5 px-3">
                       <span
                         className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          duty.active
+                          duty.active !== false
                             ? 'bg-emerald-50 text-emerald-700'
                             : 'bg-slate-100 text-slate-500'
                         }`}
                       >
-                        {duty.active ? 'Active' : 'Archived'}
+                        {duty.active !== false ? 'Active' : 'Archived'}
                       </span>
                     </td>
                     <td className="py-2.5 px-3 text-right">

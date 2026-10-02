@@ -172,12 +172,14 @@ function findRule(rules: Rule[], def: { key: string; id?: string; keywords?: str
   return resolveRule(rules, def.key, def.id, def.keywords, def.excludeKeywords);
 }
 
+const ZERO_MEANS_DEFAULT = new Set<string>(['MAX_WORKING_HOURS_PER_PERIOD', 'MAX_CONSECUTIVE_DAYS', 'MAX_CONSECUTIVE_LATE_DUTIES']);
+
 /** The number the generator actually uses for this rule. */
 function effectiveValue(def: RuleDef, rule: Rule): number {
   const v = Number(rule.value);
   if (rule.value === undefined || rule.value === null || !Number.isFinite(v)) return def.fallback ?? def.value?.min ?? 0;
-  // Rest of 0 means no minimum rest; for the other rules a 0 means "use the default".
-  if (v === 0 && def.key !== 'MIN_REST_HOURS') return def.fallback ?? def.value?.min ?? 0;
+  // The generator reads these three as "0 means use the default"; the others use a 0 as it is.
+  if (v === 0 && ZERO_MEANS_DEFAULT.has(def.key)) return def.fallback ?? def.value?.min ?? 0;
   return v;
 }
 
