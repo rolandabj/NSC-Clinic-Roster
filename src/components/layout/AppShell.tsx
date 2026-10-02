@@ -341,22 +341,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       setShareTokenParam(parsed.token);
       setNurseIdParam(parsed.nurse);
 
-      if (parsed.ackToken) {
-        RosterPublishService.acknowledgeByToken(parsed.ackToken).then((success) => {
-          if (success) {
-            setAckNotice('Your shift schedule receipt has been officially acknowledged and verified.');
-          }
-        });
-      }
+      // Receipt links open the confirm page (see App.tsx); nothing is confirmed automatically.
     };
-
-    if (initialUrl.ackToken) {
-      RosterPublishService.acknowledgeByToken(initialUrl.ackToken).then((success) => {
-        if (success) {
-          setAckNotice('Your shift schedule receipt has been officially acknowledged and verified.');
-        }
-      });
-    }
 
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);

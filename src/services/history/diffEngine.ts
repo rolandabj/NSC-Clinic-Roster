@@ -30,7 +30,7 @@ export interface FormattedAssignmentState {
 }
 
 export interface AssignmentDiffItem {
-  id: string; // `${nurseId}_${date}`
+  id: string; // `${nurseId}|${date}`
   nurseId: string;
   nurseName: string;
   date: string;
@@ -116,10 +116,11 @@ export function computeScheduleDiff(
 
   // Index assignments by `${nurseId}_${date}`
   const baseMap = new Map<string, Assignment>();
-  baseAssignments.forEach((a) => baseMap.set(`${a.nurseId}_${a.date}`, a));
+  // '|' can't appear in ids or dates, so the key always splits back correctly.
+  baseAssignments.forEach((a) => baseMap.set(`${a.nurseId}|${a.date}`, a));
 
   const targetMap = new Map<string, Assignment>();
-  targetAssignments.forEach((a) => targetMap.set(`${a.nurseId}_${a.date}`, a));
+  targetAssignments.forEach((a) => targetMap.set(`${a.nurseId}|${a.date}`, a));
 
   // Collect all unique keys
   const allKeys = new Set<string>([...baseMap.keys(), ...targetMap.keys()]);
@@ -135,7 +136,7 @@ export function computeScheduleDiff(
     const baseAsgn = baseMap.get(key);
     const targetAsgn = targetMap.get(key);
 
-    const [nurseId, date] = key.split('_');
+    const [nurseId, date] = key.split('|');
     const nurse = nurseMap.get(nurseId);
     const nurseName = nurse ? nurse.fullName : nurseId;
 
@@ -242,11 +243,17 @@ export function computeScheduleDiff(
           description: desc,
         };
         allChanges.push(item);
-        if (!changesByNurse[nurseId]) changesByNurse[nurseId] = [];
-        changesByNurse[nurseId].push(item);
+        // A pin added or removed isn't a change to the nurse's shift, so it isn't emailed.
+        if (isDutyChanged || isTargetChanged) {
+          if (!changesByNurse[nurseId]) changesByNurse[nurseId] = [];
+          changesByNurse[nurseId].push(item);
+        }
       }
     }
   });
+
+  // Each nurse's changes in date order (as listed in her email)
+  for (const list of Object.values(changesByNurse)) list.sort((a, b) => a.date.localeCompare(b.date));
 
   // Sort changes chronologically by date then nurse name
   allChanges.sort((a, b) => {

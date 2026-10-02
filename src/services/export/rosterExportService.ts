@@ -6,6 +6,7 @@
  * Supports Multi-Sheet Excel (.xlsx via SheetJS), Matrix/Long CSV, and Formatted Print Datasets.
  */
 
+import { resolveFullTimeTarget } from '../hours/hoursPolicy';
 import { isWeekendDay } from '../../utils/weekend';
 import { CsvValue, downloadCsv, toCsv } from '../../utils/csv';
 import {
@@ -114,7 +115,7 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
 
   // Title / Metadata Banner Rows
   rosterAoa.push([clinicName.toUpperCase(), '', '', '', '', `SCHEDULE: ${schedule.name}`, '', '', `VERSION: v${versionNumber}`]);
-  rosterAoa.push([`Period: ${schedule.startDate} to ${schedule.endDate}`, '', '', '', '', `Target: ${schedule.hoursTargetFullTime}h Full-Time`, '', '', `Exported: ${new Date().toLocaleString()}`]);
+  rosterAoa.push([`Period: ${schedule.startDate} to ${schedule.endDate}`, '', '', '', '', `Full time goal: ${resolveFullTimeTarget(schedule, workingHoursPeriods).hours}h`, '', '', `Exported: ${new Date().toLocaleString()}`]);
   rosterAoa.push([]); // blank separator
 
   // Header Row: Staff info + Dates

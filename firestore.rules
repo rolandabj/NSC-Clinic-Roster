@@ -78,13 +78,15 @@ service cloud.firestore {
     // confirming receipt (setting ackAt once), even without signing in.
     // ---------------------------------------------------------------------
     match /acknowledgments/{ackId} {
-      allow get: if isApproved() || resource.data.token == ackId;
-      allow list: if isApproved();
+      allow get: if isEditor() || resource.data.token == ackId
+        || (isApproved() && myNurseId() != '' && resource.data.nurseId == myNurseId());
+      // Who confirmed what is for the people who publish rosters.
+      allow list: if isEditor();
       allow create, delete: if isEditor();
       allow update: if isEditor() || (
-        // By token without signing in, or (for older acknowledgments whose id
-        // is not the token) by any approved signed in user.
-        (resource.data.token == ackId || isApproved())
+        // By the token from the email (no sign in needed), or for older
+        // acknowledgments whose id is not the token, by the nurse herself.
+        (resource.data.token == ackId || (isApproved() && myNurseId() != '' && resource.data.nurseId == myNurseId()))
         && resource.data.get('ackAt', null) == null
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ackAt'])
         && request.resource.data.ackAt is string

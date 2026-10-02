@@ -338,7 +338,7 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
                 <option value="ALL">All Nursing Staff ({nurses.length})</option>
                 {nurses.map((n) => (
                   <option key={n.id} value={n.id}>
-                    {n.fullName} ({n.employeeCode})
+                    {n.fullName}
                   </option>
                 ))}
               </select>
@@ -414,8 +414,7 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
               <User className="w-4 h-4 text-indigo-600" />
               <span>
                 Showing personalized roster view for{' '}
-                <strong>{nurseMap.get(selectedNurseFilter)?.fullName}</strong> (
-                {nurseMap.get(selectedNurseFilter)?.employeeCode})
+                <strong>{nurseMap.get(selectedNurseFilter)?.fullName || 'this nurse'}</strong>
               </span>
             </div>
             <button
@@ -469,8 +468,6 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
                           {nurse.fullName}
                         </div>
                         <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5">
-                          <span>{nurse.employeeCode}</span>
-                          <span>·</span>
                           <span>{seniority?.name || 'Staff'}</span>
                         </div>
                       </td>

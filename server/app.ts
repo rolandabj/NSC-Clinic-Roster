@@ -58,7 +58,17 @@ export async function startServer() {
   // No CORS middleware: the browser app is served from this same origin, so
   // cross origin calls to the API are not needed and are not allowed.
   app.use(express.json({ limit: '5mb' }));
-  app.use('/api', apiRateLimiter);
+  // Publishing sends one request per nurse, so roster emails get their own, higher limit
+  // (a clinic of 60+ nurses would otherwise be cut off partway through a publish).
+  const emailRateLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'TooManyRequests', message: 'Too many emails in a minute: please wait a minute and retry the ones not sent.' },
+  });
+  app.use('/api/email', emailRateLimiter);
+  app.use('/api', (req: Request, res: Response, next) => (req.path.startsWith('/email/') ? next() : apiRateLimiter(req, res, next)));
   app.use(authMiddleware);
 
   // Every API route requires a signed in, approved user, except these.

@@ -39,7 +39,7 @@ export interface PublicRosterDoc {
   version: Pick<ScheduleVersion, 'id' | 'scheduleId' | 'number' | 'timestamp' | 'isPublished'> & {
     snapshot: { assignments: any[]; leaveEntries: any[] };
   };
-  nurses: Pick<Nurse, 'id' | 'fullName' | 'employeeCode' | 'seniorityLevelId' | 'active'>[];
+  nurses: Pick<Nurse, 'id' | 'fullName' | 'seniorityLevelId' | 'active'>[];
   dutyWindows: Pick<DutyWindow, 'id' | 'name' | 'acronym' | 'startTime' | 'endTime' | 'color'>[];
   leaveTypes: Pick<LeaveType, 'id' | 'name' | 'acronym' | 'color'>[];
   seniorityLevels: Pick<SeniorityLevel, 'id' | 'name' | 'rank' | 'color'>[];
@@ -60,6 +60,9 @@ function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pick<T, K
  * Creates or refreshes the public snapshot for a share link.
  * Revoked links have their snapshot removed.
  */
+/** The one leave type a public roster shows (the real type stays private). */
+const PUBLIC_LEAVE_TYPE = { id: 'leave', name: 'Leave', acronym: 'L', color: '#94a3b8' };
+
 export async function syncPublicRoster(link: ShareLink): Promise<void> {
   const repo = getRepository();
 
@@ -86,12 +89,25 @@ export async function syncPublicRoster(link: ShareLink): Promise<void> {
     throw new Error('The shared version or schedule no longer exists.');
   }
 
-  const snapshotAssignments = (version.snapshot?.assignments || []).map((a) =>
-    pick(a, ['id', 'nurseId', 'date', 'dutyWindowId', 'kind', 'doctorId', 'specialtyId', 'clinicalRoleId'])
-  );
+  // Only what this roster shows: its shifts, and approved leave clipped to its dates. Leave is
+  // shown as a plain "Leave" (whether it is sick, annual or other leave stays private).
+  const inRoster = (d: string) => d >= schedule.startDate && d <= schedule.endDate;
+  const snapshotAssignments = (version.snapshot?.assignments || [])
+    .filter((a) => inRoster(a.date))
+    .map((a) => pick(a, ['id', 'nurseId', 'date', 'dutyWindowId', 'kind', 'doctorId', 'specialtyId', 'clinicalRoleId']));
   const snapshotLeave = (version.snapshot?.leaveEntries || [])
-    .filter((le) => le.approved)
-    .map((le) => pick(le, ['id', 'nurseId', 'leaveTypeId', 'startDate', 'endDate', 'approved']));
+    .filter((le) => le.approved && le.endDate >= schedule.startDate && le.startDate <= schedule.endDate)
+    .map((le) => ({
+      id: le.id,
+      nurseId: le.nurseId,
+      leaveTypeId: PUBLIC_LEAVE_TYPE.id,
+      startDate: le.startDate < schedule.startDate ? schedule.startDate : le.startDate,
+      endDate: le.endDate > schedule.endDate ? schedule.endDate : le.endDate,
+      approved: true,
+    }));
+  // Only the people on this roster (no employee codes or other details).
+  const nurseIds = new Set([...snapshotAssignments.map((a) => a.nurseId), ...snapshotLeave.map((l) => l.nurseId)]);
+  const doctorIds = new Set(snapshotAssignments.map((a) => a.doctorId).filter(Boolean) as string[]);
 
   const doc: PublicRosterDoc = {
     id: link.token,
@@ -109,11 +125,11 @@ export async function syncPublicRoster(link: ShareLink): Promise<void> {
       ...pick(version, ['id', 'scheduleId', 'number', 'timestamp', 'isPublished']),
       snapshot: { assignments: snapshotAssignments, leaveEntries: snapshotLeave },
     },
-    nurses: nurses.filter((n) => n.active).map((n) => pick(n, ['id', 'fullName', 'employeeCode', 'seniorityLevelId', 'active'])),
+    nurses: nurses.filter((n) => nurseIds.has(n.id)).map((n) => pick(n, ['id', 'fullName', 'seniorityLevelId', 'active'])),
     dutyWindows: dutyWindows.map((d) => pick(d, ['id', 'name', 'acronym', 'startTime', 'endTime', 'color'])),
-    leaveTypes: leaveTypes.map((l) => pick(l, ['id', 'name', 'acronym', 'color'])),
+    leaveTypes: [PUBLIC_LEAVE_TYPE],
     seniorityLevels: seniorityLevels.map((s) => pick(s, ['id', 'name', 'rank', 'color'])),
-    doctors: doctors.map((d) => pick(d, ['id', 'fullName', 'specialtyIds'])),
+    doctors: doctors.filter((d) => doctorIds.has(d.id)).map((d) => pick(d, ['id', 'fullName', 'specialtyIds'])),
     clinicalRoles: clinicalRoles.map((r) => pick(r, ['id', 'name', 'acronym'])),
     specialties: specialties.map((s) => pick(s, ['id', 'name', 'code'])),
   };
@@ -121,12 +137,15 @@ export async function syncPublicRoster(link: ShareLink): Promise<void> {
   await repo.create('publicRosters', doc);
 }
 
+/**
+ * Removes a link's public snapshot. It is marked revoked first, so even if the delete
+ * fails the database rules already refuse to show it. Errors are passed on to the caller.
+ */
 export async function removePublicRoster(token: string): Promise<void> {
-  try {
-    await getRepository().remove('publicRosters', token);
-  } catch (err) {
-    console.warn('[publicRosterService] Could not remove public roster snapshot:', err);
-  }
+  const repo = getRepository();
+  const existing = await repo.get('publicRosters', token).catch(() => null);
+  if (existing) await repo.update('publicRosters', token, { revoked: true } as any);
+  await repo.remove('publicRosters', token);
 }
 
 /**

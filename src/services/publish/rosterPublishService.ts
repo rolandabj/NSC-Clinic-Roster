@@ -109,7 +109,10 @@ export class RosterPublishService {
     const variance = Math.round((totalEarnedHours - targetHours) * 10) / 10;
 
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://clinicroster.app';
-    const viewUrl = `${origin}/#published?token=${encodeURIComponent(shareToken || 'active')}&nurse=${encodeURIComponent(nurse.id)}`;
+    // No link unless the planner chose to include one (never a made up token).
+    const viewUrl = shareToken
+      ? `${origin}/#published?token=${encodeURIComponent(shareToken)}&nurse=${encodeURIComponent(nurse.id)}`
+      : '';
     const ackUrl = `${origin}/#ack?token=${encodeURIComponent(ackToken)}`;
 
     // Every user supplied value below is HTML escaped.
@@ -282,13 +285,13 @@ export class RosterPublishService {
                     </a>
                   </td>
                 </tr>
-                <tr>
+                ${viewUrl ? `<tr>
                   <td align="center" style="padding-top: 12px;">
-                    <a href="${viewUrl}" style="font-size: 12px; color: #6366f1; text-decoration: underline;">
-                      Open Live Personal Roster on Web / Mobile
+                    <a href="${h(viewUrl)}" style="font-size: 12px; color: #6366f1; text-decoration: underline;">
+                      View the roster online
                     </a>
                   </td>
-                </tr>
+                </tr>` : ''}
               </table>
             </td>
           </tr>

@@ -83,6 +83,10 @@ await t('anon cannot acknowledge legacy ack', false, updateDoc(doc(anon, 'acknow
 await t('viewer acknowledges legacy ack once', true, updateDoc(doc(viewer, 'acknowledgments/legacy'), { ackAt: '2026-10-01T00:00:00Z' }));
 await t('viewer cannot re-acknowledge legacy ack', false, updateDoc(doc(viewer, 'acknowledgments/legacy'), { ackAt: '2026-10-03T00:00:00Z' }));
 await t('viewer cannot create ack', false, setDoc(doc(viewer, 'acknowledgments/ack-z'), { token: 'ack-z' }));
+await t('viewer cannot list acks', false, getDocs(collection(viewer, 'acknowledgments')));
+await t('editor lists acks', true, getDocs(collection(editor, 'acknowledgments')));
+await t("manager cannot acknowledge another nurse's ack", false, updateDoc(doc(manager, 'acknowledgments/legacy'), { ackAt: '2026-10-05T00:00:00Z' }));
+await t("manager cannot read another nurse's legacy ack", false, getDoc(doc(manager, 'acknowledgments/legacy')));
 // public rosters
 await t('anon reads public roster', true, getDoc(doc(anon, 'publicRosters/sh_pub')));
 await t('anon cannot list public rosters', false, getDocs(collection(anon, 'publicRosters')));

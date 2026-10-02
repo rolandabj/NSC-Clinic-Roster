@@ -6,7 +6,7 @@
  * roster email. Works without signing in: the token in the link is the proof.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 
@@ -16,22 +16,33 @@ interface AcknowledgePageProps {
 }
 
 export const AcknowledgePage: React.FC<AcknowledgePageProps> = ({ token, clinicName }) => {
-  const [state, setState] = useState<'working' | 'done' | 'failed'>('working');
+  // Nothing is confirmed until the nurse presses the button: email apps that open links
+  // to scan them must not confirm on her behalf.
+  const [state, setState] = useState<'ask' | 'working' | 'done' | 'failed'>('ask');
 
-  useEffect(() => {
-    let cancelled = false;
-    RosterPublishService.acknowledgeByToken(token).then((ok) => {
-      if (!cancelled) setState(ok ? 'done' : 'failed');
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+  const confirm = async () => {
+    setState('working');
+    const ok = await RosterPublishService.acknowledgeByToken(token);
+    setState(ok ? 'done' : 'failed');
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white border border-slate-200 rounded-lg p-6 shadow-xl space-y-4 text-center">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{clinicName}</p>
+        {state === 'ask' && (
+          <>
+            <h1 className="text-base font-bold text-slate-900">Confirm you received your roster</h1>
+            <p className="text-xs text-slate-600">Press the button to let the clinic know you've seen your schedule.</p>
+            <button
+              type="button"
+              onClick={confirm}
+              className="px-5 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm cursor-pointer"
+            >
+              I've received my roster
+            </button>
+          </>
+        )}
         {state === 'working' && (
           <>
             <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />

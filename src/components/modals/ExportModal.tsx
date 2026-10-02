@@ -6,6 +6,7 @@
  * Supports a PDF of the nurses' and doctors' grids, Multi-Sheet Excel, CSV Matrix/Long, and Per-Nurse Packets.
  */
 
+import { resolveFullTimeTarget } from '../../services/hours/hoursPolicy';
 import React, { useEffect, useId, useState } from 'react';
 import {
   X,
@@ -620,7 +621,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="text-right font-mono text-[10px]">
                 <p className="font-bold">VERSION: v{versionNumber}</p>
                 <p className="text-slate-600">Printed: {new Date().toLocaleString()}</p>
-                <p className="text-slate-600">Hours Target: {schedule.hoursTargetFullTime}h FT</p>
+                <p className="text-slate-600">Full time goal: {resolveFullTimeTarget(schedule, workingHoursPeriods).hours}h</p>
               </div>
             </div>
 

@@ -51,6 +51,8 @@ import {
   PublishLog,
   Acknowledgment,
   ShareLink,
+  LockEntry,
+  WorkingHoursPeriod,
 } from '../../types';
 import { PublishModal } from '../modals/PublishModal';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
@@ -89,6 +91,9 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
   const [publishLogs, setPublishLogs] = useState<PublishLog[]>([]);
   const [acknowledgments, setAcknowledgments] = useState<Acknowledgment[]>([]);
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
+  // Pinned days and time periods, so publishing from here checks and counts like the Schedules page.
+  const [locks, setLocks] = useState<LockEntry[]>([]);
+  const [workingHoursPeriods, setWorkingHoursPeriods] = useState<WorkingHoursPeriod[]>([]);
 
   // Wizard state
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
@@ -135,6 +140,8 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
         plList,
         ackList,
         linkList,
+        lockList,
+        periodList,
       ] = await Promise.all([
         repo.list('schedules'),
         repo.list('assignments'),
@@ -152,6 +159,8 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
         repo.list('emailLog'),
         repo.list('acknowledgments'),
         repo.list('shareLinks'),
+        repo.list('locks'),
+        repo.list('workingHoursPeriods'),
       ]);
 
       const uniqueSchedules = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
@@ -170,6 +179,8 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       setPublishLogs(plList.sort((a, b) => b.sentAt.localeCompare(a.sentAt)));
       setAcknowledgments(ackList);
       setShareLinks(linkList);
+      setLocks(lockList);
+      setWorkingHoursPeriods(periodList);
       // Links made before public snapshots existed get one now (editors only).
       if (canEditClinicData(authService.getCurrentUser())) void ensurePublicRosters(linkList);
 
@@ -254,7 +265,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       id: `remind-${crypto.randomUUID()}`,
       scheduleId: activeSchedule.id,
       versionId: ack.versionId,
-      kind: 'CHANGE',
+      kind: 'REMINDER',
       recipients: [recipientLog],
       status: recipientLog.status === 'FAILED' ? 'FAILED' : recipientLog.status,
       sentAt: nowIso,
@@ -319,11 +330,14 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
   const handleGeneratePersonalLink = () => {
     if (!selectedNurseForLink || !activeSchedule) return;
     const origin = window.location.origin;
-    const targetLink = shareLinks.find((l) => l.scheduleId === activeSchedule.id && !l.revoked);
-    const token = targetLink?.token || 'preview';
-    const link = `${origin}/#published?token=${token}&nurse=${selectedNurseForLink.id}`;
-    setGeneratedLink(link);
-    triggerToast('Generated personal secure link.');
+    const targetLink = shareLinks.find((l) => l.scheduleId === activeSchedule.id && !l.revoked && l.public);
+    if (!targetLink) {
+      notify('This roster has no share link yet. Create one in Share first.', 'warning');
+      return;
+    }
+    // Opens the roster filtered to this nurse; anyone with the link can still see the whole team.
+    setGeneratedLink(`${origin}/#published?token=${targetLink.token}&nurse=${selectedNurseForLink.id}`);
+    triggerToast('Link made. It opens the roster on this nurse.');
   };
 
   // Export Recipients CSV
@@ -705,9 +719,29 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
                       {log.subject}
                     </td>
                     <td className="py-2.5 px-3">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-bold text-[10px] border border-emerald-200">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        <span>{log.status}</span>
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold text-[10px] border ${
+                          log.status === 'SENT'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                            : log.status === 'MOCK_SENT'
+                            ? 'bg-slate-100 text-slate-700 border-slate-200'
+                            : log.status === 'FAILED'
+                            ? 'bg-rose-50 text-rose-800 border-rose-200'
+                            : 'bg-amber-50 text-amber-800 border-amber-200'
+                        }`}
+                      >
+                        {log.status === 'SENT' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
+                        <span>
+                          {log.status === 'SENT'
+                            ? 'Sent'
+                            : log.status === 'MOCK_SENT'
+                            ? 'Test mode'
+                            : log.status === 'FAILED'
+                            ? 'Failed'
+                            : log.status === 'PARTIAL'
+                            ? 'Some failed'
+                            : 'Not finished'}
+                        </span>
                       </span>
                     </td>
                     <td className="py-2.5 px-4 text-right font-sans">
@@ -819,6 +853,8 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
           leaveEntries={leaveEntries}
           leaveTypes={leaveTypes}
           versions={versions}
+          locks={locks}
+          workingHoursPeriods={workingHoursPeriods}
           isOpen={isPublishModalOpen}
           onClose={() => setIsPublishModalOpen(false)}
           onPublishComplete={() => {

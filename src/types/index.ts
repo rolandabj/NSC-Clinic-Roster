@@ -81,8 +81,9 @@ export interface AvailabilityRequest {
   reviewNotes?: string;
 }
 
-export type EmailLogKind = 'PUBLISH' | 'CHANGE' | 'TEST';
-export type EmailLogStatus = 'MOCK_SENT' | 'SENT' | 'FAILED';
+export type EmailLogKind = 'PUBLISH' | 'CHANGE' | 'TEST' | 'REMINDER';
+// PARTIAL: some recipients failed. SENDING: a publish that is still running (or was interrupted).
+export type EmailLogStatus = 'MOCK_SENT' | 'SENT' | 'FAILED' | 'PARTIAL' | 'SENDING';
 
 export type AuditAction =
   | 'CREATE'

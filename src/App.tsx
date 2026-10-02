@@ -98,11 +98,14 @@ export default function App() {
   // 2. Links that work without signing in: shared rosters (#published?token=...)
   // and roster receipt confirmations (#ack?token=...). Signed in users get the
   // same links inside the full app below.
+  // A receipt link always shows the confirm page (signed in or not), so the receipt is
+  // only confirmed by pressing its button.
+  const ackLink = parsePublicLink();
+  if (ackLink?.kind === 'ack') {
+    return <AcknowledgePage token={ackLink.token} clinicName={clinicName} />;
+  }
   if (!currentUser) {
     const publicLink = parsePublicLink();
-    if (publicLink?.kind === 'ack') {
-      return <AcknowledgePage token={publicLink.token} clinicName={clinicName} />;
-    }
     if (publicLink?.kind === 'published') {
       return (
         <LoadErrorBoundary><Suspense fallback={<PageLoading />}>

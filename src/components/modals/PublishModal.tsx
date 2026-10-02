@@ -116,7 +116,14 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   const [publishKind, setPublishKind] = useState<'PUBLISH' | 'CHANGE'>(initialMode);
   const [versionNote, setVersionNote] = useState('');
   const [generalBroadcastNote, setGeneralBroadcastNote] = useState('');
-  const [includeOwnerCopy, setIncludeOwnerCopy] = useState(true);
+  // Whether the emails link to the roster online (a share link anyone who has it can open).
+  const [includeLink, setIncludeLink] = useState(false);
+  const [hasPublicLink, setHasPublicLink] = useState(false);
+  // Outcome of the last send, per nurse, and problems that didn't stop the publish.
+  const [sendResults, setSendResults] = useState<EmailRecipientLog[]>([]);
+  const [publishWarnings, setPublishWarnings] = useState<string[]>([]);
+  // A publish already saved (version, link, log), so a retry only re-sends the failed emails.
+  const runRef = useRef<{ version: ScheduleVersion; shareToken?: string; logId: string; recipients: EmailRecipientLog[] } | null>(null);
 
   // Email Config
   const [emailConfig, setEmailConfig] = useState<EmailSettingsConfig>(() => cachedEmailSettings());
@@ -141,15 +148,48 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   // Latest roster check run, and whether its clinic details are still loading
   const validationRunRef = useRef(0);
   const [isClinicCheckPending, setIsClinicCheckPending] = useState(false);
-  const isOwner = context.currentUser?.role === 'OWNER';
+  // Owner and editors may publish (the same people the database rules allow to write versions).
+  const isOwner = ['OWNER', 'EDITOR', 'PLANNER'].includes(context.currentUser?.role || '');
   const repo = getRepository();
+
+  /** Changes since the latest published version (same as shown in the change alert). */
+  const computedDiffFor = (publishedList: ScheduleVersion[]) => {
+    const lastPub = [...publishedList].sort((a, b) => b.number - a.number)[0];
+    return computeScheduleDiff(
+      lastPub.snapshot.assignments,
+      assignments,
+      nurses,
+      dutyWindows,
+      doctors,
+      roles,
+      specialties,
+      `v${lastPub.number}`,
+      `v${(schedule.activeVersionNumber || 1) + 1}`,
+      lastPub.number,
+      (schedule.activeVersionNumber || 1) + 1
+    );
+  };
 
   useEffect(() => {
     if (isOpen) {
       setCurrentStep('VALIDATION');
       setAcknowledgeWarnings(false);
+      // The mode the dialog was opened with (it stays mounted between openings).
+      setPublishKind(initialMode);
+      runRef.current = null;
+      setSendResults([]);
+      setPublishWarnings([]);
+      setCreatedVersion(null);
+      repo
+        .list('shareLinks', { field: 'scheduleId', operator: '==', value: schedule.id })
+        .then((links) => {
+          const has = links.some((l) => l.public && !l.revoked);
+          setHasPublicLink(has);
+          setIncludeLink(has);
+        })
+        .catch(() => setHasPublicLink(false));
       setVersionNote(
-        publishKind === 'CHANGE'
+        initialMode === 'CHANGE'
           ? `Change Alert — Shift adjustments for ${schedule.name}`
           : `Official Roster Release — ${schedule.name}`
       );
@@ -220,14 +260,23 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         setComputedDiff(null);
       }
 
-      // 3. Initialize selected nurses
+      // 3. Recipients: everyone with an email, or for a change alert only nurses whose shifts changed.
       const activeNursesWithGmail = nurses.filter((n) => n.active && n.gmail);
-      setSelectedNurseIds(new Set(activeNursesWithGmail.map((n) => n.id)));
-      if (activeNursesWithGmail.length > 0) {
-        setPreviewNurseId(activeNursesWithGmail[0].id);
-      }
+      const changedIds = new Set(
+        Object.entries(
+          (publishedList.length > 0 ? computedDiffFor(publishedList) : null)?.changesByNurse || {}
+        )
+          .filter(([, list]) => list.length > 0)
+          .map(([id]) => id)
+      );
+      const recipients =
+        initialMode === 'CHANGE' && publishedList.length > 0
+          ? activeNursesWithGmail.filter((n) => changedIds.has(n.id))
+          : activeNursesWithGmail;
+      setSelectedNurseIds(new Set(recipients.map((n) => n.id)));
+      setPreviewNurseId((recipients[0] || activeNursesWithGmail[0])?.id || '');
     }
-  }, [isOpen, schedule.id]);
+  }, [isOpen, schedule.id, initialMode]);
 
   const titleId = useId();
   // Esc does nothing while emails are being dispatched, so a stray key press can't hide a running publish.
@@ -256,7 +305,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
             schedule,
             assignments,
             leaveEntries,
-            locks: [],
+            locks,
             rulesSnapshot: rules,
           },
           isPublished: true,
@@ -272,102 +321,115 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         leaveTypes,
         changes: computedDiff?.changesByNurse[previewNurse.id] || [],
         generalNote: generalBroadcastNote,
-        shareToken: 'active',
+        shareToken: includeLink ? 'preview' : undefined,
         ackToken: 'preview-token',
         isChangeAlert: publishKind === 'CHANGE',
+        workingHoursPeriods,
       })
     : null;
 
-  // --- EXECUTE DISPATCH PIPELINE ---
-  const handleExecuteDispatch = async () => {
-    setCurrentStep('SENDING');
-    setProgressPercent(0);
-    const logs: string[] = [];
+  // --- PUBLISH AND SEND ---
+  /** Overall result of a send, from each recipient's result. */
+  const overallStatus = (list: EmailRecipientLog[]): PublishLog['status'] => {
+    if (list.length === 0) return emailConfig.mockMode ? 'MOCK_SENT' : 'SENT';
+    const failed = list.filter((r) => r.status === 'FAILED').length;
+    if (failed === list.length) return 'FAILED';
+    if (failed > 0) return 'PARTIAL';
+    return list.every((r) => r.status === 'MOCK_SENT') ? 'MOCK_SENT' : 'SENT';
+  };
 
-    try {
-      // Next version number = highest existing version of this schedule + 1
-      const scheduleVersions = await repo.list('versions', { field: 'scheduleId', operator: '==', value: schedule.id });
-      const newVersionNumber =
-        Math.max(schedule.activeVersionNumber || 1, ...scheduleVersions.map((v) => v.number || 0)) + 1;
-      const versionId = `v-${schedule.id}-${newVersionNumber}-${Date.now()}`;
-      const nowIso = new Date().toISOString();
+  /** Saves the published version, share links and an email log once per publish. */
+  const savePublish = async (logs: string[]) => {
+    const scheduleVersions = await repo.list('versions', { field: 'scheduleId', operator: '==', value: schedule.id });
+    const newVersionNumber = Math.max(schedule.activeVersionNumber || 1, ...scheduleVersions.map((v) => v.number || 0)) + 1;
+    const versionId = `v-${schedule.id}-${newVersionNumber}-${Date.now()}`;
+    const nowIso = new Date().toISOString();
+    const inRoster = (start: string, end: string) => end >= schedule.startDate && start <= schedule.endDate;
 
-      // 1. Create published ScheduleVersion
-      const newVersion: ScheduleVersion = {
-        id: versionId,
+    const newVersion: ScheduleVersion = {
+      id: versionId,
+      scheduleId: schedule.id,
+      number: newVersionNumber,
+      timestamp: nowIso,
+      author: context.currentUser?.name || context.currentUser?.email || 'Planner',
+      note: versionNote.trim(),
+      snapshot: {
+        schedule,
+        assignments,
+        // Only this roster's leave and pinned days are kept with the version.
+        leaveEntries: leaveEntries.filter((l) => inRoster(l.startDate, l.endDate)),
+        locks: locks.filter((l) => inRoster(l.date, l.date)),
+        rulesSnapshot: rules,
+      },
+      isPublished: true,
+      publishedAt: nowIso,
+    };
+    await repo.create('versions', newVersion);
+    await repo.update('schedules', schedule.id, { status: 'PUBLISHED', activeVersionNumber: newVersionNumber, updatedAt: nowIso });
+
+    // Every link of this roster (revoked ones too, so a restored link shows the latest version)
+    // points to the new version; active links get a fresh public snapshot.
+    const links = await repo.list('shareLinks', { field: 'scheduleId', operator: '==', value: schedule.id });
+    let publicLink = links.find((l) => l.public && !l.revoked);
+    if (includeLink && !publicLink) {
+      // Only when the planner chose to include a link (the dialog says anyone with it can open it).
+      publicLink = {
+        id: uuidv4(),
         scheduleId: schedule.id,
-        number: newVersionNumber,
-        timestamp: nowIso,
-        author: context.currentUser?.name || 'Schedule Owner',
-        note: versionNote.trim(),
-        snapshot: {
-          schedule,
-          assignments,
-          leaveEntries,
-          locks: locks.filter((l) => l.date >= schedule.startDate && l.date <= schedule.endDate),
-          rulesSnapshot: rules,
-        },
-        isPublished: true,
-        publishedAt: nowIso,
+        token: `sh_${crypto.randomUUID()}`,
+        role: 'VIEWER',
+        public: true,
+        allowedEmails: [],
+        createdAt: nowIso,
+        revoked: false,
+        pointsToVersionId: versionId,
       };
-
-      await repo.create('versions', newVersion);
-
-      // 2. Update Schedule Status
-      await repo.update('schedules', schedule.id, {
-        status: 'PUBLISHED',
-        activeVersionNumber: newVersionNumber,
-        updatedAt: nowIso,
-      });
-
-      // 3. Ensure ShareLink exists pointing to this new published version
-      //    and refresh every active link's public snapshot.
-      const existingLinks = await repo.list('shareLinks', { field: 'scheduleId', operator: '==', value: schedule.id });
-      const schedLinks = existingLinks.filter((l) => !l.revoked);
-      // Emails need a public link that nurses can open without an account.
-      if (!schedLinks.some((l) => l.public)) {
-        const newLink: ShareLink = {
-          id: uuidv4(),
-          scheduleId: schedule.id,
-          token: `sh_${crypto.randomUUID()}`,
-          role: 'VIEWER',
-          public: true,
-          allowedEmails: [],
-          createdAt: nowIso,
-          revoked: false,
-          pointsToVersionId: versionId,
-        };
-        await repo.create('shareLinks', newLink);
-        schedLinks.push(newLink);
+      await repo.create('shareLinks', publicLink);
+      links.push(publicLink);
+    }
+    for (const link of links) {
+      if (link.pointsToVersionId !== versionId) await repo.update('shareLinks', link.id, { pointsToVersionId: versionId });
+      if (link.revoked) continue;
+      try {
+        await syncPublicRoster({ ...link, pointsToVersionId: versionId });
+      } catch (syncErr: any) {
+        // A snapshot problem must not stop the publish; the link can be refreshed from Share.
+        const msg = `A share link couldn't be refreshed (${syncErr?.message || syncErr}). Open Share to refresh it.`;
+        logs.push(`⚠ ${msg}`);
+        setPublishWarnings((prev) => [...prev, msg]);
       }
-      for (const link of schedLinks) {
-        if (link.pointsToVersionId !== versionId) {
-          await repo.update('shareLinks', link.id, { pointsToVersionId: versionId });
-        }
-        try {
-          await syncPublicRoster({ ...link, pointsToVersionId: versionId });
-        } catch (syncErr: any) {
-          // A snapshot problem must not stop the publish; the link can be refreshed from Share.
-          logs.push(`⚠ Could not refresh share link snapshot: ${syncErr?.message || syncErr}`);
-          setSendLogs([...logs]);
-        }
-      }
-      const emailShareToken = schedLinks.find((l) => l.public)!.token;
+    }
 
-      // 4. Dispatch Email to Selected Nurses
-      const targetNurses = nurses.filter((n) => selectedNurseIds.has(n.id));
-      const recipientLogs: EmailRecipientLog[] = [];
-      const totalCount = targetNurses.length + (includeOwnerCopy ? 1 : 0);
-      let sentCount = 0;
+    // The log is written before sending, and updated after each email, so an interrupted
+    // publish still shows who was emailed.
+    const logId = `pub-${schedule.id}-${Date.now()}`;
+    const pubLog: PublishLog = {
+      id: logId,
+      scheduleId: schedule.id,
+      versionId,
+      kind: publishKind,
+      recipients: [],
+      status: 'SENDING',
+      sentAt: nowIso,
+    };
+    await repo.create('emailLog', pubLog);
+    runRef.current = { version: newVersion, shareToken: includeLink ? publicLink?.token : undefined, logId, recipients: [] };
+    setCreatedVersion(newVersion);
+    return runRef.current;
+  };
 
-      for (const nurse of targetNurses) {
-        const ackToken = `ack-${uuidv4()}`;
-        const nurseChanges = computedDiff?.changesByNurse[nurse.id] || [];
-
+  /** Sends to the given nurses; one failed email never stops the others. */
+  const sendTo = async (targetNurses: Nurse[], logs: string[]) => {
+    const run = runRef.current!;
+    let done = 0;
+    for (const nurse of targetNurses) {
+      const ackToken = `ack-${uuidv4()}`;
+      let recipientLog: EmailRecipientLog;
+      try {
         const payload = RosterPublishService.generatePersonalEmailHtml({
           clinicName: context.clinicName,
           schedule,
-          version: newVersion,
+          version: run.version,
           nurse,
           assignments,
           dutyWindows,
@@ -376,16 +438,14 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           specialties,
           leaveEntries,
           leaveTypes,
-          changes: nurseChanges,
+          changes: computedDiff?.changesByNurse[nurse.id] || [],
           generalNote: generalBroadcastNote,
-          shareToken: emailShareToken,
+          shareToken: run.shareToken,
           ackToken,
           isChangeAlert: publishKind === 'CHANGE',
           workingHoursPeriods,
         });
-
-        // Dispatch via provider
-        const { recipientLog, acknowledgment } = await RosterPublishService.dispatchEmail(
+        const result = await RosterPublishService.dispatchEmail(
           emailConfig,
           nurse.gmail,
           nurse,
@@ -393,66 +453,98 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           payload.bodyPreview,
           payload.html,
           schedule.id,
-          newVersion.id,
+          run.version.id,
           ackToken
         );
-
-        recipientLogs.push(recipientLog);
-        await repo.create('acknowledgments', acknowledgment);
-
-        sentCount++;
-        logs.push(`✓ Sent to ${nurse.fullName} (${nurse.gmail}) — [${recipientLog.status}]`);
-        setSendLogs([...logs]);
-        setProgressPercent(Math.round((sentCount / totalCount) * 100));
-
-        await new Promise((r) => setTimeout(r, 60));
+        recipientLog = result.recipientLog;
+        // A read receipt is only expected from a nurse who was actually emailed.
+        if (recipientLog.status !== 'FAILED') await repo.create('acknowledgments', result.acknowledgment);
+      } catch (err: any) {
+        recipientLog = {
+          email: nurse.gmail,
+          nurseId: nurse.id,
+          nurseName: nurse.fullName,
+          subject: '',
+          bodyPreview: '',
+          fullBodyHtml: '',
+          status: 'FAILED',
+          errorMessage: err?.message || String(err),
+        };
       }
-
-      // Owner copy
-      if (includeOwnerCopy && context.currentUser?.email) {
-        recipientLogs.push({
-          email: context.currentUser.email,
-          nurseId: 'owner',
-          nurseName: context.currentUser.name,
-          subject: `[ADMIN COPY] Published ${schedule.name} v${newVersionNumber}`,
-          bodyPreview: `Official administrative copy of published schedule v${newVersionNumber}.`,
-          fullBodyHtml: `<h3>Administrative Copy: ${escapeHtml(schedule.name)} v${newVersionNumber}</h3><p>Published to ${targetNurses.length} nurses on ${nowIso}.</p>`,
-          status: 'MOCK_SENT',
-        });
-        logs.push(`✓ Sent administrative copy to ${context.currentUser.email}`);
-        setSendLogs([...logs]);
-        setProgressPercent(100);
+      run.recipients = [...run.recipients.filter((r) => r.nurseId !== nurse.id), recipientLog];
+      const ok = recipientLog.status !== 'FAILED';
+      logs.push(
+        ok
+          ? `✓ ${nurse.fullName}${recipientLog.status === 'MOCK_SENT' ? ' (test mode, not sent)' : ''}`
+          : `✗ ${nurse.fullName}: ${recipientLog.errorMessage || 'not sent'}`
+      );
+      setSendLogs([...logs]);
+      done++;
+      setProgressPercent(Math.round((done / Math.max(1, targetNurses.length)) * 100));
+      try {
+        await repo.update('emailLog', run.logId, { recipients: run.recipients, status: 'SENDING' });
+      } catch {
+        // the final update below tries again
       }
+      await new Promise((r) => setTimeout(r, 60));
+    }
+  };
 
-      // 5. Persist PublishLog
-      const pubLog: PublishLog = {
-        id: `pub-${schedule.id}-${Date.now()}`,
-        scheduleId: schedule.id,
-        versionId: newVersion.id,
-        kind: publishKind,
-        recipients: recipientLogs,
-        status: emailConfig.mockMode ? 'MOCK_SENT' : 'SENT',
-        sentAt: nowIso,
-      };
-
-      await repo.create('emailLog', pubLog);
-
-      // 6. Audit Trail
-      await repo.create('audit', {
-        actor: context.currentUser?.name || 'Owner',
+  const finishSend = async () => {
+    const run = runRef.current!;
+    const status = overallStatus(run.recipients);
+    await repo.update('emailLog', run.logId, { recipients: run.recipients, status });
+    const failed = run.recipients.filter((r) => r.status === 'FAILED').length;
+    await repo
+      .create('audit', {
+        actor: context.currentUser?.name || context.currentUser?.email || 'Planner',
         action: 'PUBLISH',
         entity: 'Schedule',
         entityId: schedule.id,
-        note: `Published version v${newVersionNumber} (${publishKind}) with ${recipientLogs.length} transmissions.`,
-        timestamp: nowIso,
-      });
+        note: `Published v${run.version.number} (${publishKind}): ${run.recipients.length - failed} emailed, ${failed} failed.`,
+        timestamp: new Date().toISOString(),
+      })
+      .catch(() => {});
+    setSendResults([...run.recipients]);
+    setCurrentStep('DONE');
+    onPublishComplete(run.version);
+  };
 
-      setCreatedVersion(newVersion);
-      setCurrentStep('DONE');
-      onPublishComplete(newVersion);
+  const handleExecuteDispatch = async () => {
+    setCurrentStep('SENDING');
+    setProgressPercent(0);
+    const logs: string[] = [];
+    try {
+      if (!runRef.current) await savePublish(logs);
+      await sendTo(nurses.filter((n) => selectedNurseIds.has(n.id)), logs);
+      await finishSend();
     } catch (err: any) {
-      notify(`Publishing failed: ${err.message}`, 'error');
-      setCurrentStep('PREVIEW');
+      // Nothing is sent twice: if the version was saved, a retry only sends the missing emails.
+      notify(`Publishing stopped: ${err.message}`, 'error');
+      if (runRef.current) {
+        setSendResults([...runRef.current.recipients]);
+        setCurrentStep('DONE');
+      } else {
+        setCurrentStep('PREVIEW');
+      }
+    }
+  };
+
+  const handleRetryFailed = async () => {
+    const run = runRef.current;
+    if (!run) return;
+    const doneIds = new Set(run.recipients.filter((r) => r.status !== 'FAILED').map((r) => r.nurseId));
+    const retry = nurses.filter((n) => selectedNurseIds.has(n.id) && !doneIds.has(n.id));
+    setCurrentStep('SENDING');
+    setProgressPercent(0);
+    const logs: string[] = [];
+    try {
+      await sendTo(retry, logs);
+      await finishSend();
+    } catch (err: any) {
+      notify(`Sending stopped: ${err.message}`, 'error');
+      setSendResults([...run.recipients]);
+      setCurrentStep('DONE');
     }
   };
 
@@ -493,8 +585,10 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           <button
             type="button"
             onClick={onClose}
+            disabled={currentStep === 'SENDING'}
             aria-label="Close"
-            className="p-1.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+            title={currentStep === 'SENDING' ? 'Wait until sending finishes' : 'Close'}
+            className="p-1.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <X className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -503,23 +597,23 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         {/* Wizard Step Breadcrumbs */}
         <div className="px-6 py-2.5 bg-slate-100/70 border-b border-slate-200 flex items-center gap-2 text-[11px] font-semibold text-slate-500">
           <span className={currentStep === 'VALIDATION' ? 'text-indigo-600 font-bold' : ''}>
-            1. Validation Gate
+            1. Check
           </span>
           <span>›</span>
           <span className={currentStep === 'DETAILS' ? 'text-indigo-600 font-bold' : ''}>
-            2. Version Note
+            2. Message
           </span>
           <span>›</span>
           <span className={currentStep === 'PREVIEW' ? 'text-indigo-600 font-bold' : ''}>
-            3. Email Preview
+            3. Preview
           </span>
           <span>›</span>
           <span className={currentStep === 'SENDING' ? 'text-indigo-600 font-bold' : ''}>
-            4. Dispatch
+            4. Send
           </span>
           <span>›</span>
           <span className={currentStep === 'DONE' ? 'text-emerald-600 font-bold' : ''}>
-            5. Complete
+            5. Done
           </span>
         </div>
 
@@ -530,14 +624,10 @@ export const PublishModal: React.FC<PublishModalProps> = ({
             <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-900 space-y-2">
               <div className="flex items-center gap-2 font-bold text-sm text-rose-800">
                 <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
-                <span>Restricted Action: Owner-Only Publishing</span>
+                <span>You can't publish rosters</span>
               </div>
               <p className="text-xs leading-relaxed">
-                Publishing live official schedules to hospital staff is restricted to schedule <strong>Owners</strong>. Current user (
-                <strong>{context.currentUser?.name}</strong>, role: <em>{context.currentUser?.role}</em>) can edit and rebalance drafts, but cannot trigger public broadcasts.
-              </p>
-              <p className="text-[11px] text-rose-700">
-                Switch to <strong>Dr. Fatima (Admin / Owner)</strong> via the top-right profile menu to test full publishing.
+                Only the clinic owner and people who can edit rosters can publish. Ask one of them to publish this roster.
               </p>
             </div>
           )}
@@ -714,7 +804,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                   className="w-full px-3 py-2 border border-slate-300 rounded font-medium text-xs focus:ring-1 focus:ring-indigo-500"
                 />
                 <p className="text-[11px] text-slate-400">
-                  This note is immutably recorded in Schedule Version History.
+                  Kept with this version in the roster's history.
                 </p>
               </div>
 
@@ -733,18 +823,81 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 />
               </div>
 
-              {/* Checkboxes */}
-              <div className="pt-2 border-t border-slate-200 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-700">
+              {/* Link to the roster online */}
+              <div className="pt-2 border-t border-slate-200 space-y-1">
+                <label className="flex items-start gap-2 cursor-pointer font-medium text-slate-700">
                   <input
                     type="checkbox"
-                    checked={includeOwnerCopy}
-                    onChange={(e) => setIncludeOwnerCopy(e.target.checked)}
-                    className="rounded text-indigo-600"
+                    checked={includeLink}
+                    onChange={(e) => setIncludeLink(e.target.checked)}
+                    className="rounded text-indigo-600 mt-0.5"
                   />
-                  <span>Dispatch administrative summary copy to Schedule Owner ({context.currentUser?.email})</span>
+                  <span>
+                    Include a link to view the roster online
+                    <span className="block text-[11px] font-normal text-slate-500">
+                      {hasPublicLink
+                        ? 'Uses the roster\'s existing share link. Anyone who has the link can open it.'
+                        : 'Creates a share link for this roster. Anyone who has the link can open it; you can remove it later in Share.'}
+                    </span>
+                  </span>
                 </label>
               </div>
+
+              {/* Recipients */}
+              {(() => {
+                const withEmail = nurses.filter((n) => n.active && n.gmail);
+                const noEmail = nurses.filter((n) => n.active && !n.gmail);
+                const changedIds = new Set(
+                  Object.entries(computedDiff?.changesByNurse || {})
+                    .filter(([, list]) => list.length > 0)
+                    .map(([id]) => id)
+                );
+                const toggle = (id: string) =>
+                  setSelectedNurseIds((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(id)) next.delete(id);
+                    else next.add(id);
+                    return next;
+                  });
+                return (
+                  <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800 text-xs">
+                        Send to {selectedNurseIds.size} of {withEmail.length} nurses
+                      </span>
+                      <span className="flex gap-2 text-[11px]">
+                        <button type="button" className="text-indigo-700 underline cursor-pointer" onClick={() => setSelectedNurseIds(new Set(withEmail.map((n) => n.id)))}>
+                          All
+                        </button>
+                        {computedDiff && (
+                          <button type="button" className="text-indigo-700 underline cursor-pointer" onClick={() => setSelectedNurseIds(new Set(withEmail.filter((n) => changedIds.has(n.id)).map((n) => n.id)))}>
+                            Only nurses with changes ({withEmail.filter((n) => changedIds.has(n.id)).length})
+                          </button>
+                        )}
+                        <button type="button" className="text-indigo-700 underline cursor-pointer" onClick={() => setSelectedNurseIds(new Set())}>
+                          None
+                        </button>
+                      </span>
+                    </div>
+                    <div className="max-h-40 overflow-y-auto border border-slate-200 rounded divide-y divide-slate-100">
+                      {withEmail.map((n) => (
+                        <label key={n.id} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-slate-50">
+                          <input type="checkbox" checked={selectedNurseIds.has(n.id)} onChange={() => toggle(n.id)} className="rounded" />
+                          <span className="text-slate-800">{n.fullName}</span>
+                          <span className="text-slate-400 text-[11px] truncate">{n.gmail}</span>
+                          {changedIds.has(n.id) && <span className="ml-auto text-[10px] text-amber-700">changed</span>}
+                        </label>
+                      ))}
+                    </div>
+                    {noEmail.length > 0 && (
+                      <p className="text-[11px] text-amber-800">
+                        {noEmail.length} nurse{noEmail.length === 1 ? ' has' : 's have'} no email address and won't be emailed: {noEmail.map((n) => n.fullName).join(', ')}.
+                        Add it in Nurses.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -762,11 +915,13 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                     onChange={(e) => setPreviewNurseId(e.target.value)}
                     className="px-2.5 py-1 border border-slate-300 rounded bg-white text-xs font-semibold text-slate-800"
                   >
-                    {nurses.map((n) => (
-                      <option key={n.id} value={n.id}>
-                        {n.fullName} ({n.gmail})
-                      </option>
-                    ))}
+                    {nurses
+                      .filter((n) => n.active && n.gmail)
+                      .map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.fullName} ({n.gmail})
+                        </option>
+                      ))}
                   </select>
                 </div>
 
@@ -801,7 +956,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
             <div className="space-y-4 py-4">
               <div className="flex items-center justify-between font-mono text-xs">
                 <span className="font-bold text-slate-800">
-                  Dispatching Personalized Google Emails ({emailConfig.mockMode ? 'Safe Sandbox' : 'Live Google'})...
+                  {emailConfig.mockMode ? 'Test mode: nothing is really sent' : 'Sending emails'}…
                 </span>
                 <span className="font-bold text-indigo-600 text-sm">{progressPercent}%</span>
               </div>
@@ -813,36 +968,64 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 />
               </div>
 
-              <div className="border border-slate-200 rounded p-3 bg-slate-900 text-emerald-400 font-mono text-[11px] space-y-1.5 max-h-48 overflow-y-auto">
+              <ul className="border border-slate-200 rounded p-3 bg-white text-[11px] space-y-1 max-h-48 overflow-y-auto" aria-live="polite">
                 {sendLogs.map((log, i) => (
-                  <div key={i}>{log}</div>
+                  <li key={i} className={log.startsWith('✗') ? 'text-rose-700' : log.startsWith('⚠') ? 'text-amber-700' : 'text-slate-700'}>
+                    {log}
+                  </li>
                 ))}
-              </div>
+              </ul>
             </div>
           )}
 
           {/* STEP 5: DONE */}
-          {currentStep === 'DONE' && createdVersion && (
-            <div className="space-y-4 text-center py-4">
-              <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-8 h-8" />
-              </div>
+          {currentStep === 'DONE' && createdVersion && (() => {
+            const failed = sendResults.filter((r) => r.status === 'FAILED');
+            const sent = sendResults.length - failed.length;
+            const testMode = sendResults.length > 0 && sendResults.every((r) => r.status === 'MOCK_SENT' || r.status === 'FAILED') && sent > 0;
+            return (
+              <div className="space-y-4 py-2">
+                <div className="text-center space-y-1">
+                  <div
+                    className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto ${
+                      failed.length === 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-700'
+                    }`}
+                  >
+                    {failed.length === 0 ? <CheckCircle2 className="w-8 h-8" /> : <ShieldAlert className="w-8 h-8" />}
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {failed.length === 0
+                      ? testMode
+                        ? `Published v${createdVersion.number} (test mode: ${sent} emails not really sent)`
+                        : `Published v${createdVersion.number} and emailed ${sent} nurse${sent === 1 ? '' : 's'}`
+                      : `Published v${createdVersion.number}: ${failed.length} email${failed.length === 1 ? '' : 's'} not sent`}
+                  </h3>
+                  <p className="text-xs text-slate-600">Nurses can confirm they've seen it. Replies show on the Publish page.</p>
+                </div>
 
-              <div className="space-y-1">
-                <h3 className="text-base font-bold text-slate-900">Publication Complete!</h3>
-                <p className="text-xs text-slate-600 max-w-md mx-auto">
-                  Roster version <strong>v{createdVersion.number}</strong> has been officially published and logged in the immutable audit trail.
-                </p>
-              </div>
+                {failed.length > 0 && (
+                  <div className="p-3 rounded border border-rose-200 bg-rose-50 text-xs text-rose-900 space-y-1">
+                    <p className="font-semibold">Not sent:</p>
+                    <ul className="list-disc pl-5 space-y-0.5">
+                      {failed.map((r) => (
+                        <li key={r.nurseId}>
+                          {r.nurseName} ({r.email || 'no email'}): {r.errorMessage || 'unknown error'}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded max-w-md mx-auto text-left text-xs font-mono space-y-1 text-slate-600">
-                <div>• Schedule Status: <strong className="text-purple-700">PUBLISHED</strong></div>
-                <div>• Version: <strong>v{createdVersion.number}</strong> ({createdVersion.note})</div>
-                <div>• Transmissions: <strong>{sendLogs.length} dispatched</strong></div>
-                <div>• Acknowledgment Tokens: <strong>Active</strong></div>
+                {publishWarnings.length > 0 && (
+                  <div className="p-3 rounded border border-amber-200 bg-amber-50 text-xs text-amber-900 space-y-1">
+                    {publishWarnings.map((w, i) => (
+                      <p key={i}>{w}</p>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Footer Actions */}
@@ -910,13 +1093,22 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs transition-colors"
               >
                 <Send className="w-4 h-4" aria-hidden="true" />
-                <span>Confirm &amp; Publish ({selectedNurseIds.size} Emails)</span>
+                <span>Publish and email {selectedNurseIds.size} nurse{selectedNurseIds.size === 1 ? '' : 's'}</span>
               </button>
             </>
           )}
 
           {currentStep === 'DONE' && (
-            <div className="w-full flex items-center justify-end">
+            <div className="w-full flex items-center justify-end gap-2">
+              {sendResults.some((r) => r.status === 'FAILED') && (
+                <button
+                  type="button"
+                  onClick={handleRetryFailed}
+                  className="px-4 py-2 border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 rounded font-bold cursor-pointer"
+                >
+                  Retry the {sendResults.filter((r) => r.status === 'FAILED').length} not sent
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}

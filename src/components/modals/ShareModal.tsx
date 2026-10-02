@@ -171,8 +171,9 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const handleDeleteLink = async (linkId: string) => {
     try {
       const link = shareLinks.find((l) => l.id === linkId);
-      await repo.remove('shareLinks', linkId);
+      // The public copy goes first: it can't be found once its link record is gone.
       if (link) await removePublicRoster(link.token);
+      await repo.remove('shareLinks', linkId);
       triggerToast('Share link removed.');
     } catch (err: any) {
       notify(`Failed to remove the link: ${err.message}`, 'error');

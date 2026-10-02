@@ -5,7 +5,7 @@
  * Version Compare & Diff Modal (Phase 10)
  */
 
-import React, { useState, useMemo, useId } from 'react';
+import React, { useState, useMemo, useEffect, useId } from 'react';
 import {
   X,
   Diff,
@@ -82,6 +82,16 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
     if (initialTargetVersionId) return initialTargetVersionId;
     return 'DRAFT';
   });
+
+  // The modal stays mounted, so the versions to compare are set again each time it opens
+  // (and when the roster's versions change): by default the latest published one against now.
+  useEffect(() => {
+    if (!isOpen) return;
+    const known = (id?: string) => !!id && (id === 'DRAFT' || versions.some((v) => v.id === id));
+    const latestPublished = [...versions].filter((v) => v.isPublished).sort((a, b) => b.number - a.number)[0];
+    setBaseId(known(initialBaseVersionId) ? initialBaseVersionId! : latestPublished?.id || versions[0]?.id || 'DRAFT');
+    setTargetId(known(initialTargetVersionId) ? initialTargetVersionId! : 'DRAFT');
+  }, [isOpen, initialBaseVersionId, initialTargetVersionId, schedule.id, versions.length]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [changeTypeFilter, setChangeTypeFilter] = useState<'ALL' | 'ADDED' | 'REMOVED' | 'MODIFIED'>('ALL');
