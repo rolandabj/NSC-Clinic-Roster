@@ -20,7 +20,24 @@
  *     for consecutive days, rest and late duty rules.
  */
 
-import { Assignment, ClinicalRole, DoctorSession, DutyWindow, Nurse } from '../../types';
+import { Assignment, AvailabilityRequest, ClinicalRole, DoctorSession, DutyWindow, Nurse } from '../../types';
+
+/** One nurse's totals over the earlier rosters of this calendar year. */
+export interface YearToDateCounts {
+  /** Days worked on a weekend day. */
+  weekendDays: number;
+  /** Public holidays worked. */
+  holidays: number;
+  /** Shifts ending at or after the late time. */
+  lateShifts: number;
+  /** Shifts running Nurse Clinic. */
+  nurseClinic: number;
+  /** Earlier rosters in which she had at least one shift. */
+  rosters: number;
+}
+
+/** Year to date totals by nurse id. */
+export type YearToDate = Record<string, YearToDateCounts>;
 
 export interface ClinicSetup {
   /** 'HH:mm', default '09:00' */
@@ -31,6 +48,10 @@ export interface ClinicSetup {
   holidayDates?: Iterable<string>;
   /** Shifts from the roster just before this one (read only, for the rules that look back). */
   priorAssignments?: Assignment[];
+  /** Weekends, holidays, late shifts and Nurse Clinic so far this year (earlier rosters only). */
+  yearToDate?: YearToDate;
+  /** Nurses' availability requests for this roster's dates (any status). */
+  availabilityRequests?: AvailabilityRequest[];
 }
 
 export interface ResolvedClinicSetup {

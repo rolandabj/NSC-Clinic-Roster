@@ -479,6 +479,57 @@ export interface WorkingHoursPeriod {
   updatedAt?: string;
 }
 
+/** A nurse's own private link (one per nurse, kept across rosters). Editors only. */
+export interface NurseLink {
+  id: string; // the nurse id
+  nurseId: string;
+  /** Random, unguessable; also the id of the nurse's nurseRosters document. */
+  token: string;
+  createdAt: string;
+  revoked: boolean;
+}
+
+/** One shift on a nurse's private page (already worded, nothing else about the roster). */
+export interface NurseRosterShift {
+  date: string;
+  startTime: string;
+  endTime: string;
+  /** Shift code and name, e.g. "E" and "Early". */
+  acronym: string;
+  shiftName: string;
+  /** What the nurse does, e.g. "With Dr Amal" or "Nurse Clinic". */
+  detail: string;
+  scheduleName: string;
+}
+
+/**
+ * nurseRosters/{token}: what a nurse's private link shows. Only that nurse's
+ * published shifts and leave days, readable by anyone holding the token.
+ */
+export interface NurseRosterDoc {
+  id: string; // = token
+  token: string;
+  nurseId: string;
+  nurseName: string;
+  clinicName: string;
+  timezone: string;
+  revoked: boolean;
+  updatedAt: string;
+  shifts: NurseRosterShift[];
+  /** Leave as plain days (no leave type). */
+  leaveDays: string[];
+}
+
+/** presence/{uid}: who has which roster open (updated every 30 seconds while open). */
+export interface PresenceRecord {
+  id: string; // the Firebase user id
+  name: string;
+  email: string;
+  scheduleId: string | null;
+  /** ISO time of the last heartbeat. */
+  at: string;
+}
+
 // Repository Collection Key Map
 export type CollectionName =
   | 'clinics'
@@ -509,7 +560,10 @@ export type CollectionName =
   | 'availabilityRequests'
   | 'systemMetadata'
   | 'workingHoursPeriods'
-  | 'publicRosters';
+  | 'publicRosters'
+  | 'nurseLinks'
+  | 'nurseRosters'
+  | 'presence';
 
 // Type lookup helper for generic repository access
 export type EntityForCollection<T extends CollectionName> =
@@ -541,4 +595,7 @@ export type EntityForCollection<T extends CollectionName> =
   T extends 'availabilityRequests' ? AvailabilityRequest :
   T extends 'systemMetadata' ? SystemMetadata :
   T extends 'workingHoursPeriods' ? WorkingHoursPeriod :
+  T extends 'nurseLinks' ? NurseLink :
+  T extends 'nurseRosters' ? NurseRosterDoc :
+  T extends 'presence' ? PresenceRecord :
   any;

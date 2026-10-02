@@ -100,6 +100,30 @@ export function resolveRule(
 /** Name words that mark a rule about late or night duties (never "max consecutive days"). */
 export const LATE_DUTY_RULE_WORDS = ['late', 'night', '21:00'];
 
+/** The consecutive late duties rule (S1), if the clinic has one. */
+function consecutiveLateRuleOf(rules: Rule[]): Rule | undefined {
+  return resolveRule(rules, 'MAX_CONSECUTIVE_LATE_DUTIES', 'rule-s1', [
+    'consecutive late',
+    'consecutive night',
+    'ending at 21:00',
+    'late duties',
+  ]);
+}
+
+/**
+ * A duty is "late" when it ends at or after this time (the S1 rule's setting,
+ * default 21:00). The engine, the fairness counts and the year to date totals
+ * all use it, so they agree on which shifts are late.
+ */
+export function lateDutyThreshold(rules: Rule[] = []): string {
+  return (consecutiveLateRuleOf(rules)?.params as any)?.thresholdTime || '21:00';
+}
+
+/** True when the duty ends at or after the late threshold. */
+export function isLateDuty(duty: DutyWindow | undefined, threshold: string): boolean {
+  return !!duty && duty.endTime >= threshold;
+}
+
 interface InternalSlot {
   date: IsoDateString;
   kind: 'DOCTOR' | 'CLINICAL_ROLE' | 'SPECIALTY';
@@ -423,17 +447,12 @@ export class SchedulingEngine {
     const maxHoursToleranceRatio = (maxHoursRule?.value ? maxHoursRule.value : 105) / 100;
 
     // Consecutive Late Duties Ending at 21:00 (Rule S1)
-    const consecutiveLateRule = resolveRule(rules, 'MAX_CONSECUTIVE_LATE_DUTIES', 'rule-s1', [
-      'consecutive late',
-      'consecutive night',
-      'ending at 21:00',
-      'late duties',
-    ]);
+    const consecutiveLateRule = consecutiveLateRuleOf(rules);
     const maxConsecutiveLate = consecutiveLateRule?.value ? consecutiveLateRule.value : 3;
     const consecutiveLateSeverity = consecutiveLateRule?.severity || 'HARD';
     const consecutiveLateEnabled = consecutiveLateRule ? consecutiveLateRule.enabled !== false : true;
     // A duty "ends late" when it ends at or after this time (rule setting, default 21:00)
-    const lateThreshold: string = (consecutiveLateRule?.params as any)?.thresholdTime || '21:00';
+    const lateThreshold: string = lateDutyThreshold(rules);
 
     // Consecutive Working Days (Hard Rule H2)
     const consecutiveDaysRule = resolveRule(
@@ -603,7 +622,7 @@ export class SchedulingEngine {
     const hasDayOffLock = (nurseId: string, date: string) =>
       activeLocks.some((l) => l.nurseId === nurseId && l.date === date && l.mode === 'OFF');
     const isSenior = (nurse?: Nurse) => !!nurse && seniorLevelIds.has(nurse.seniorityLevelId);
-    const isLate = (duty?: DutyWindow) => !!duty && duty.endTime >= lateThreshold;
+    const isLate = (duty?: DutyWindow) => isLateDuty(duty, lateThreshold);
 
     // 4. Nurse state
     const nurseStates = new Map<string, NurseDayState>();

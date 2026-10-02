@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { explainDay, explainNurseDay, ExplainDayInput } from '../../src/services/engine/explainCell';
+import { describeRequest, explainDay, explainNurseDay, ExplainDayInput } from '../../src/services/engine/explainCell';
 import { ANNUAL_LEAVE, DAY_DUTY, SENIOR, makeLeave, makeLock, makeNurse, makeSchedule } from './fixtures';
-import type { Assignment, Rule } from '../../src/types';
+import type { Assignment, AvailabilityRequest, Rule } from '../../src/types';
 
 const LATE = { ...DAY_DUTY, id: 'duty-l', name: 'Late', acronym: 'L', startTime: '13:00', endTime: '23:00' };
 const EARLY = { ...DAY_DUTY, id: 'duty-e', name: 'Early', acronym: 'E', startTime: '07:00', endTime: '15:00' };
@@ -110,4 +110,73 @@ test('explainDay lists free nurses first, most hours short first, then nurses wh
       ['n3', 'BLOCKED'],
     ]
   );
+});
+
+function request(overrides: Partial<AvailabilityRequest>): AvailabilityRequest {
+  return {
+    id: 'req-1',
+    nurseId: 'n1',
+    date: '2026-10-07',
+    available: false,
+    status: 'PENDING',
+    submittedByNurseId: 'n1',
+    submittedAt: '2026-09-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+test('a day off request waiting for approval is a note, not a block', () => {
+  const r = explainNurseDay({ ...input({ availabilityRequests: [request({})] }), nurseId: 'n1', date: '2026-10-07' });
+  assert.equal(r.status, 'AVAILABLE');
+  assert.equal(r.askedOff, true);
+  assert.ok(r.notes.includes('Asked for this day off (waiting for approval).'));
+
+  // A refused request says nothing.
+  const refused = explainNurseDay({ ...input({ availabilityRequests: [request({ status: 'REJECTED' })] }), nurseId: 'n1', date: '2026-10-07' });
+  assert.equal(refused.askedOff, false);
+  assert.ok(!refused.notes.some((n) => /Asked for/.test(n)));
+});
+
+test('leave waiting for approval is a note, not a block; refused leave says nothing', () => {
+  const pending = [makeLeave({ startDate: '2026-10-06', endDate: '2026-10-08', approved: false, status: 'PENDING' })];
+  const r = explainNurseDay({ ...input({ leaveEntries: pending }), nurseId: 'n1', date: '2026-10-07' });
+  assert.equal(r.status, 'AVAILABLE');
+  assert.ok(r.notes.includes('Has leave waiting for approval on this day (Annual Leave).'));
+
+  const oldStyle = [makeLeave({ startDate: '2026-10-07', endDate: '2026-10-07', approved: false, status: undefined })];
+  assert.ok(explainNurseDay({ ...input({ leaveEntries: oldStyle }), nurseId: 'n1', date: '2026-10-07' }).notes.some((n) => /waiting for approval/.test(n)));
+
+  const refused = [makeLeave({ startDate: '2026-10-07', endDate: '2026-10-07', approved: false, status: 'REJECTED' })];
+  const none = explainNurseDay({ ...input({ leaveEntries: refused }), nurseId: 'n1', date: '2026-10-07' });
+  assert.equal(none.status, 'AVAILABLE');
+  assert.ok(!none.notes.some((n) => /leave/.test(n)));
+});
+
+test('a nurse who asked for a shift has it listed first, with a note', () => {
+  const availabilityRequests = [request({ available: true, preferredDutyWindowId: LATE.id, status: 'APPROVED' })];
+  const r = explainNurseDay({ ...input({ availabilityRequests }), nurseId: 'n1', date: '2026-10-07' });
+  assert.deepEqual(r.possibleShifts.map((s) => s.label), ['L', 'E', 'D']);
+  assert.ok(r.notes.includes('Asked for the Late shift.'));
+  assert.equal(r.askedOff, false);
+});
+
+test('explainDay lists free nurses who asked for the day off after the other free nurses', () => {
+  const list = explainDay('2026-10-07', input({ availabilityRequests: [request({})] }));
+  assert.deepEqual(list.map((r) => r.nurseId), ['n2', 'n1']);
+});
+
+test('describeRequest words a request for its cell', () => {
+  const duties = [EARLY, DAY_DUTY, LATE];
+  assert.deepEqual(describeRequest(request({}), duties), {
+    text: 'Asked for this day off (waiting for approval)',
+    mismatch: false,
+    dayOff: true,
+    pending: true,
+  });
+  assert.equal(describeRequest(request({ status: 'APPROVED' }), duties, EARLY.id).text, 'Asked for this day off, has Early');
+  const late = request({ available: true, preferredDutyWindowId: LATE.id, status: 'APPROVED' });
+  assert.equal(describeRequest(late, duties, EARLY.id).text, 'Asked for the Late shift, has Early');
+  assert.equal(describeRequest(late, duties, EARLY.id).mismatch, true);
+  assert.equal(describeRequest(late, duties, LATE.id).mismatch, false);
+  assert.equal(describeRequest(late, duties).text, 'Asked for the Late shift');
 });

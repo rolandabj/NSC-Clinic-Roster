@@ -94,6 +94,17 @@ export class CollectionSyncer<C extends CollectionName> {
     this.remember(items);
   }
 
+  /**
+   * True when a fresh copy from the database (for one scope) differs from what
+   * this browser knows is saved: someone else changed it.
+   */
+  differsFromKnown(items: EntityForCollection<C>[], inScope: (item: EntityForCollection<C>) => boolean = () => true): boolean {
+    let knownCount = 0;
+    for (const k of this.known.values()) if (inScope(k.item)) knownCount++;
+    if (knownCount !== items.length) return true;
+    return items.some((item) => this.known.get(item.id)?.print !== fingerprint(item));
+  }
+
   /** Drops a scope entirely (e.g. a deleted roster): nothing more is saved for it. */
   forgetScope(scope: string, inScope: (item: EntityForCollection<C>) => boolean): void {
     this.pending.delete(scope);

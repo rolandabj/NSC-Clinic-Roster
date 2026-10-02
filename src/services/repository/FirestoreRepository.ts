@@ -242,17 +242,19 @@ export class FirestoreRepository implements IRepository {
 
   subscribe<T extends CollectionName>(
     colName: T,
-    callback: SubscribeCallback<EntityForCollection<T>>
+    callback: SubscribeCallback<EntityForCollection<T>>,
+    filter?: { field: string; operator: '=='; value: any }
   ): Unsubscribe {
     const colRef = collection(this.db, colName);
+    const target = filter ? query(colRef, where(filter.field, filter.operator, filter.value)) : colRef;
     return onSnapshot(
-      colRef,
+      target,
       (snapshot) => {
         const items = snapshot.docs.map((docSnap) => ({
           id: docSnap.id,
           ...docSnap.data(),
         })) as EntityForCollection<T>[];
-        callback(items);
+        callback(items, { fromThisDevice: snapshot.metadata.hasPendingWrites });
       },
       (error) => {
         quotaTracker.notifyQuotaExceeded(error);

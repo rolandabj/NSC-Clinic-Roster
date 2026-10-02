@@ -35,6 +35,7 @@ import { MenuButton } from '../common/MenuButton';
 import { PageLoading } from '../common/PageLoading';
 import { ProblemsPanel } from '../workbook/ProblemsPanel';
 import { withoutBackups } from '../../services/history/versionList';
+import { usePresence } from '../../services/presence/usePresence';
 import { WhoCanCover } from '../workbook/WhoCanCover';
 import { nurseClinicRoleOf, canBeFreeNurse } from '../../services/engine/clinicModel';
 import { ClinicContextState } from '../../types/navigation';
@@ -1291,6 +1292,42 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     }
   };
 
+  // --- LIVE UPDATES ---
+  // Other planners' changes to this roster's shifts arrive as they are saved.
+  // With nothing unsaved here they are shown at once; otherwise a notice asks
+  // to reload once this browser's own changes are saved.
+  const [remoteChange, setRemoteChange] = useState(false);
+  const othersHere = usePresence(activeSchedule?.id ?? null);
+  const liveRef = useRef({ isGenerating, runValidation, triggerToast });
+  liveRef.current = { isGenerating, runValidation, triggerToast };
+  useEffect(() => {
+    const sched = activeSchedule;
+    if (!sched) return;
+    setRemoteChange(false);
+    const inScope = (a: Assignment) => a.scheduleId === sched.id;
+    return repo.subscribe(
+      'assignments',
+      (items, info) => {
+        if (info?.fromThisDevice) return; // this browser's own edit, already on screen
+        if (loadingRef.current || activeScheduleRef.current?.id !== sched.id) return;
+        const list = items as Assignment[];
+        if (!syncers.assignments.differsFromKnown(list, inScope)) return; // what this browser saved
+        if (syncers.assignments.hasUnsaved(sched.id) || liveRef.current.isGenerating) {
+          setRemoteChange(true);
+          return;
+        }
+        syncers.assignments.replaceKnown(list, inScope);
+        setAssignments(list);
+        // Undo steps hold the whole list from before; using one now would undo their change.
+        setUndoStack([]);
+        setRedoStack([]);
+        liveRef.current.runValidation(activeScheduleRef.current || sched, list);
+        liveRef.current.triggerToast('Updated with a change made by someone else.');
+      },
+      { field: 'scheduleId', operator: '==', value: sched.id }
+    );
+  }, [activeSchedule?.id]);
+
   // Undo / Redo: a step restores shifts, pinned days and leave together, and
   // only ever on the roster it was recorded for.
   const restoreSnapshot = (target: RosterSnapshot) => {
@@ -1568,6 +1605,17 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               </span>
             )
           )}
+
+          {othersHere.length > 0 && (
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-800 bg-sky-50 border border-sky-200 rounded px-2 py-0.5"
+              title={othersHere.map((p) => `${p.name} (${p.email})`).join(', ')}
+              role="status"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-sky-500" aria-hidden="true" />
+              {othersHere.length === 1 ? `${othersHere[0].name} is also here` : `${othersHere.length} others are also here`}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -1749,6 +1797,22 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             ))}
           </ol>
         </nav>
+      )}
+
+      {remoteChange && (
+        <div role="status" className="mx-4 mt-2 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 flex flex-wrap items-center justify-between gap-2">
+          <span>Someone else changed this roster while you were editing. Reload to see their change (yours are saved first).</span>
+          <button
+            type="button"
+            onClick={() => {
+              setRemoteChange(false);
+              void loadData();
+            }}
+            className="px-2.5 py-1 rounded border border-sky-300 bg-white font-semibold hover:bg-sky-100 cursor-pointer"
+          >
+            Reload
+          </button>
+        </div>
       )}
 
       {clinicSetupError && (
