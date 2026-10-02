@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Suspense, lazy, useId } from 'react';
+import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
 import { AppRoute, ClinicContextState } from '../../types/navigation';
 import { LocalModeBanner } from './LocalModeBanner';
 import { Sidebar } from './Sidebar';
@@ -19,8 +19,7 @@ import { setClinicWeekendDays } from '../../utils/weekend';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { quotaTracker } from '../../services/firebase/quotaTracker';
-import { CheckCircle2, Check, AlertTriangle, X } from 'lucide-react';
-import { useDialogA11y } from '../common/useDialogA11y';
+import { Check, AlertTriangle, X } from 'lucide-react';
 import { LoadErrorBoundary } from '../common/LoadErrorBoundary';
 
 // Screens load on demand, so the first page does not download the whole app.
@@ -34,41 +33,6 @@ const ReportsView = lazy(() => import('../views/ReportsView').then((m) => ({ def
 const SettingsView = lazy(() => import('../views/SettingsView').then((m) => ({ default: m.SettingsView })));
 const PublishedRosterView = lazy(() => import('../views/PublishedRosterView').then((m) => ({ default: m.PublishedRosterView })));
 const AuditTrailView = lazy(() => import('../views/AuditTrailView').then((m) => ({ default: m.AuditTrailView })));
-
-/** "Schedule receipt confirmed" dialog shown after a nurse acknowledges a roster. */
-const AckNoticeDialog: React.FC<{ message: string; onDismiss: () => void; onContinue: () => void }> = ({
-  message,
-  onDismiss,
-  onContinue,
-}) => {
-  const titleId = useId();
-  const ref = useDialogA11y<HTMLDivElement>(true, onDismiss);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-sm w-full p-5 text-center space-y-4 text-xs"
-      >
-        <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
-          <CheckCircle2 className="w-6 h-6" aria-hidden="true" />
-        </div>
-        <div>
-          <h3 id={titleId} className="font-bold text-slate-900 text-sm">Schedule Receipt Confirmed!</h3>
-          <p className="text-slate-600 text-xs mt-1 leading-relaxed">{message}</p>
-        </div>
-        <button
-          onClick={onContinue}
-          className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer transition-colors shadow-xs"
-        >
-          Continue to Workspace
-        </button>
-      </div>
-    </div>
-  );
-};
 
 interface AppShellProps {
   currentUser?: UserProfile | null;
@@ -116,7 +80,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   const [currentRoute, setCurrentRoute] = useState<AppRoute>(initialUrl.route);
   const [shareTokenParam, setShareTokenParam] = useState<string | undefined>(initialUrl.token);
   const [nurseIdParam, setNurseIdParam] = useState<string | undefined>(initialUrl.nurse);
-  const [ackNotice, setAckNotice] = useState<string | null>(null);
 
   const initialUser = propUser || authService.getCurrentUser();
   const isInitiallyCleared =
@@ -513,17 +476,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
         onClose={() => setIsShortcutsOpen(false)}
       />
 
-      {/* Digital Acknowledgment Receipt Modal (Phase 13) */}
-      {ackNotice && (
-        <AckNoticeDialog
-          message={ackNotice}
-          onDismiss={() => setAckNotice(null)}
-          onContinue={() => {
-            setAckNotice(null);
-            navigateTo('schedules');
-          }}
-        />
-      )}
     </div>
   );
 };

@@ -27,6 +27,7 @@ import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/setting
 import { AssignmentDiffItem } from '../history/diffEngine';
 import { getRepository } from '../repository';
 import { authService } from '../auth/authService';
+import { canEditClinicData } from '../auth/access';
 import { escapeHtml, safeColor } from '../../utils/escapeHtml';
 import { leaveCreditInRange, resolveFullTimeTarget } from '../hours/hoursPolicy';
 
@@ -467,8 +468,14 @@ export class RosterPublishService {
     }
 
     try {
-      // Older links (document id differs from the token): needs a signed in user.
-      const acks = await repo.list('acknowledgments', { field: 'token', operator: '==', value: token });
+      // Older links (document id differs from the token): a signed in nurse may look
+      // through their own read receipts (the database rules allow only that query).
+      const user = authService.getCurrentUser();
+      const acks = canEditClinicData(user)
+        ? await repo.list('acknowledgments', { field: 'token', operator: '==', value: token })
+        : user?.linkedNurseId
+        ? await repo.list('acknowledgments', { field: 'nurseId', operator: '==', value: user.linkedNurseId })
+        : [];
       const matched = acks.find((a) => a.token === token);
       if (!matched) return false;
       if (!matched.ackAt) {

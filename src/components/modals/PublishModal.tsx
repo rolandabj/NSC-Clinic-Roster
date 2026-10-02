@@ -81,6 +81,8 @@ interface PublishModalProps {
   isOpen: boolean;
   onClose: () => void;
   onPublishComplete: (version: ScheduleVersion) => void;
+  /** After resending failed emails (the email log changed, nothing was published). */
+  onSendUpdated?: () => void;
   initialMode?: 'PUBLISH' | 'CHANGE';
 }
 
@@ -106,6 +108,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   isOpen,
   onClose,
   onPublishComplete,
+  onSendUpdated,
   initialMode = 'PUBLISH',
 }) => {
   const [currentStep, setCurrentStep] = useState<Step>('VALIDATION');
@@ -123,6 +126,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   const [sendResults, setSendResults] = useState<EmailRecipientLog[]>([]);
   const [publishWarnings, setPublishWarnings] = useState<string[]>([]);
   // A publish already saved (version, link, log), so a retry only re-sends the failed emails.
+  // `logId` is empty until every save step has finished, so a retry resumes from the step that failed.
   const runRef = useRef<{ version: ScheduleVersion; shareToken?: string; logId: string; recipients: EmailRecipientLog[] } | null>(null);
 
   // Email Config
@@ -180,6 +184,9 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       setSendResults([]);
       setPublishWarnings([]);
       setCreatedVersion(null);
+      // Off until this roster's links are known, so a choice from the last opening never carries over.
+      setIncludeLink(false);
+      setHasPublicLink(false);
       repo
         .list('shareLinks', { field: 'scheduleId', operator: '==', value: schedule.id })
         .then((links) => {
@@ -187,7 +194,10 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           setHasPublicLink(has);
           setIncludeLink(has);
         })
-        .catch(() => setHasPublicLink(false));
+        .catch(() => {
+          setHasPublicLink(false);
+          setIncludeLink(false);
+        });
       setVersionNote(
         initialMode === 'CHANGE'
           ? `Change Alert — Shift adjustments for ${schedule.name}`
@@ -235,7 +245,8 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         });
 
       // 2. Find latest published version for diffing
-      const publishedList = versions.filter((v) => v.isPublished);
+      // Only this roster's versions (the Publish page passes every roster's).
+      const publishedList = versions.filter((v) => v.isPublished && v.scheduleId === schedule.id);
       if (publishedList.length > 0) {
         publishedList.sort((a, b) => b.number - a.number);
         const lastPub = publishedList[0];
@@ -338,33 +349,18 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     return list.every((r) => r.status === 'MOCK_SENT') ? 'MOCK_SENT' : 'SENT';
   };
 
-  /** Saves the published version, share links and an email log once per publish. */
+  /**
+   * Saves the published version, share links and an email log once per publish.
+   * If a step fails, the next try continues with the version already saved
+   * instead of making a second one.
+   */
   const savePublish = async (logs: string[]) => {
-    const scheduleVersions = await repo.list('versions', { field: 'scheduleId', operator: '==', value: schedule.id });
-    const newVersionNumber = Math.max(schedule.activeVersionNumber || 1, ...scheduleVersions.map((v) => v.number || 0)) + 1;
-    const versionId = `v-${schedule.id}-${newVersionNumber}-${Date.now()}`;
-    const nowIso = new Date().toISOString();
-    const inRoster = (start: string, end: string) => end >= schedule.startDate && start <= schedule.endDate;
-
-    const newVersion: ScheduleVersion = {
-      id: versionId,
-      scheduleId: schedule.id,
-      number: newVersionNumber,
-      timestamp: nowIso,
-      author: context.currentUser?.name || context.currentUser?.email || 'Planner',
-      note: versionNote.trim(),
-      snapshot: {
-        schedule,
-        assignments,
-        // Only this roster's leave and pinned days are kept with the version.
-        leaveEntries: leaveEntries.filter((l) => inRoster(l.startDate, l.endDate)),
-        locks: locks.filter((l) => inRoster(l.date, l.date)),
-        rulesSnapshot: rules,
-      },
-      isPublished: true,
-      publishedAt: nowIso,
-    };
-    await repo.create('versions', newVersion);
+    if (!runRef.current) await saveVersion();
+    const run = runRef.current!;
+    const { version: newVersion } = run;
+    const versionId = newVersion.id;
+    const newVersionNumber = newVersion.number;
+    const nowIso = newVersion.timestamp;
     await repo.update('schedules', schedule.id, { status: 'PUBLISHED', activeVersionNumber: newVersionNumber, updatedAt: nowIso });
 
     // Every link of this roster (revoked ones too, so a restored link shows the latest version)
@@ -396,7 +392,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         // A snapshot problem must not stop the publish; the link can be refreshed from Share.
         const msg = `A share link couldn't be refreshed (${syncErr?.message || syncErr}). Open Share to refresh it.`;
         logs.push(`⚠ ${msg}`);
-        setPublishWarnings((prev) => [...prev, msg]);
+        setPublishWarnings((prev) => (prev.includes(msg) ? prev : [...prev, msg]));
       }
     }
 
@@ -413,9 +409,40 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       sentAt: nowIso,
     };
     await repo.create('emailLog', pubLog);
-    runRef.current = { version: newVersion, shareToken: includeLink ? publicLink?.token : undefined, logId, recipients: [] };
+    run.shareToken = includeLink ? publicLink?.token : undefined;
+    run.logId = logId;
+    return run;
+  };
+
+  /** Writes the new version and remembers it, so it is never written twice. */
+  const saveVersion = async () => {
+    const scheduleVersions = await repo.list('versions', { field: 'scheduleId', operator: '==', value: schedule.id });
+    const newVersionNumber = Math.max(schedule.activeVersionNumber || 1, ...scheduleVersions.map((v) => v.number || 0)) + 1;
+    const versionId = `v-${schedule.id}-${newVersionNumber}-${Date.now()}`;
+    const nowIso = new Date().toISOString();
+    const inRoster = (start: string, end: string) => end >= schedule.startDate && start <= schedule.endDate;
+
+    const newVersion: ScheduleVersion = {
+      id: versionId,
+      scheduleId: schedule.id,
+      number: newVersionNumber,
+      timestamp: nowIso,
+      author: context.currentUser?.name || context.currentUser?.email || 'Planner',
+      note: versionNote.trim(),
+      snapshot: {
+        schedule,
+        assignments,
+        // Only this roster's leave and pinned days are kept with the version.
+        leaveEntries: leaveEntries.filter((l) => inRoster(l.startDate, l.endDate)),
+        locks: locks.filter((l) => inRoster(l.date, l.date)),
+        rulesSnapshot: rules,
+      },
+      isPublished: true,
+      publishedAt: nowIso,
+    };
+    await repo.create('versions', newVersion);
+    runRef.current = { version: newVersion, logId: '', recipients: [] };
     setCreatedVersion(newVersion);
-    return runRef.current;
   };
 
   /** Sends to the given nurses; one failed email never stops the others. */
@@ -457,8 +484,17 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           ackToken
         );
         recipientLog = result.recipientLog;
-        // A read receipt is only expected from a nurse who was actually emailed.
-        if (recipientLog.status !== 'FAILED') await repo.create('acknowledgments', result.acknowledgment);
+        // A read receipt is only expected from a nurse who was actually emailed. If saving it
+        // fails the email still went out, so it stays "sent" (a retry would email them twice).
+        if (recipientLog.status !== 'FAILED') {
+          try {
+            await repo.create('acknowledgments', result.acknowledgment);
+          } catch (ackErr: any) {
+            const msg = `${nurse.fullName} was emailed, but their read receipt couldn't be saved (${ackErr?.message || ackErr}), so their confirm link won't work.`;
+            logs.push(`⚠ ${msg}`);
+            setPublishWarnings((prev) => [...prev, msg]);
+          }
+        }
       } catch (err: any) {
         recipientLog = {
           email: nurse.gmail,
@@ -490,10 +526,17 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     }
   };
 
-  const finishSend = async () => {
+  /** Records the result. A retry only updates the email log; the publish was already recorded. */
+  const finishSend = async (isRetry = false) => {
     const run = runRef.current!;
     const status = overallStatus(run.recipients);
     await repo.update('emailLog', run.logId, { recipients: run.recipients, status });
+    setSendResults([...run.recipients]);
+    setCurrentStep('DONE');
+    if (isRetry) {
+      onSendUpdated?.();
+      return;
+    }
     const failed = run.recipients.filter((r) => r.status === 'FAILED').length;
     await repo
       .create('audit', {
@@ -505,8 +548,6 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         timestamp: new Date().toISOString(),
       })
       .catch(() => {});
-    setSendResults([...run.recipients]);
-    setCurrentStep('DONE');
     onPublishComplete(run.version);
   };
 
@@ -515,13 +556,13 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     setProgressPercent(0);
     const logs: string[] = [];
     try {
-      if (!runRef.current) await savePublish(logs);
+      if (!runRef.current?.logId) await savePublish(logs);
       await sendTo(nurses.filter((n) => selectedNurseIds.has(n.id)), logs);
       await finishSend();
     } catch (err: any) {
-      // Nothing is sent twice: if the version was saved, a retry only sends the missing emails.
+      // Nothing is saved or sent twice: publishing again carries on from where it stopped.
       notify(`Publishing stopped: ${err.message}`, 'error');
-      if (runRef.current) {
+      if (runRef.current?.logId) {
         setSendResults([...runRef.current.recipients]);
         setCurrentStep('DONE');
       } else {
@@ -540,7 +581,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     const logs: string[] = [];
     try {
       await sendTo(retry, logs);
-      await finishSend();
+      await finishSend(true);
     } catch (err: any) {
       notify(`Sending stopped: ${err.message}`, 'error');
       setSendResults([...run.recipients]);

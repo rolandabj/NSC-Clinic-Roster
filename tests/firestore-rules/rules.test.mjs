@@ -1,5 +1,5 @@
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import fs from 'fs';
 
 const env = await initializeTestEnvironment({
@@ -84,6 +84,9 @@ await t('viewer acknowledges legacy ack once', true, updateDoc(doc(viewer, 'ackn
 await t('viewer cannot re-acknowledge legacy ack', false, updateDoc(doc(viewer, 'acknowledgments/legacy'), { ackAt: '2026-10-03T00:00:00Z' }));
 await t('viewer cannot create ack', false, setDoc(doc(viewer, 'acknowledgments/ack-z'), { token: 'ack-z' }));
 await t('viewer cannot list acks', false, getDocs(collection(viewer, 'acknowledgments')));
+await t('viewer lists own acks', true, getDocs(query(collection(viewer, 'acknowledgments'), where('nurseId', '==', 'n1'))));
+await t("viewer cannot list another nurse's acks", false, getDocs(query(collection(viewer, 'acknowledgments'), where('nurseId', '==', 'n2'))));
+await t("manager cannot list another nurse's acks", false, getDocs(query(collection(manager, 'acknowledgments'), where('nurseId', '==', 'n1'))));
 await t('editor lists acks', true, getDocs(collection(editor, 'acknowledgments')));
 await t("manager cannot acknowledge another nurse's ack", false, updateDoc(doc(manager, 'acknowledgments/legacy'), { ackAt: '2026-10-05T00:00:00Z' }));
 await t("manager cannot read another nurse's legacy ack", false, getDoc(doc(manager, 'acknowledgments/legacy')));

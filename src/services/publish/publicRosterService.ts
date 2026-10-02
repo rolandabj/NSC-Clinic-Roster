@@ -24,8 +24,15 @@ import {
 } from '../../types';
 import { getRepository } from '../repository';
 
+/**
+ * Bumped when the snapshot's contents change (2: only this roster's people and
+ * dates, generic leave, no employee codes), so older snapshots are rebuilt.
+ */
+export const PUBLIC_ROSTER_FORMAT = 2;
+
 export interface PublicRosterDoc {
   id: string;
+  format?: number;
   token: string;
   scheduleId: string;
   versionId: string;
@@ -111,6 +118,7 @@ export async function syncPublicRoster(link: ShareLink): Promise<void> {
 
   const doc: PublicRosterDoc = {
     id: link.token,
+    format: PUBLIC_ROSTER_FORMAT,
     token: link.token,
     scheduleId: schedule.id,
     versionId: version.id,
@@ -163,9 +171,9 @@ export async function loadPublicRoster(token: string): Promise<PublicRosterDoc |
 }
 
 /**
- * Creates missing snapshots for active share links (for example links made
- * before snapshots existed). Called when an editor opens the share or publish
- * screens. Failures are logged, never thrown.
+ * Creates missing snapshots for active share links, and rebuilds ones saved in an
+ * older format (which could show more than the roster page needs). Called when an
+ * editor opens the share or publish screens. Failures are logged, never thrown.
  */
 export async function ensurePublicRosters(links: ShareLink[]): Promise<void> {
   const repo = getRepository();
@@ -173,7 +181,9 @@ export async function ensurePublicRosters(links: ShareLink[]): Promise<void> {
     if (link.revoked || !link.token || !link.pointsToVersionId) continue;
     try {
       const existing = await repo.get('publicRosters', link.token);
-      if (!existing) await syncPublicRoster(link);
+      if (!existing || (existing as unknown as PublicRosterDoc).format !== PUBLIC_ROSTER_FORMAT) {
+        await syncPublicRoster(link);
+      }
     } catch (err) {
       console.warn('[publicRosterService] Could not create snapshot for share link:', err);
     }

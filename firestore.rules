@@ -80,12 +80,14 @@ service cloud.firestore {
     match /acknowledgments/{ackId} {
       allow get: if isEditor() || resource.data.token == ackId
         || (isApproved() && myNurseId() != '' && resource.data.nurseId == myNurseId());
-      // Who confirmed what is for the people who publish rosters.
-      allow list: if isEditor();
+      // Who confirmed what is for the people who publish rosters; a signed in
+      // nurse may only list their own (used to confirm older links).
+      allow list: if isEditor()
+        || (isApproved() && myNurseId() != '' && resource.data.nurseId == myNurseId());
       allow create, delete: if isEditor();
       allow update: if isEditor() || (
         // By the token from the email (no sign in needed), or for older
-        // acknowledgments whose id is not the token, by the nurse herself.
+        // acknowledgments whose id is not the token, by that nurse.
         (resource.data.token == ackId || (isApproved() && myNurseId() != '' && resource.data.nurseId == myNurseId()))
         && resource.data.get('ackAt', null) == null
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ackAt'])

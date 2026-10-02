@@ -861,6 +861,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
             loadData();
             triggerToast('Official publish broadcast finalized.');
           }}
+          onSendUpdated={() => loadData()}
           initialMode={wizardMode}
         />
       )}
