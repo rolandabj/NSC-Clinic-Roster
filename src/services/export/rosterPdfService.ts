@@ -25,8 +25,7 @@ import {
   Specialty,
 } from '../../types';
 import { isWeekendDate } from '../../utils/weekend';
-import { calculateDutyDurationHours } from '../reports/hoursAccounting';
-import { nurseLeaveHoursInRange } from '../hours/hoursPolicy';
+import { calculateDutyDurationHours, summarizeNurseHours } from '../reports/hoursAccounting';
 import { getScheduleDates } from './rosterExportService';
 
 export interface RosterPdfOptions {
@@ -212,13 +211,12 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
   if (includeNurses) {
     const totals = new Map<string, number>();
     nurses.forEach((n) => {
-      let hours = 0;
-      allDates.forEach((d) => {
-        const a = shiftByNurseDate.get(`${n.id}_${d}`);
-        if (a) hours += calculateDutyDurationHours(dutyMap.get(a.dutyWindowId));
+      // Shared hours rule: a leave day counts its leave, not also a shift on it.
+      const h = summarizeNurseHours(n, schedule, assignments, dutyMap, leaveEntries, leaveTypes, [], {
+        start: allDates[0],
+        end: allDates[allDates.length - 1],
       });
-      hours += nurseLeaveHoursInRange(n.id, leaveEntries, leaveTypes, allDates[0], allDates[allDates.length - 1]);
-      totals.set(n.id, Math.round(hours * 10) / 10);
+      totals.set(n.id, h.totalHours);
     });
 
     chunk(allDates, daysPerPart).forEach((dates, part, parts) => {

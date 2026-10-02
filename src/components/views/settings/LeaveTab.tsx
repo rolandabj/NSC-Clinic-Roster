@@ -314,7 +314,7 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
                 className="w-20 px-2 py-1 border border-slate-300 rounded font-mono text-center"
               />
               <span className="text-[10px] text-slate-400 mt-0.5 block">
-                Changes apply to leave added from now on.
+                The default for every day of this leave. To count a different number for one nurse on one day, open that day in the roster.
               </span>
             </div>
 

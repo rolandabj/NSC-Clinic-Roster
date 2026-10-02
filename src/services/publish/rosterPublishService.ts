@@ -5,6 +5,7 @@
  * Roster Publishing, Personalized Email Generator & Dispatch Engine (Phase 13)
  */
 
+import { summarizeNurseHours } from '../reports/hoursAccounting';
 import {
   Schedule,
   ScheduleVersion,
@@ -99,32 +100,13 @@ export class RosterPublishService {
       .filter((le) => le.nurseId === nurse.id && le.approved)
       .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-    // Calculate hours summary
-    let dutyHours = 0;
-    for (const a of nurseAsgns) {
-      const dw = dutyMap.get(a.dutyWindowId);
-      if (dw) {
-        const [sh, sm] = dw.startTime.split(':').map(Number);
-        const [eh, em] = dw.endTime.split(':').map(Number);
-        let mins = eh * 60 + em - (sh * 60 + sm);
-        if (mins < 0) mins += 24 * 60;
-        dutyHours += mins / 60;
-      }
-    }
-
-    // Only the leave days inside this schedule count (shared hours rule)
-    let leaveCreditedHours = 0;
-    for (const le of nurseLeaves) {
-      leaveCreditedHours += leaveCreditInRange(le, ltMap.get(le.leaveTypeId), schedule.startDate, schedule.endDate);
-    }
-    leaveCreditedHours = Math.round(leaveCreditedHours * 10) / 10;
-    dutyHours = Math.round(dutyHours * 10) / 10;
-
-    const targetHours = Math.round(
-      (resolveFullTimeTarget(schedule, workingHoursPeriods).hours * (nurse.contractPercent || 100)) / 100
-    );
-    const totalEarnedHours = dutyHours + leaveCreditedHours;
-    const variance = totalEarnedHours - targetHours;
+    // Hours by the shared rule (a leave day counts its leave, not also a shift)
+    const hours = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, ltMap, workingHoursPeriods);
+    const dutyHours = hours.dutyHours;
+    const leaveCreditedHours = hours.leaveHours;
+    const targetHours = hours.targetHours;
+    const totalEarnedHours = hours.totalHours;
+    const variance = Math.round((totalEarnedHours - targetHours) * 10) / 10;
 
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://clinicroster.app';
     const viewUrl = `${origin}/#published?token=${encodeURIComponent(shareToken || 'active')}&nurse=${encodeURIComponent(nurse.id)}`;

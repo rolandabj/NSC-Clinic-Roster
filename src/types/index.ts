@@ -262,7 +262,9 @@ export interface LeaveEntry {
   endDate: IsoDateString;
   note?: string;
   approved: boolean;
-  hoursCredited: number; // computed snapshot
+  hoursCredited: number; // computed snapshot (only used when the leave type is unknown)
+  /** Hours for single days that differ from the leave type's default, e.g. { '2026-01-11': 6 }. */
+  dayHours?: Record<string, number>;
   status?: ApprovalStatus; // 'PENDING' | 'APPROVED' | 'REJECTED'
   submittedByNurseId?: string;
   submittedAt?: string;

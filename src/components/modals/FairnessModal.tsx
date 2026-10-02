@@ -7,6 +7,7 @@
  * Balance spread score + Automated parity rebalancing with diff preview.
  */
 
+import { summarizeNurseHours } from '../../services/reports/hoursAccounting';
 import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useMemo, useId } from 'react';
 import {
@@ -32,6 +33,8 @@ import {
   PublicHoliday,
   SeniorityLevel,
   Rule,
+  LeaveType,
+  WorkingHoursPeriod,
   LeaveEntry,
   LockEntry,
   ClinicalRole,
@@ -52,6 +55,8 @@ interface FairnessModalProps {
   locks: LockEntry[];
   roles?: ClinicalRole[];
   rules?: Rule[];
+  leaveTypes?: LeaveType[];
+  workingHoursPeriods?: WorkingHoursPeriod[];
   isOpen: boolean;
   onClose: () => void;
   onApplyAssignments: (updated: Assignment[], note: string) => void;
@@ -93,6 +98,8 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
   isOpen,
   onClose,
   onApplyAssignments,
+  leaveTypes = [],
+  workingHoursPeriods = [],
 }) => {
   const [activeTab, setActiveTab] = useState<'METRICS' | 'REBALANCE'>('METRICS');
   const [selectedSwaps, setSelectedSwaps] = useState<Set<string>>(new Set());
@@ -153,8 +160,11 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
       }
 
       const weekendsOff = Math.max(0, totalWeekendDays - weekendsWorked);
-      const targetHours = Math.round((schedule.hoursTargetFullTime * (nurse.contractPercent || 100)) / 100);
-      const hoursDelta = totalDutyHours - targetHours;
+      // Hours and goal by the shared rule (leave counts, period targets apply), as in the Hours tab.
+      const summary = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, workingHoursPeriods);
+      totalDutyHours = summary.totalHours;
+      const targetHours = summary.targetHours;
+      const hoursDelta = Math.round((totalDutyHours - targetHours) * 10) / 10;
 
       return {
         nurse,
@@ -167,7 +177,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
         lateEndsCount,
       };
     });
-  }, [nurses, assignments, dutyMap, holidayDateSet, schedule]);
+  }, [nurses, assignments, dutyMap, holidayDateSet, schedule, leaveEntries, leaveTypes, workingHoursPeriods]);
 
   // Compute Overall Balance Spread Score (0 - 100)
   const spreadScore = useMemo(() => {
@@ -390,7 +400,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                       <th className="py-2.5 px-4">Nursing Staff</th>
                       <th className="py-2.5 px-3">Contract</th>
                       <th className="py-2.5 px-3">Target</th>
-                      <th className="py-2.5 px-3">Worked</th>
+                      <th className="py-2.5 px-3">Hours (shifts + leave)</th>
                       <th className="py-2.5 px-3">Variance</th>
                       <th className="py-2.5 px-3">Weekends Off</th>
                       <th className="py-2.5 px-3">Holidays Worked</th>

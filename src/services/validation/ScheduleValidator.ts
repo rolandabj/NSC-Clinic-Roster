@@ -14,6 +14,7 @@
  * 5. DATA_ISSUE: Missing Gmail, unassigned doctor sessions, duplicate duties on same day, leave overlapping assignments.
  */
 
+import { summarizeNurseHours } from '../reports/hoursAccounting';
 import {
   Schedule,
   Assignment,
@@ -66,6 +67,17 @@ export interface ValidationFinding {
   hour?: string;
 }
 
+export interface HourCoverage {
+  nurses: number;
+  doctors: number;
+  /** Nurses free of a doctor at that hour who can run Nurse Clinic. */
+  freeNurses?: number;
+  /** Free nurses still needed at that hour (0 when covered). */
+  deficit: number;
+  /** A public holiday: one nurse covers the clinic. */
+  holiday?: boolean;
+}
+
 export interface ValidationReport {
   scheduleId: string;
   timestamp: string;
@@ -73,7 +85,8 @@ export interface ValidationReport {
   warnCount: number;
   infoCount: number;
   findings: ValidationFinding[];
-  hourlyCoverageMap: Record<string, Record<string, { nurses: number; doctors: number; deficit: number }>>;
+  /** Per date and opening hour: nurses on duty, doctors in session, free nurses, and how many free nurses are missing. */
+  hourlyCoverageMap: Record<string, Record<string, HourCoverage>>;
 }
 
 export class ScheduleValidator {
@@ -120,7 +133,7 @@ export class ScheduleValidator {
       datesList.push(d.toISOString().split('T')[0]);
     }
 
-    const hourlyCoverageMap: Record<string, Record<string, { nurses: number; doctors: number; deficit: number }>> = {};
+    const hourlyCoverageMap: Record<string, Record<string, HourCoverage>> = {};
 
     // 0. CATEGORY 2: STAFFING SCALE WARNINGS (Setup-time analysis)
     const activeDoctorIds = new Set(sessions.filter((s) => !s.cancelled).map((s) => s.doctorId));
@@ -153,7 +166,7 @@ export class ScheduleValidator {
             const duty = dutyMap.get(a.dutyWindowId);
             return !!duty && overlaps(duty.startTime, duty.endTime, h.start, h.end);
           }).length;
-          hourlyCoverageMap[date][h.start] = { nurses: onDuty, doctors: 0, deficit: onDuty > 0 ? 0 : 1 };
+          hourlyCoverageMap[date][h.start] = { nurses: onDuty, doctors: 0, freeNurses: onDuty, deficit: onDuty > 0 ? 0 : 1, holiday: true };
         });
         const holidayDuties = dayAssignments.map((a) => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d);
         const holidayGaps = uncoveredParts(clinic.openTime, clinic.closeTime, holidayDuties);
@@ -227,7 +240,7 @@ export class ScheduleValidator {
         ).length;
         const deficit = Math.max(0, minAdditional - freeNurses);
 
-        hourlyCoverageMap[date][h.start] = { nurses: activeNurses, doctors: activeDocs, deficit };
+        hourlyCoverageMap[date][h.start] = { nurses: activeNurses, doctors: activeDocs, freeNurses, deficit };
 
         if (deficit > 0) {
           findings.push({
@@ -596,8 +609,6 @@ export class ScheduleValidator {
           const currentAsgn = asgnsToday[0];
           consecutiveDays++;
           const duty = dutyMap.get(currentAsgn.dutyWindowId);
-          const duration = duty ? calculateDutyDurationHours(duty) : 8;
-          totalHours += duration;
 
           // Rule H6: Capability verification (Blood Collection & IV / PHL)
           if (currentAsgn.kind === 'CLINICAL_ROLE') {
@@ -769,19 +780,9 @@ export class ScheduleValidator {
         }
       }
 
-      // Leave credit additions
-      const nurseLeave = leaveEntries.filter(
-        (le) =>
-          le.nurseId === nurse.id &&
-          le.approved &&
-          !(le.endDate < schedule.startDate || le.startDate > schedule.endDate)
-      );
-      // Only leave days inside the schedule count (shared hours rule)
-      const leaveTypeMap = new Map(leaveTypes.map((t) => [t.id, t]));
-      nurseLeave.forEach((le) => {
-        totalHours += leaveCreditInRange(le, leaveTypeMap.get(le.leaveTypeId), schedule.startDate, schedule.endDate);
-      });
-      totalHours = Math.round(totalHours * 10) / 10;
+      // Hours by the shared rule: a leave day counts its leave (not also a shift on it),
+      // and a day with two shifts counts one, as in the Hours tab and the emails.
+      totalHours = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, workingHoursPeriods).totalHours;
 
       // Full time target hours (shared rule, same as the engine and reports)
       const effectiveFullTimeTarget = resolveFullTimeTarget(schedule, workingHoursPeriods).hours;

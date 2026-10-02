@@ -1,3 +1,4 @@
+import { leaveCreditInRange } from '../../services/hours/hoursPolicy';
 import React, { useState } from 'react';
 import {
   CalendarCheck2,
@@ -163,7 +164,7 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
                         </span>
                       </td>
                       <td className="py-2 px-3 text-slate-700 font-bold">
-                        {le.hoursCredited}h
+                        {Math.round(leaveCreditInRange(le, lt, le.startDate, le.endDate) * 10) / 10}h
                       </td>
                       <td className="py-2 px-3 text-slate-400 italic font-sans">{le.note || '—'}</td>
                       <td className="py-2 px-3 text-right">

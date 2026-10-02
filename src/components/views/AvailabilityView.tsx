@@ -1,3 +1,4 @@
+import { leaveCreditInRange } from '../../services/hours/hoursPolicy';
 import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
@@ -1096,7 +1097,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                                   leaveTypes.find((l) => l.id === leave.leaveTypeId)?.color ||
                                   '#f59e0b',
                               }}
-                              title={`${leaveTypes.find((l) => l.id === leave.leaveTypeId)?.name} (${leave.hoursCredited}h credited). Click to edit.`}
+                              title={`${leaveTypes.find((l) => l.id === leave.leaveTypeId)?.name} (${Math.round(leaveCreditInRange(leave, leaveTypes.find((l) => l.id === leave.leaveTypeId), leave.startDate, leave.endDate) * 10) / 10}h counted). Click to edit.`}
                             >
                               {leaveTypes.find((l) => l.id === leave.leaveTypeId)?.acronym || 'L'}
                             </button>

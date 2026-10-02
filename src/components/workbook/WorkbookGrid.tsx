@@ -1,6 +1,6 @@
 import { isWeekendDay } from '../../utils/weekend';
-import { leaveCreditInRange, leaveCreditPerDay, resolveFullTimeTarget } from '../../services/hours/hoursPolicy';
-import React, { useState, useEffect, useRef, useId } from 'react';
+import { leaveCreditOnDate } from '../../services/hours/hoursPolicy';
+import React, { useState, useEffect, useRef, useId, useMemo } from 'react';
 import {
   FileSpreadsheet,
   Undo2,
@@ -57,11 +57,11 @@ import {
   WorkingHoursPeriod,
 } from '../../types';
 import { ValidationReport, ValidationFinding } from '../../services/validation/ScheduleValidator';
-import { calculateDutyDurationHours } from '../../services/reports/hoursAccounting';
+import { calculateDutyDurationHours, summarizeNurseHours, NurseHoursSummary } from '../../services/reports/hoursAccounting';
 import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { confirmDialog } from '../common/dialogs';
+import { confirmDialog, notify } from '../common/dialogs';
 
 interface WorkbookGridProps {
   schedule: Schedule;
@@ -151,6 +151,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   const [editorNote, setEditorNote] = useState<string>('');
   const [editorLeaveTypeId, setEditorLeaveTypeId] = useState<string>(leaveTypes[0]?.id || '');
   const [editorAllowOverwrite, setEditorAllowOverwrite] = useState<boolean>(false);
+  // Hours this leave day counts for this nurse ('' = the leave type's default from Settings).
+  const [editorLeaveHours, setEditorLeaveHours] = useState<string>('');
 
   // Right-Click Context Menu
   const [contextMenu, setContextMenu] = useState<{
@@ -194,7 +196,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   }
 
   // Lookup maps
-  const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
+  const dutyMap = useMemo(() => new Map(dutyWindows.map((d) => [d.id, d])), [dutyWindows]);
   const nurseMap = new Map(nurses.map((n) => [n.id, n]));
   const doctorMap = new Map(doctors.map((d) => [d.id, d]));
   const specialtyMap = new Map(specialties.map((s) => [s.id, s]));
@@ -226,62 +228,42 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     return a.fullName.localeCompare(b.fullName);
   });
 
-  // Calculate nurse total hours vs target
+  // Hours per nurse, counted by the shared rule (same as the Hours tab, emails and PDF).
+  const leaveTypeMap = useMemo(() => new Map(leaveTypes.map((l) => [l.id, l])), [leaveTypes]);
+  const hoursByNurse = useMemo(() => {
+    const map = new Map<string, NurseHoursSummary>();
+    for (const n of nurses) {
+      map.set(n.id, summarizeNurseHours(n, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods));
+    }
+    return map;
+  }, [nurses, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods]);
+
   const getNurseHoursProgress = (nurse: Nurse) => {
-    const nurseAssignments = assignments.filter((a) => a.nurseId === nurse.id);
-    let dutyHours = 0;
-    nurseAssignments.forEach((a) => {
-      const duty = dutyMap.get(a.dutyWindowId);
-      dutyHours += calculateDutyDurationHours(duty);
-    });
-
-    let leaveHours = 0;
-    const activeLeave = leaveEntries.filter(
-      (le) =>
-        le.nurseId === nurse.id &&
-        le.approved &&
-        !(le.endDate < schedule.startDate || le.startDate > schedule.endDate)
-    );
-    activeLeave.forEach((le) => {
-      const lt = leaveTypes.find((l) => l.id === le.leaveTypeId);
-      // Only the leave days inside this schedule count (shared hours rule)
-      leaveHours += leaveCreditInRange(le, lt, schedule.startDate, schedule.endDate);
-    });
-    leaveHours = Math.round(leaveHours * 10) / 10;
-
-    const totalHours = Math.round((dutyHours + leaveHours) * 10) / 10;
-    const targetHours = Math.round(resolveFullTimeTarget(schedule, workingHoursPeriods).hours * (nurse.contractPercent / 100));
-    const percent = targetHours > 0 ? Math.min(100, Math.round((totalHours / targetHours) * 100)) : 0;
-
-    return { totalHours, targetHours, percent, dutyHours, leaveHours };
+    const h = hoursByNurse.get(nurse.id)!;
+    return { totalHours: h.totalHours, targetHours: h.targetHours, percent: h.percent, dutyHours: h.dutyHours, leaveHours: h.leaveHours };
   };
 
-  // Calculate hours worked within the currently active block
+  // Hours inside the page of days shown
+  const blockStart = blockDates[0];
+  const blockEnd = blockDates[blockDates.length - 1];
+  const blockHoursByNurse = useMemo(() => {
+    const map = new Map<string, NurseHoursSummary>();
+    if (!blockStart || !blockEnd) return map;
+    for (const n of nurses) {
+      map.set(
+        n.id,
+        summarizeNurseHours(n, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods, {
+          start: blockStart,
+          end: blockEnd,
+        })
+      );
+    }
+    return map;
+  }, [nurses, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods, blockStart, blockEnd]);
+
   const getNurseBlockHours = (nurse: Nurse) => {
-    let bDuty = 0;
-    let bLeave = 0;
-    blockDates.forEach((dateStr) => {
-      const asgn = assignments.find((a) => a.nurseId === nurse.id && a.date === dateStr);
-      if (asgn) {
-        const duty = dutyMap.get(asgn.dutyWindowId);
-        bDuty += calculateDutyDurationHours(duty);
-      } else {
-        const leave = leaveEntries.find(
-          (le) =>
-            le.nurseId === nurse.id &&
-            le.approved &&
-            dateStr >= le.startDate &&
-            dateStr <= le.endDate
-        );
-        if (leave) {
-          const lt = leaveTypes.find((l) => l.id === leave.leaveTypeId);
-          // One day's share of the leave entry, not the entry's whole total
-          bLeave += leaveCreditPerDay(leave, lt);
-        }
-      }
-    });
-    bLeave = Math.round(bLeave * 10) / 10;
-    return { blockTotal: Math.round((bDuty + bLeave) * 10) / 10, bDuty, bLeave };
+    const h = blockHoursByNurse.get(nurse.id);
+    return { blockTotal: h?.totalHours ?? 0, bDuty: h?.dutyHours ?? 0, bLeave: h?.leaveHours ?? 0 };
   };
 
   // Open Cell Editor for Duty Shift or Leave
@@ -297,10 +279,12 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     );
     const existingAsgn = assignments.find((a) => a.nurseId === nurseId && a.date === date);
 
+    const ownHours = existingLeave?.dayHours?.[date];
+    setEditorLeaveHours(typeof ownHours === 'number' ? String(ownHours) : '');
     if (existingLeave) {
       setEditorCategory('LEAVE');
       setEditorLeaveTypeId(existingLeave.leaveTypeId);
-      setEditorAllowOverwrite(!existingLeave.approved && !existingLock);
+      setEditorAllowOverwrite(!existingLock);
       setEditorNote(existingLeave.note || '');
       setEditorDutyId(dutyWindows[0]?.id || '');
       setEditorKind('DOCTOR');
@@ -624,7 +608,45 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       // LEAVE / DAY OFF
       const lt = leaveTypes.find((l) => l.id === editorLeaveTypeId) || leaveTypes[0];
       const isProtected = !editorAllowOverwrite;
-      const creditedHours = typeof lt?.creditedHours === 'number' ? lt.creditedHours : 8;
+      const defaultHours = typeof lt?.creditedHours === 'number' ? lt.creditedHours : 8;
+      const typed = editorLeaveHours.trim();
+      const ownHours = typed === '' ? undefined : Number(typed);
+      if (ownHours !== undefined && (!Number.isFinite(ownHours) || ownHours < 0 || ownHours > 24)) {
+        notify('Hours for this day must be a number from 0 to 24.', 'warning');
+        return;
+      }
+      const dayHoursOverride = ownHours !== undefined && ownHours !== defaultHours ? ownHours : undefined;
+      const creditedHours = dayHoursOverride ?? defaultHours;
+      const withDay = (entry: LeaveEntry): LeaveEntry => {
+        const rest = { ...(entry.dayHours || {}) };
+        delete rest[date];
+        const dayHours = dayHoursOverride !== undefined ? { ...rest, [date]: dayHoursOverride } : rest;
+        const { dayHours: _old, ...base } = entry;
+        return Object.keys(dayHours).length > 0 ? { ...base, dayHours } : base;
+      };
+
+      // Same leave already on this day: only its hours (and note) change, the leave isn't split.
+      const sameLeave = leaveEntries.find(
+        (le) => le.nurseId === nurseId && le.approved && le.leaveTypeId === lt?.id && date >= le.startDate && date <= le.endDate
+      );
+      if (sameLeave) {
+        nextLeaves = leaveEntries.map((le) =>
+          le.id === sameLeave.id ? withDay({ ...le, note: editorNote.trim() || le.note }) : le
+        );
+        if (isProtected) {
+          nextLocks.push({
+            id: `lock-${nurseId}-${date}-${Date.now()}`,
+            nurseId,
+            date,
+            mode: 'OFF',
+            note: `Pinned ${lt?.name || 'Leave'}`,
+            createdAt: new Date().toISOString(),
+          });
+        }
+        emitCellEdit(nextAssignments, nextLocks, nextLeaves);
+        setIsEditorOpen(false);
+        return;
+      }
 
       // Leave a planner enters is always approved (it is shown and counted, and the
       // generator never puts a shift on it). Pinning also adds a day off lock, which
@@ -639,6 +661,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
         status: 'APPROVED',
         hoursCredited: creditedHours,
         note: editorNote.trim() || undefined,
+        ...(dayHoursOverride !== undefined ? { dayHours: { [date]: dayHoursOverride } } : {}),
       };
       nextLeaves.push(newLeave);
 
@@ -753,10 +776,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                   ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
                   : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
               }`}
-              title={isAllDaysExpanded ? 'Switch to block view (14 days)' : 'Expand view to all days (full month continuous)'}
+              title={isAllDaysExpanded ? `Show ${(schedule.blockWeeks || 2) * 7} days at a time` : 'Show every day of the roster'}
             >
               <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>{isAllDaysExpanded ? 'All Days (31d) ✓' : 'Expand All Days'}</span>
+              <span>{isAllDaysExpanded ? `All ${blockDates.length} days ✓` : 'Show all days'}</span>
             </button>
           )}
 
@@ -963,13 +986,18 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                 const hasPhl = nurse.capabilityIds?.includes('role-phl');
                 const { totalHours, targetHours, percent } = getNurseHoursProgress(nurse);
 
-                // Progress bar color: green in range, amber near, red over/under
-                const barColor =
-                  percent >= 90 && percent <= 110
-                    ? 'bg-emerald-500'
-                    : percent >= 75
-                    ? 'bg-amber-500'
-                    : 'bg-rose-500';
+                // Bar: green on goal, amber short, red over. The bar is full at the
+                // goal; going over shows in red with the hours over.
+                const diff = Math.round((totalHours - targetHours) * 10) / 10;
+                const barColor = percent > 105 ? 'bg-rose-500' : percent >= 95 ? 'bg-emerald-500' : 'bg-amber-500';
+                const hoursNote =
+                  targetHours <= 0
+                    ? ''
+                    : diff > 0
+                    ? `${diff} h over`
+                    : diff < 0
+                    ? `${-diff} h short`
+                    : 'On goal';
 
                 return (
                   <tr key={nurse.id} className="hover:bg-slate-50/60">
@@ -1015,14 +1043,24 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                       <div className="space-y-0.5">
                         <div className="flex items-center justify-between text-[10px]">
                           <span className="font-bold text-slate-800">{totalHours}h</span>
-                          <span className="text-slate-400">/ {targetHours}h</span>
+                          <span className="text-slate-500">/ {targetHours}h</span>
                         </div>
-                        <div className="w-full h-1.5 rounded bg-slate-100 overflow-hidden">
-                          <div
-                            className={`h-full ${barColor}`}
-                            style={{ width: `${percent}%` }}
-                          />
+                        <div
+                          className="w-full h-1.5 rounded bg-slate-100 overflow-hidden"
+                          role="img"
+                          aria-label={`${totalHours} of ${targetHours} hours${hoursNote ? `, ${hoursNote}` : ''}`}
+                        >
+                          <div className={`h-full ${barColor}`} style={{ width: `${Math.min(100, percent)}%` }} />
                         </div>
+                        {hoursNote && (
+                          <span
+                            className={`block text-[10px] font-sans ${
+                              percent > 105 ? 'text-rose-700 font-semibold' : percent >= 95 ? 'text-emerald-700' : 'text-amber-700'
+                            }`}
+                          >
+                            {hoursNote}
+                          </span>
+                        )}
                       </div>
                     </td>
 
@@ -1210,7 +1248,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                             <div
                               className="w-full h-full rounded flex items-center justify-center font-bold text-white shadow-2xs"
                               style={{ backgroundColor: leaveType?.color || '#f59e0b' }}
-                              title={`${leaveType?.name} (${leave.hoursCredited}h credit)`}
+                              title={`${leaveType?.name || 'Leave'}: ${Math.round(leaveCreditOnDate(leave, leaveType, dateStr) * 100) / 100} h counted this day${leave.dayHours?.[dateStr] !== undefined ? ' (set for this day)' : ''}`}
                             >
                               <span>{leaveType?.acronym || 'L'}</span>
                             </div>
@@ -1454,34 +1492,31 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
         <div className="flex items-center gap-4">
           {(() => {
+            // The day of the selected cell (else the first day shown): opening hours missing a free nurse.
             const checkDate = selectedCell?.date || blockDates[0] || schedule.startDate;
-            const hourData = validationReport.hourlyCoverageMap[checkDate]?.['19:00'];
-            if (hourData) {
-              const { nurses: nActive, doctors: dActive, deficit } = hourData;
-              return (
-                <button
-                  type="button"
-                  onClick={() => onNavigateTab && onNavigateTab('coverage')}
-                  className={`flex items-center gap-1 font-mono cursor-pointer px-1.5 py-0.5 rounded ${
-                    deficit > 0
-                      ? 'bg-rose-50 text-rose-700 font-bold border border-rose-200'
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                  title="Click to inspect Hourly Coverage tab"
-                >
-                  <span className="text-slate-400">19:00 coverage:</span>
-                  <span>
-                    {nActive} {nActive === 1 ? 'nurse' : 'nurses'} / {dActive} {dActive === 1 ? 'doctor' : 'doctors'}
-                  </span>
-                  {deficit > 0 && <span className="text-rose-600 font-bold">⚠</span>}
-                </button>
-              );
+            const dayMap = validationReport.hourlyCoverageMap[checkDate];
+            if (!dayMap || Object.keys(dayMap).length === 0) {
+              return <span className="text-slate-500">Coverage: not checked yet</span>;
             }
+            const shortHours = Object.keys(dayMap).filter((h) => dayMap[h].deficit > 0).sort();
             return (
-              <div className="flex items-center gap-1">
-                <span className="text-slate-400">Evening Coverage:</span>
-                <span className="font-mono font-semibold text-emerald-700">Satisfied ✓</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => onNavigateTab && onNavigateTab('coverage')}
+                className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded ${
+                  shortHours.length > 0
+                    ? 'bg-rose-50 text-rose-700 font-bold border border-rose-200'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+                title="Open the Coverage tab"
+              >
+                <span className="text-slate-500">Coverage {formatDate(checkDate)}:</span>
+                <span>
+                  {shortHours.length === 0
+                    ? 'every hour covered'
+                    : `${shortHours.length} hour${shortHours.length === 1 ? '' : 's'} without a free nurse (from ${shortHours[0]})`}
+                </span>
+              </button>
             );
           })()}
 
@@ -1826,13 +1861,54 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                             </span>
                           </div>
                           <span className="text-[10px] text-slate-500 block">
-                            {typeof lt.creditedHours === 'number' ? `${lt.creditedHours}h credit` : 'Duty match'}
+                            {typeof lt.creditedHours === 'number' ? `${lt.creditedHours} h a day` : '8 h a day'}
                           </span>
                         </button>
                       );
                     })}
                   </div>
                 </div>
+                {(() => {
+                  const lt = leaveTypes.find((l) => l.id === editorLeaveTypeId);
+                  if (lt && lt.countsTowardHoursTarget === false) {
+                    return <p className="text-[11px] text-slate-500">This leave doesn't count toward the hours goal.</p>;
+                  }
+                  const def = typeof lt?.creditedHours === 'number' ? lt.creditedHours : 8;
+                  return (
+                    <div>
+                      <label htmlFor="editor-leave-hours" className="block font-semibold text-slate-700 mb-1">
+                        Hours counted for this day
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          id="editor-leave-hours"
+                          type="number"
+                          min={0}
+                          max={24}
+                          step={0.5}
+                          value={editorLeaveHours}
+                          onChange={(e) => setEditorLeaveHours(e.target.value)}
+                          placeholder={String(def)}
+                          className="w-20 px-2 py-1 border border-slate-300 rounded font-mono text-center"
+                        />
+                        <span className="text-[11px] text-slate-500">
+                          {editorLeaveHours.trim() === ''
+                            ? `Default: ${def} h (Settings > Leave types)`
+                            : `Only this day, for this nurse. Default is ${def} h.`}
+                        </span>
+                        {editorLeaveHours.trim() !== '' && (
+                          <button
+                            type="button"
+                            onClick={() => setEditorLeaveHours('')}
+                            className="text-[11px] text-indigo-700 underline cursor-pointer"
+                          >
+                            Use default
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 

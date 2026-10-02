@@ -1741,12 +1741,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             {activeTab === 'coverage' && (
               <CoverageSheet
                 blockDates={blockDates}
-                sessions={sessions}
                 assignments={assignments}
                 dutyWindows={dutyWindows}
                 roles={roles}
                 nurses={nurses}
                 seniorityLevels={seniorityLevels}
+                validationReport={validationReport}
               />
             )}
 
@@ -2575,6 +2575,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           locks={locks}
           roles={roles}
           rules={rules}
+          leaveTypes={leaveTypes}
+          workingHoursPeriods={workingHoursPeriods}
           isOpen={isFairnessModalOpen}
           onClose={() => setIsFairnessModalOpen(false)}
           onApplyAssignments={(updated, note) => {

@@ -138,7 +138,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
           <div className="flex items-center gap-1.5">
             <Scale className="w-4 h-4 text-indigo-600" />
             <span className="font-bold text-slate-800">
-              Hours Accounting &amp; Equity Audit ({schedule.name})
+              Hours ({schedule.name})
             </span>
           </div>
 
@@ -156,7 +156,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
               Leave: <strong>{metrics.totalLeaveHoursCredited}h</strong>
             </span>
             <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">
-              Fulfillment: <strong>{metrics.clinicFulfillmentPercent}%</strong>
+              Share of goal: <strong>{metrics.clinicFulfillmentPercent}%</strong>
             </span>
           </div>
         </div>
@@ -177,11 +177,11 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
             className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
           >
             <option value="ALL">All Statuses ({nurseRows.length})</option>
-            <option value="OPTIMAL">On Target</option>
-            <option value="UNDER">Deficit</option>
-            <option value="CRITICAL_UNDER">Severe Deficit</option>
-            <option value="OVER">Overtime</option>
-            <option value="CRITICAL_OVER">Excess Overtime</option>
+            <option value="OPTIMAL">On goal</option>
+            <option value="UNDER">A little short</option>
+            <option value="CRITICAL_UNDER">Very short</option>
+            <option value="OVER">A little over</option>
+            <option value="CRITICAL_OVER">Too many hours</option>
           </select>
         </div>
       </div>
@@ -194,14 +194,14 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
               <tr>
                 <th className="py-2 px-3">Nurse Staff</th>
                 <th className="py-2 px-3 text-center">Contract</th>
-                <th className="py-2 px-3">Target</th>
-                <th className="py-2 px-3">Clinical Duty</th>
-                <th className="py-2 px-3">Leave Credit</th>
-                <th className="py-2 px-3">Total Earned</th>
-                <th className="py-2 px-3">Variance</th>
+                <th className="py-2 px-3">Goal</th>
+                <th className="py-2 px-3">Shifts</th>
+                <th className="py-2 px-3">Leave</th>
+                <th className="py-2 px-3">Total (shifts + leave)</th>
+                <th className="py-2 px-3">Difference from goal</th>
                 <th className="py-2 px-3 text-center">Weekends</th>
                 <th className="py-2 px-3 text-center">Late Shifts</th>
-                <th className="py-2 px-3 w-36">Pace Fulfillment</th>
+                <th className="py-2 px-3 w-36">Share of goal</th>
                 <th className="py-2 px-3 text-right">Status</th>
               </tr>
             </thead>
@@ -253,11 +253,11 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
                     <td className="py-2 px-3">
                       <span
                         className={`font-bold ${
-                          r.varianceHours > 0
-                            ? 'text-emerald-600'
-                            : r.varianceHours < 0
+                          r.status === 'OVER' || r.status === 'CRITICAL_OVER'
                             ? 'text-rose-600'
-                            : 'text-slate-500'
+                            : r.status === 'UNDER' || r.status === 'CRITICAL_UNDER'
+                            ? 'text-amber-700'
+                            : 'text-slate-600'
                         }`}
                       >
                         {r.varianceHours > 0 ? `+${r.varianceHours}h` : `${r.varianceHours}h`}
@@ -284,7 +284,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
                                 ? 'bg-emerald-500'
                                 : isUnder
                                 ? 'bg-amber-500'
-                                : 'bg-indigo-500'
+                                : 'bg-rose-500'
                             }`}
                             style={{ width: `${Math.min(100, r.pacePercent)}%` }}
                           />
@@ -301,14 +301,14 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
                             ? 'bg-red-50 text-red-700 border border-red-200'
                             : r.status === 'UNDER'
                             ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                            : 'bg-rose-50 text-rose-700 border border-rose-200'
                         }`}
                       >
-                        {r.status === 'OPTIMAL' && 'ON TARGET ✓'}
-                        {r.status === 'UNDER' && 'BELOW TARGET'}
-                        {r.status === 'CRITICAL_UNDER' && 'DEFICIT ALERT'}
-                        {r.status === 'OVER' && 'OVERTIME'}
-                        {r.status === 'CRITICAL_OVER' && 'EXCESS HOURS'}
+                        {r.status === 'OPTIMAL' && 'On goal'}
+                        {r.status === 'UNDER' && 'A little short'}
+                        {r.status === 'CRITICAL_UNDER' && 'Very short'}
+                        {r.status === 'OVER' && 'A little over'}
+                        {r.status === 'CRITICAL_OVER' && 'Too many hours'}
                       </span>
                     </td>
                   </tr>

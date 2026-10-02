@@ -20,7 +20,7 @@ import {
   NurseHoursQuota,
   WorkingHoursPeriod,
 } from '../../types';
-import { resolveFullTimeTarget, leaveCreditPerDay } from '../hours/hoursPolicy';
+import { resolveFullTimeTarget, leaveCreditOnDate } from '../hours/hoursPolicy';
 
 export type HoursAccountingStatus =
   | 'OPTIMAL'        // 90% - 110%
@@ -152,7 +152,8 @@ const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
  * Calculates exact duty duration from duty window start & end times.
  */
 export function calculateDutyDurationHours(duty?: DutyWindow): number {
-  if (!duty) return 8;
+  // A shift whose type was deleted counts nothing (it used to count a made up 8 h).
+  if (!duty) return 0;
   try {
     const [sh, sm] = duty.startTime.split(':').map(Number);
     const [eh, em] = duty.endTime.split(':').map(Number);
@@ -164,6 +165,83 @@ export function calculateDutyDurationHours(duty?: DutyWindow): number {
   } catch {
     return 8;
   }
+}
+
+/** A nurse's contract as a share of full time (0.5 for 50%); a missing contract counts as full time. */
+export function contractShare(nurse: Pick<Nurse, 'contractPercent'>): number {
+  const pct = Number(nurse.contractPercent);
+  return Number.isFinite(pct) && pct >= 0 ? pct / 100 : 1;
+}
+
+export interface NurseHoursSummary {
+  dutyHours: number;
+  leaveHours: number;
+  totalHours: number;
+  targetHours: number;
+  /** Total as a percent of the goal (can be above 100). */
+  percent: number;
+}
+
+/**
+ * The one rule for counting a nurse's hours, used by the grid, emails, PDF,
+ * fairness and the checker (the Hours tab uses the same rule day by day):
+ * - an approved leave day counts the leave's hours for that day, not a shift
+ *   that may also be there;
+ * - any other day counts one shift (duplicates once), by its real length;
+ * - the goal is the full time target times the nurse's contract.
+ * The range defaults to the whole roster.
+ */
+export function summarizeNurseHours(
+  nurse: Pick<Nurse, 'id' | 'contractPercent'>,
+  schedule: Pick<Schedule, 'startDate' | 'endDate' | 'hoursTargetFullTime' | 'periodName'>,
+  assignments: Assignment[],
+  dutyWindows: DutyWindow[] | Map<string, DutyWindow>,
+  leaveEntries: LeaveEntry[],
+  leaveTypes: LeaveType[] | Map<string, LeaveType>,
+  workingHoursPeriods: WorkingHoursPeriod[] = [],
+  range: { start: string; end: string } = { start: schedule.startDate, end: schedule.endDate }
+): NurseHoursSummary {
+  const dutyMap = dutyWindows instanceof Map ? dutyWindows : new Map(dutyWindows.map((d) => [d.id, d]));
+  const typeMap = leaveTypes instanceof Map ? leaveTypes : new Map(leaveTypes.map((t) => [t.id, t]));
+  const shiftByDate = new Map<string, Assignment>();
+  for (const a of assignments) {
+    if (a.nurseId === nurse.id && a.date >= range.start && a.date <= range.end && !shiftByDate.has(a.date)) {
+      shiftByDate.set(a.date, a);
+    }
+  }
+  const leaves = leaveEntries.filter(
+    (le) => le.nurseId === nurse.id && le.approved && le.endDate >= range.start && le.startDate <= range.end
+  );
+
+  let dutyHours = 0;
+  let leaveHours = 0;
+  const days = new Set<string>([...shiftByDate.keys()]);
+  for (const le of leaves) {
+    const from = le.startDate > range.start ? le.startDate : range.start;
+    const to = le.endDate < range.end ? le.endDate : range.end;
+    for (let d = new Date(`${from}T00:00:00Z`); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) {
+      days.add(d.toISOString().slice(0, 10));
+    }
+  }
+  for (const date of days) {
+    const leave = leaves.find((le) => date >= le.startDate && date <= le.endDate);
+    if (leave) {
+      leaveHours += leaveCreditOnDate(leave, typeMap.get(leave.leaveTypeId), date);
+    } else {
+      const shift = shiftByDate.get(date);
+      if (shift) dutyHours += calculateDutyDurationHours(dutyMap.get(shift.dutyWindowId));
+    }
+  }
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  const targetHours = Math.round(resolveFullTimeTarget(schedule, workingHoursPeriods).hours * contractShare(nurse));
+  const totalHours = round1(dutyHours + leaveHours);
+  return {
+    dutyHours: round1(dutyHours),
+    leaveHours: round1(leaveHours),
+    totalHours,
+    targetHours,
+    percent: targetHours > 0 ? Math.round((totalHours / targetHours) * 100) : 0,
+  };
 }
 
 /**
@@ -193,7 +271,7 @@ export function calculateNurseHoursAccounting(
   const seniority = seniorityMap.get(nurse.seniorityLevelId);
   // Shared rule, same as the engine and validator
   const fullTimeTargetHours = resolveFullTimeTarget(schedule, workingHoursPeriods).hours;
-  const targetHours = Math.round(fullTimeTargetHours * (nurse.contractPercent / 100));
+  const targetHours = Math.round(fullTimeTargetHours * (contractShare(nurse)));
 
   // Filter nurse assignments in schedule period
   const nurseAssignments = assignments.filter(
@@ -253,7 +331,7 @@ export function calculateNurseHoursAccounting(
       type = 'LEAVE';
       leaveType = leaveTypeMap.get(leave.leaveTypeId);
       // Hours this one day credits (an entry's hoursCredited is its total, spread over its days)
-      const credits = Math.round(leaveCreditPerDay(leave, leaveType) * 100) / 100;
+      const credits = Math.round(leaveCreditOnDate(leave, leaveType, dateStr) * 100) / 100;
 
       if (leaveType?.countsTowardHoursTarget !== false) {
         hoursEarned = credits;
@@ -324,7 +402,7 @@ export function calculateNurseHoursAccounting(
 
   leaveHours = Math.round(leaveHours * 10) / 10;
   const totalEarnedHours = Math.round((dutyHours + leaveHours) * 10) / 10;
-  const varianceHours = totalEarnedHours - targetHours;
+  const varianceHours = Math.round((totalEarnedHours - targetHours) * 10) / 10;
   const pacePercent = targetHours > 0 ? Math.round((totalEarnedHours / targetHours) * 100) : 100;
 
   let status: HoursAccountingStatus = 'OPTIMAL';
@@ -384,7 +462,7 @@ export function calculateNurseHoursAccounting(
     contractPercent: nurse.contractPercent,
     fullTimeTargetHours,
     targetHours,
-    dutyHours,
+    dutyHours: Math.round(dutyHours * 10) / 10,
     leaveHours,
     totalEarnedHours,
     varianceHours,

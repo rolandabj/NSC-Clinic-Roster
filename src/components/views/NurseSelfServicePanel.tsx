@@ -7,6 +7,7 @@
  * and monitor live approval statuses from clinical managers.
  */
 
+import { leaveCreditInRange } from '../../services/hours/hoursPolicy';
 import React, { useState, useEffect, useId } from 'react';
 import {
   Calendar,
@@ -299,7 +300,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
                         {l.startDate} {l.startDate !== l.endDate ? `→ ${l.endDate}` : ''}
                       </td>
                       <td className="py-2.5 px-3 font-bold text-slate-700">
-                        {l.hoursCredited || 8}h
+                        {Math.round(leaveCreditInRange(l, lt, l.startDate, l.endDate) * 10) / 10}h
                       </td>
                       <td className="py-2.5 px-3 text-slate-600 max-w-xs truncate">
                         {l.note || <span className="text-slate-400 italic">None</span>}
