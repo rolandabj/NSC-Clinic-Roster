@@ -48,6 +48,8 @@ export interface GenerateEmailPayloadParams {
   changes?: AssignmentDiffItem[];
   generalNote?: string;
   shareToken?: string;
+  /** The nurse's own private page (only her shifts), when she has one. */
+  privateRosterUrl?: string;
   ackToken: string;
   isChangeAlert?: boolean;
   workingHoursPeriods?: WorkingHoursPeriod[];
@@ -82,6 +84,7 @@ export class RosterPublishService {
       changes,
       generalNote,
       shareToken,
+      privateRosterUrl,
       ackToken,
       isChangeAlert,
       workingHoursPeriods = [],
@@ -286,6 +289,13 @@ export class RosterPublishService {
                     </a>
                   </td>
                 </tr>
+                ${privateRosterUrl ? `<tr>
+                  <td align="center" style="padding-top: 14px;">
+                    <a href="${h(privateRosterUrl)}" style="font-size: 13px; font-weight: 600; color: #4338ca; text-decoration: underline;">
+                      See my shifts (this link is just for you)
+                    </a>
+                  </td>
+                </tr>` : ''}
                 ${viewUrl ? `<tr>
                   <td align="center" style="padding-top: 12px;">
                     <a href="${h(viewUrl)}" style="font-size: 12px; color: #6366f1; text-decoration: underline;">
@@ -326,6 +336,8 @@ export class RosterPublishService {
     nurse: Nurse;
     ackToken: string;
     shareToken?: string;
+    /** The nurse's own private page (only her shifts), when she has one. */
+    privateRosterUrl?: string;
   }): { subject: string; bodyPreview: string; html: string } {
     const h = escapeHtml;
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -345,7 +357,8 @@ export class RosterPublishService {
   <p style="text-align: center; margin: 24px 0;">
     <a href="${h(ackUrl)}" style="display: inline-block; background-color: #b45309; color: #ffffff; text-decoration: none; font-weight: 700; padding: 12px 22px; border-radius: 6px;">Confirm Receipt of My Roster</a>
   </p>
-  ${viewUrl ? `<p style="text-align: center; font-size: 12px;"><a href="${h(viewUrl)}" style="color: #4f46e5;">View my roster</a></p>` : ''}
+  ${params.privateRosterUrl ? `<p style="text-align: center; font-size: 13px;"><a href="${h(params.privateRosterUrl)}" style="color: #4338ca; font-weight: 600;">See my shifts (this link is just for you)</a></p>` : ''}
+  ${viewUrl ? `<p style="text-align: center; font-size: 12px;"><a href="${h(viewUrl)}" style="color: #4f46e5;">${params.privateRosterUrl ? 'View the whole roster' : 'View my roster'}</a></p>` : ''}
 </div>`;
     return { subject, bodyPreview, html };
   }

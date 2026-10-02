@@ -10,7 +10,7 @@
  */
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AlertTriangle, Check, CircleCheck, CircleSlash, Lock, Edit2, Trash2, Unlock, X } from 'lucide-react';
+import { AlertTriangle, Check, CircleCheck, CircleSlash, Lock, Edit2, MessageSquare, Trash2, Unlock, X } from 'lucide-react';
 
 export interface QuickWorkOption {
   key: string;
@@ -41,6 +41,14 @@ export interface QuickDayNote {
   lines: string[];
 }
 
+/** A nurse's wish for the day: her request (a day off or a shift) or leave waiting for approval. */
+export interface QuickWish {
+  /** e.g. "Asked for this day off (waiting for approval): family visit". */
+  text: string;
+  /** The day does not follow the request (shown in amber). */
+  notFollowed: boolean;
+}
+
 interface QuickCellPopupProps {
   /** The data-cell value of the cell the popup belongs to. */
   cellKey: string;
@@ -51,6 +59,8 @@ interface QuickCellPopupProps {
   problems: string[];
   /** Shown at the top for an empty cell. */
   dayNote?: QuickDayNote;
+  /** The nurse's requests and leave waiting for approval, shown first. */
+  wishes?: QuickWish[];
   pinned: boolean;
   onUnpin?: () => void;
   workOptions: QuickWorkOption[];
@@ -77,6 +87,7 @@ export const QuickCellPopup: React.FC<QuickCellPopupProps> = ({
   currentLabel,
   problems,
   dayNote,
+  wishes = [],
   pinned,
   onUnpin,
   workOptions,
@@ -110,7 +121,7 @@ export const QuickCellPopup: React.FC<QuickCellPopupProps> = ({
     if (top + h > vh - MARGIN) top = vh - h - MARGIN;
     if (top < MARGIN) top = MARGIN;
     setPos({ top, left });
-  }, [cellKey, workOptions.length, leaveOptions.length, problems.length, pinned, dayNote?.lines.length, noteOpen]);
+  }, [cellKey, workOptions.length, leaveOptions.length, problems.length, pinned, dayNote?.lines.length, noteOpen, wishes.length]);
 
   // Keyboard users who opened the popup land on its first choice.
   useEffect(() => {
@@ -216,6 +227,22 @@ export const QuickCellPopup: React.FC<QuickCellPopupProps> = ({
           <X className="w-3.5 h-3.5" aria-hidden="true" />
         </button>
       </div>
+
+      {wishes.map((w, i) => (
+        <div
+          key={i}
+          className={`mx-2 mt-2 p-2 rounded border text-[11px] flex items-start gap-1 leading-snug ${
+            w.notFollowed ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-sky-200 bg-sky-50 text-sky-900'
+          }`}
+          role="note"
+        >
+          <MessageSquare
+            className={`w-3.5 h-3.5 shrink-0 mt-px ${w.notFollowed ? 'text-amber-600' : 'text-sky-600'}`}
+            aria-hidden="true"
+          />
+          <span>{w.text}</span>
+        </div>
+      ))}
 
       {dayNote && (
         <div

@@ -53,6 +53,7 @@ import {
   hoursToCover,
   doctorSessionsOn,
 } from './clinicModel';
+import { yearToDateSeeds } from '../fairness/yearSeed';
 
 /**
  * Resiliently finds a rule by templateKey, id, or semantic keywords in its name.
@@ -118,6 +119,19 @@ function consecutiveLateRuleOf(rules: Rule[]): Rule | undefined {
 export function lateDutyThreshold(rules: Rule[] = []): string {
   return (consecutiveLateRuleOf(rules)?.params as any)?.thresholdTime || '21:00';
 }
+
+/**
+ * How much a nurse's requests weigh when choosing who works. Modest on purpose:
+ * covering the clinic and keeping hours on target always come first.
+ */
+export const REQUEST_WEIGHTS = {
+  /** She asked for this shift on this day and a manager approved it. */
+  preferredApproved: 30,
+  /** She asked for this shift on this day; not decided yet. */
+  preferredPending: 15,
+  /** She asked for the day off, or for leave covering it; not decided yet. */
+  pendingTimeOff: 60,
+};
 
 /** True when the duty ends at or after the late threshold. */
 export function isLateDuty(duty: DutyWindow | undefined, threshold: string): boolean {
@@ -628,7 +642,48 @@ export class SchedulingEngine {
     const isSenior = (nurse?: Nurse) => !!nurse && seniorLevelIds.has(nurse.seniorityLevelId);
     const isLate = (duty?: DutyWindow) => isLateDuty(duty, lateThreshold);
 
+    // Nurses' requests for this roster. They only change scores ("try to"): coverage,
+    // hours and the hard rules always come first. Approving a day off request already
+    // adds a day off lock, which is handled as a hard rule above.
+    const inRange = (date: string) => date >= schedule.startDate && date <= schedule.endDate;
+    const requests = (clinicSetup?.availabilityRequests || []).filter((r) => nurseMap.has(r.nurseId) && inRange(r.date));
+    const preferredDutyRequests = new Map<string, { dutyWindowId: string; bonus: number }>();
+    requests
+      .filter((r) => r.available && r.preferredDutyWindowId && (r.status === 'APPROVED' || r.status === 'PENDING'))
+      // approved last, so it wins over a pending request for the same day
+      .sort((a, b) => (a.status === 'APPROVED' ? 1 : 0) - (b.status === 'APPROVED' ? 1 : 0))
+      .forEach((r) =>
+        preferredDutyRequests.set(`${r.nurseId}_${r.date}`, {
+          dutyWindowId: r.preferredDutyWindowId!,
+          bonus: r.status === 'APPROVED' ? REQUEST_WEIGHTS.preferredApproved : REQUEST_WEIGHTS.preferredPending,
+        })
+      );
+    const pendingDayOffRequests = requests.filter((r) => !r.available && r.status === 'PENDING');
+    const pendingDayOff = new Set(pendingDayOffRequests.map((r) => `${r.nurseId}_${r.date}`));
+    const pendingLeave = leaveEntries.filter(
+      (le) =>
+        !le.approved &&
+        (le.status === 'PENDING' || le.status === undefined) &&
+        nurseMap.has(le.nurseId) &&
+        !(le.endDate < schedule.startDate || le.startDate > schedule.endDate)
+    );
+    /** She asked for this day off, or for leave covering it, and nobody has decided yet. */
+    const hasPendingTimeOff = (nurseId: string, date: string) =>
+      pendingDayOff.has(`${nurseId}_${date}`) ||
+      pendingLeave.some((le) => le.nurseId === nurseId && date >= le.startDate && date <= le.endDate);
+    const preferredDutyOn = (nurseId: string, date: string) => preferredDutyRequests.get(`${nurseId}_${date}`)?.dutyWindowId;
+    /** Score for her requests: a bonus for the shift she asked for, a penalty on a day she asked to be off. */
+    const requestScore = (nurseId: string, date: string, duty: DutyWindow): number => {
+      let score = 0;
+      const preferred = preferredDutyRequests.get(`${nurseId}_${date}`);
+      if (preferred && preferred.dutyWindowId === duty.id) score += preferred.bonus;
+      if (hasPendingTimeOff(nurseId, date)) score -= REQUEST_WEIGHTS.pendingTimeOff;
+      return score;
+    };
+
     // 4. Nurse state
+    // Head start from earlier rosters this year, relative to the clinic average (0 without them).
+    const yearSeeds = yearToDateSeeds(clinicSetup?.yearToDate, sortedNurses);
     const nurseStates = new Map<string, NurseDayState>();
     sortedNurses.forEach((nurse) => {
       // Only the leave days inside this schedule count (shared hours rule)
@@ -637,6 +692,8 @@ export class SchedulingEngine {
       // Retained (pinned, hand set) shifts are committed up front and not counted again on their day.
       let initialPreservedDutyHours = 0;
       let initialWeekendsWorked = 0;
+      let initialHolidaysWorked = 0;
+      let initialLateShifts = 0;
       resultAssignmentsMap.forEach((asgn) => {
         if (asgn.nurseId === nurse.id && asgn.date >= schedule.startDate && asgn.date <= schedule.endDate) {
           // A kept shift on an approved leave day isn't counted: the leave already is (shared hours rule).
@@ -645,9 +702,12 @@ export class SchedulingEngine {
           );
           if (!onLeave) initialPreservedDutyHours += calculateDutyDurationHours(dutyMapGlobal.get(asgn.dutyWindowId));
           if (isWeekendDate(asgn.date)) initialWeekendsWorked++;
+          if (clinic.holidays.has(asgn.date)) initialHolidaysWorked++;
+          if (isLate(dutyMapGlobal.get(asgn.dutyWindowId))) initialLateShifts++;
         }
       });
 
+      const seed = yearSeeds.get(nurse.id);
       nurseStates.set(nurse.id, {
         hasDuty: false,
         consecutiveWorkingDays: 0,
@@ -655,9 +715,11 @@ export class SchedulingEngine {
         totalDutyHoursEarned: initialPreservedDutyHours,
         leaveHoursCredited: nurseLeaveHours,
         initialLockedHours: initialPreservedDutyHours,
-        weekendsWorked: initialWeekendsWorked,
-        holidaysWorked: 0,
-        nurseClinicCount: 0,
+        weekendsWorked: initialWeekendsWorked + (seed?.weekendDays || 0),
+        holidaysWorked: initialHolidaysWorked + (seed?.holidays || 0),
+        // Kept Nurse Clinic shifts are added on their own day (see 5).
+        nurseClinicCount: seed?.nurseClinic || 0,
+        lateShiftsWorked: initialLateShifts + (seed?.lateShifts || 0),
       });
     });
 
@@ -799,6 +861,7 @@ export class SchedulingEngine {
       if (isWeekend) state.weekendsWorked += 1;
       if (isHoliday) state.holidaysWorked += 1;
       if (isNurseClinic) state.nurseClinicCount += 1;
+      if (isLate(duty)) state.lateShiftsWorked += 1;
     };
 
     /** Takes a generated shift away again (used when a senior takes it over). */
@@ -809,10 +872,23 @@ export class SchedulingEngine {
       const state = nurseStates.get(asgn.nurseId);
       if (!state) return;
       state.totalDutyHoursEarned = Math.max(0, state.totalDutyHoursEarned - calculateDutyDurationHours(dutyMapGlobal.get(asgn.dutyWindowId)));
-      if (isWeekend) state.weekendsWorked = Math.max(0, state.weekendsWorked - 1);
-      if (asgn.kind === 'CLINICAL_ROLE' && asgn.clinicalRoleId === nurseClinicRole.id) {
-        state.nurseClinicCount = Math.max(0, state.nurseClinicCount - 1);
-      }
+      // No floor at 0: the counters may start below 0 (year to date head start), and a
+      // shift is only taken away after it was counted.
+      if (isWeekend) state.weekendsWorked -= 1;
+      if (clinic.holidays.has(asgn.date)) state.holidaysWorked -= 1;
+      if (isNurseClinicAssignment(asgn)) state.nurseClinicCount -= 1;
+      if (isLate(dutyMapGlobal.get(asgn.dutyWindowId))) state.lateShiftsWorked -= 1;
+    };
+
+    // Late shifts are compared with the clinic average so far (by contract), so the
+    // penalty only decides between nurses and never makes late shifts as such unwelcome.
+    const contractShare = (n: Nurse) => Math.max(0.1, (n.contractPercent ?? 100) / 100);
+    const totalContractShare = sortedNurses.reduce((sum, n) => sum + contractShare(n), 0);
+    const lateShiftsAboveAverage = (nurse: Nurse): number => {
+      let total = 0;
+      nurseStates.forEach((st) => (total += st.lateShiftsWorked));
+      const expected = totalContractShare > 0 ? (total / totalContractShare) * contractShare(nurse) : 0;
+      return (nurseStates.get(nurse.id)?.lateShiftsWorked ?? 0) - expected;
     };
 
     /** Duties ordered by how much of [start, end) they cover, then shortest first. */
@@ -1043,7 +1119,8 @@ export class SchedulingEngine {
               if (isSenior(nurse) && !existingToday().some((a) => isSenior(nurseMap.get(a.nurseId)))) score += 60;
               if (canBeFreeNurse(nurse, roles)) score += 30;
               score += hoursBehindPace(nurse.id, dayIdx) * 1.5;
-              score -= (nurseStates.get(nurse.id)?.holidaysWorked || 0) * 40; // share holidays out
+              score -= (nurseStates.get(nurse.id)?.holidaysWorked || 0) * 40; // share holidays out (this year too)
+              score += requestScore(nurse.id, date, duty);
               score -= overGoalPenalty(nurse.id, hours);
               if (!best || score > best.score) best = { nurse, duty, score };
             }
@@ -1305,6 +1382,11 @@ export class SchedulingEngine {
 
                 // Weekend fairness
                 if (isWeekend) score -= state.weekendsWorked * 25;
+                // Late shift fairness: nurses who already have more late shifts than average
+                // (this roster and earlier ones this year) are asked less often
+                if (isLate(candidateDuty)) score -= lateShiftsAboveAverage(nurse) * 15;
+                // Her requests for this day (soft)
+                score += requestScore(nurse.id, date, candidateDuty);
 
                 // SOFT late duty limit
                 if (consecutiveLateEnabled && isLate(candidateDuty)) {
@@ -1469,6 +1551,7 @@ export class SchedulingEngine {
             if (state) {
               state.totalDutyHoursEarned += Math.max(0, added);
               state.lastDutyEndTime = `${date} ${longer.endTime}`;
+              state.lateShiftsWorked += (isLate(longer) ? 1 : 0) - (isLate(oldDuty) ? 1 : 0);
             }
             fixed = true;
             break;
@@ -1489,6 +1572,7 @@ export class SchedulingEngine {
               score -= overGoalPenalty(nurse.id, calculateDutyDurationHours(duty));
               if (isExclusiveNurseClinic(nurse, roles)) score += 50;
               if (isWeekend) score -= (nurseStates.get(nurse.id)?.weekendsWorked || 0) * 25;
+              score += requestScore(nurse.id, date, duty);
               if (!added || score > added.score) added = { nurse, duty, score };
             }
           }
@@ -1523,13 +1607,20 @@ export class SchedulingEngine {
               getConsecutiveDaysWorkedEndingYesterday(n.id, date) + 1 + getConsecutiveDaysFixedFromTomorrow(n.id, date) <=
               maxConsecutiveDays
           )
-          .sort((a, b) => hoursBehindPace(b.id, dayIdx) - hoursBehindPace(a.id, dayIdx));
+          // A senior who asked for the day off (not decided yet) is asked last
+          .sort(
+            (a, b) =>
+              Number(hasPendingTimeOff(a.id, date)) - Number(hasPendingTimeOff(b.id, date)) ||
+              hoursBehindPace(b.id, dayIdx) - hoursBehindPace(a.id, dayIdx)
+          );
+        const pendingLast = (a: Nurse, b: Nurse) => Number(hasPendingTimeOff(a.id, date)) - Number(hasPendingTimeOff(b.id, date));
 
         // A: when there are spare hours, a senior who needs hours joins as an extra nurse
         // (nobody loses a shift)
         let done = false;
         const seniorBudget = spareHoursForToday(dayIdx);
         for (const senior of seniors) {
+          if (hasPendingTimeOff(senior.id, date)) break; // an extra shift is optional: not on a day she asked off
           if (hoursBehindPace(senior.id, dayIdx) <= 0) break;
           const duty = dutiesCovering(clinic.openTime, clinic.closeTime).find(
             (d) =>
@@ -1570,7 +1661,7 @@ export class SchedulingEngine {
             .filter((a) => a.source === 'GENERATED' && !a.locked)
             .sort((a, b) => (a.kind === 'DOCTOR' ? 1 : 0) - (b.kind === 'DOCTOR' ? 1 : 0));
           // Seniors who stay within their goal are tried first
-          const bySpareHours = [...seniors].sort((a, b) => hoursOverGoal(a.id, 8) - hoursOverGoal(b.id, 8));
+          const bySpareHours = [...seniors].sort((a, b) => pendingLast(a, b) || hoursOverGoal(a.id, 8) - hoursOverGoal(b.id, 8));
           outer: for (const senior of bySpareHours) {
             for (const asgn of juniorShifts) {
               const duty = dutyMapGlobal.get(asgn.dutyWindowId);
@@ -1605,7 +1696,7 @@ export class SchedulingEngine {
         // C: nothing to swap (e.g. every shift today was set by hand): add a senior anyway,
         // within the hours limit, since a senior on duty is required.
         if (!done) {
-          for (const senior of [...seniors].sort((a, b) => hoursOverGoal(a.id, 8) - hoursOverGoal(b.id, 8))) {
+          for (const senior of [...seniors].sort((a, b) => pendingLast(a, b) || hoursOverGoal(a.id, 8) - hoursOverGoal(b.id, 8))) {
             const duty = dutiesCovering(clinic.openTime, clinic.closeTime).find((d) => fitsHardRules(senior, date, d, calculateDutyDurationHours(d)));
             if (!duty) continue;
             const free = canBeFreeNurse(senior, roles);
@@ -1669,6 +1760,7 @@ export class SchedulingEngine {
               score -= hours * 2; // with the shortest shift that does it
               if (pref) score += Math.max(0, 60 - pref.rank * 10);
               score += hoursBehindPace(nurse.id, dayIdx) * 1.5;
+              score += requestScore(nurse.id, date, duty);
               if (!best || score > best.score) best = { nurse, duty, score };
             }
           }
@@ -1707,10 +1799,18 @@ export class SchedulingEngine {
         if (!limits || state.totalDutyHoursEarned >= limits.dutyTarget) continue;
         // Keep a one day margin under the consecutive days limit while the rule is on
         if (getConsecutiveDaysWorkedEndingYesterday(nurse.id, date) >= maxConsecutiveDays - 1) continue;
+        // Floats are optional: none on a day she asked to be off (not decided yet)
+        if (hasPendingTimeOff(nurse.id, date)) continue;
 
-        // Floats are optional, so they must fit within her goal: longer shifts first, then shorter ones
+        // Floats are optional, so they must fit within her goal: the shift she asked for first,
+        // then longer shifts, then shorter ones
         const byLength = (list: DutyWindow[]) => [...list].sort((a, b) => calculateDutyDurationHours(b) - calculateDutyDurationHours(a));
-        const poolTiers = [byLength(activeDuties.filter((d) => d.isPriority)), byLength(activeDuties.filter((d) => !d.isPriority))];
+        const asked = activeDuties.filter((d) => d.id === preferredDutyOn(nurse.id, date));
+        const poolTiers = [
+          asked,
+          byLength(activeDuties.filter((d) => d.isPriority && !asked.includes(d))),
+          byLength(activeDuties.filter((d) => !d.isPriority && !asked.includes(d))),
+        ];
         let selected: DutyWindow | null = null;
         for (const tier of poolTiers) {
           for (const cand of tier) {
@@ -1758,6 +1858,25 @@ export class SchedulingEngine {
       }
     }
 
+    // How many of the nurses' requests this roster meets: the shift asked for, or no shift
+    // on a day (or leave) asked off that is not decided yet.
+    const shiftOnDay = (nurseId: string, date: string) => resultAssignmentsMap.get(`${nurseId}_${date}`);
+    let requestsMet = 0;
+    let requestsTotal = 0;
+    preferredDutyRequests.forEach((req, key) => {
+      const [nurseId, date] = [key.slice(0, key.lastIndexOf('_')), key.slice(key.lastIndexOf('_') + 1)];
+      requestsTotal++;
+      if (shiftOnDay(nurseId, date)?.dutyWindowId === req.dutyWindowId) requestsMet++;
+    });
+    pendingDayOffRequests.forEach((r) => {
+      requestsTotal++;
+      if (!shiftOnDay(r.nurseId, r.date)) requestsMet++;
+    });
+    pendingLeave.forEach((le) => {
+      requestsTotal++;
+      if (!datesList.some((d) => d >= le.startDate && d <= le.endDate && shiftOnDay(le.nurseId, d))) requestsMet++;
+    });
+
     if (onProgress) {
       onProgress({
         currentDay: totalDays,
@@ -1784,6 +1903,8 @@ export class SchedulingEngine {
       doctorFallbackPairingsCount,
       effectiveFullTimeTarget,
       periodName: resolvedPeriodName,
+      requestsMet,
+      requestsTotal,
     };
   }
 }

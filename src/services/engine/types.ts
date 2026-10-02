@@ -78,4 +78,8 @@ export interface GenerationResult {
   doctorFallbackPairingsCount?: number;
   effectiveFullTimeTarget?: number;
   periodName?: string;
+  /** Nurses' requests this roster meets (shift asked for, or a day or leave asked off and not decided yet). */
+  requestsMet?: number;
+  /** Requests taken into account (see requestsMet). */
+  requestsTotal?: number;
 }

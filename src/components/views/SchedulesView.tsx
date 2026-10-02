@@ -61,6 +61,7 @@ import {
   LeaveType,
   NurseHoursQuota,
   WorkingHoursPeriod,
+  AvailabilityRequest,
 } from '../../types';
 import { loadClinicSetup } from '../../services/engine/clinicSetupService';
 import type { ClinicSetup } from '../../services/engine/clinicModel';
@@ -149,6 +150,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // Opening hours, public holidays and the end of the previous roster, for the engine and the checker
   const clinicSetupRef = useRef<ClinicSetup | undefined>(undefined);
   const [quotas, setQuotas] = useState<NurseHoursQuota[]>([]);
+  // Nurses' day off and shift wishes (shown on the grid; the checker notes when they aren't followed).
+  const [availabilityRequests, setAvailabilityRequests] = useState<AvailabilityRequest[]>([]);
+  const availabilityRequestsRef = useRef<AvailabilityRequest[]>([]);
+  availabilityRequestsRef.current = availabilityRequests;
 
   // Validation Report state
   const [validationReport, setValidationReport] = useState<ValidationReport>({
@@ -320,6 +325,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         hList,
         qList,
         whpList,
+        reqList,
       ] = await Promise.all([
         repo.list('schedules'),
         // Shifts and versions are loaded for the open roster only (see openSchedule).
@@ -337,7 +343,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         repo.list('holidays'),
         repo.list('quotas'),
         repo.list('workingHoursPeriods'),
+        // Requests are extra information: the roster still opens without them.
+        repo.list('availabilityRequests').catch((err) => {
+          console.warn('Could not load the nurses\' requests:', err);
+          return [] as AvailabilityRequest[];
+        }),
       ]);
+      setAvailabilityRequests(reqList);
+      availabilityRequestsRef.current = reqList;
 
       const sortedWhp = [...whpList].sort((a, b) => a.startDate.localeCompare(b.startDate));
       setWorkingHoursPeriods(sortedWhp);
@@ -446,7 +459,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         x.specialties,
         x.doctors,
         x.leaveTypes,
-        clinicSetupRef.current
+        clinicSetupRef.current,
+        availabilityRequestsRef.current
       )
     );
   };
@@ -995,7 +1009,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           specialties,
           doctors,
           leaveTypes,
-          clinicSetupRef.current
+          clinicSetupRef.current,
+          availabilityRequestsRef.current
         );
         setValidationReport(report);
 
@@ -1118,7 +1133,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         specialties,
         doctors,
           leaveTypes,
-          clinicSetupRef.current
+          clinicSetupRef.current,
+          availabilityRequestsRef.current
       );
       setValidationReport(report);
 
@@ -1876,6 +1892,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 onCellEdit={(edit) => applyEdit(edit)}
                 rules={rules}
                 priorAssignments={clinicSetupRef.current?.priorAssignments}
+                availabilityRequests={availabilityRequests}
                 focusRequest={focusRequest}
                 onNavigateTab={(tab) => {
                   // The grid's problem links open the side panel instead of leaving the grid.
@@ -2037,6 +2054,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   sessions={sessions}
                   doctors={doctors}
                   priorAssignments={clinicSetupRef.current?.priorAssignments}
+                  availabilityRequests={availabilityRequests}
                   onPick={(nurseId, dutyWindowId) => handleAddNurseClinicShift(nurseId, f.date!, dutyWindowId)}
                 />
               ) : null

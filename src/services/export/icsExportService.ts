@@ -8,7 +8,7 @@
  * calendar app understands without extra time zone definitions.
  */
 
-import { Assignment, DutyWindow, Doctor, ClinicalRole, Specialty } from '../../types';
+import type { Assignment, DutyWindow, Doctor, ClinicalRole, Specialty, NurseRosterDoc } from '../../types';
 
 interface IcsParams {
   calendarName: string;
@@ -145,4 +145,70 @@ export function downloadIcsFile(fileName: string, content: string): void {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** The parts of a nurse's private page that her calendar needs. */
+type NurseRosterIcsInput = Pick<NurseRosterDoc, 'nurseId' | 'nurseName' | 'clinicName' | 'timezone' | 'shifts' | 'leaveDays'>;
+
+/** Next calendar day of a 'YYYY-MM-DD' date, as 'YYYYMMDD' (all day events end the day after). */
+function nextDayCompact(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+/**
+ * Builds the .ics file of a nurse's private page (her shifts, and leave as all
+ * day events). Event ids are stable, so a subscribed calendar updates the same
+ * events instead of adding copies. Pure: also used by the server's calendar feed.
+ */
+export function buildNurseRosterIcs(doc: NurseRosterIcsInput): string {
+  const stamp = formatIcsDate(new Date());
+  const lines: string[] = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//ClinicRoster//Nurse Roster//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:${escapeIcsText(`${doc.nurseName} shifts`)}`,
+    // Calendar apps that honour it check for changes every few hours.
+    'REFRESH-INTERVAL;VALUE=DURATION:PT4H',
+    'X-PUBLISHED-TTL:PT4H',
+  ];
+
+  const shifts = [...(doc.shifts || [])].sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime));
+  for (const s of shifts) {
+    const start = zonedTimeToUtc(s.date, s.startTime, doc.timezone);
+    let end = zonedTimeToUtc(s.date, s.endTime, doc.timezone);
+    if (end.getTime() <= start.getTime()) {
+      end = new Date(end.getTime() + 24 * 60 * 60 * 1000); // overnight duty
+    }
+    const summary = s.detail ? `${s.acronym} ${s.shiftName} · ${s.detail}` : `${s.acronym} ${s.shiftName}`;
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${escapeIcsText(`${doc.nurseId}-${s.date}-${s.startTime.replace(':', '')}@clinicroster`)}`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART:${formatIcsDate(start)}`,
+      `DTEND:${formatIcsDate(end)}`,
+      `SUMMARY:${escapeIcsText(summary)}`,
+      `LOCATION:${escapeIcsText(doc.clinicName)}`,
+      `DESCRIPTION:${escapeIcsText(`${s.startTime} to ${s.endTime}${s.detail ? ` · ${s.detail}` : ''}${s.scheduleName ? ` · ${s.scheduleName}` : ''}`)}`,
+      'END:VEVENT'
+    );
+  }
+
+  for (const day of [...(doc.leaveDays || [])].sort()) {
+    lines.push(
+      'BEGIN:VEVENT',
+      `UID:${escapeIcsText(`${doc.nurseId}-${day}-leave@clinicroster`)}`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;VALUE=DATE:${day.replace(/-/g, '')}`,
+      `DTEND;VALUE=DATE:${nextDayCompact(day)}`,
+      'SUMMARY:Leave',
+      'TRANSP:TRANSPARENT',
+      'END:VEVENT'
+    );
+  }
+
+  lines.push('END:VCALENDAR');
+  return lines.map(foldLine).join('\r\n') + '\r\n';
 }
