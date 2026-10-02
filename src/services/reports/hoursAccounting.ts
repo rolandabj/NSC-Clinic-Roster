@@ -278,7 +278,10 @@ export function calculateNurseHoursAccounting(
     (a) => a.nurseId === nurse.id && a.date >= schedule.startDate && a.date <= schedule.endDate
   );
   const asgnByDate = new Map<string, Assignment>();
-  nurseAssignments.forEach((a) => asgnByDate.set(a.date, a));
+  // One shift per day: the first one, as in summarizeNurseHours.
+  nurseAssignments.forEach((a) => {
+    if (!asgnByDate.has(a.date)) asgnByDate.set(a.date, a);
+  });
 
   // Filter approved nurse leave entries overlapping schedule period
   const nurseLeaves = leaveEntries.filter(

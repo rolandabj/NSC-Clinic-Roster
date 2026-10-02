@@ -45,6 +45,7 @@ import {
   overlaps,
   resolveClinicSetup,
   uncoveredParts,
+  doctorSessionsOn,
 } from '../engine/clinicModel';
 
 export type FindingSeverity = 'ERROR' | 'WARN' | 'INFO';
@@ -206,15 +207,7 @@ export class ScheduleValidator {
       }
 
       // Each doctor works one session a day (a duplicate entry is ignored)
-      const seenDoctors = new Set<string>();
-      const daySessions = sessions
-        .filter((s) => !s.cancelled && s.date === date)
-        .sort((a, b) => a.startTime.localeCompare(b.startTime))
-        .filter((s) => {
-          if (seenDoctors.has(s.doctorId)) return false;
-          seenDoctors.add(s.doctorId);
-          return true;
-        });
+      const daySessions = doctorSessionsOn(sessions, date);
 
       // Rule: At least +1 Additional Nurse Above Doctors During Operating Hours
       const plusOneRule = resolveRule(rules, 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS', 'rule-nurse-plus-one', [

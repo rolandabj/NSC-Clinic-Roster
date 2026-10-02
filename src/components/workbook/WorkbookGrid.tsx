@@ -631,7 +631,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       );
       if (sameLeave) {
         nextLeaves = leaveEntries.map((le) =>
-          le.id === sameLeave.id ? withDay({ ...le, note: editorNote.trim() || le.note }) : le
+          le.id === sameLeave.id ? withDay({ ...le, note: editorNote.trim() || undefined }) : le
         );
         if (isProtected) {
           nextLocks.push({
@@ -989,7 +989,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                 // Bar: green on goal, amber short, red over. The bar is full at the
                 // goal; going over shows in red with the hours over.
                 const diff = Math.round((totalHours - targetHours) * 10) / 10;
-                const barColor = percent > 105 ? 'bg-rose-500' : percent >= 95 ? 'bg-emerald-500' : 'bg-amber-500';
+                // Same bands as the Hours tab: 90 to 110% is on goal.
+                const barColor = percent > 110 ? 'bg-rose-500' : percent >= 90 ? 'bg-emerald-500' : 'bg-amber-500';
                 const hoursNote =
                   targetHours <= 0
                     ? ''
@@ -1055,7 +1056,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                         {hoursNote && (
                           <span
                             className={`block text-[10px] font-sans ${
-                              percent > 105 ? 'text-rose-700 font-semibold' : percent >= 95 ? 'text-emerald-700' : 'text-amber-700'
+                              percent > 110 ? 'text-rose-700 font-semibold' : percent >= 90 ? 'text-emerald-700' : 'text-amber-700'
                             }`}
                           >
                             {hoursNote}

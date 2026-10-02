@@ -175,3 +175,26 @@ export function hoursToCover(start: string, end: string, duties: DutyWindow[]): 
   }
   return total;
 }
+
+/**
+ * A day's doctor sessions, one per doctor (a doctor works one session a day; a
+ * duplicate entry is ignored). The generator and the checker both use this, so
+ * they always keep the same session: the earliest start, then the longest.
+ */
+export function doctorSessionsOn(sessions: DoctorSession[], date: string): DoctorSession[] {
+  const seen = new Set<string>();
+  return sessions
+    .filter((s) => !s.cancelled && s.date === date)
+    .sort(
+      (a, b) =>
+        a.startTime.localeCompare(b.startTime) ||
+        b.endTime.localeCompare(a.endTime) ||
+        a.doctorId.localeCompare(b.doctorId) ||
+        a.id.localeCompare(b.id)
+    )
+    .filter((s) => {
+      if (seen.has(s.doctorId)) return false;
+      seen.add(s.doctorId);
+      return true;
+    });
+}

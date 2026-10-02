@@ -51,6 +51,7 @@ import {
   toMinutes,
   uncoveredParts,
   hoursToCover,
+  doctorSessionsOn,
 } from './clinicModel';
 
 /**
@@ -612,7 +613,11 @@ export class SchedulingEngine {
       let initialWeekendsWorked = 0;
       resultAssignmentsMap.forEach((asgn) => {
         if (asgn.nurseId === nurse.id && asgn.date >= schedule.startDate && asgn.date <= schedule.endDate) {
-          initialPreservedDutyHours += calculateDutyDurationHours(dutyMapGlobal.get(asgn.dutyWindowId));
+          // A kept shift on an approved leave day isn't counted: the leave already is (shared hours rule).
+          const onLeave = leaveEntries.some(
+            (le) => le.nurseId === nurse.id && le.approved && asgn.date >= le.startDate && asgn.date <= le.endDate
+          );
+          if (!onLeave) initialPreservedDutyHours += calculateDutyDurationHours(dutyMapGlobal.get(asgn.dutyWindowId));
           if (isWeekendDate(asgn.date)) initialWeekendsWorked++;
         }
       });
@@ -1043,17 +1048,8 @@ export class SchedulingEngine {
 
       // 5.1 Today's jobs
       const coveredDoctorIds = new Set(existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId).map((a) => a.doctorId!));
-      const allDaySessions: DoctorSession[] = [];
-      const seenDoctors = new Set<string>();
-      sessions
-        .filter((s) => !s.cancelled && s.date === date)
-        .sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime) || a.doctorId.localeCompare(b.doctorId) || a.id.localeCompare(b.id))
-        .forEach((s) => {
-          // Doctors work one session a day; a duplicate entry is ignored.
-          if (seenDoctors.has(s.doctorId)) return;
-          seenDoctors.add(s.doctorId);
-          allDaySessions.push(s);
-        });
+      // One session per doctor, chosen the same way as the checker does.
+      const allDaySessions: DoctorSession[] = doctorSessionsOn(sessions, date);
       const daySessions = allDaySessions
         .filter((s) => !coveredDoctorIds.has(s.doctorId))
         .sort((a, b) => b.endTime.localeCompare(a.endTime)); // late ending sessions first
