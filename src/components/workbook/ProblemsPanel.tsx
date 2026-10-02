@@ -75,7 +75,7 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, 
             const cell = target(f);
             const help = openHelpId === f.id && renderHelp ? renderHelp(f) : null;
             // Missing nurses on a day can be helped by listing who is free that day.
-            const hasHelp = !!renderHelp && f.category === 'COVERAGE_GAP' && !!f.date;
+            const hasHelp = !!renderHelp && !!f.date && renderHelp(f) !== null;
             return (
               <div key={f.id} className={`rounded border p-2 space-y-1 ${s.tone}`}>
                 <div className="flex items-start gap-1.5">

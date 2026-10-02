@@ -26,6 +26,7 @@ import {
   WorkingHoursPeriod,
 } from '../../types';
 import { checkAssignment, AssignmentCheckContext } from './assignmentChecks';
+import { resolveRule } from './SchedulingEngine';
 import { calculateDutyDurationHours, summarizeNurseHours } from '../reports/hoursAccounting';
 
 export interface ExplainDayInput {
@@ -43,6 +44,8 @@ export interface ExplainDayInput {
   /** Not needed for the checks today; accepted so callers can pass the whole roster. */
   sessions?: DoctorSession[];
   doctors?: Doctor[];
+  /** Shifts from the roster just before this one, for rest and days in a row at its start. */
+  priorAssignments?: Assignment[];
 }
 
 export interface ExplainNurseDayInput extends ExplainDayInput {
@@ -166,7 +169,8 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
   };
   if (assignments.some((a) => a.nurseId === nurseId && a.date === date)) return base;
 
-  const own = assignments.filter((a) => a.nurseId === nurseId);
+  const prior = input.priorAssignments || [];
+  const own = [...prior, ...assignments].filter((a) => a.nurseId === nurseId);
   const dutyOn = (d: string) => {
     const a = own.find((x) => x.date === d);
     return a ? dutyMap.get(a.dutyWindowId) : undefined;
@@ -183,6 +187,17 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
 
   // The same rules with SOFT ones made hard, to spot what is allowed but not ideal.
   const softAsHard = rules.map((r) => (r.enabled !== false && r.severity === 'SOFT' ? { ...r, severity: 'HARD' } : r)) as Rule[];
+
+  const h7Rule = resolveRule(rules, 'MAX_WORKING_HOURS_PER_PERIOD', 'rule-h7-max-hours', [
+    'working hours',
+    'max hours',
+    'period hours',
+    'overwork',
+    'hour limit',
+  ]);
+  const h7Blocks = (h7Rule ? h7Rule.enabled !== false : true) && h7Rule?.severity !== 'SOFT';
+  const tolerance = (h7Rule?.value ? h7Rule.value : 105) / 100;
+  const maxAllowed = h7Blocks && goal > 0 ? Math.max(goal, Math.min(goal + 8, Math.round(goal * tolerance))) : null;
 
   const possible: PossibleShift[] = [];
   const blocked: BlockedShift[] = [];
@@ -202,7 +217,7 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
       source: pinnedHere ? 'LOCK' : 'MANUAL',
     } as Assignment;
     const ctx: AssignmentCheckContext = {
-      assignments: [...assignments, cell],
+      assignments: [...prior, ...assignments, cell],
       nurses,
       dutyWindows,
       leaveEntries,
@@ -213,6 +228,16 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
     const hard = checkAssignment(ctx, cell);
     if (hard.length > 0) {
       blocked.push({ dutyWindowId: duty.id, label: duty.acronym, reasons: unique(hard.map((r) => plainReason(r, name, date, wording))) });
+      continue;
+    }
+    // The most hours allowed (as the roster check: the goal plus the allowed margin, at most 8 h).
+    const hoursAfter = round1(worked + calculateDutyDurationHours(duty));
+    if (maxAllowed !== null && hoursAfter > maxAllowed) {
+      blocked.push({
+        dutyWindowId: duty.id,
+        label: duty.acronym,
+        reasons: [`Would go over the most hours allowed (${hoursAfter} h; the limit is ${maxAllowed} h).`],
+      });
       continue;
     }
     const soft = checkAssignment({ ...ctx, rules: softAsHard }, cell);

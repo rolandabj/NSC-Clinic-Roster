@@ -23,7 +23,8 @@ export function suggestNewRosterDates(existing: Pick<Schedule, 'startDate' | 'en
   const latest = [...existing].filter((s) => s.endDate).sort((a, b) => b.endDate.localeCompare(a.endDate))[0];
   if (!latest) {
     // No roster yet: next month.
-    const start = iso(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1)));
+    // The month as the planner sees it (local time), not UTC.
+    const start = iso(new Date(Date.UTC(today.getFullYear(), today.getMonth() + 1, 1)));
     return { start, end: monthEnd(start) };
   }
   const start = addDays(latest.endDate, 1);

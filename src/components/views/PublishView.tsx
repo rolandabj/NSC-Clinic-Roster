@@ -65,6 +65,7 @@ import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog } from '../common/dialogs';
 import { EmailHtmlPreview } from '../common/EmailHtmlPreview';
 import { loadEmailSettings } from '../../services/settings/emailSettingsStore';
+import { withoutBackups } from '../../services/history/versionList';
 
 interface PublishViewProps {
   context: ClinicContextState;
@@ -155,7 +156,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
         repo.list('rules'),
         repo.list('leaveEntries'),
         repo.list('leaveTypes'),
-        repo.list('versions'),
+        repo.list('versions').then(withoutBackups),
         repo.list('emailLog'),
         repo.list('acknowledgments'),
         repo.list('shareLinks'),

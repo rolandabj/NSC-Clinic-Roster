@@ -34,8 +34,9 @@ import {
 import { MenuButton } from '../common/MenuButton';
 import { PageLoading } from '../common/PageLoading';
 import { ProblemsPanel } from '../workbook/ProblemsPanel';
+import { withoutBackups } from '../../services/history/versionList';
 import { WhoCanCover } from '../workbook/WhoCanCover';
-import { nurseClinicRoleOf } from '../../services/engine/clinicModel';
+import { nurseClinicRoleOf, canBeFreeNurse } from '../../services/engine/clinicModel';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
 import { CollectionSyncer } from '../../services/repository/collectionSyncer';
@@ -192,6 +193,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [saveNote, setSaveNote] = useState('');
   const [versions, setVersions] = useState<ScheduleVersion[]>([]);
+  // Automatic copies kept before each fill or clear (not versions; see Backup copies).
+  const [backupVersions, setBackupVersions] = useState<ScheduleVersion[]>([]);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -380,6 +383,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         setActiveSchedule(null);
         setAssignments([]);
         setVersions([]);
+        setBackupVersions([]);
       }
       workspaceLoadedRef.current = true;
       loadingRef.current = false;
@@ -495,7 +499,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setup ? null : 'Public holidays, opening hours and the previous roster could not be loaded. Reload the page before generating.'
     );
     setAssignments(list);
-    setVersions([...vList].sort((a, b) => b.number - a.number));
+    setVersions(withoutBackups(vList).sort((a, b) => b.number - a.number));
+    setBackupVersions(vList.filter((v) => v.kind === 'BACKUP'));
     runValidation(sched, list, inputs);
   };
 
@@ -704,7 +709,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     const by = { field: 'scheduleId', operator: '==' as const, value: scheduleToDelete.id };
     Promise.all([repo.list('assignments', by), repo.list('versions', by)])
       .then(([a, v]) => {
-        if (!cancelled) setDeleteCounts({ shifts: a.length, versions: v.length });
+        if (!cancelled) setDeleteCounts({ shifts: a.length, versions: withoutBackups(v).length });
       })
       .catch(() => {
         if (!cancelled) setDeleteCounts(null);
@@ -739,6 +744,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           setActiveSchedule(null);
           setAssignments([]);
           setVersions([]);
+          setBackupVersions([]);
           setUndoStack([]);
           setRedoStack([]);
         }
@@ -1054,7 +1060,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         doctors,
           leaveTypes,
           generationClinicSetup,
-          { keepManual: useRange || activeGenerationMode !== 'GENERATE_ALL' || keepManualOnGenerate }
+          {
+            keepManual: useRange || activeGenerationMode !== 'GENERATE_ALL' || keepManualOnGenerate,
+            onlyDates: useRange ? { start: fillRange.start, end: fillRange.end } : undefined,
+          }
       );
       const result = useRange
         ? {
@@ -1123,7 +1132,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         return;
       }
       triggerToast(
-        `Roster filled: ${result.assignments.length} shifts.` +
+        (useRange
+          ? `Filled ${formatDate(fillRange.start)} to ${formatDate(fillRange.end)}: ${result.assignments.filter((a) => inRange(a.date)).length} shifts.`
+          : `Roster filled: ${result.assignments.length} shifts.`) +
           (overtimeCount > 0 ? ` ${overtimeCount} nurse${overtimeCount === 1 ? ' is' : 's are'} over their hours.` : '') +
           (report.errorCount > 0 ? ` ${report.errorCount} problem${report.errorCount === 1 ? '' : 's'} to fix.` : ' No problems to fix.') +
           backupNote
@@ -1143,7 +1154,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   /** Keeps a copy of the roster as it is now; only the last few backups are kept. */
   const saveBackup = async (sched: Schedule, note: string) => {
     const saved = await repo.list('versions', { field: 'scheduleId', operator: '==', value: sched.id });
-    const number = Math.max(sched.activeVersionNumber || 1, ...saved.map((v) => v.number || 0)) + 1;
+    // Backups take no version number, so saved and published versions keep theirs.
+    const number = 0;
     const inRange = (start: string, end: string) => end >= sched.startDate && start <= sched.endDate;
     const created = await repo.create('versions', {
       scheduleId: sched.id,
@@ -1168,14 +1180,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     // Removing old backups is tidying up; a failure here doesn't matter.
     await Promise.all(older.map((v) => repo.remove('versions', v.id).catch(() => {})));
     const gone = new Set(older.map((v) => v.id));
-    setVersions((prev) => [created, ...prev.filter((v) => !gone.has(v.id))].sort((a, b) => b.number - a.number));
+    setBackupVersions((prev) => [created, ...prev.filter((v) => !gone.has(v.id))]);
   };
 
   const [isBackupsOpen, setIsBackupsOpen] = useState(false);
   const backupsTitleId = useId();
   const backupsDialogRef = useDialogA11y<HTMLDivElement>(isBackupsOpen, () => setIsBackupsOpen(false));
-  const backups = versions
-    .filter((v) => v.kind === 'BACKUP' && v.scheduleId === activeSchedule?.id)
+  const backups = backupVersions
+    .filter((v) => v.scheduleId === activeSchedule?.id)
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
   /** Puts a backup's shifts back (pinned days and leave are not changed by filling, so they stay). Undo works. */
@@ -1188,7 +1200,18 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       danger: true,
     });
     if (!ok) return;
-    applyEdit({ assignments: backup.snapshot.assignments.map((a) => ({ ...a, scheduleId: activeSchedule.id })) });
+    // Pinned days and leave stay as they are now: their shifts are kept from now,
+    // and the backup's shifts on today's pinned or leave days are left out.
+    const pinned = (a: Assignment) => a.locked || a.source === 'LOCK';
+    const lockedCell = new Set(locks.map((l) => `${l.nurseId}|${l.date}`));
+    const onLeave = (a: Assignment) =>
+      leaveEntries.some((le) => le.nurseId === a.nurseId && le.approved && a.date >= le.startDate && a.date <= le.endDate);
+    const keepNow = assignments.filter((a) => pinned(a) && lockedCell.has(`${a.nurseId}|${a.date}`));
+    const fromBackup = backup.snapshot.assignments
+      .filter((a) => !lockedCell.has(`${a.nurseId}|${a.date}`) && !onLeave(a))
+      .map((a) => (pinned(a) ? { ...a, locked: false, source: 'MANUAL' as const } : a))
+      .map((a) => ({ ...a, scheduleId: activeSchedule.id }));
+    applyEdit({ assignments: [...keepNow, ...fromBackup] });
     setIsBackupsOpen(false);
     triggerToast('Backup restored.');
   };
@@ -1226,7 +1249,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       const updatedSched = { ...sched, activeVersionNumber: nextVerNumber, updatedAt: now };
       setActiveSchedule(updatedSched);
       setSchedules((prev) => prev.map((x) => (x.id === sched.id ? updatedSched : x)));
-      setVersions([created, ...saved].sort((a, b) => b.number - a.number));
+      setVersions([created, ...withoutBackups(saved)].sort((a, b) => b.number - a.number));
       triggerToast(`Kept a copy as v${nextVerNumber}.`);
       setIsSaveModalOpen(false);
       setSaveNote('');
@@ -1357,7 +1380,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       date,
       dutyWindowId,
       kind: 'CLINICAL_ROLE',
-      clinicalRoleId: nurseClinicRoleOf(roles)?.id || 'role-nurse-clinic',
+      // As the generator does: a nurse who can't run Nurse Clinic covers as a float nurse.
+      clinicalRoleId: canBeFreeNurse(nurses.find((n) => n.id === nurseId), roles)
+        ? nurseClinicRoleOf(roles)?.id || 'role-nurse-clinic'
+        : 'role-float',
       locked: false,
       source: 'MANUAL',
     };
@@ -1374,7 +1400,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const changedSincePublish = (() => {
     if (!lastPublished) return 0;
     const sig = (a: Assignment) =>
-      `${a.dutyWindowId}|${a.kind}|${a.doctorId || ''}|${a.clinicalRoleId || ''}|${a.specialtyId || ''}`;
+      `${a.dutyWindowId}|${a.kind}|${a.doctorId || ''}|${a.clinicalRoleId || ''}|${a.specialtyId || ''}|${a.locked ? 'pinned' : ''}`;
     const cells = (list: Assignment[]) => {
       const m = new Map<string, string>();
       for (const a of list) m.set(`${a.nurseId}|${a.date}`, sig(a));
@@ -1785,6 +1811,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 onLeaveEntriesChange={handleLeaveEntriesChange}
                 onCellEdit={(edit) => applyEdit(edit)}
                 rules={rules}
+                priorAssignments={clinicSetupRef.current?.priorAssignments}
                 focusRequest={focusRequest}
                 onNavigateTab={(tab) => {
                   // The grid's problem links open the side panel instead of leaving the grid.
@@ -1927,13 +1954,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             }}
             onClose={() => setIsProblemsOpen(false)}
             renderHelp={(f) =>
-              f.date ? (
+              // Only for a missing free nurse (or nobody on a public holiday), which one added nurse fixes.
+              f.date && (f.id.startsWith('cov-gap-') || f.id.startsWith('holiday-gap-') || f.id.startsWith('holiday-no-nurse-')) ? (
                 <WhoCanCover
                   date={f.date}
                   hour={f.hour}
                   schedule={activeSchedule}
                   assignments={assignments}
-                  nurses={nurses}
+                  nurses={f.id.startsWith('cov-gap-') ? nurses.filter((n) => canBeFreeNurse(n, roles)) : nurses}
                   dutyWindows={dutyWindows}
                   leaveEntries={leaveEntries}
                   locks={locks}
@@ -1944,6 +1972,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   leaveTypes={leaveTypes}
                   sessions={sessions}
                   doctors={doctors}
+                  priorAssignments={clinicSetupRef.current?.priorAssignments}
                   onPick={(nurseId, dutyWindowId) => handleAddNurseClinicShift(nurseId, f.date!, dutyWindowId)}
                 />
               ) : null
@@ -2115,8 +2144,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       {/* --- FILL ROSTER DIALOG --- */}
       {isPreflightModalOpen && preflightSummary && (() => {
         const isClear = activeGenerationMode === 'CLEAR_GENERATED';
-        const filledCount = assignments.filter((a) => a.source === 'GENERATED').length;
-        const manualCount = assignments.filter((a) => a.source === 'MANUAL').length;
+        // With "Only fill some dates", the counts are for those dates only.
+        const ranged = !isClear && fillRange.enabled && !!fillRange.start && !!fillRange.end;
+        const touched = assignments.filter((a) => !ranged || (a.date >= fillRange.start && a.date <= fillRange.end));
+        const filledCount = touched.filter((a) => a.source === 'GENERATED').length;
+        const manualCount = touched.filter((a) => a.source === 'MANUAL').length;
         const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
         const title = isClear
           ? 'Clear filled shifts'
@@ -2193,7 +2225,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 <>
                   <p className="text-slate-800 leading-relaxed text-[13px]">
                     <strong>Kept:</strong> {kept.join(', ')}
-                    {activeGenerationMode === 'EMPTY_ONLY' ? `, and every shift already on the roster (${assignments.length})` : ''}.{' '}
+                    {activeGenerationMode === 'EMPTY_ONLY' ? `, and every shift already on the roster (${assignments.length})` : ''}
+                    {ranged ? `, and everything outside ${formatDate(fillRange.start)} to ${formatDate(fillRange.end)}` : ''}.{' '}
                     {activeGenerationMode === 'GENERATE_ALL' && (
                       <>
                         <strong>Replaced:</strong>{' '}

@@ -364,11 +364,14 @@ export class SchedulingEngine {
     doctors: Doctor[] = [],
     leaveTypes: LeaveType[] = [],
     clinicSetup?: ClinicSetup,
-    options: { keepManual?: boolean } = {}
+    options: { keepManual?: boolean; onlyDates?: { start: string; end: string } } = {}
   ): Promise<GenerationResult> {
     const startTimeMs = performance.now();
     // Hand edits are kept unless the planner asks to replace them (GENERATE_ALL only).
     const keepManual = options.keepManual !== false;
+    // Filling only some dates: no shift is placed on other days, and their needs
+    // don't take nurses' hours (the shifts already there still count).
+    const inFill = (date: string) => !options.onlyDates || (date >= options.onlyDates.start && date <= options.onlyDates.end);
 
     // 1. Sort inputs deterministically
     const sortedNurses = [...nurses].sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -913,7 +916,7 @@ export class SchedulingEngine {
     sortedNurses.forEach((n) => {
       const firstChoiceDoctors = new Set((n.preferences || []).filter((p) => p.kind === 'DOCTOR' && p.rank === 1).map((p) => p.refId));
       const perDay = datesList.map((d) => {
-        if (firstChoiceDoctors.size === 0 || clinic.holidays.has(d)) return 0;
+        if (firstChoiceDoctors.size === 0 || clinic.holidays.has(d) || !inFill(d)) return 0;
         if (isOnApprovedLeave(n.id, d) || hasDayOffLock(n.id, d)) return 0;
         const sess = sessions.find((x) => !x.cancelled && x.date === d && firstChoiceDoctors.has(x.doctorId));
         return sess ? shortestCoverHours(sess.startTime, sess.endTime) : 0;
@@ -953,6 +956,7 @@ export class SchedulingEngine {
       });
       let laterNeed = 0;
       for (let k = dayIdx + 1; k < datesList.length; k++) {
+        if (!inFill(datesList[k])) continue;
         // a senior is needed every day: count one shortest shift a day for the seniors
         laterNeed += group === 'senior' ? (seniorRuleEnabled ? shortestShiftHours : 0) : onlyBloodCollection ? dayFreeNurseHours[k] : dayNeedHours[k];
       }
@@ -961,7 +965,7 @@ export class SchedulingEngine {
       if (spare <= 0) return 0;
       let weightLeft = 0;
       for (let k = dayIdx; k < datesList.length; k++) {
-        if (!clinic.holidays.has(datesList[k])) weightLeft += Math.max(1, dayBusyness[k]);
+        if (!clinic.holidays.has(datesList[k]) && inFill(datesList[k])) weightLeft += Math.max(1, dayBusyness[k]);
       }
       if (weightLeft === 0) return 0;
       return (spare * Math.max(1, dayBusyness[dayIdx])) / weightLeft;
@@ -983,6 +987,7 @@ export class SchedulingEngine {
         });
         await new Promise((resolve) => setTimeout(resolve, 8));
       }
+      if (!inFill(date)) continue;
 
       // Nurses in a fresh, fair order for today (used for ties)
       const dayOrder = [...sortedNurses].sort((a, b) => tieOrder(a.id, date) - tieOrder(b.id, date));

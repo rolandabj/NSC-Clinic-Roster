@@ -84,6 +84,8 @@ interface WorkbookGridProps {
   validationReport: ValidationReport;
   /** The roster rules, so "why is this cell empty" follows the same limits (defaults are used without them). */
   rules?: Rule[];
+  /** Shifts from the roster just before this one (for rest and days in a row at the start). */
+  priorAssignments?: Assignment[];
   currentBlockIndex: number;
   onBlockChange: (index: number) => void;
   onAssignmentsChange: (next: Assignment[]) => void;
@@ -159,6 +161,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   holidays,
   validationReport,
   rules = [],
+  priorAssignments = [],
   currentBlockIndex,
   onBlockChange,
   onAssignmentsChange,
@@ -2640,6 +2643,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             leaveTypes,
             sessions,
             doctors,
+            priorAssignments,
           });
           if (why.status === 'BLOCKED') {
             dayNote = { tone: 'off', title: 'Why this nurse is off:', lines: why.reasons };

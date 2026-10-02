@@ -69,9 +69,19 @@ test('a 7th working day in a row is blocked by the default limit', () => {
   assert.deepEqual(r.reasons, ['Would be 7 working days in a row; the limit is 6.']);
 });
 
+// The most hours rule set to "followed when possible", so hours alone don't block.
+const softHoursLimit = { id: 'rule-h7-max-hours', name: 'Max hours', templateKey: 'MAX_WORKING_HOURS_PER_PERIOD', enabled: true, value: 105, severity: 'SOFT' } as unknown as Rule;
+
+test('the most hours allowed blocks a shift that would go over it', () => {
+  const assignments = ['05', '06', '07', '08', '09'].map((d) => cell(`2026-10-${d}`)); // 40 h, goal 40, limit 42
+  const r = explainNurseDay({ ...input({ assignments }), nurseId: 'n1', date: '2026-10-10' });
+  assert.equal(r.status, 'BLOCKED');
+  assert.ok(r.reasons.some((x) => /most hours allowed/.test(x)));
+});
+
 test('a soft consecutive days rule only adds a note', () => {
   const assignments = ['05', '06', '07', '08', '09', '10'].map((d) => cell(`2026-10-${d}`));
-  const rules = [{ id: 'rule-h2', name: 'Max consecutive working days', templateKey: 'MAX_CONSECUTIVE_DAYS', enabled: true, value: 6, severity: 'SOFT' } as unknown as Rule];
+  const rules = [{ id: 'rule-h2', name: 'Max consecutive working days', templateKey: 'MAX_CONSECUTIVE_DAYS', enabled: true, value: 6, severity: 'SOFT' } as unknown as Rule, softHoursLimit];
   const r = explainNurseDay({ ...input({ assignments, rules }), nurseId: 'n1', date: '2026-10-11' });
   assert.equal(r.status, 'AVAILABLE');
   assert.ok(r.notes.some((n) => /not ideal.*7 working days in a row/.test(n)));
@@ -79,7 +89,7 @@ test('a soft consecutive days rule only adds a note', () => {
 
 test('a free nurse lists her shifts and hours, with a note when she is at her goal', () => {
   const assignments = ['05', '06', '07', '08', '09'].map((d) => cell(`2026-10-${d}`)); // 40 h
-  const r = explainNurseDay({ ...input({ assignments }), nurseId: 'n1', date: '2026-10-10' });
+  const r = explainNurseDay({ ...input({ assignments, rules: [softHoursLimit] }), nurseId: 'n1', date: '2026-10-10' });
   assert.equal(r.status, 'AVAILABLE');
   assert.deepEqual(r.possibleShifts.map((s) => s.label), ['E', 'D', 'L']);
   assert.deepEqual(r.hours, { worked: 40, goal: 40, afterShift: 48 });

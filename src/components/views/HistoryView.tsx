@@ -69,6 +69,7 @@ import { ExportModal } from '../modals/ExportModal';
 import { DeleteVersionModal } from '../modals/DeleteVersionModal';
 import { DeleteScheduleModal } from '../modals/DeleteScheduleModal';
 import { deleteEntireSchedule } from '../../services/schedule/scheduleDeletionService';
+import { withoutBackups } from '../../services/history/versionList';
 
 interface HistoryViewProps {
   context: ClinicContextState;
@@ -157,7 +158,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
       ] = await Promise.all([
         repo.list('schedules'),
         repo.list('assignments'),
-        repo.list('versions'),
+        repo.list('versions').then(withoutBackups),
         repo.list('nurses'),
         repo.list('dutyWindows'),
         repo.list('doctors'),
@@ -234,7 +235,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
         setActiveAssignments(asgns.filter((a) => a.scheduleId === found.id));
       });
       repo.list('versions').then((vList) => {
-        const schedVersions = vList
+        const schedVersions = withoutBackups(vList)
           .filter((v) => v.scheduleId === found.id)
           .sort((a, b) => b.number - a.number);
         setVersions(schedVersions);

@@ -99,3 +99,13 @@ test('the generator gives the same roster whatever order the shifts are listed i
   const key = (r: any) => r.assignments.map((x: any) => `${x.nurseId}${x.date}${x.dutyWindowId}`).sort().join(',');
   assert.equal(key(a), key(b));
 });
+
+test('filling only some dates places no shift outside them', async () => {
+  const nurses = ['a', 'b', 'c'].map((id) => makeNurse(id));
+  const result = await SchedulingEngine.generate(
+    week, 'GENERATE_ALL', [], nurses, [], [DAY_DUTY], [], [], [], [], [], [], undefined, [], [], [], undefined,
+    { onlyDates: { start: '2026-10-08', end: '2026-10-09' } }
+  );
+  assert.ok(result.assignments.length > 0);
+  assert.ok(result.assignments.every((a) => a.date >= '2026-10-08' && a.date <= '2026-10-09'));
+});

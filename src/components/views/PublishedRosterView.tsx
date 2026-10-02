@@ -46,6 +46,7 @@ import { getRepository } from '../../services/repository';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { loadPublicRoster } from '../../services/publish/publicRosterService';
 import { buildNurseIcs, downloadIcsFile } from '../../services/export/icsExportService';
+import { withoutBackups } from '../../services/history/versionList';
 
 interface PublishedRosterViewProps {
   shareToken?: string;
@@ -138,7 +139,7 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
           const repo = getRepository();
           const [schedList, vList, nList, dwList, ltList, sList, dList, rList, spList] = await Promise.all([
             repo.list('schedules'),
-            repo.list('versions'),
+            repo.list('versions').then(withoutBackups),
             repo.list('nurses'),
             repo.list('dutyWindows'),
             repo.list('leaveTypes'),
