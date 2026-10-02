@@ -7,6 +7,7 @@
  * browser, protected by the Firestore security rules. This server only:
  *   - serves the web app (Vite middleware in development, the built bundle in production)
  *   - sends email through Google SMTP (credentials from AI Studio Secrets)
+ *   - serves each nurse's private calendar feed (/calendar/TOKEN.ics)
  */
 
 import express, { Request, Response } from 'express';
@@ -16,6 +17,7 @@ import path from 'path';
 import { authMiddleware, requireAuth } from './middleware/auth';
 import { authRouter } from './routes/auth';
 import { emailRouter } from './routes/email';
+import { calendarRouter } from './routes/calendar';
 
 export async function startServer() {
   const app = express();
@@ -69,6 +71,17 @@ export async function startServer() {
   });
   app.use('/api/email', emailRateLimiter);
   app.use('/api', (req: Request, res: Response, next) => (req.path.startsWith('/email/') ? next() : apiRateLimiter(req, res, next)));
+  // Nurse calendar feeds (no sign in). Calendar apps check every few hours, so a
+  // modest limit is plenty and stops anyone trying tokens in bulk.
+  const calendarRateLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Too many calendar requests: please wait a minute and try again.',
+  });
+  app.use('/calendar', calendarRateLimiter);
+  app.use(calendarRouter);
   app.use(authMiddleware);
 
   // Every API route requires a signed in, approved user, except these.

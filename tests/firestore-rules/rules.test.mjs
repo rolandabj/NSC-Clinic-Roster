@@ -28,6 +28,9 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, 'publicRosters/sh_priv'), { isPublic: false, allowedEmails: ['friend@x.com'], revoked: false });
   await setDoc(doc(db, 'publicRosters/sh_rev'), { isPublic: true, allowedEmails: [], revoked: true });
   await setDoc(doc(db, 'leaveEntries/l2'), { nurseId: 'n1', status: 'APPROVED', approved: true });
+  await setDoc(doc(db, 'nurseRosters/nr_ok'), { token: 'nr_ok', nurseId: 'n1', revoked: false, shifts: [], leaveDays: [] });
+  await setDoc(doc(db, 'nurseRosters/nr_rev'), { token: 'nr_rev', nurseId: 'n1', revoked: true, shifts: [], leaveDays: [] });
+  await setDoc(doc(db, 'nurseLinks/n1'), { id: 'n1', nurseId: 'n1', token: 'nr_ok', revoked: false });
 });
 
 const results = [];
@@ -102,6 +105,34 @@ await t('revoked roster unreadable', false, getDoc(doc(anon, 'publicRosters/sh_r
 await t('viewer cannot write public roster', false, setDoc(doc(viewer, 'publicRosters/sh_new'), { isPublic: true }));
 await t('editor writes public roster', true, setDoc(doc(editor, 'publicRosters/sh_new'), { isPublic: true, allowedEmails: [], revoked: false }));
 await t('anon cannot write public roster', false, setDoc(doc(anon, 'publicRosters/sh_x'), { isPublic: true }));
+// private nurse pages
+await t('anon gets nurse roster by token', true, getDoc(doc(anon, 'nurseRosters/nr_ok')));
+await t('anon cannot list nurse rosters', false, getDocs(collection(anon, 'nurseRosters')));
+await t('viewer cannot list nurse rosters', false, getDocs(collection(viewer, 'nurseRosters')));
+await t('revoked nurse roster unreadable', false, getDoc(doc(anon, 'nurseRosters/nr_rev')));
+await t('unknown nurse roster unreadable', false, getDoc(doc(anon, 'nurseRosters/nr_missing')));
+await t('editor reads revoked nurse roster', true, getDoc(doc(editor, 'nurseRosters/nr_rev')));
+await t('anon cannot write nurse roster', false, setDoc(doc(anon, 'nurseRosters/nr_x'), { revoked: false }));
+await t('viewer cannot write nurse roster', false, setDoc(doc(viewer, 'nurseRosters/nr_ok'), { token: 'nr_ok', nurseId: 'n1', revoked: false, shifts: [{ date: '2026-12-01' }] }));
+await t('editor writes nurse roster', true, setDoc(doc(editor, 'nurseRosters/nr_new'), { token: 'nr_new', nurseId: 'n1', revoked: false, shifts: [], leaveDays: [] }));
+await t('editor deletes nurse roster', true, deleteDoc(doc(editor, 'nurseRosters/nr_new')));
+await t('anon cannot read nurse links', false, getDoc(doc(anon, 'nurseLinks/n1')));
+await t('viewer cannot read nurse links', false, getDoc(doc(viewer, 'nurseLinks/n1')));
+await t('viewer cannot list nurse links', false, getDocs(collection(viewer, 'nurseLinks')));
+await t('viewer cannot write nurse links', false, setDoc(doc(viewer, 'nurseLinks/n1'), { token: 'nr_mine' }));
+await t('editor reads nurse links', true, getDoc(doc(editor, 'nurseLinks/n1')));
+await t('editor lists nurse links', true, getDocs(collection(editor, 'nurseLinks')));
+await t('editor writes nurse links', true, setDoc(doc(editor, 'nurseLinks/n2'), { id: 'n2', nurseId: 'n2', token: 'nr_new2', revoked: false }));
+
+// presence: everyone approved reads, each user writes only their own record
+const pres = (id) => ({ id, name: 'V', email: 'viewer@x.com', scheduleId: 'sch1', at: '2026-10-02T10:00:00Z' });
+await t('viewer writes own presence', true, setDoc(doc(viewer, 'presence/v'), pres('v')));
+await t("viewer cannot write another user's presence", false, setDoc(doc(viewer, 'presence/e'), pres('e')));
+await t('viewer cannot add other fields to presence', false, setDoc(doc(viewer, 'presence/v'), { ...pres('v'), role: 'OWNER' }));
+await t('editor reads presence', true, getDocs(collection(editor, 'presence')));
+await t('anon cannot read presence', false, getDocs(collection(anon, 'presence')));
+await t('stranger cannot write presence', false, setDoc(doc(stranger, 'presence/s'), pres('s')));
+await t('viewer deletes own presence', true, deleteDoc(doc(viewer, 'presence/v')));
 
 for (const r of results) console.log(r.join('  '));
 console.log(results.filter(r => r[0] === 'FAIL').length + ' failed of ' + results.length);

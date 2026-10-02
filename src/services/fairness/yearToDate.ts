@@ -98,9 +98,14 @@ export async function loadYearToDate(
   schedule: Schedule,
   dutyWindows: DutyWindow[],
   holidayDates: Iterable<string>,
-  options: { lateThreshold?: string; roles?: ClinicalRole[] } = {}
+  options: {
+    lateThreshold?: string;
+    roles?: ClinicalRole[];
+    /** All rosters, when the caller already has them (saves a read). */
+    schedules?: Schedule[];
+  } = {}
 ): Promise<YearToDate> {
-  const earlier = earlierRostersThisYear(schedule, await repo.list('schedules'));
+  const earlier = earlierRostersThisYear(schedule, options.schedules || (await repo.list('schedules')));
   const rosters = await Promise.all(
     earlier.map(async (s) => {
       const bySchedule = { field: 'scheduleId', operator: '==' as const, value: s.id };

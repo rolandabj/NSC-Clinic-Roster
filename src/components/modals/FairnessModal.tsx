@@ -7,8 +7,8 @@
  */
 
 import { summarizeNurseHours } from '../../services/reports/hoursAccounting';
-import { isWeekendDay } from '../../utils/weekend';
-import React, { useState, useMemo, useId } from 'react';
+import { isWeekendDate, isWeekendDay } from '../../utils/weekend';
+import React, { useState, useMemo, useId, useEffect, useRef } from 'react';
 import {
   X,
   Scale,
@@ -41,6 +41,8 @@ import {
 import { getRepository } from '../../services/repository';
 import { formatDate } from '../../utils/dateUtils';
 import { checkAssignment } from '../../services/engine/assignmentChecks';
+import { isLateDuty, lateDutyThreshold } from '../../services/engine/SchedulingEngine';
+import { loadYearToDate, YearToDate } from '../../services/fairness/yearToDate';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog } from '../common/dialogs';
 import { authService } from '../../services/auth/authService';
@@ -108,6 +110,42 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
 
   const dutyMap = useMemo(() => new Map(dutyWindows.map((d) => [d.id, d])), [dutyWindows]);
   const holidayDateSet = useMemo(() => new Set(holidays.map((h) => h.date)), [holidays]);
+  // Late means the same as for the generator: ending at or after the late duties rule's time.
+  const lateThreshold = useMemo(() => lateDutyThreshold(rules), [rules]);
+
+  // Totals from the earlier rosters this year (as published), loaded when the dialog opens.
+  const [yearToDate, setYearToDate] = useState<YearToDate | null>(null);
+  const [yearStatus, setYearStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  // Reload only when what the totals depend on changes (the role list may be a new array each time).
+  const yearInputs = useRef({ schedule, dutyWindows, holidays, roles });
+  yearInputs.current = { schedule, dutyWindows, holidays, roles };
+  const yearKey = [
+    schedule.id,
+    schedule.startDate,
+    lateThreshold,
+    dutyWindows.map((d) => `${d.id}${d.endTime}`).join(','),
+    holidays.map((h) => h.date).join(','),
+    roles.map((r) => r.id).join(','),
+  ].join('|');
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setYearStatus('loading');
+    const { schedule, dutyWindows, holidays, roles } = yearInputs.current;
+    loadYearToDate(getRepository(), schedule, dutyWindows, holidays.map((h) => h.date), { lateThreshold, roles })
+      .then((ytd) => {
+        if (cancelled) return;
+        setYearToDate(ytd);
+        setYearStatus('ready');
+      })
+      .catch((err) => {
+        console.warn('Could not load the totals for this year:', err);
+        if (!cancelled) setYearStatus('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, yearKey]);
 
   // Compute metrics per nurse
   const metrics: NurseFairnessMetrics[] = useMemo(() => {
@@ -130,8 +168,8 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
           if (mins < 0) mins += 24 * 60;
           totalDutyHours += mins / 60;
 
-          // Late ends (at or after 21:00)
-          if (eh >= 21) {
+          // Late ends (at or after the late time)
+          if (isLateDuty(dw, lateThreshold)) {
             lateEndsCount++;
           }
         }
@@ -141,10 +179,8 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
           holidaysWorked++;
         }
 
-        // Weekend duty (Sunday = 0, Saturday = 6)
-        const dObj = new Date(a.date);
-        const day = dObj.getUTCDay();
-        if (isWeekendDay(day)) {
+        // Weekend duty (the clinic's weekend days)
+        if (isWeekendDate(a.date)) {
           weekendsWorked++;
         }
       }
@@ -178,7 +214,18 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
         lateEndsCount,
       };
     });
-  }, [nurses, assignments, dutyMap, holidayDateSet, schedule, leaveEntries, leaveTypes, workingHoursPeriods]);
+  }, [nurses, assignments, dutyMap, holidayDateSet, schedule, leaveEntries, leaveTypes, workingHoursPeriods, lateThreshold]);
+
+  /** This year so far: the earlier rosters plus this one. */
+  const thisYear = (m: NurseFairnessMetrics) => {
+    const ytd = yearToDate?.[m.nurse.id];
+    return {
+      weekendDays: (ytd?.weekendDays || 0) + m.weekendsWorked,
+      lateShifts: (ytd?.lateShifts || 0) + m.lateEndsCount,
+      holidays: (ytd?.holidays || 0) + m.holidaysWorked,
+    };
+  };
+  const showYear = yearStatus === 'ready' && !!yearToDate;
 
   // Compute Overall Balance Spread Score (0 - 100)
   const spreadScore = useMemo(() => {
@@ -363,7 +410,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
             <span className="text-slate-300">|</span>
 
             <div className="text-slate-600 text-[11px]">
-              Higher is fairer. Looks at how far each nurse is from their hours goal and how evenly late shifts (ending 21:00 or later) are shared.
+              Higher is fairer. Looks at how far each nurse is from their hours goal and how evenly late shifts (ending {lateThreshold} or later) are shared.
             </div>
           </div>
 
@@ -402,7 +449,17 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
         <div className="p-6 overflow-y-auto space-y-4 flex-1">
           {activeTab === 'METRICS' && (
             <div className="space-y-4">
-              <div className="border border-slate-200 rounded-lg overflow-hidden shadow-xs">
+              {yearStatus === 'loading' && (
+                <p className="text-[11px] text-slate-500" role="status">
+                  Loading…
+                </p>
+              )}
+              {showYear && (
+                <p className="text-[11px] text-slate-500">
+                  "This year" adds up the earlier rosters of {schedule.startDate.slice(0, 4)} (as published) and this roster.
+                </p>
+              )}
+              <div className="border border-slate-200 rounded-lg overflow-x-auto shadow-xs">
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 text-slate-600 font-mono text-[11px] border-b border-slate-200">
                     <tr>
@@ -413,7 +470,14 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                       <th className="py-2.5 px-3">Difference from goal</th>
                       <th className="py-2.5 px-3">Weekend days off</th>
                       <th className="py-2.5 px-3">Holidays worked</th>
-                      <th className="py-2.5 px-3">Late shifts (end 21:00 or later)</th>
+                      <th className="py-2.5 px-3">Late shifts (end {lateThreshold} or later)</th>
+                      {showYear && (
+                        <>
+                          <th className="py-2.5 px-3 border-l border-slate-200">This year: weekend days worked</th>
+                          <th className="py-2.5 px-3">This year: late shifts</th>
+                          <th className="py-2.5 px-3">This year: holidays worked</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono">
@@ -451,6 +515,13 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                             {m.lateEndsCount} shifts
                           </span>
                         </td>
+                        {showYear && (
+                          <>
+                            <td className="py-3 px-3 text-slate-700 border-l border-slate-100">{thisYear(m).weekendDays} days</td>
+                            <td className="py-3 px-3 text-slate-700">{thisYear(m).lateShifts} shifts</td>
+                            <td className="py-3 px-3 text-slate-700">{thisYear(m).holidays}</td>
+                          </>
+                        )}
                       </tr>
                     ))}
                   </tbody>

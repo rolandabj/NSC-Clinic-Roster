@@ -11,6 +11,8 @@ import {
   Send,
   MailCheck,
   ShieldCheck,
+  Lock,
+  RefreshCw,
   CheckCircle2,
   Calendar,
   User,
@@ -37,6 +39,7 @@ import { getRepository } from '../../services/repository';
 import {
   Schedule,
   ScheduleVersion,
+  NurseLink,
   Assignment,
   Nurse,
   DutyWindow,
@@ -57,6 +60,12 @@ import {
 import { PublishModal } from '../modals/PublishModal';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { ensurePublicRosters } from '../../services/publish/publicRosterService';
+import {
+  ensureNurseLink,
+  regenerateNurseLink,
+  syncNurseRosters,
+  nurseLinkUrl,
+} from '../../services/publish/nurseRosterService';
 import { canEditClinicData } from '../../services/auth/access';
 import { authService } from '../../services/auth/authService';
 import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
@@ -114,9 +123,9 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
   const [logFilterKind, setLogFilterKind] = useState<string>('ALL');
   const [logSearchQuery, setLogSearchQuery] = useState('');
 
-  // Personal link generator
-  const [selectedNurseForLink, setSelectedNurseForLink] = useState<Nurse | null>(null);
-  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+  // Each nurse's private link (nurse id to link); editors only.
+  const [nurseLinks, setNurseLinks] = useState<Map<string, NurseLink>>(new Map());
+  const [busyLinkNurseId, setBusyLinkNurseId] = useState<string | null>(null);
 
   const [notification, setNotification] = useState<string | null>(null);
 
@@ -183,7 +192,14 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       setLocks(lockList);
       setWorkingHoursPeriods(periodList);
       // Links made before public snapshots existed get one now (editors only).
-      if (canEditClinicData(authService.getCurrentUser())) void ensurePublicRosters(linkList);
+      if (canEditClinicData(authService.getCurrentUser())) {
+        void ensurePublicRosters(linkList);
+        // Private nurse links are for editors only, so they load on their own.
+        repo
+          .list('nurseLinks')
+          .then((list) => setNurseLinks(new Map(list.filter((l) => !l.revoked).map((l) => [l.nurseId || l.id, l]))))
+          .catch((err) => console.warn('Could not load private nurse links:', err));
+      }
 
       const current =
         uniqueSchedules.find((s) => s.id === context.activeScheduleId) || uniqueSchedules[0];
@@ -191,7 +207,6 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
         setActiveSchedule(current);
         const schedAsgns = asgnList.filter((a) => a.scheduleId === current.id);
         setAssignments(schedAsgns);
-        if (nList.length > 0) setSelectedNurseForLink(nList[0]);
       }
     } catch (err) {
       console.error('Error loading publish view:', err);
@@ -243,6 +258,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       nurse,
       ackToken: ack.token,
       shareToken: link?.token,
+      privateRosterUrl: nurseLinks.get(nurse.id) ? nurseLinkUrl(nurseLinks.get(nurse.id)!.token) : undefined,
     });
 
     const { recipientLog } = await RosterPublishService.dispatchEmail(
@@ -327,18 +343,72 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
     }
   };
 
-  // Generate Personalized Read-Only Link
-  const handleGeneratePersonalLink = () => {
-    if (!selectedNurseForLink || !activeSchedule) return;
-    const origin = window.location.origin;
-    const targetLink = shareLinks.find((l) => l.scheduleId === activeSchedule.id && !l.revoked && l.public);
-    if (!targetLink) {
-      notify('This roster has no share link yet. Create one in Share first.', 'warning');
-      return;
+  // --- PRIVATE NURSE LINKS ---
+  const rememberLink = (link: NurseLink) => setNurseLinks((prev) => new Map(prev).set(link.nurseId, link));
+
+  const copyText = async (text: string, done: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      triggerToast(done);
+    } catch {
+      notify("Couldn't copy. Select the link and copy it instead.", 'warning');
     }
-    // Opens the roster filtered to this nurse; anyone with the link can still see the whole team.
-    setGeneratedLink(`${origin}/#published?token=${targetLink.token}&nurse=${selectedNurseForLink.id}`);
-    triggerToast('Link made. It opens the roster on this nurse.');
+  };
+
+  /** Copies the nurse's private link, making it first when she has none yet. */
+  const handleCopyPrivateLink = async (nurse: Nurse) => {
+    setBusyLinkNurseId(nurse.id);
+    try {
+      let link = nurseLinks.get(nurse.id);
+      if (!link) {
+        link = await ensureNurseLink(repo, nurse.id);
+        rememberLink(link);
+        const result = await syncNurseRosters(repo, [nurse.id]);
+        if (result.failed.length > 0) notify(`The link was made, but her page couldn't be filled: ${result.failed[0]}`, 'warning');
+      }
+      await copyText(nurseLinkUrl(link.token), `Private link for ${nurse.fullName} copied.`);
+    } catch (err: any) {
+      notify(`Couldn't make the private link: ${err?.message || err}`, 'error');
+    } finally {
+      setBusyLinkNurseId(null);
+    }
+  };
+
+  const handleRegeneratePrivateLink = async (nurse: Nurse) => {
+    const ok = await confirmDialog({
+      title: `Make a new link for ${nurse.fullName}?`,
+      message: 'The old link stops working. Send her the new one.',
+      confirmLabel: 'Make a new link',
+      danger: true,
+    });
+    if (!ok) return;
+    setBusyLinkNurseId(nurse.id);
+    try {
+      const link = await regenerateNurseLink(repo, nurse.id);
+      rememberLink(link);
+      await copyText(nurseLinkUrl(link.token), `New private link for ${nurse.fullName} copied. The old link no longer works.`);
+    } catch (err: any) {
+      notify(`Couldn't make a new link: ${err?.message || err}`, 'error');
+    } finally {
+      setBusyLinkNurseId(null);
+    }
+  };
+
+  const [isRefreshingPages, setIsRefreshingPages] = useState(false);
+  const handleRefreshPrivatePages = async () => {
+    setIsRefreshingPages(true);
+    try {
+      const result = await syncNurseRosters(repo);
+      if (result.failed.length > 0) {
+        notify(`${result.synced} page(s) updated, ${result.failed.length} failed:\n\n${result.failed.join('\n')}`, 'warning');
+      } else {
+        triggerToast(`${result.synced} private page(s) updated.`);
+      }
+    } catch (err: any) {
+      notify(`Couldn't update the private pages: ${err?.message || err}`, 'error');
+    } finally {
+      setIsRefreshingPages(false);
+    }
   };
 
   // Export Recipients CSV
@@ -517,7 +587,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
           }`}
         >
           <ExternalLink className="w-4 h-4" aria-hidden="true" />
-          <span>Personal Read-Only Links</span>
+          <span>Private Links</span>
         </button>
       </div>
 
@@ -780,59 +850,73 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
         </div>
       )}
 
-      {/* --- TAB 3: PERSONAL READ-ONLY LINKS --- */}
+      {/* --- TAB 3: PRIVATE NURSE LINKS --- */}
       {activeTab === 'personal_links' && (
-        <div className="bg-white border border-slate-200 rounded-lg p-5 shadow-xs space-y-4 text-xs">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-            <ExternalLink className="w-4 h-4 text-indigo-600" />
-            <h3 className="font-bold text-slate-800 text-sm">Personal Staff View Links</h3>
+        <div className="bg-white border border-slate-200 rounded-lg p-4 sm:p-5 shadow-xs space-y-4 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+              <h3 className="font-bold text-slate-800 text-sm">Private nurse links</h3>
+            </div>
+            {canEditClinicData(authService.getCurrentUser()) && (
+              <button
+                type="button"
+                onClick={handleRefreshPrivatePages}
+                disabled={isRefreshingPages}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 rounded text-slate-700 hover:bg-slate-50 cursor-pointer font-semibold disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingPages ? 'animate-spin' : ''}`} aria-hidden="true" />
+                {isRefreshingPages ? 'Updating…' : 'Update all pages'}
+              </button>
+            )}
           </div>
 
           <p className="text-slate-600 leading-relaxed text-[11px]">
-            Generate direct links filtered specifically to an individual nurse. Nurses can bookmark this URL on mobile devices to view only their assigned duties.
+            Each nurse has her own link that shows only her published shifts and leave days, on her phone, without
+            signing in. It is in her roster email after each publish. Pages update when you publish.
           </p>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <select aria-label="Nurse for personal link"
-              value={selectedNurseForLink?.id || ''}
-              onChange={(e) => {
-                const n = nurses.find((x) => x.id === e.target.value);
-                setSelectedNurseForLink(n || null);
-                setGeneratedLink(null);
-              }}
-              className="px-3 py-1.5 border border-slate-300 rounded bg-white text-xs font-medium"
-            >
-              {nurses.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.fullName} ({n.gmail})
-                </option>
-              ))}
-            </select>
-
-            <button
-              onClick={handleGeneratePersonalLink}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold cursor-pointer shadow-xs"
-            >
-              Generate Personal Link
-            </button>
-          </div>
-
-          {generatedLink && (
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded flex items-center justify-between gap-2">
-              <span className="font-mono text-[11px] text-slate-800 truncate select-all">
-                {generatedLink}
-              </span>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(generatedLink);
-                  triggerToast('Link copied to clipboard.');
-                }}
-                className="inline-flex items-center gap-1 px-3 py-1 bg-white border border-slate-300 rounded text-slate-700 hover:bg-slate-50 shrink-0 cursor-pointer text-xs font-semibold"
-              >
-                <Copy className="w-3 h-3 text-slate-500" aria-hidden="true" />
-                <span>Copy</span>
-              </button>
-            </div>
+          {!canEditClinicData(authService.getCurrentUser()) ? (
+            <p className="text-slate-500 text-[11px]">Only planners can see and share private links.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100 border border-slate-200 rounded">
+              {nurses.map((n) => {
+                const link = nurseLinks.get(n.id);
+                const busy = busyLinkNurseId === n.id;
+                return (
+                  <li key={n.id} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-800 text-xs truncate">{n.fullName}</p>
+                      <p className="text-[11px] text-slate-500">{link ? 'Private link ready' : 'No link yet'}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyPrivateLink(n)}
+                        disabled={busy}
+                        aria-label={`${link ? 'Copy private link' : 'Make and copy private link'} for ${n.fullName}`}
+                        className="inline-flex items-center gap-1 min-h-9 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold cursor-pointer disabled:opacity-50"
+                      >
+                        <Copy className="w-3 h-3" aria-hidden="true" />
+                        <span>{link ? 'Copy private link' : 'Make private link'}</span>
+                      </button>
+                      {link && (
+                        <button
+                          type="button"
+                          onClick={() => handleRegeneratePrivateLink(n)}
+                          disabled={busy}
+                          aria-label={`Make a new link for ${n.fullName}`}
+                          className="inline-flex items-center gap-1 min-h-9 px-3 bg-white border border-slate-300 rounded text-slate-700 hover:bg-slate-50 cursor-pointer font-semibold disabled:opacity-50"
+                        >
+                          <RefreshCw className="w-3 h-3" aria-hidden="true" />
+                          <span>Make a new link</span>
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
       )}

@@ -32,6 +32,7 @@ const PublishView = lazy(() => import('../views/PublishView').then((m) => ({ def
 const ReportsView = lazy(() => import('../views/ReportsView').then((m) => ({ default: m.ReportsView })));
 const SettingsView = lazy(() => import('../views/SettingsView').then((m) => ({ default: m.SettingsView })));
 const PublishedRosterView = lazy(() => import('../views/PublishedRosterView').then((m) => ({ default: m.PublishedRosterView })));
+const MyRosterView = lazy(() => import('../views/MyRosterView').then((m) => ({ default: m.MyRosterView })));
 const AuditTrailView = lazy(() => import('../views/AuditTrailView').then((m) => ({ default: m.AuditTrailView })));
 
 interface AppShellProps {
@@ -50,6 +51,10 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     const ackToken = urlParams.get('ackToken') || (hash.startsWith('ack') ? urlParams.get('token') || undefined : undefined);
 
     const baseRoute = hash.split('?')[0] as AppRoute;
+    // A nurse's private page (#me?t=TOKEN); its token is never a share token.
+    if (baseRoute === 'me') {
+      return { route: 'me', token: urlParams.get('t') || undefined };
+    }
     const validRoutes: AppRoute[] = [
       'dashboard',
       'schedules',
@@ -324,6 +329,15 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     setCurrentRoute('published');
     window.location.hash = `published?token=${token}`;
   };
+
+  // A nurse's private page, opened inside the app (the same page as without signing in).
+  if (currentRoute === 'me') {
+    return (
+      <LoadErrorBoundary><Suspense fallback={<PageLoading />}>
+        <MyRosterView token={shareTokenParam || ''} />
+      </Suspense></LoadErrorBoundary>
+    );
+  }
 
   // If in published view mode (read-only standalone page for external links or preview)
   if (currentRoute === 'published') {

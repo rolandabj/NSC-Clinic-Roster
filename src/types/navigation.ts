@@ -11,7 +11,8 @@ export type AppRoute =
   | 'reports'
   | 'audit'
   | 'settings'
-  | 'published';
+  | 'published'
+  | 'me';
 
 export interface NavItem {
   id: AppRoute;

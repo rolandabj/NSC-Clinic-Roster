@@ -21,12 +21,15 @@ const AppShell = lazy(() => import('./components/layout/AppShell').then((m) => (
 const PublishedRosterView = lazy(() =>
   import('./components/views/PublishedRosterView').then((m) => ({ default: m.PublishedRosterView }))
 );
+const MyRosterView = lazy(() => import('./components/views/MyRosterView').then((m) => ({ default: m.MyRosterView })));
 
-function parsePublicLink(): { kind: 'published' | 'ack'; token: string; nurse?: string } | null {
+function parsePublicLink(): { kind: 'published' | 'ack' | 'me'; token: string; nurse?: string } | null {
   if (typeof window === 'undefined') return null;
   const hash = window.location.hash.replace(/^#/, '');
   const [route, query = ''] = hash.split('?');
   const params = new URLSearchParams(query);
+  // A nurse's private page (#me?t=TOKEN).
+  if (route === 'me') return { kind: 'me', token: params.get('t') || '' };
   const token = params.get('token') || params.get('ackToken') || '';
   if (!token) return null;
   if (route === 'ack') return { kind: 'ack', token };
@@ -103,6 +106,14 @@ export default function App() {
   const ackLink = parsePublicLink();
   if (ackLink?.kind === 'ack') {
     return <AcknowledgePage token={ackLink.token} clinicName={clinicName} />;
+  }
+  // A nurse's private page looks the same signed in or not (it shows only her own shifts).
+  if (ackLink?.kind === 'me') {
+    return (
+      <LoadErrorBoundary><Suspense fallback={<PageLoading />}>
+        <MyRosterView token={ackLink.token} />
+      </Suspense></LoadErrorBoundary>
+    );
   }
   if (!currentUser) {
     const publicLink = parsePublicLink();

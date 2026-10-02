@@ -672,6 +672,11 @@ export class SchedulingEngine {
       pendingDayOff.has(`${nurseId}_${date}`) ||
       pendingLeave.some((le) => le.nurseId === nurseId && date >= le.startDate && date <= le.endDate);
     const preferredDutyOn = (nurseId: string, date: string) => preferredDutyRequests.get(`${nurseId}_${date}`)?.dutyWindowId;
+    /** The duties with the one she asked for on this day first (otherwise unchanged). */
+    const askedDutyFirst = (nurseId: string, date: string, duties: DutyWindow[]): DutyWindow[] => {
+      const asked = preferredDutyOn(nurseId, date);
+      return asked ? [...duties.filter((d) => d.id === asked), ...duties.filter((d) => d.id !== asked)] : duties;
+    };
     /** Score for her requests: a bonus for the shift she asked for, a penalty on a day she asked to be off. */
     const requestScore = (nurseId: string, date: string, duty: DutyWindow): number => {
       let score = 0;
@@ -1384,7 +1389,8 @@ export class SchedulingEngine {
                 if (isWeekend) score -= state.weekendsWorked * 25;
                 // Late shift fairness: nurses who already have more late shifts than average
                 // (this roster and earlier ones this year) are asked less often
-                if (isLate(candidateDuty)) score -= lateShiftsAboveAverage(nurse) * 15;
+                // (a penalty only: a bonus below average would pull nurses onto longer late shifts)
+                if (isLate(candidateDuty)) score -= Math.max(0, lateShiftsAboveAverage(nurse)) * 15;
                 // Her requests for this day (soft)
                 score += requestScore(nurse.id, date, candidateDuty);
 
@@ -1622,7 +1628,7 @@ export class SchedulingEngine {
         for (const senior of seniors) {
           if (hasPendingTimeOff(senior.id, date)) break; // an extra shift is optional: not on a day she asked off
           if (hoursBehindPace(senior.id, dayIdx) <= 0) break;
-          const duty = dutiesCovering(clinic.openTime, clinic.closeTime).find(
+          const duty = askedDutyFirst(senior.id, date, dutiesCovering(clinic.openTime, clinic.closeTime)).find(
             (d) =>
               calculateDutyDurationHours(d) <= seniorBudget &&
               hoursOverGoal(senior.id, calculateDutyDurationHours(d)) === 0 &&
@@ -1697,7 +1703,9 @@ export class SchedulingEngine {
         // within the hours limit, since a senior on duty is required.
         if (!done) {
           for (const senior of [...seniors].sort((a, b) => pendingLast(a, b) || hoursOverGoal(a.id, 8) - hoursOverGoal(b.id, 8))) {
-            const duty = dutiesCovering(clinic.openTime, clinic.closeTime).find((d) => fitsHardRules(senior, date, d, calculateDutyDurationHours(d)));
+            const duty = askedDutyFirst(senior.id, date, dutiesCovering(clinic.openTime, clinic.closeTime)).find((d) =>
+              fitsHardRules(senior, date, d, calculateDutyDurationHours(d))
+            );
             if (!duty) continue;
             const free = canBeFreeNurse(senior, roles);
             placeShift(

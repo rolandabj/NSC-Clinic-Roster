@@ -57,6 +57,7 @@ import { RosterPublishService } from '../../services/publish/rosterPublishServic
 import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
 import { getRepository } from '../../services/repository';
 import { syncPublicRoster } from '../../services/publish/publicRosterService';
+import { ensureNurseLink, syncNurseRosters, nurseLinkUrl } from '../../services/publish/nurseRosterService';
 import { escapeHtml } from '../../utils/escapeHtml';
 import { EmailHtmlPreview } from '../common/EmailHtmlPreview';
 import { cachedEmailSettings, loadEmailSettings } from '../../services/settings/emailSettingsStore';
@@ -132,7 +133,14 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   const [publishWarnings, setPublishWarnings] = useState<string[]>([]);
   // A publish already saved (version, link, log), so a retry only re-sends the failed emails.
   // `logId` is empty until every save step has finished, so a retry resumes from the step that failed.
-  const runRef = useRef<{ version: ScheduleVersion; shareToken?: string; logId: string; recipients: EmailRecipientLog[] } | null>(null);
+  // `nurseTokens`: each nurse's private link token (nurse id to token), for her email.
+  const runRef = useRef<{
+    version: ScheduleVersion;
+    shareToken?: string;
+    nurseTokens?: Record<string, string>;
+    logId: string;
+    recipients: EmailRecipientLog[];
+  } | null>(null);
 
   // Email Config
   const [emailConfig, setEmailConfig] = useState<EmailSettingsConfig>(() => cachedEmailSettings());
@@ -346,6 +354,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         changes: computedDiff?.changesByNurse[previewNurse.id] || [],
         generalNote: generalBroadcastNote,
         shareToken: includeLink ? 'preview' : undefined,
+        privateRosterUrl: nurseLinkUrl('preview'),
         ackToken: 'preview-token',
         isChangeAlert: publishKind === 'CHANGE',
         workingHoursPeriods,
@@ -407,6 +416,42 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         logs.push(`⚠ ${msg}`);
         setPublishWarnings((prev) => (prev.includes(msg) ? prev : [...prev, msg]));
       }
+    }
+
+    // Each nurse's private page (only her own shifts) gets the new version. Like the share
+    // link snapshots above, a problem here never stops the publish.
+    const addWarning = (msg: string) => {
+      logs.push(`⚠ ${msg}`);
+      setPublishWarnings((prev) => (prev.includes(msg) ? prev : [...prev, msg]));
+    };
+    try {
+      const activeIds = new Set(nurses.filter((n) => n.active).map((n) => n.id));
+      const onRoster = new Set<string>([
+        ...assignments.filter((a) => a.scheduleId === schedule.id || !a.scheduleId).map((a) => a.nurseId),
+        ...leaveEntries
+          .filter((l) => l.approved && l.endDate >= schedule.startDate && l.startDate <= schedule.endDate)
+          .map((l) => l.nurseId),
+        ...selectedNurseIds,
+      ]);
+      const ids = [...onRoster].filter((id) => activeIds.has(id));
+      const nurseTokens: Record<string, string> = {};
+      let linkFailures = 0;
+      for (const id of ids) {
+        try {
+          nurseTokens[id] = (await ensureNurseLink(repo, id)).token;
+        } catch {
+          linkFailures++;
+        }
+      }
+      run.nurseTokens = nurseTokens;
+      const synced = await syncNurseRosters(repo, Object.keys(nurseTokens));
+      if (linkFailures > 0 || synced.failed.length > 0) {
+        addWarning(
+          `${linkFailures + synced.failed.length} nurse private page(s) couldn't be updated. Open Publish, Private links, to update them.`
+        );
+      }
+    } catch (nurseErr: any) {
+      addWarning(`Nurse private pages couldn't be updated (${nurseErr?.message || nurseErr}). Open Publish, Private links, to update them.`);
     }
 
     // The log is written before sending, and updated after each email, so an interrupted
@@ -481,6 +526,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           changes: computedDiff?.changesByNurse[nurse.id] || [],
           generalNote: generalBroadcastNote,
           shareToken: run.shareToken,
+          privateRosterUrl: run.nurseTokens?.[nurse.id] ? nurseLinkUrl(run.nurseTokens[nurse.id]) : undefined,
           ackToken,
           isChangeAlert: publishKind === 'CHANGE',
           workingHoursPeriods,
