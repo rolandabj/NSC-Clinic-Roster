@@ -17,6 +17,8 @@ interface ProblemsPanelProps {
   onShowInGrid: (nurseId: string, date: string) => void;
   onOpenFullList: () => void;
   onClose: () => void;
+  /** Extra help under a problem, e.g. who could cover a missing free nurse (null for none). */
+  renderHelp?: (finding: ValidationFinding) => React.ReactNode | null;
 }
 
 const SEVERITY: Record<FindingSeverity, { label: string; order: number; icon: React.ReactNode; tone: string }> = {
@@ -25,8 +27,9 @@ const SEVERITY: Record<FindingSeverity, { label: string; order: number; icon: Re
   INFO: { label: 'Note', order: 2, icon: <Info className="w-3.5 h-3.5 text-slate-500" />, tone: 'border-slate-200 bg-white' },
 };
 
-export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, nurseName, onShowInGrid, onOpenFullList, onClose }) => {
+export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, nurseName, onShowInGrid, onOpenFullList, onClose, renderHelp }) => {
   const [showNotes, setShowNotes] = useState(false);
+  const [openHelpId, setOpenHelpId] = useState<string | null>(null);
   const all = [...validationReport.findings].sort(
     (a, b) => SEVERITY[a.severity].order - SEVERITY[b.severity].order || (a.date || '').localeCompare(b.date || '')
   );
@@ -70,6 +73,9 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, 
           shown.map((f) => {
             const s = SEVERITY[f.severity];
             const cell = target(f);
+            const help = openHelpId === f.id && renderHelp ? renderHelp(f) : null;
+            // Missing nurses on a day can be helped by listing who is free that day.
+            const hasHelp = !!renderHelp && f.category === 'COVERAGE_GAP' && !!f.date;
             return (
               <div key={f.id} className={`rounded border p-2 space-y-1 ${s.tone}`}>
                 <div className="flex items-start gap-1.5">
@@ -84,15 +90,28 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, 
                     )}
                   </div>
                 </div>
-                {cell && (
-                  <button
-                    type="button"
-                    onClick={() => onShowInGrid(cell.nurseId, cell.date)}
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
-                  >
-                    Show in grid <ArrowRight className="w-3 h-3" aria-hidden="true" />
-                  </button>
-                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  {cell && (
+                    <button
+                      type="button"
+                      onClick={() => onShowInGrid(cell.nurseId, cell.date)}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
+                    >
+                      Show in grid <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                    </button>
+                  )}
+                  {hasHelp && (
+                    <button
+                      type="button"
+                      aria-expanded={openHelpId === f.id}
+                      onClick={() => setOpenHelpId(openHelpId === f.id ? null : f.id)}
+                      className="text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
+                    >
+                      {openHelpId === f.id ? 'Hide who could cover' : 'Who could cover?'}
+                    </button>
+                  )}
+                </div>
+                {help && <div className="pt-1 border-t border-black/5">{help}</div>}
               </div>
             );
           })

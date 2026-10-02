@@ -34,6 +34,8 @@ import {
 import { MenuButton } from '../common/MenuButton';
 import { PageLoading } from '../common/PageLoading';
 import { ProblemsPanel } from '../workbook/ProblemsPanel';
+import { WhoCanCover } from '../workbook/WhoCanCover';
+import { nurseClinicRoleOf } from '../../services/engine/clinicModel';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
 import { CollectionSyncer } from '../../services/repository/collectionSyncer';
@@ -1345,6 +1347,24 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (activeTab !== 'roster') setFocusRequest(undefined);
   }, [activeTab]);
 
+  /** "Add" in Who could cover: a Nurse Clinic shift for a nurse free that day (a hand change). */
+  const handleAddNurseClinicShift = (nurseId: string, date: string, dutyWindowId: string) => {
+    if (!activeSchedule) return;
+    const added: Assignment = {
+      id: `asgn-man-${activeSchedule.id}-${nurseId}-${date}-${Date.now()}`,
+      scheduleId: activeSchedule.id,
+      nurseId,
+      date,
+      dutyWindowId,
+      kind: 'CLINICAL_ROLE',
+      clinicalRoleId: nurseClinicRoleOf(roles)?.id || 'role-nurse-clinic',
+      locked: false,
+      source: 'MANUAL',
+    };
+    applyEdit({ assignments: [...assignments, added] });
+    triggerToast(`${nurseName(nurseId)} added to Nurse Clinic on ${formatDate(date)}.`);
+  };
+
   const hasPublished = versions.some((v) => v.isPublished && v.scheduleId === activeSchedule?.id);
 
   // Cells that differ from the last published version (what "Send changes" would send).
@@ -1764,6 +1784,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 onLocksChange={handleLocksChange}
                 onLeaveEntriesChange={handleLeaveEntriesChange}
                 onCellEdit={(edit) => applyEdit(edit)}
+                rules={rules}
                 focusRequest={focusRequest}
                 onNavigateTab={(tab) => {
                   // The grid's problem links open the side panel instead of leaving the grid.
@@ -1905,6 +1926,28 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               setActiveTab('warnings');
             }}
             onClose={() => setIsProblemsOpen(false)}
+            renderHelp={(f) =>
+              f.date ? (
+                <WhoCanCover
+                  date={f.date}
+                  hour={f.hour}
+                  schedule={activeSchedule}
+                  assignments={assignments}
+                  nurses={nurses}
+                  dutyWindows={dutyWindows}
+                  leaveEntries={leaveEntries}
+                  locks={locks}
+                  roles={roles}
+                  rules={rules}
+                  seniorityLevels={seniorityLevels}
+                  workingHoursPeriods={workingHoursPeriods}
+                  leaveTypes={leaveTypes}
+                  sessions={sessions}
+                  doctors={doctors}
+                  onPick={(nurseId, dutyWindowId) => handleAddNurseClinicShift(nurseId, f.date!, dutyWindowId)}
+                />
+              ) : null
+            }
           />
         )}
       </div>
