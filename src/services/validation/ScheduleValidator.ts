@@ -221,7 +221,9 @@ export class ScheduleValidator {
       const plusOneSeverity: FindingSeverity = isPlusOneHard ? 'ERROR' : 'WARN';
 
       // Every opening hour needs a free nurse: not with a doctor at that hour, and
-      // qualified for blood collection (she runs Nurse Clinic and blood collection).
+      // qualified for blood collection (they run Nurse Clinic and blood collection).
+      // Hours in a row without one are reported together, as one problem.
+      const gapRuns: { start: string; end: string }[] = [];
       openHours.forEach((h) => {
         const activeDocs = daySessions.filter((s) => overlaps(s.startTime, s.endTime, h.start, h.end)).length;
         const activeNurses = dayAssignments.filter((a) => {
@@ -236,17 +238,22 @@ export class ScheduleValidator {
         hourlyCoverageMap[date][h.start] = { nurses: activeNurses, doctors: activeDocs, freeNurses, deficit };
 
         if (deficit > 0) {
-          findings.push({
-            id: `cov-gap-${date}-${h.start}`,
-            category: 'COVERAGE_GAP',
-            severity: plusOneSeverity,
-            message: `${dayName} ${formatDate(date)}, ${h.start}: no free nurse for Nurse Clinic (a nurse not with a doctor who can run Nurse Clinic${phlRole ? ' and take blood' : ''} is needed every opening hour).`,
-            affectedNurseIds: dayAssignments.map((a) => a.nurseId),
-            cellRefs: dayAssignments.map((a) => ({ nurseId: a.nurseId, date })),
-            date,
-            hour: h.start,
-          });
+          const last = gapRuns[gapRuns.length - 1];
+          if (last && last.end === h.start) last.end = h.end;
+          else gapRuns.push({ start: h.start, end: h.end });
         }
+      });
+      gapRuns.forEach((run) => {
+        findings.push({
+          id: `cov-gap-${date}-${run.start}`,
+          category: 'COVERAGE_GAP',
+          severity: plusOneSeverity,
+          message: `${dayName} ${formatDate(date)}, ${run.start} to ${run.end}: no free nurse for Nurse Clinic (a nurse not with a doctor who can run Nurse Clinic${phlRole ? ' and take blood' : ''} is needed every opening hour).`,
+          affectedNurseIds: dayAssignments.map((a) => a.nurseId),
+          cellRefs: dayAssignments.map((a) => ({ nurseId: a.nurseId, date })),
+          date,
+          hour: run.start,
+        });
       });
 
       // Check Evening Departure Tail Scenario (19:00 boundary):

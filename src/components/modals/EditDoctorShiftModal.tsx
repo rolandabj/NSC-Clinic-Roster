@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  * 
  * Edit Doctor Shift Modal
- * Allows manually editing doctor clinic shifts by clicking on any matrix cell,
- * including options to update a single-day override or modify a recurring weekly shift.
+ * Change a doctor's clinic on one day, or on that weekday every week.
  */
 
 import React, { useState, useEffect, useId } from 'react';
@@ -27,6 +26,7 @@ import {
 } from '../../services/schedule/doctorScheduleService';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify } from '../common/dialogs';
+import { formatDate } from '../../utils/dateUtils';
 
 export interface EditDoctorShiftModalProps {
   isOpen: boolean;
@@ -56,18 +56,9 @@ export interface EditDoctorShiftModalProps {
 const TIME_PRESETS = [
   { label: 'Morning', start: '09:00', end: '13:00', desc: '4 hrs (09:00–13:00)' },
   { label: 'Afternoon', start: '13:00', end: '17:00', desc: '4 hrs (13:00–17:00)' },
-  { label: 'Standard Day', start: '09:00', end: '17:00', desc: '8 hrs (09:00–17:00)' },
+  { label: 'Normal day', start: '09:00', end: '17:00', desc: '8 hrs (09:00–17:00)' },
   { label: 'Evening', start: '17:00', end: '21:00', desc: '4 hrs (17:00–21:00)' },
-  { label: 'Full Day', start: '09:00', end: '21:00', desc: '12 hrs (09:00–21:00)' },
-];
-
-const ROOM_PRESETS = [
-  'Suite 101',
-  'Suite 102',
-  'Suite 103',
-  'Clinic 1',
-  'Clinic 2',
-  'Consultation Room',
+  { label: 'Long day', start: '09:00', end: '21:00', desc: '12 hrs (09:00–21:00)' },
 ];
 
 export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
@@ -83,7 +74,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
 }) => {
   const [startTime, setStartTime] = useState<string>('09:00');
   const [endTime, setEndTime] = useState<string>('13:00');
-  const [room, setRoom] = useState<string>('Suite 101');
+  const [room, setRoom] = useState<string>('');
   const [specialtyId, setSpecialtyId] = useState<string>('');
   const [updateScope, setUpdateScope] = useState<'THIS_DATE_ONLY' | 'RECURRING_ALL_MATCHING_DAYS'>('THIS_DATE_ONLY');
   const [isSaving, setIsSaving] = useState(false);
@@ -103,20 +94,20 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
       if (existingSession) {
         setStartTime(existingSession.startTime);
         setEndTime(existingSession.endTime);
-        setRoom(existingSession.room || 'Suite 101');
+        setRoom(existingSession.room || '');
         setSpecialtyId(existingSession.specialtyId || doctor.specialtyIds[0] || '');
         // A change starts as "this date only"; changing every matching weekday is a deliberate choice.
         setUpdateScope('THIS_DATE_ONLY');
       } else if (recurringPatternSlot) {
         setStartTime(recurringPatternSlot.startTime);
         setEndTime(recurringPatternSlot.endTime);
-        setRoom(recurringPatternSlot.room || 'Suite 101');
+        setRoom(recurringPatternSlot.room || '');
         setSpecialtyId(doctor.specialtyIds[0] || (specialties[0]?.id ?? ''));
         setUpdateScope('THIS_DATE_ONLY');
       } else {
         setStartTime('09:00');
         setEndTime('13:00');
-        setRoom('Suite 101');
+        setRoom('');
         setSpecialtyId(doctor.specialtyIds[0] || (specialties[0]?.id ?? ''));
         setUpdateScope('THIS_DATE_ONLY');
       }
@@ -158,14 +149,14 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
         date,
         startTime,
         endTime,
-        room: room.trim() || 'Suite 101',
+        room: room.trim(),
         specialtyId: specialtyId || doctor.specialtyIds[0] || '',
         updateScope,
       });
       onClose();
     } catch (err: any) {
       console.error('Failed to save shift:', err);
-      notify(`Failed to save doctor shift: ${err.message || 'Unknown error'}`, 'error');
+      notify(`Couldn't save the clinic: ${err.message || 'unknown error'}`, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -183,7 +174,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('Failed to delete shift:', err);
-      notify(`Failed to remove shift: ${err.message || 'Unknown error'}`, 'error');
+      notify(`Couldn't remove the clinic: ${err.message || 'unknown error'}`, 'error');
     } finally {
       setIsDeleting(false);
     }
@@ -206,15 +197,15 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
             </div>
             <div>
               <h2 id={titleId} className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-                <span>{existingSession ? 'Edit Doctor Shift' : 'Add Doctor Shift'}</span>
+                <span>{existingSession ? "Change doctor's clinic" : "Add doctor's clinic"}</span>
                 {isExistingRecurring && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-indigo-500/30 border border-indigo-400/40 text-indigo-200">
-                    Recurring Pattern
+                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-500/30 border border-indigo-400/40 text-indigo-200">
+                    Every {weekdayName}
                   </span>
                 )}
               </h2>
               <p className="text-xs text-indigo-200/80">
-                {doctor.fullName} · {weekdayName}, {date}
+                {doctor.fullName} · {weekdayName}, {formatDate(date)}
               </p>
             </div>
           </div>
@@ -233,22 +224,22 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
           {/* Status info bar */}
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 flex items-center justify-between text-slate-700">
             <div>
-              <span className="text-[11px] text-slate-500 block font-medium">Current Status on {date}:</span>
+              <span className="text-[11px] text-slate-500 block font-medium">Now on {formatDate(date)}:</span>
               <span className="font-semibold text-slate-800 text-xs">
                 {existingSession
-                  ? `${existingSession.startTime} – ${existingSession.endTime} (${existingSession.room || 'Suite 101'})`
-                  : 'No shift scheduled'}
+                  ? `${existingSession.startTime} – ${existingSession.endTime}${existingSession.room ? ` (${existingSession.room})` : ''}`
+                  : 'No clinic'}
               </span>
             </div>
             <span className="text-[11px] font-mono text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-              {calculateDuration()} hrs duration
+              {calculateDuration().replace(/\.0$/, '')} hours
             </span>
           </div>
 
           {/* Preset Shift Hours */}
           <div>
             <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-              Quick Shift Presets
+              Usual times
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
               {TIME_PRESETS.map((p) => {
@@ -279,7 +270,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
           <div className="grid grid-cols-2 gap-3 pt-1">
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Start Time
+                Start time
               </label>
               <div className="relative">
                 <Clock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
@@ -296,7 +287,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                End Time
+                End time
               </label>
               <div className="relative">
                 <Clock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
@@ -312,43 +303,31 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
             </div>
           </div>
 
-          {/* Room / Suite and Specialty */}
+          {/* Room and specialty */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Room / Clinic Suite
+                Room (optional)
               </label>
               <div className="relative">
                 <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
                 <input
                   type="text"
-                  aria-label="Room or clinic suite"
+                  aria-label="Room (optional)"
                   value={room}
                   onChange={(e) => setRoom(e.target.value)}
-                  placeholder="e.g. Suite 101"
+                  placeholder="For example: Room 2"
                   className="w-full pl-8 pr-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
-              </div>
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {ROOM_PRESETS.slice(0, 4).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setRoom(r)}
-                    className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 cursor-pointer"
-                  >
-                    {r}
-                  </button>
-                ))}
               </div>
             </div>
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Clinical Specialty
+                Specialty
               </label>
               <select
-                aria-label="Clinical specialty"
+                aria-label="Specialty"
                 value={specialtyId}
                 onChange={(e) => setSpecialtyId(e.target.value)}
                 className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -365,8 +344,8 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
           {/* Recurrence Scope Selector */}
           <div className="border border-indigo-100 bg-indigo-50/40 rounded-xl p-3.5 space-y-2">
             <span className="block text-[11px] font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
-              <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Shift Scope &amp; Recurrence</span>
+              <RefreshCw className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
+              <span>Which days to change</span>
             </span>
 
             <div className="space-y-2">
@@ -387,10 +366,10 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                 />
                 <div>
                   <span className="font-semibold text-slate-800 block text-xs">
-                    This date only ({date})
+                    This day only ({formatDate(date)})
                   </span>
                   <span className="text-[11px] text-slate-500 block leading-tight">
-                    Apply change as an individual session override. Does not change other {weekdayName}s.
+                    Other {weekdayName}s stay as they are.
                   </span>
                 </div>
               </label>
@@ -412,13 +391,10 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                 />
                 <div>
                   <span className="font-semibold text-slate-800 block text-xs flex items-center gap-1.5">
-                    <span>Update recurring pattern (Every {weekdayName})</span>
-                    <span className="bg-emerald-100 text-emerald-800 text-[9px] font-bold px-1.5 py-0.2 rounded">
-                      Recurrent
-                    </span>
+                    <span>Every {weekdayName}</span>
                   </span>
                   <span className="text-[11px] text-slate-500 block leading-tight">
-                    Updates Dr. {doctor.fullName}&apos;s weekly pattern and syncs all {weekdayName} shifts across the entire schedule.
+                    Changes {doctor.fullName}&apos;s usual week, and every {weekdayName} on this roster.
                   </span>
                 </div>
               </label>
@@ -429,11 +405,11 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
           {showDeleteConfirm && (
             <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-rose-900 space-y-2 animate-in fade-in duration-150">
               <div className="flex items-center gap-1.5 font-bold text-xs text-rose-800">
-                <AlertCircle className="w-4 h-4 text-rose-600" />
-                <span>Confirm Shift Removal</span>
+                <AlertCircle className="w-4 h-4 text-rose-600" aria-hidden="true" />
+                <span>Remove this clinic?</span>
               </div>
               <p className="text-[11px] text-rose-700">
-                Choose the removal scope for Dr. {doctor.fullName}&apos;s shift:
+                Which of {doctor.fullName}&apos;s clinics should be removed?
               </p>
               <div className="space-y-1.5 pt-1">
                 <label className="flex items-center gap-2 text-xs cursor-pointer font-medium">
@@ -445,7 +421,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                     onChange={() => setDeleteScope('THIS_DATE_ONLY')}
                     className="text-rose-600 focus:ring-rose-500"
                   />
-                  <span>Remove only on {date}</span>
+                  <span>Only on {formatDate(date)}</span>
                 </label>
                 <label className="flex items-center gap-2 text-xs cursor-pointer font-medium">
                   <input
@@ -456,7 +432,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                     onChange={() => setDeleteScope('REMOVE_RECURRING_PATTERN')}
                     className="text-rose-600 focus:ring-rose-500"
                   />
-                  <span>Remove recurring pattern (all {weekdayName}s)</span>
+                  <span>Every {weekdayName} (also removed from the usual week)</span>
                 </label>
               </div>
               <div className="flex items-center gap-2 pt-2">
@@ -466,7 +442,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                   disabled={isDeleting}
                   className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded text-xs font-semibold cursor-pointer disabled:opacity-50"
                 >
-                  {isDeleting ? 'Removing...' : 'Confirm Remove'}
+                  {isDeleting ? 'Removing…' : 'Remove'}
                 </button>
                 <button
                   type="button"
@@ -489,7 +465,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                   className="inline-flex items-center gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Remove Shift</span>
+                  <span>Remove clinic</span>
                 </button>
               )}
             </div>
@@ -508,7 +484,7 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
                 className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
               >
                 <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-                <span>{isSaving ? 'Saving...' : 'Save Shift'}</span>
+                <span>{isSaving ? 'Saving…' : 'Save'}</span>
               </button>
             </div>
           </div>

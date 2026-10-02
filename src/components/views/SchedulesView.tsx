@@ -2155,6 +2155,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
             setTimeout(() => setToastMessage(null), 3000);
           }}
           initialMode={publishWizardMode}
+          onShowProblems={() => {
+            setActiveTab('roster');
+            setIsProblemsOpen(true);
+          }}
         />
       )}
 

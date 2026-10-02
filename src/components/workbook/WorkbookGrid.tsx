@@ -1105,8 +1105,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             </button>
             <span className="font-mono font-bold text-slate-800 px-2 tabular-nums">
               {isAllDaysExpanded
-                ? `All ${totalDays} Days (${blockDates[0]?.substring(5)}–${blockDates[blockDates.length - 1]?.substring(5)})`
-                : `Block ${currentBlockIndex + 1}/${numBlocks} (${blockDates[0]?.substring(5)}–${blockDates[blockDates.length - 1]?.substring(5)})`}
+                ? `All ${totalDays} days, ${formatDate(blockDates[0] || '')} to ${formatDate(blockDates[blockDates.length - 1] || '')}`
+                : `Days ${formatDate(blockDates[0] || '')} to ${formatDate(blockDates[blockDates.length - 1] || '')}`}
             </span>
             <button
               disabled={isAllDaysExpanded || currentBlockIndex >= numBlocks - 1}
