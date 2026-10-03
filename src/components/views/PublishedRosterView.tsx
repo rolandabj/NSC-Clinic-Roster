@@ -47,6 +47,7 @@ import { authService, UserProfile } from '../../services/auth/authService';
 import { loadPublicRoster } from '../../services/publish/publicRosterService';
 import { buildNurseIcs, downloadIcsFile } from '../../services/export/icsExportService';
 import { withoutBackups } from '../../services/history/versionList';
+import { isFloatShift } from '../../services/engine/floatShift';
 
 interface PublishedRosterViewProps {
   shareToken?: string;
@@ -506,7 +507,9 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
                         if (asgn) {
                           const duty = dutyMap.get(asgn.dutyWindowId);
                           let targetName = '';
-                          if (asgn.doctorId) {
+                          if (isFloatShift(asgn)) {
+                            targetName = 'FLOAT';
+                          } else if (asgn.doctorId) {
                             targetName = doctorMap.get(asgn.doctorId)?.fullName.replace('Dr. ', '') || 'Doctor';
                           } else if (asgn.clinicalRoleId) {
                             targetName = roleMap.get(asgn.clinicalRoleId)?.acronym || 'PHL';

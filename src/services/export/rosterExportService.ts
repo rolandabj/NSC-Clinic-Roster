@@ -29,6 +29,7 @@ import {
   calculateDutyDurationHours,
   NurseHoursAccounting,
 } from '../reports/hoursAccounting';
+import { isFloatShift } from '../engine/floatShift';
 
 export interface RosterExportOptions {
   clinicName: string;
@@ -173,7 +174,9 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
       } else if (asgn) {
         const duty = dutyMap.get(asgn.dutyWindowId);
         let targetLabel = '';
-        if (asgn.doctorId) {
+        if (isFloatShift(asgn)) {
+          targetLabel = 'FLOAT';
+        } else if (asgn.doctorId) {
           const doc = doctorMap.get(asgn.doctorId);
           targetLabel = doc ? doc.fullName.replace('Dr. ', '') : 'Doctor';
         } else if (asgn.clinicalRoleId) {
@@ -285,7 +288,9 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
     const isWeekend = isWeekendDay(dateObj.getUTCDay());
 
     let targetName = 'Specialty Pool';
-    if (a.doctorId) {
+    if (isFloatShift(a)) {
+      targetName = 'Float';
+    } else if (a.doctorId) {
       const doc = doctorMap.get(a.doctorId);
       targetName = doc ? doc.fullName : 'Doctor';
     } else if (a.clinicalRoleId) {
@@ -468,7 +473,9 @@ export function exportRosterToCsvMatrix(options: RosterExportOptions): string {
       } else if (asgn) {
         const duty = dutyMap.get(asgn.dutyWindowId);
         let targetLabel = '';
-        if (asgn.doctorId) {
+        if (isFloatShift(asgn)) {
+          targetLabel = 'FLOAT';
+        } else if (asgn.doctorId) {
           const doc = doctorMap.get(asgn.doctorId);
           targetLabel = doc ? doc.fullName.replace('Dr. ', '') : '';
         } else if (asgn.clinicalRoleId) {
@@ -544,7 +551,9 @@ export function exportRosterToCsvLong(options: RosterExportOptions): string {
     const weekday = WEEKDAY_NAMES[dateObj.getUTCDay()];
 
     let targetName = 'Specialty Pool';
-    if (a.doctorId) {
+    if (isFloatShift(a)) {
+      targetName = 'Float';
+    } else if (a.doctorId) {
       const doc = doctorMap.get(a.doctorId);
       targetName = doc ? doc.fullName : 'Doctor';
     } else if (a.clinicalRoleId) {

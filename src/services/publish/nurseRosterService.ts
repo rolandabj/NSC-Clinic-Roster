@@ -31,6 +31,7 @@ import type { IRepository } from '../repository/IRepository';
 
 /** How far back a private page still shows shifts (so last week stays visible). */
 export const NURSE_ROSTER_LOOKBACK_DAYS = 31;
+import { isFloatShift } from '../engine/floatShift';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -157,12 +158,13 @@ type ShiftRefs = {
 
 /**
  * What the nurse does on a shift, in plain words: "With Dr Amal", "Nurse Clinic",
- * "Blood Collection", "Department: Cardiology", or "General Pool" as in the emails.
+ * "Blood Collection", or "Float" as in the emails.
  */
 export function shiftDetail(
   a: Pick<Assignment, 'doctorId' | 'clinicalRoleId' | 'specialtyId'>,
   refs: ShiftRefs
 ): string {
+  if (isFloatShift(a)) return 'Float';
   if (a.doctorId) {
     const name = refs.doctors.find((d) => d.id === a.doctorId)?.fullName?.trim();
     if (!name) return 'With a doctor';
@@ -173,7 +175,7 @@ export function shiftDetail(
     const name = refs.specialties.find((s) => s.id === a.specialtyId)?.name;
     return name ? `Department: ${name}` : 'Department';
   }
-  return 'General Pool';
+  return 'Float';
 }
 
 /** Each roster's latest published version (automatic backups never count). */

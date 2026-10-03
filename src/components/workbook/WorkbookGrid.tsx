@@ -65,6 +65,7 @@ import { applyPreferenceFocus } from '../../services/engine/preferenceOrder';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { confirmDialog, notify } from '../common/dialogs';
 import { coveredMinutes, doctorSessionsOn, nurseClinicRoleOf, toMinutes } from '../../services/engine/clinicModel';
+import { isFloatShift } from '../../services/engine/floatShift';
 import { QuickCellPopup, QuickWorkOption, QuickLeaveOption, QuickDayNote, QuickWish } from './grid/QuickCellPopup';
 import { describeRequest, explainNurseDay, isPendingLeave, pendingLeaveOn, requestOn, RequestWords } from '../../services/engine/explainCell';
 
@@ -1226,6 +1227,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     if (lock?.mode === 'OFF') return 'Day off, pinned';
     if (!asgn) return '';
     const duty = dutyMap.get(asgn.dutyWindowId);
+    if (isFloatShift(asgn)) return `${duty ? `${duty.name} shift` : 'Shift'}, float${pinned}`;
     const what = asgn.doctorId
       ? doctorMap.get(asgn.doctorId)?.fullName || 'a doctor'
       : asgn.clinicalRoleId
@@ -1617,11 +1619,14 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                         asgn?.note?.toLowerCase().includes('nurse clinic');
 
                       const isFloatPool =
-                        asgn?.clinicalRoleId === 'role-float' ||
+                        (!!asgn && isFloatShift(asgn)) ||
                         asgn?.note?.toLowerCase().includes('float pool') ||
                         asgn?.note?.toLowerCase().includes('general clinic');
 
-                      if (asgn?.doctorId) {
+                      if (asgn && isFloatShift(asgn)) {
+                        // Not with a doctor: the roster says Float (not a department)
+                        doctorName = 'FLOAT';
+                      } else if (asgn?.doctorId) {
                         const d = doctorMap.get(asgn.doctorId);
                         doctorName = d ? d.fullName.replace(/^dr\.?\s+/i, '') : '';
                       } else if (asgn?.clinicalRoleId) {
@@ -1691,7 +1696,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                             isAllocationMismatch = true;
                             mismatchReason = `${docObj ? withDr(docObj.fullName) : 'This doctor'} is not one of ${nurse.fullName}'s usual doctors or departments.`;
                           }
-                        } else if (asgn.kind === 'SPECIALTY' && asgn.specialtyId) {
+                        } else if (asgn.kind === 'SPECIALTY' && asgn.specialtyId && !isFloatShift(asgn)) {
                           const specObj = specialtyMap.get(asgn.specialtyId);
                           const matchesSpec = nurse.preferences?.some((p) => {
                             if (p.kind !== 'SPECIALTY') return false;
@@ -1731,8 +1736,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
                       const pairingDesc = isNurseClinic
                         ? 'Nurse Clinic (no doctor)'
-                        : isFloatPool || asgn?.clinicalRoleId === 'role-float'
-                        ? 'General clinic (float)'
+                        : isFloatPool
+                        ? 'Float (not with a doctor)'
                         : asgn?.clinicalRoleId
                         ? `Clinic task: ${roleMap.get(asgn.clinicalRoleId)?.name || doctorName}`
                         : asgn?.doctorId

@@ -21,7 +21,7 @@ Last updated: 2026-10-03, at commit `9c0b819` on `main`.
 | `npm install --legacy-peer-deps` | Install (the flag is needed for esbuild/vite peer conflicts) |
 | `npm run dev` | Express + Vite dev server on port 3000 |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 146 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 150 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `dist/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -94,7 +94,7 @@ src/
              VersionCompare, VersionView, DeleteVersion, DeleteSchedule, BulkImport,
              NurseTimesheet, EditDoctorShift, Auth, Shortcuts, Walkthrough (disabled)
   services/
-    engine/      SchedulingEngine.ts (the generator), assignmentChecks.ts, clinicModel.ts,
+    engine/      SchedulingEngine.ts (the generator), assignmentChecks.ts, clinicModel.ts, floatShift.ts,
                  clinicSetupService.ts, explainCell.ts, leaveStatus.ts, nurseClinicUtils.ts,
                  preferenceOrder.ts, types.ts
     validation/  ScheduleValidator.ts
@@ -283,10 +283,12 @@ Modes (`engine/types.ts`): GENERATE_ALL (rebuild; keeps hand edits when `keepMan
    - **Doctor slot queue**: nurses who name the doctor (by rank, ranks 1, 2, 3+), then nurses whose specialty matches one of the doctor's specialties (rank 1, then others), then everyone else. `pairingRank(nurse, doctorId, session)` = her best rank for that doctor by name or by specialty.
    - Passes, first hit wins: within goal before over goal; "leave her for a doctor she ranks higher today" before ignoring that; nurses not needed for blood collection first when blood collection hours are short; full cover shifts before partial.
    - Score terms (higher wins): full cover +40; wasted hours −6/h; near days in a row limit −60; Nurse Clinic: exclusive NC +200, −25 per NC shift so far, NC preference +40/+20, kept for doctors who rank her −(40…160); doctor: named rank 1 +80, 2 +40, else +20; specialty rank 1 +70, 2 +35, else +15; −50 per other first choice doctor today; behind pace +1.5/h; over goal −(300 + 20/h); at target −150; weekend −25 per weekend worked; late shifts above average −15 each; request score; late run near limit −50/−150; senior +10; priority duty +30.
+   - Nurse Clinic slot: a shift covering all opening hours first; a shorter one only when nobody can work it.
    - Free nurse each hour (plus one rule): stretch an existing shift, else add a nurse.
+   - **One Nurse Clinic a day** (the DEDICATED_NURSE_CLINIC rule value, at least 1): a nurse added later who is not with a doctor (evening free nurse, senior, holiday cover) gets Nurse Clinic only while the day still needs one, otherwise she floats (`roleForExtraNurse`).
    - Senior each day (H1): add an extra senior, else swap a senior into a junior's generated shift, else add anyway.
    - Second nurse for a partly covered doctor (from spare hours).
-   - Float shifts from spare hours for nurses behind pace (her top specialty, else general pool `role-float`).
+   - Float shifts from spare hours for nurses behind pace, always `clinicalRoleId: 'role-float'` (`FLOAT_ROLE_ID`), shown as **Float** everywhere. `floatShift.isFloatShift` also treats older shifts with a department and no doctor as Float (grid, PDF, Excel, CSV, emails, nurse pages, calendar, history).
 10. Requests met are tallied.
 
 Ties rotate between nurses by an FNV hash of date and nurse id, so the result is deterministic.

@@ -32,6 +32,7 @@ import { escapeHtml, safeColor } from '../../utils/escapeHtml';
 import { leaveCreditInRange, resolveFullTimeTarget } from '../hours/hoursPolicy';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+import { isFloatShift } from '../engine/floatShift';
 
 export interface GenerateEmailPayloadParams {
   clinicName: string;
@@ -138,7 +139,8 @@ export class RosterPublishService {
         const weekday = WEEKDAY_NAMES[dObj.getUTCDay()];
 
         let target = 'General Pool';
-        if (a.doctorId) target = docMap.get(a.doctorId)?.fullName || 'Doctor';
+        if (isFloatShift(a)) target = 'Float';
+        else if (a.doctorId) target = docMap.get(a.doctorId)?.fullName || 'Doctor';
         else if (a.clinicalRoleId) target = roleMap.get(a.clinicalRoleId)?.name || 'Clinical Role';
         else if (a.specialtyId) target = spMap.get(a.specialtyId)?.name || 'Specialty';
         target = h(target);

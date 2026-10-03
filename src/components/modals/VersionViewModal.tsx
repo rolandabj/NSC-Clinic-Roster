@@ -42,6 +42,7 @@ import { useDialogA11y } from '../common/useDialogA11y';
 import { formatDate } from '../../utils/dateUtils';
 
 const SOURCE_LABELS: Record<string, string> = { GENERATED: 'Filled automatically', MANUAL: 'Set by hand', LOCK: 'From a pinned day' };
+import { isFloatShift } from '../../services/engine/floatShift';
 
 interface VersionViewModalProps {
   version: ScheduleVersion | null;
@@ -381,7 +382,9 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                           const leaveType = leave ? leaveTypeMap.get(leave.leaveTypeId) : null;
 
                           let targetLabel = '';
-                          if (asgn?.doctorId) {
+                          if (asgn && isFloatShift(asgn)) {
+                            targetLabel = 'Float';
+                          } else if (asgn?.doctorId) {
                             const doc = doctorMap.get(asgn.doctorId);
                             targetLabel = doc ? doc.fullName.split(' ')[1] || doc.fullName : 'Doctor';
                           } else if (asgn?.clinicalRoleId) {
@@ -453,7 +456,9 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
                     const duty = dutyMap.get(a.dutyWindowId);
 
                     let targetName = 'Any specialty';
-                    if (a.doctorId) {
+                    if (isFloatShift(a)) {
+                      targetName = 'Float';
+                    } else if (a.doctorId) {
                       const doc = doctorMap.get(a.doctorId);
                       targetName = doc ? doc.fullName : 'Doctor';
                     } else if (a.clinicalRoleId) {

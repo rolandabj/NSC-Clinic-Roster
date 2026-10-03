@@ -9,6 +9,7 @@
  */
 
 import type { Assignment, DutyWindow, Doctor, ClinicalRole, Specialty, NurseRosterDoc, NurseRosterShift } from '../../types';
+import { isFloatShift } from '../engine/floatShift';
 
 interface IcsParams {
   calendarName: string;
@@ -144,7 +145,8 @@ export function buildNurseIcs(params: IcsParams): string {
     }
 
     let pairing = 'General Pool';
-    if (a.doctorId) pairing = doctorMap.get(a.doctorId)?.fullName || 'Doctor';
+    if (isFloatShift(a)) pairing = 'Float';
+    else if (a.doctorId) pairing = doctorMap.get(a.doctorId)?.fullName || 'Doctor';
     else if (a.clinicalRoleId) pairing = roleMap.get(a.clinicalRoleId)?.name || 'Clinical Role';
     else if (a.specialtyId) pairing = specialtyMap.get(a.specialtyId)?.name || 'Specialty';
 

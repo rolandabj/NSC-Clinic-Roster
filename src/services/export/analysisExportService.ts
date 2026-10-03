@@ -43,6 +43,7 @@ import {
   uncoveredParts,
 } from '../engine/clinicModel';
 import { isExclusiveNurseClinic } from '../engine/nurseClinicUtils';
+import { isFloatShift } from '../engine/floatShift';
 import { isLateDuty, lateDutyThreshold } from '../engine/SchedulingEngine';
 import { isPendingLeave } from '../engine/leaveStatus';
 import { leaveCreditOnDate, resolveFullTimeTarget } from '../hours/hoursPolicy';
@@ -220,7 +221,8 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
         specialtyId: a.specialtyId || null,
         specialty: a.specialtyId ? specialtyMap.get(a.specialtyId)?.name || a.specialtyId : null,
         clinicalRoleId: a.clinicalRoleId || null,
-        clinicalRole: a.clinicalRoleId ? roleMap.get(a.clinicalRoleId)?.acronym || a.clinicalRoleId : null,
+        clinicalRole: isFloatShift(a) ? 'Float' : a.clinicalRoleId ? roleMap.get(a.clinicalRoleId)?.acronym || a.clinicalRoleId : null,
+        float: isFloatShift(a),
         preferenceRank: pairing ? pairing.rank : specialtyRank,
         preferenceMatchedBy: pairing ? pairing.by : specialtyRank !== null ? 'SPECIALTY' : null,
         source: a.source,
@@ -384,13 +386,16 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
       shiftsByType: countBy(dayShifts.map((a) => dutyMap.get(a.dutyWindowId)?.acronym || a.dutyWindowId)),
       doctorSessions,
       nurseClinic: dayShifts
-        .filter((a) => a.kind === 'CLINICAL_ROLE')
+        .filter((a) => a.kind === 'CLINICAL_ROLE' && !isFloatShift(a))
         .map((a) => ({
           nurseId: a.nurseId,
           nurse: nurseName(a.nurseId),
           role: a.clinicalRoleId ? roleMap.get(a.clinicalRoleId)?.acronym || a.clinicalRoleId : null,
           shift: dutyMap.get(a.dutyWindowId)?.acronym || null,
         })),
+      floats: dayShifts
+        .filter((a) => isFloatShift(a))
+        .map((a) => ({ nurseId: a.nurseId, nurse: nurseName(a.nurseId), shift: dutyMap.get(a.dutyWindowId)?.acronym || null })),
       onLeave: leave
         .filter((le) => date >= le.startDate && date <= le.endDate)
         .map((le) => ({ nurseId: le.nurseId, nurse: le.nurse, type: le.type, status: le.status })),
@@ -459,7 +464,8 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
           weekendShifts: mine.filter((s) => isWeekendDate(s.date)).length,
           holidayShifts: mine.filter((s) => holidays.has(s.date)).length,
           lateShifts: mine.filter((s) => s.late).length,
-          nurseClinicShifts: mine.filter((s) => s.kind === 'CLINICAL_ROLE').length,
+          nurseClinicShifts: mine.filter((s) => s.kind === 'CLINICAL_ROLE' && !s.float).length,
+          floatShifts: mine.filter((s) => s.float).length,
           withFirstChoice: mine.filter((s) => s.preferenceRank === 1).length,
           withOtherChoice: mine.filter((s) => s.preferenceRank !== null && s.preferenceRank > 1).length,
           doctorShiftsOutsideList: mine.filter((s) => s.kind === 'DOCTOR' && s.preferenceRank === null).length,

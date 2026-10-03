@@ -35,6 +35,7 @@ import {
   GenerationPreflightSummary,
 } from './types';
 import { isExclusiveNurseClinic } from './nurseClinicUtils';
+import { FLOAT_ROLE_ID } from './floatShift';
 import { resolveFullTimeTarget, nurseLeaveHoursInRange, leaveDaysInRange } from '../hours/hoursPolicy';
 import { calculateWorkingHoursForDateRange } from '../periods/workingHoursPeriodService';
 import { generateDoctorSessionsForDateRange } from '../schedule/doctorScheduleService';
@@ -1004,6 +1005,9 @@ export class SchedulingEngine {
 
     const ncRoleIds = new Set([nurseClinicRole.id, 'role-nurse-clinic']);
     const isNurseClinicAssignment = (a: Assignment) => a.kind === 'CLINICAL_ROLE' && !!a.clinicalRoleId && ncRoleIds.has(a.clinicalRoleId);
+    // Nurse Clinic shifts a day may have: the rule's number (one by default). Any other
+    // nurse who is not with a doctor floats, even when she covers free nurse hours.
+    const ncShiftsPerDay = Math.max(1, ncQuota);
 
     // Hours each day needs whatever happens (a nurse for each doctor and the free nurse,
     // or the one holiday nurse), less the hours of shifts already fixed on that day, and
@@ -1124,6 +1128,11 @@ export class SchedulingEngine {
       // Nurses in a fresh, fair order for today (used for ties)
       const dayOrder = [...sortedNurses].sort((a, b) => tieOrder(a.id, date) - tieOrder(b.id, date));
       const existingToday = () => Array.from(resultAssignmentsMap.values()).filter((a) => a.date === date);
+      /** The job of a nurse added who is not with a doctor: Nurse Clinic while today still needs one, otherwise float. */
+      const roleForExtraNurse = (nurse: Nurse): string =>
+        canBeFreeNurse(nurse, roles) && existingToday().filter(isNurseClinicAssignment).length < ncShiftsPerDay
+          ? nurseClinicRole.id
+          : FLOAT_ROLE_ID;
 
       // Retained shifts today count toward today's counters
       existingToday().forEach((asgn) => {
@@ -1162,6 +1171,7 @@ export class SchedulingEngine {
             unmetSlotsCount++;
             break;
           }
+          const holidayRole = roleForExtraNurse(best.nurse);
           placeShift(
             {
               id: `asgn-gen-${schedule.id}-${best.nurse.id}-${date}-HOL`,
@@ -1170,15 +1180,14 @@ export class SchedulingEngine {
               date,
               dutyWindowId: best.duty.id,
               kind: 'CLINICAL_ROLE',
-              clinicalRoleId: nurseClinicRole.id,
+              clinicalRoleId: holidayRole,
               locked: false,
               source: 'GENERATED',
               note: 'Public holiday cover (on call doctor)',
-              ...(canBeFreeNurse(best.nurse, roles) ? {} : { clinicalRoleId: 'role-float' }),
             },
             isWeekend,
             true,
-            true
+            holidayRole !== FLOAT_ROLE_ID
           );
         }
         continue;
@@ -1482,12 +1491,22 @@ export class SchedulingEngine {
               (x) => !filled.has(x.doctorId) && pairingRank(n, x.doctorId, x) === 1 && canWorkWithDoctor(n, x.doctorId, x)
             );
           };
+          // Nurse Clinic runs the whole opening hours: a shift that covers them all comes
+          // first, and a shorter one only when nobody can work it. A shorter shift leaves
+          // hours that need another free nurse, so it costs a second nurse.
+          const coversSlot = (d: DutyWindow) => d.startTime <= slot.startTime && d.endTime >= slot.endTime;
+          const coverSets: ((d: DutyWindow) => boolean)[] = isNurseClinicSlot
+            ? [coversSlot, (d) => !coversSlot(d)]
+            : [() => true];
           cohorts: for (const withinGoalOnly of [true, false])
             for (const keepForDoctors of isNurseClinicSlot ? [true, false] : [false])
+              for (const inCoverSet of coverSets)
               for (const cohort of candidateCohorts) {
                 const nurses = keepForDoctors ? cohort.nurses.filter((n) => !firstChoiceOfOpenDoctor(n)) : cohort.nurses;
                 if (nurses.length === 0) continue;
-                for (const tier of tiersToEvaluate) {
+                for (const fullTier of tiersToEvaluate) {
+                  const tier = fullTier.filter(inCoverSet);
+                  if (tier.length === 0) continue;
                   const found = bestInCohort({ nurses }, tier, withinGoalOnly);
                   if (found) {
                     bestNurse = found.nurse;
@@ -1599,6 +1618,9 @@ export class SchedulingEngine {
             }
           }
           if (!added) break; // nobody qualified is free: the validator will flag the gap
+          // Today's Nurse Clinic nurse may already be on duty (e.g. until 19:00): the nurse
+          // added for the remaining hours then floats, so a day has one Nurse Clinic.
+          const freeRole = roleForExtraNurse(added.nurse);
           placeShift(
             {
               id: `asgn-gen-${schedule.id}-${added.nurse.id}-${date}-free`,
@@ -1607,14 +1629,17 @@ export class SchedulingEngine {
               date,
               dutyWindowId: added.duty.id,
               kind: 'CLINICAL_ROLE',
-              clinicalRoleId: nurseClinicRole.id,
+              clinicalRoleId: freeRole,
               locked: false,
               source: 'GENERATED',
-              note: 'Free nurse (Nurse Clinic and blood collection)',
+              note:
+                freeRole === FLOAT_ROLE_ID
+                  ? 'Float (free nurse when no other nurse is free of a doctor)'
+                  : 'Free nurse (Nurse Clinic and blood collection)',
             },
             isWeekend,
             false,
-            true
+            freeRole !== FLOAT_ROLE_ID
           );
         }
       }
@@ -1651,7 +1676,7 @@ export class SchedulingEngine {
               fitsHardRules(senior, date, d, calculateDutyDurationHours(d))
           );
           if (!duty) continue;
-          const free = canBeFreeNurse(senior, roles);
+          const seniorRole = roleForExtraNurse(senior);
           placeShift(
             {
               id: `asgn-gen-${schedule.id}-${senior.id}-${date}-SENIOR`,
@@ -1660,14 +1685,14 @@ export class SchedulingEngine {
               date,
               dutyWindowId: duty.id,
               kind: 'CLINICAL_ROLE',
-              clinicalRoleId: free ? nurseClinicRole.id : 'role-float',
+              clinicalRoleId: seniorRole,
               locked: false,
               source: 'GENERATED',
               note: 'Senior nurse on duty',
             },
             isWeekend,
             false,
-            free
+            seniorRole !== FLOAT_ROLE_ID
           );
           done = true;
           break;
@@ -1724,7 +1749,7 @@ export class SchedulingEngine {
               fitsHardRules(senior, date, d, calculateDutyDurationHours(d))
             );
             if (!duty) continue;
-            const free = canBeFreeNurse(senior, roles);
+            const seniorRole = roleForExtraNurse(senior);
             placeShift(
               {
                 id: `asgn-gen-${schedule.id}-${senior.id}-${date}-SENIOR`,
@@ -1733,14 +1758,14 @@ export class SchedulingEngine {
                 date,
                 dutyWindowId: duty.id,
                 kind: 'CLINICAL_ROLE',
-                clinicalRoleId: free ? nurseClinicRole.id : 'role-float',
+                clinicalRoleId: seniorRole,
                 locked: false,
                 source: 'GENERATED',
                 note: 'Senior nurse on duty',
               },
               isWeekend,
               false,
-              free
+              seniorRole !== FLOAT_ROLE_ID
             );
             break;
           }
@@ -1856,12 +1881,7 @@ export class SchedulingEngine {
         if (needsPhlReserve && canBeFreeNurse(nurse, roles)) phlFloatBudget -= calculateDutyDurationHours(selected);
         if (isSenior(nurse)) seniorFloatBudget -= calculateDutyDurationHours(selected);
 
-        // A nurse with a specialty in her profile floats in her highest ranked one, otherwise in the general pool.
-        const canTakeSpecialty = nurse.isClinicNurse && !isExclusiveNurseClinic(nurse, roles);
-        const specPref = canTakeSpecialty
-          ? [...(nurse.preferences || [])].filter((p) => p.kind === 'SPECIALTY').sort((a, b) => a.rank - b.rank)[0]
-          : undefined;
-        const spec = specPref ? specialties.find((s) => specialtyMatchesPref(specPref.refId, s)) : null;
+        // A nurse who is not with a doctor floats (shown as Float on the roster, not a department).
         placeShift(
           {
             id: `asgn-gen-${schedule.id}-${nurse.id}-${date}-POOL`,
@@ -1869,14 +1889,11 @@ export class SchedulingEngine {
             nurseId: nurse.id,
             date,
             dutyWindowId: selected.id,
-            kind: spec ? 'SPECIALTY' : 'CLINICAL_ROLE',
-            specialtyId: spec ? spec.id : undefined,
-            clinicalRoleId: spec ? undefined : 'role-float',
+            kind: 'CLINICAL_ROLE',
+            clinicalRoleId: FLOAT_ROLE_ID,
             locked: false,
             source: 'GENERATED',
-            note: spec
-              ? `${spec.name} Coverage / Float Pool (${selected.isPriority ? 'Priority' : 'Standard'})`
-              : `General Clinic / Float Pool (${selected.isPriority ? 'Priority' : 'Standard'})`,
+            note: 'Float',
           },
           isWeekend,
           false,

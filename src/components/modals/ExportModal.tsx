@@ -55,6 +55,7 @@ import {
   calculateDutyDurationHours,
   NurseHoursAccounting,
 } from '../../services/reports/hoursAccounting';
+import { isFloatShift } from '../../services/engine/floatShift';
 
 interface ExportModalProps {
   clinicName: string;
@@ -929,7 +930,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                           {entry.dutyWindow ? `${entry.dutyWindow.startTime}–${entry.dutyWindow.endTime}` : '—'}
                         </td>
                         <td className="border border-black p-1 font-sans">
-                          {entry.doctor
+                          {entry.assignment && isFloatShift(entry.assignment)
+                            ? 'Float'
+                            : entry.doctor
                             ? entry.doctor.fullName
                             : entry.clinicalRole
                             ? entry.clinicalRole.name

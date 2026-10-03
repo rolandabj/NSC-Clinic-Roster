@@ -70,6 +70,7 @@ import { DeleteVersionModal } from '../modals/DeleteVersionModal';
 import { DeleteScheduleModal } from '../modals/DeleteScheduleModal';
 import { deleteEntireSchedule } from '../../services/schedule/scheduleDeletionService';
 import { withoutBackups } from '../../services/history/versionList';
+import { isFloatShift } from '../../services/engine/floatShift';
 
 interface HistoryViewProps {
   context: ClinicContextState;
@@ -1212,7 +1213,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                                   const leaveType = leave ? leaveTypeMap.get(leave.leaveTypeId) : null;
 
                                   let targetLabel = '';
-                                  if (asgn?.doctorId) {
+                                  if (asgn && isFloatShift(asgn)) {
+                                    targetLabel = 'Float';
+                                  } else if (asgn?.doctorId) {
                                     const doc = doctorMap.get(asgn.doctorId);
                                     targetLabel = doc ? doc.fullName.split(' ')[1] || doc.fullName : 'Doc';
                                   } else if (asgn?.clinicalRoleId) {
@@ -1424,7 +1427,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                             const duty = dutyMap.get(a.dutyWindowId);
 
                             let targetName = 'Specialty Pool';
-                            if (a.doctorId) {
+                            if (isFloatShift(a)) {
+                              targetName = 'Float';
+                            } else if (a.doctorId) {
                               const doc = doctorMap.get(a.doctorId);
                               targetName = doc ? doc.fullName : 'Doctor';
                             } else if (a.clinicalRoleId) {

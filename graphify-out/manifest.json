@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/ExportModal.tsx": {
-    "mtime": 1791051049.4821453,
-    "seen": 1791051157.0645638,
-    "ast_hash": "222228e29f213c34bb15284c59030c09",
+    "mtime": 1791051785.3468878,
+    "seen": 1791051936.712135,
+    "ast_hash": "44da82ee1cb6e6871a98d57141958978",
     "semantic_hash": ""
   },
   "src/components/modals/FairnessModal.tsx": {
@@ -222,9 +222,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/VersionViewModal.tsx": {
-    "mtime": 1791031563.0423193,
-    "seen": 1791051157.0645745,
-    "ast_hash": "94c4d19187d2e9f782d7be6e52c9a203",
+    "mtime": 1791051785.3417735,
+    "seen": 1791051936.7121484,
+    "ast_hash": "cdcecbc45b538e4f0ada0138542e5286",
     "semantic_hash": ""
   },
   "src/components/modals/WalkthroughModal.tsx": {
@@ -276,9 +276,9 @@
     "semantic_hash": "a763257c4e18e4cfc42f672a27230cf4"
   },
   "src/components/views/HistoryView.tsx": {
-    "mtime": 1791031563.0463192,
-    "seen": 1791051157.064584,
-    "ast_hash": "8928d5d95ec6991f5b9cc2468aa01a28",
+    "mtime": 1791051785.3406122,
+    "seen": 1791051936.7121577,
+    "ast_hash": "4143d07a89aee87faf23ca7b48a411b9",
     "semantic_hash": ""
   },
   "src/components/views/NurseSelfServicePanel.tsx": {
@@ -300,9 +300,9 @@
     "semantic_hash": ""
   },
   "src/components/views/PublishedRosterView.tsx": {
-    "mtime": 1791031563.0463192,
-    "seen": 1791051157.0645895,
-    "ast_hash": "6e33e836a99e82b39ad05b4ce8613037",
+    "mtime": 1791051785.3454218,
+    "seen": 1791051936.7121627,
+    "ast_hash": "f8a88c21826affcf0f144add93e3792c",
     "semantic_hash": ""
   },
   "src/components/views/ReportsView.tsx": {
@@ -426,9 +426,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/WorkbookGrid.tsx": {
-    "mtime": 1791031563.0623193,
-    "seen": 1791051157.0646155,
-    "ast_hash": "245b0cadb19409ffc87afa729fa0203d",
+    "mtime": 1791051813.8125527,
+    "seen": 1791051936.7121878,
+    "ast_hash": "65f2e2faaa6036b85fffc3dd7b7f54da",
     "semantic_hash": ""
   },
   "src/main.tsx": {
@@ -450,9 +450,9 @@
     "semantic_hash": "7f14f9df033240b364eb865b54a94258"
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1791031563.0677643,
-    "seen": 1791051157.064623,
-    "ast_hash": "7d553109c807eabf263072b41a34d846",
+    "mtime": 1791051900.2273338,
+    "seen": 1791051936.7121952,
+    "ast_hash": "9a1657975a58f562467b280125f9fba6",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
@@ -486,21 +486,21 @@
     "semantic_hash": ""
   },
   "src/services/export/icsExportService.ts": {
-    "mtime": 1791031563.0677643,
-    "seen": 1791051157.0646336,
-    "ast_hash": "e52ad8bd8f5a54ef71424c4c8dca2fe2",
+    "mtime": 1791051785.3425553,
+    "seen": 1791051936.7122073,
+    "ast_hash": "79b615b4fae17dd1ac9177e375e682f6",
     "semantic_hash": ""
   },
   "src/services/export/rosterExportService.ts": {
-    "mtime": 1791031563.0703194,
-    "seen": 1791051157.0646348,
-    "ast_hash": "6f58d47e0b70c8eaf2d600876d990ded",
+    "mtime": 1791051785.3462312,
+    "seen": 1791051936.712208,
+    "ast_hash": "8d7204bc0e3e200c583d290e2f37ac53",
     "semantic_hash": ""
   },
   "src/services/export/rosterPdfService.ts": {
-    "mtime": 1791031563.0703194,
-    "seen": 1791051157.064636,
-    "ast_hash": "0633b842997c18cbfb479055ff4f2aa3",
+    "mtime": 1791051785.3443015,
+    "seen": 1791051936.7122092,
+    "ast_hash": "b30bbcc2b352890024524f546f53973b",
     "semantic_hash": ""
   },
   "src/services/firebase/firebaseConfig.ts": {
@@ -516,9 +516,9 @@
     "semantic_hash": "9c8ae7630c974986cd032a3b85cc04c0"
   },
   "src/services/history/diffEngine.ts": {
-    "mtime": 1791031563.0722325,
-    "seen": 1791051157.0646415,
-    "ast_hash": "decf5c2415388ab9bf65fdeee4be9b84",
+    "mtime": 1791051785.342155,
+    "seen": 1791051936.7122142,
+    "ast_hash": "5e15b88a43b2e2b22b33a1eb978e85dd",
     "semantic_hash": ""
   },
   "src/services/hours/hoursPolicy.ts": {
@@ -546,9 +546,9 @@
     "semantic_hash": ""
   },
   "src/services/publish/rosterPublishService.ts": {
-    "mtime": 1791031563.0738883,
-    "seen": 1791051157.0646515,
-    "ast_hash": "777e77ca6367865b209cabb601661502",
+    "mtime": 1791051785.3429656,
+    "seen": 1791051936.7122233,
+    "ast_hash": "a0e4c3d58323ce08974ee2a90704f593",
     "semantic_hash": ""
   },
   "src/services/reports/hoursAccounting.ts": {
@@ -894,9 +894,9 @@
     "semantic_hash": ""
   },
   "src/services/publish/nurseRosterService.ts": {
-    "mtime": 1791031563.0738883,
-    "seen": 1791051157.0646496,
-    "ast_hash": "dd916d7d5b7600c6e48e59d9c4b72131",
+    "mtime": 1791051839.0723193,
+    "seen": 1791051936.7122214,
+    "ast_hash": "6ae0331caad85b59358afa612d070a19",
     "semantic_hash": ""
   },
   "src/services/schedule/newRosterDates.ts": {
@@ -948,9 +948,9 @@
     "semantic_hash": ""
   },
   "tests/unit/nurseRoster.test.ts": {
-    "mtime": 1791031563.0827599,
-    "seen": 1791051157.064696,
-    "ast_hash": "9a80cb70288eb36802926a10349a1c87",
+    "mtime": 1791051909.1001532,
+    "seen": 1791051936.7122672,
+    "ast_hash": "e3cd3ec5238271ea31ce6f79bc6b5f2c",
     "semantic_hash": ""
   },
   "tests/unit/preferenceFocus.test.ts": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791051149.8456697,
-    "seen": 1791051157.064727,
-    "ast_hash": "52e219f858a73bdcdd65fb7452a43610",
+    "mtime": 1791051931.5356698,
+    "seen": 1791051936.712288,
+    "ast_hash": "004a3320705fc5b2cd9770a6e5b0b741",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1002,9 +1002,9 @@
     "semantic_hash": ""
   },
   "src/services/export/analysisExportService.ts": {
-    "mtime": 1791051023.3689432,
-    "seen": 1791051157.0646324,
-    "ast_hash": "b02a664758c7eddf23f2c0b94951b609",
+    "mtime": 1791051820.0688972,
+    "seen": 1791051936.7122066,
+    "ast_hash": "86274eb8c5fad53a43db1ce9438dfaeb",
     "semantic_hash": ""
   },
   "tests/unit/analysisExport.test.ts": {
@@ -1071,6 +1071,18 @@
     "mtime": 1791031562.98983,
     "seen": 1791051157.064726,
     "ast_hash": "b5bfd08e0adf1dd99142013dccedc6b4",
+    "semantic_hash": ""
+  },
+  "src/services/engine/floatShift.ts": {
+    "mtime": 1791051792.2751458,
+    "seen": 1791051936.7122006,
+    "ast_hash": "d7b9d6a8cac4cc7da93991824e708a95",
+    "semantic_hash": ""
+  },
+  "tests/unit/nurseClinicFloat.test.ts": {
+    "mtime": 1791051899.7305143,
+    "seen": 1791051936.7122662,
+    "ast_hash": "6f6a81399d919a5572b72c5c7b3eb478",
     "semantic_hash": ""
   }
 }

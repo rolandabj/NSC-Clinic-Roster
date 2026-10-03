@@ -81,8 +81,9 @@ test('shift wording is plain', () => {
   assert.equal(shiftDetail({ doctorId: 'doc-dr' }, refs), 'With Dr. Omar Saleh');
   assert.equal(shiftDetail({ clinicalRoleId: 'role-nurse-clinic' }, refs), 'Nurse Clinic');
   assert.equal(shiftDetail({ clinicalRoleId: 'role-phl' }, refs), 'Blood Collection');
-  assert.equal(shiftDetail({ specialtyId: 'sp-card' }, refs), 'Department: Cardiology');
-  assert.equal(shiftDetail({}, refs), 'General Pool');
+  assert.equal(shiftDetail({ specialtyId: 'sp-card' }, refs), 'Float');
+  assert.equal(shiftDetail({}, refs), 'Float');
+  assert.equal(shiftDetail({ clinicalRoleId: 'role-float' }, refs), 'Float');
 });
 
 test('only her shifts, from the latest published version', () => {
@@ -100,7 +101,7 @@ test('only her shifts, from the latest published version', () => {
     doc.shifts.map((s) => [s.date, s.acronym, s.detail]),
     [
       ['2026-12-01', 'E', 'With Dr Amal'],
-      ['2026-12-03', 'L', 'Department: Cardiology'],
+      ['2026-12-03', 'L', 'Float'],
     ]
   );
   assert.equal(doc.id, base.token);

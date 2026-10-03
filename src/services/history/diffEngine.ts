@@ -16,6 +16,7 @@ import {
 } from '../../types';
 
 export type ChangeType = 'ADDED' | 'REMOVED' | 'MODIFIED';
+import { isFloatShift } from '../engine/floatShift';
 
 export interface FormattedAssignmentState {
   dutyWindowId: string;
@@ -67,7 +68,9 @@ function formatAssignment(
   const duty = dutyMap.get(asgn.dutyWindowId);
   let targetName = 'Specialty Pool';
 
-  if (asgn.doctorId) {
+  if (isFloatShift(asgn)) {
+    targetName = 'Float';
+  } else if (asgn.doctorId) {
     const doc = doctorMap.get(asgn.doctorId);
     targetName = doc ? doc.fullName : 'Doctor';
   } else if (asgn.clinicalRoleId) {
