@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-03, at commit `9c0b819` on `main`.
+Last updated: 2026-10-03, after the engine fixes from the Sep 19 to Oct 18 roster analysis (section 16, item 10).
 
 ---
 
@@ -10,7 +10,7 @@ Last updated: 2026-10-03, at commit `9c0b819` on `main`.
 
 **What it is.** A nurse rostering web app for one outpatient clinic (American Hospital Nad Al Sheba OutPatient clinic, Dubai, timezone Asia/Dubai). Planners build a roster (a grid of nurses × days), the engine fills it automatically, the app checks it against the clinic rules, and the roster is published to nurses by email, private links and a calendar feed.
 
-**Repository.** GitHub `rolandabj/nsc-clinic-roster`. Default branch `main`. Working branch used by Claude sessions: `ccr-7e9cfdbe-x4izxn`.
+**Repository.** GitHub `rolandabj/nsc-clinic-roster`. Default branch `main`. Working branch used by Claude sessions: the branch named by the session (recently `ccr-6dd5843f-1r1r0c`).
 
 **Stack.** React 19 + Vite 8 + Tailwind 4 + TypeScript (browser). Cloud Firestore accessed directly from the browser, protected by `firestore.rules`. A small Express server only sends email and serves the `.ics` calendar feed. Hosted by Google AI Studio (Cloud Run), which syncs from GitHub `main`.
 
@@ -445,6 +445,8 @@ Completed and on `main`, in order:
 6. Dashboard rewrite (planner and viewer paths) and review fixes.
 7. Grid problem marks fix (day badges, nurse badges, switch).
 8. Doctor vs specialty preferences: shared ranked list fixes in the engine and the per nurse "which comes first" setting (commit `9c0b819`).
+9. Export: "Full report for analysis" JSON (`analysisExportService`), for the owner to hand a roster back to Claude.
+10. From the Sep 19 to Oct 18 2026 roster analysis: one Nurse Clinic a day and a 9-9 Nurse Clinic shift first; nurses not with a doctor are Float everywhere (`floatShift.ts`); last resort nurse for a doctor with nobody, reported as Check (`lastResort.ts`); shortages of a doctor's own nurses spread over the roster; the consecutive days rule renamed "Maximum consecutive shifts"; a doctor's nurse behind her hours gets a longer shift (9-7 to 9-9).
 
 ---
 

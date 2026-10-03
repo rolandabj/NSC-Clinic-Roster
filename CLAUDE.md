@@ -2,6 +2,11 @@
 
 Read `PROJECT_GUIDE.md` first: it describes the whole app, the code layout, the roster engine, data, deploy, tests and how the owner likes to work (plain English with no hyphens, ask before pushing to `main`, inspect before fixing).
 
+## Always, with every change (owner's standing instruction)
+
+1. Update `PROJECT_GUIDE.md` in the same commit: the sections the change touches, the test count, section 16 (history of work) and the "Last updated" line.
+2. Refresh the graph with `graphify update .` and commit the changed files in `graphify-out/`.
+
 ## graphify
 
 - **graphify** (`.claude/skills/graphify/SKILL.md`) turns the codebase into a knowledge graph. Trigger: `/graphify`.
