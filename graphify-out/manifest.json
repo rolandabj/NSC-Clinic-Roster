@@ -450,9 +450,9 @@
     "semantic_hash": "7f14f9df033240b364eb865b54a94258"
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1791052378.1869488,
-    "seen": 1791052420.1306467,
-    "ast_hash": "dc7e539a9f60162c53f9c3fc88839f37",
+    "mtime": 1791052629.0185332,
+    "seen": 1791052655.8816283,
+    "ast_hash": "fd308672abe7e95f50c1dda702872ba2",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791052414.9737585,
-    "seen": 1791052420.1307442,
-    "ast_hash": "6341c056c0386c03174b60e02c5c0be1",
+    "mtime": 1791052650.6916027,
+    "seen": 1791052655.881723,
+    "ast_hash": "43f5a5c7dc5b187365aa2f16d37a7fdd",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1092,9 +1092,9 @@
     "semantic_hash": ""
   },
   "tests/unit/lastResort.test.ts": {
-    "mtime": 1791052363.6667738,
-    "seen": 1791052420.1307158,
-    "ast_hash": "58250a368e8218f5014ef37ec50b3a57",
+    "mtime": 1791052622.814789,
+    "seen": 1791052655.881698,
+    "ast_hash": "6ac8e40b4c3c002ff9c50b9f29e07627",
     "semantic_hash": ""
   }
 }

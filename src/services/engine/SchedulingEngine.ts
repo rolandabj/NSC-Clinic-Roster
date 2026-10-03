@@ -1161,6 +1161,22 @@ export class SchedulingEngine {
       return false;
     };
 
+    /** Nurses in a pool whose hours left are below what its doctors still need after `date`. */
+    const nursesInShortPools = (date: string): Set<string> => {
+      const out = new Set<string>();
+      poolSessions.forEach((list, key) => {
+        const needed = list.filter((x) => x.date > date).reduce((sum, x) => sum + x.hours, 0);
+        if (needed <= 0) return;
+        const members = poolMembers.get(key) || [];
+        const left = members.reduce(
+          (sum, n) => sum + Math.max(0, (nurseTargetMap.get(n.id)?.dutyTarget ?? 0) - (nurseStates.get(n.id)?.totalDutyHoursEarned ?? 0)),
+          0
+        );
+        if (left < needed) members.forEach((n) => out.add(n.id));
+      });
+      return out;
+    };
+
     // 5. Day by day
     for (let dayIdx = 0; dayIdx < datesList.length; dayIdx++) {
       const date = datesList[dayIdx];
@@ -1898,6 +1914,53 @@ export class SchedulingEngine {
             false
           );
         }
+      }
+
+      // 5.5b A doctor's nurse who is behind her hours works on after his session: her shift
+      // is lengthened (e.g. 9-7 to 9-9 when Dr Rayya works 9 to 7), and once he leaves she is
+      // a free nurse. Like a float it comes from today's spare hours, stays within her goal
+      // (keeping hours for her first choice doctors), and never uses the hours of nurses
+      // whose doctors are short of them.
+      const shortPoolNurses = nursesInShortPools(date);
+      const lengthenOrder = existingToday()
+        .filter((a) => a.kind === 'DOCTOR' && a.source === 'GENERATED' && !a.locked)
+        .sort((a, b) => hoursBehindPace(b.nurseId, dayIdx) - hoursBehindPace(a.nurseId, dayIdx));
+      for (const asgn of lengthenOrder) {
+        if (floatBudget <= 0) break;
+        const nurse = nurseMap.get(asgn.nurseId);
+        const oldDuty = dutyMapGlobal.get(asgn.dutyWindowId);
+        if (!nurse || !oldDuty || shortPoolNurses.has(nurse.id)) continue;
+        const behind = hoursBehindPace(nurse.id, dayIdx);
+        if (behind <= 0) continue; // on or ahead of her pace
+        const longer = activeDuties
+          .filter((d) => d.id !== oldDuty.id && d.startTime <= oldDuty.startTime && d.endTime >= oldDuty.endTime)
+          .map((d) => ({ d, extra: calculateDutyDurationHours(d) - calculateDutyDurationHours(oldDuty) }))
+          .filter(({ d, extra }) => {
+            if (extra <= 0 || extra > floatBudget || extra > behind) return false; // only the hours she is behind
+            if (needsPhlReserve && canBeFreeNurse(nurse, roles) && extra > phlFloatBudget) return false;
+            if (isSenior(nurse) && extra > seniorFloatBudget) return false;
+            // Seniors' hours are needed for a senior every day: keep a margin of one long shift
+            if (seniorRuleEnabled && isSenior(nurse) && spareHoursForToday(dayIdx, 'senior', true) < extra + longestShiftHours) return false;
+            if (hoursOverGoal(nurse.id, extra + keepForFirstChoiceAfter(nurse.id, dayIdx)) > 0) return false;
+            return fitsHardRules(nurse, date, d, extra, { replacingOwnShift: true });
+          })
+          // the longest that fits: she is behind, and it covers the most of the evening
+          .sort((a, b) => b.extra - a.extra || requestScore(nurse.id, date, b.d) - requestScore(nurse.id, date, a.d))[0];
+        if (!longer) continue;
+        resultAssignmentsMap.set(`${asgn.nurseId}_${date}`, {
+          ...asgn,
+          dutyWindowId: longer.d.id,
+          note: asgn.note ? `${asgn.note} (longer shift to make up her hours)` : 'Longer shift to make up her hours',
+        });
+        const state = nurseStates.get(nurse.id);
+        if (state) {
+          state.totalDutyHoursEarned += longer.extra;
+          state.lastDutyEndTime = `${date} ${longer.d.endTime}`;
+          state.lateShiftsWorked += (isLate(longer.d) ? 1 : 0) - (isLate(oldDuty) ? 1 : 0);
+        }
+        floatBudget -= longer.extra;
+        if (needsPhlReserve && canBeFreeNurse(nurse, roles)) phlFloatBudget -= longer.extra;
+        if (isSenior(nurse)) seniorFloatBudget -= longer.extra;
       }
 
       const floatOrder = [...dayOrder].sort((a, b) => hoursBehindPace(b.id, dayIdx) - hoursBehindPace(a.id, dayIdx));

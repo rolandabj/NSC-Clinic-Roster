@@ -21,7 +21,7 @@ Last updated: 2026-10-03, at commit `9c0b819` on `main`.
 | `npm install --legacy-peer-deps` | Install (the flag is needed for esbuild/vite peer conflicts) |
 | `npm run dev` | Express + Vite dev server on port 3000 |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 153 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 154 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `dist/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -289,6 +289,7 @@ Modes (`engine/types.ts`): GENERATE_ALL (rebuild; keeps hand edits when `keepMan
    - Senior each day (H1): add an extra senior, else swap a senior into a junior's generated shift, else add anyway.
    - **Spreading a shortage** (`poolMayStaff`): for each doctor session the pool is the nurses who may work with him (H8). When the pool's hours left are below the hours its sessions still need, each session adds left/needed to a credit (starting at 0.5) and is staffed by the pool only while the credit reaches 1, so missing sessions are spread over the roster instead of all falling at the end. Held back sessions go to 5.6.
    - Second nurse for a partly covered doctor (from spare hours).
+   - **5.5b Longer shift for a doctor's nurse**: a nurse with a doctor who is behind her pace gets a longer shift containing hers (e.g. 9-7 to 9-9 when the doctor works 9 to 7; she is a free nurse once he leaves). From today's spare hours, at most the hours she is behind, within her goal (keeping her first choice hours), never for nurses of a pool short of hours, and for seniors only with one long shift of senior spare hours to spare. Note "Longer shift to make up her hours".
    - Float shifts from spare hours for nurses behind pace, always `clinicalRoleId: 'role-float'` (`FLOAT_ROLE_ID`), shown as **Float** everywhere. `floatShift.isFloatShift` also treats older shifts with a department and no doctor as Float (grid, PDF, Excel, CSV, emails, nurse pages, calendar, history).
    - **5.6 Last resort**: a doctor still without any nurse gets a clinic nurse from outside her list (never an Exclusive Nurse Clinic nurse): first one already floating today (her float becomes the doctor shift, only if every opening hour keeps its free nurse), else one who is off and under her goal. The shift's note is `LAST_RESORT_NOTE`; the checker reports it as `h8-doctor-allocation` WARN ("Check") instead of ERROR. A held back session with no outsider available goes back to the pool's own nurses.
 10. Requests met are tallied.

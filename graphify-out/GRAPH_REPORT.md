@@ -1,7 +1,7 @@
 # Graph Report - NSC-Clinic-Roster  (2026-10-03)
 
 ## Corpus Check
-- 181 files · ~222,405 words
+- 181 files · ~223,127 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 6 file(s) not represented in the graph (top: (none) 2, .example 1, .lock 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c8601b27`
+- Built from commit: `2025d5e9`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -358,7 +358,7 @@ Nodes (5): AssignmentDiffItem, ChangeType, formatAssignment(), FormattedAssignme
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `react` connect `react` to `Assignment`, `getRepository`, `ExportModal.tsx`, `useDialogA11y`, `WorkingHoursPeriodsPanel.tsx`, `AvailabilityView.tsx`, `package.json`, `AppShell.tsx`, `App.tsx`, `DashboardView.tsx`, `seedRunner.ts`, `Sidebar.tsx`, `ClinicContextState`, `DoctorsView.tsx`, `SchedulesView.tsx`, `types/index.ts`, `PublishView.tsx`, `RulesTab.tsx`, `QuickCellPopup.tsx`, `WorkbookGrid.tsx`, `NSC Clinic Roster: complete project guide`, `ShareModal.tsx`?**
-  _High betweenness centrality (0.064) - this node is a cross-community bridge._
+  _High betweenness centrality (0.069) - this node is a cross-community bridge._
 - **Why does `lucide-react` connect `react` to `Assignment`, `getRepository`, `ExportModal.tsx`, `useDialogA11y`, `WorkingHoursPeriodsPanel.tsx`, `AvailabilityView.tsx`, `package.json`, `AppShell.tsx`, `App.tsx`, `DashboardView.tsx`, `seedRunner.ts`, `Sidebar.tsx`, `ClinicContextState`, `DoctorsView.tsx`, `SchedulesView.tsx`, `PublishView.tsx`, `RulesTab.tsx`, `QuickCellPopup.tsx`, `WorkbookGrid.tsx`, `ShareModal.tsx`?**
   _High betweenness centrality (0.049) - this node is a cross-community bridge._
 - **Why does `NSC Clinic Roster: complete project guide` connect `NSC Clinic Roster: complete project guide` to `PublishView.tsx`, `Assignment`, `analysisExport.test.ts`, `AppShell.tsx`, `EntityForCollection`, `WorkbookGrid.tsx`, `DashboardView.tsx`, `DoctorsView.tsx`?**

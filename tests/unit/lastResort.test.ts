@@ -75,3 +75,23 @@ test('when his own nurse is short of hours, the missing sessions are spread over
   assert.ok(lastResortDays.some((d) => d <= days[4]), `last resort days: ${lastResortDays.join(', ')}`);
   assert.ok(noorDays.some((d) => d > days[4]), `Noor's days: ${noorDays.join(', ')}`);
 });
+
+test('a doctor\'s nurse who is behind her hours works on after his session (9-7 becomes 9-9)', async () => {
+  const date = '2026-11-03';
+  const NINE_SEVEN = { id: 'n7', name: '9-7', acronym: '9-7', startTime: '09:00', endTime: '19:00', color: '#000', active: true };
+  const shortSession = { ...session(date), endTime: '18:30' } as DoctorSession;
+  const shiftOfNoor = async (target: number) => {
+    const noor = makeNurse('noor', { preferences: [{ kind: 'SPECIALTY', refId: PEDS.id, rank: 1 }] });
+    const amy = makeNurse('amy', { preferences: [{ kind: 'SPECIALTY', refId: ENT.id, rank: 1 }] });
+    const { assignments } = await SchedulingEngine.generate(
+      makeSchedule({ startDate: date, endDate: date, hoursTargetFullTime: target }), 'GENERATE_ALL', [], [noor, amy], [SENIOR],
+      [NINE_SEVEN, FULL], [], [PEDS, ENT], [shortSession], [], [], RULES, undefined, [], [DR_PEDS] as any, []
+    );
+    return assignments.find((a) => a.nurseId === 'noor');
+  };
+  const behind = await shiftOfNoor(12);
+  assert.equal(behind?.doctorId, DR_PEDS.id);
+  assert.equal(behind?.dutyWindowId, FULL.id, 'she needs 12 hours: 9 to 9');
+  const onTarget = await shiftOfNoor(10);
+  assert.equal(onTarget?.dutyWindowId, NINE_SEVEN.id, 'she needs 10 hours: 9 to 7 is enough');
+});
