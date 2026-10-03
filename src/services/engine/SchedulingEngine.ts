@@ -896,6 +896,16 @@ export class SchedulingEngine {
     // Late shifts are compared with the clinic average so far (by contract), so the
     // penalty only decides between nurses and never makes late shifts as such unwelcome.
     const contractShare = (n: Nurse) => Math.max(0.1, (n.contractPercent ?? 100) / 100);
+    /** Her shifts so far in this roster with a doctor who is her first choice (by name or specialty). */
+    const firstChoiceShiftsSoFar = (n: Nurse): number => {
+      let count = 0;
+      resultAssignmentsMap.forEach((a) => {
+        if (a.nurseId !== n.id || a.kind !== 'DOCTOR' || !a.doctorId) return;
+        const sess = doctorSessionsOn(sessions, a.date).find((x) => x.doctorId === a.doctorId);
+        if (pairingRank(n, a.doctorId, sess) === 1) count++;
+      });
+      return count;
+    };
     const totalContractShare = sortedNurses.reduce((sum, n) => sum + contractShare(n), 0);
     const lateShiftsAboveAverage = (nurse: Nurse): number => {
       let total = 0;
@@ -1100,13 +1110,19 @@ export class SchedulingEngine {
         remaining += shortestShiftHours > 0 ? left - (left % shortestShiftHours) : left;
       });
       let laterNeed = 0;
+      let nextWeekNeed = 0;
       for (let k = dayIdx + 1; k < datesList.length; k++) {
         if (!inFill(datesList[k])) continue;
         // a senior is needed every day: count one shortest shift a day for the seniors
-        laterNeed += group === 'senior' ? (seniorRuleEnabled ? shortestShiftHours : 0) : onlyBloodCollection ? dayFreeNurseHours[k] : dayNeedHours[k];
+        const need = group === 'senior' ? (seniorRuleEnabled ? shortestShiftHours : 0) : onlyBloodCollection ? dayFreeNurseHours[k] : dayNeedHours[k];
+        laterNeed += need;
+        if (k <= dayIdx + 7) nextWeekNeed += need;
       }
-      const spare = remaining - laterNeed * 1.1;
-      if (rawSpare) return spare;
+      if (rawSpare) return remaining - laterNeed * 1.1;
+      // The safety margin is 10% of the next week's need, not of every later day's: a margin
+      // on the whole rest of the roster kept extra help back in the first weeks and let it
+      // pile up in the last ones. Now the extra help is shared evenly over the days left.
+      const spare = remaining - laterNeed - nextWeekNeed * 0.1;
       if (spare <= 0) return 0;
       let weightLeft = 0;
       for (let k = dayIdx; k < datesList.length; k++) {
@@ -1189,16 +1205,35 @@ export class SchedulingEngine {
     poolMembers.forEach((members, key) => members.forEach((n) => poolsOfNurse.set(n.id, [...(poolsOfNurse.get(n.id) || []), key])));
     /**
      * Hours a nurse may spend on optional work today (a float, a longer shift) and still
-     * leave the nurses of every doctor she can work with enough hours for his sessions
-     * after today. Mary, whose list has Pediatrics second, keeps her hours for the
-     * Pediatrics sessions that Alaa and Noveline can't cover instead of floating.
+     * keep her part of what the doctors she can work with need after today. For each of
+     * her groups of doctors, the nurses whose first choice they are cover the need first,
+     * in proportion to their hours left; the rest (what they can't cover) falls on the
+     * other nurses of the group in proportion to theirs. Mary (Pediatrics second) keeps
+     * only her part of what Alaa and Noveline can't cover, and floats with the rest.
      */
     const optionalHoursFree = (nurseId: string, date: string): number => {
+      const remainingOf = (n: Nurse) =>
+        Math.max(0, (nurseTargetMap.get(n.id)?.dutyTarget ?? 0) - (nurseStates.get(n.id)?.totalDutyHoursEarned ?? 0));
+      const me = nurseMap.get(nurseId);
+      if (!me) return Infinity;
+      const mine = remainingOf(me);
       let free = Infinity;
       for (const key of poolsOfNurse.get(nurseId) || []) {
         const needed = poolSessions.get(key)!.filter((x) => x.date > date).reduce((sum, x) => sum + x.hours, 0);
         if (needed <= 0) continue;
-        free = Math.min(free, poolHoursLeft(key, date) - needed);
+        const sess = poolDoctor.get(key);
+        const members = poolMembers.get(key) || [];
+        const isFirst = (n: Nurse) => !!sess && pairingRank(n, sess.doctorId, sess) === 1;
+        const firstLeft = members.filter(isFirst).reduce((sum, n) => sum + remainingOf(n), 0);
+        const othersLeft = members.filter((n) => !isFirst(n)).reduce((sum, n) => sum + remainingOf(n), 0);
+        const reserve = isFirst(me)
+          ? firstLeft > 0
+            ? Math.min(mine, (needed * mine) / firstLeft)
+            : 0
+          : othersLeft > 0
+          ? Math.min(mine, (Math.max(0, needed - firstLeft) * mine) / othersLeft)
+          : 0;
+        free = Math.min(free, mine - reserve);
       }
       return free;
     };
@@ -1412,6 +1447,16 @@ export class SchedulingEngine {
         ): { nurse: Nurse; duty: DutyWindow } | null => {
             let tierBestScore = -Infinity;
             let tierBest: { nurse: Nurse; duty: DutyWindow } | null = null;
+            // Nurses who share this doctor as their first choice take turns (see below)
+            const firstChoiceSharers =
+              slot.kind === 'DOCTOR' ? cohort.nurses.filter((o) => pairingRank(o, slot.targetId, slotSession) === 1) : [];
+            const firstChoiceTurns = new Map(
+              firstChoiceSharers.map((o) => [o.id, firstChoiceShiftsSoFar(o) / contractShare(o)])
+            );
+            const averageTurns =
+              firstChoiceSharers.length > 1
+                ? [...firstChoiceTurns.values()].reduce((sum, x) => sum + x, 0) / firstChoiceSharers.length
+                : 0;
 
             for (const candidateDuty of tier) {
               // A doctor's nurse must overlap the session (partial cover is accepted)
@@ -1493,6 +1538,13 @@ export class SchedulingEngine {
                       ? 0
                       : daySessions.filter((other) => other.doctorId !== slot.targetId && pairingRank(nurse, other.doctorId, other) === 1).length;
                   score -= 50 * otherFirstChoices;
+
+                  // Several nurses with this doctor (or his specialty) first share his sessions
+                  // evenly: the one with fewer first choice sessions so far (for her contract) goes
+                  // first, so Primary Care is not all Mary's while Mervat floats.
+                  if (firstChoiceSharers.length > 1 && firstChoiceTurns.has(nurse.id)) {
+                    score -= (firstChoiceTurns.get(nurse.id)! - averageTurns) * 25;
+                  }
                 } else if (!isNurseClinicSlot) {
                   const role = roles.find((r) => r.id === slot.targetId);
                   const rolePref = nurse.preferences?.find(
@@ -1540,9 +1592,7 @@ export class SchedulingEngine {
             return tierBest;
         };
 
-        if (heldBack) {
-          // nobody from her own nurses today
-        } else if (slot.kind === 'DOCTOR') {
+        if (slot.kind === 'DOCTOR') {
           // A free nurse at every opening hour is a hard rule and a doctor's preference is not:
           // when the blood collection nurses' hours are running short, they go to a doctor
           // only if no other nurse can take the doctor.
@@ -1551,12 +1601,18 @@ export class SchedulingEngine {
             (ncEnabled || plusOneEnabled) &&
             // a margin of two long shifts, since each doctor job takes a whole shift from them
             spareHoursForToday(dayIdx, 'bloodCollection', true) <= 2 * longestShiftHours;
+          // A session left out to spread a shortage keeps the hours of the nurses whose first
+          // choice he is (Alaa and Noveline for Pediatrics); a nurse who lists him lower (Mary,
+          // Pediatrics second) may still take it.
+          const doctorCohorts = heldBack
+            ? candidateCohorts.map((c) => ({ ...c, nurses: c.nurses.filter((n) => pairingRank(n, slot.targetId, slotSession) !== 1) }))
+            : candidateCohorts;
           const cohortSets = keepBloodCollection
             ? [
-                candidateCohorts.map((c) => ({ ...c, nurses: c.nurses.filter((n) => !canBeFreeNurse(n, roles)) })),
-                candidateCohorts,
+                doctorCohorts.map((c) => ({ ...c, nurses: c.nurses.filter((n) => !canBeFreeNurse(n, roles)) })),
+                doctorCohorts,
               ]
-            : [candidateCohorts];
+            : [doctorCohorts];
           // Full cover first: the best ranked nurse who can cover the whole session gets the
           // doctor. A shorter shift is accepted only when nobody can cover all of it.
           const overlapping = activeDuties.filter((d) => overlaps(d.startTime, d.endTime, slot.startTime, slot.endTime));
@@ -2171,6 +2227,49 @@ export class SchedulingEngine {
           false
         );
         unmetSlotsCount = Math.max(0, unmetSlotsCount - 1);
+      }
+
+      // 5.6b A doctor still partly covered (his own nurse can't stay longer and no second nurse
+      // of his was free): a nurse already floating today whose shift covers the missing hours
+      // joins him as a last resort. No extra hours; every opening hour keeps its free nurse.
+      for (const sess of allDaySessions) {
+        const linked = existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId);
+        if (linked.length === 0) continue;
+        const gaps = uncoveredParts(
+          sess.startTime,
+          sess.endTime,
+          linked.map((a) => dutyMapGlobal.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d)
+        );
+        if (gaps.length === 0) continue;
+        const gapMinutes = gaps.reduce((sum, g) => sum + toMinutes(g.end) - toMinutes(g.start), 0);
+        const freeBefore = plusOneEnabled ? freeCountsWith(existingToday()) : [];
+        let best: { asgn: Assignment; cover: number } | null = null;
+        for (const asgn of existingToday()) {
+          if (asgn.source !== 'GENERATED' || asgn.locked || !isFloatShift(asgn)) continue;
+          const nurse = nurseMap.get(asgn.nurseId);
+          const duty = dutyMapGlobal.get(asgn.dutyWindowId);
+          if (!nurse || !duty || !nurse.isClinicNurse || isExclusiveNurseClinic(nurse, roles)) continue;
+          const cover = gaps.reduce((sum, g) => sum + coveredMinutes(duty, g.start, g.end), 0);
+          if (cover === 0) continue;
+          if (plusOneEnabled) {
+            const after = freeCountsWith(
+              existingToday().map((a) => (a.id === asgn.id ? { ...a, kind: 'DOCTOR' as const, doctorId: sess.doctorId, clinicalRoleId: undefined } : a))
+            );
+            if (after.some((n, i) => n < minAdditionalNurses && freeBefore[i] >= minAdditionalNurses)) continue;
+          }
+          if (!best || cover > best.cover) best = { asgn, cover };
+        }
+        if (!best) continue;
+        const ownNurse = canWorkWithDoctor(nurseMap.get(best.asgn.nurseId)!, sess.doctorId, sess);
+        resultAssignmentsMap.set(`${best.asgn.nurseId}_${date}`, {
+          ...best.asgn,
+          kind: 'DOCTOR',
+          doctorId: sess.doctorId,
+          clinicalRoleId: undefined,
+          note: ownNurse
+            ? `Second nurse with the doctor for ${best.cover < gapMinutes ? 'part of ' : ''}the hours his first nurse can't cover`
+            : LAST_RESORT_NOTE,
+        });
       }
 
       // 5.7 The Nurse Clinic shift fits the day. Nurse Clinic may work any shift: every other
