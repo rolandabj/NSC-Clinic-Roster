@@ -9,6 +9,9 @@ import { Rule, RuleTemplateKey } from '../../types';
 import { getRepository } from '../repository';
 import { resolveRule, LATE_DUTY_RULE_WORDS } from '../engine/SchedulingEngine';
 
+/** Name of the consecutive shifts rule (no number in it: the number is the rule's value). */
+export const MAX_CONSECUTIVE_SHIFTS_NAME = 'Maximum consecutive shifts';
+
 export interface CanonicalRuleDef extends Omit<Rule, 'id'> {
   canonicalId: string;
   templateKey: RuleTemplateKey;
@@ -31,7 +34,7 @@ export const CANONICAL_RULES_SPEC: CanonicalRuleDef[] = [
   },
   {
     canonicalId: 'rule-h2',
-    name: 'Max consecutive working days per nurse = 6',
+    name: MAX_CONSECUTIVE_SHIFTS_NAME,
     templateKey: 'MAX_CONSECUTIVE_DAYS',
     scope: 'PER_NURSE',
     metric: 'CONSECUTIVE_WORKING_DAYS',
@@ -39,7 +42,7 @@ export const CANONICAL_RULES_SPEC: CanonicalRuleDef[] = [
     value: 6,
     severity: 'HARD',
     enabled: true,
-    semanticKeywords: ['consecutive working days', 'consecutive days', 'consecutive duties', 'max consecutive'],
+    semanticKeywords: ['consecutive shifts', 'consecutive working days', 'consecutive days', 'consecutive duties', 'max consecutive'],
     excludeKeywords: LATE_DUTY_RULE_WORDS,
   },
   {
@@ -164,8 +167,12 @@ export class RuleSyncService {
       );
 
       if (matched) {
+        // An old consecutive days name with a number in it ("... = 6") goes out of date when
+        // the value changes, so it takes the plain name instead.
+        const staleName = spec.templateKey === 'MAX_CONSECUTIVE_DAYS' && matched.name !== spec.name;
         // Check if templateKey, name, or params need synchronization
         const needsUpdate =
+          staleName ||
           !matched.templateKey ||
           matched.templateKey !== spec.templateKey ||
           (spec.params?.thresholdTime && (!matched.params || !matched.params.thresholdTime));
@@ -173,12 +180,14 @@ export class RuleSyncService {
         if (needsUpdate) {
           const updates: Partial<Rule> = {
             templateKey: spec.templateKey,
+            ...(staleName ? { name: spec.name } : {}),
           };
           if (spec.params?.thresholdTime && (!matched.params || !matched.params.thresholdTime)) {
             updates.params = { ...matched.params, thresholdTime: spec.params.thresholdTime };
           }
           await repo.update('rules', matched.id, updates);
           matched.templateKey = spec.templateKey;
+          if (updates.name) matched.name = updates.name;
           if (updates.params) {
             matched.params = updates.params;
           }

@@ -103,7 +103,7 @@ export function checkAssignment(ctx: AssignmentCheckContext, cell: Assignment): 
     ctx.rules,
     'MAX_CONSECUTIVE_DAYS',
     'rule-h2',
-    ['consecutive duties', 'consecutive working days', 'consecutive days'],
+    ['consecutive shifts', 'consecutive duties', 'consecutive working days', 'consecutive days'],
     LATE_DUTY_RULE_WORDS
   );
   if (h2.enforced) {

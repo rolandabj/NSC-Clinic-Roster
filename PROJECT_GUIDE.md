@@ -21,7 +21,7 @@ Last updated: 2026-10-03, at commit `9c0b819` on `main`.
 | `npm install --legacy-peer-deps` | Install (the flag is needed for esbuild/vite peer conflicts) |
 | `npm run dev` | Express + Vite dev server on port 3000 |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 150 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 153 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `dist/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -94,7 +94,7 @@ src/
              VersionCompare, VersionView, DeleteVersion, DeleteSchedule, BulkImport,
              NurseTimesheet, EditDoctorShift, Auth, Shortcuts, Walkthrough (disabled)
   services/
-    engine/      SchedulingEngine.ts (the generator), assignmentChecks.ts, clinicModel.ts, floatShift.ts,
+    engine/      SchedulingEngine.ts (the generator), assignmentChecks.ts, clinicModel.ts, floatShift.ts, lastResort.ts,
                  clinicSetupService.ts, explainCell.ts, leaveStatus.ts, nurseClinicUtils.ts,
                  preferenceOrder.ts, types.ts
     validation/  ScheduleValidator.ts
@@ -235,7 +235,7 @@ Lookup: `resolveRule(rules, templateKey, fallbackId, keywords, excludeKeywords)`
 | id | templateKey | Default | Meaning |
 |---|---|---|---|
 | rule-h1 | SENIOR_ON_DUTY | 1, HARD | A senior nurse every day |
-| rule-h2 | MAX_CONSECUTIVE_DAYS | 6, HARD | Most working days in a row |
+| rule-h2 | MAX_CONSECUTIVE_DAYS | 6, HARD | "Maximum consecutive shifts" (most shifts, so days, in a row). The stored name has no number; saving the value or "add missing rules" renames old names like "... = 6". |
 | rule-h3 | MIN_REST_HOURS | 11, HARD | Minimum rest between shifts (0 = off) |
 | rule-h4 | MAX_DUTIES_PER_DAY | 1, HARD | One shift a day (always enforced) |
 | rule-nurse-clinic | DEDICATED_NURSE_CLINIC | 1, HARD | Free nurse (Nurse Clinic) slots per day |
@@ -287,8 +287,10 @@ Modes (`engine/types.ts`): GENERATE_ALL (rebuild; keeps hand edits when `keepMan
    - Free nurse each hour (plus one rule): stretch an existing shift, else add a nurse.
    - **One Nurse Clinic a day** (the DEDICATED_NURSE_CLINIC rule value, at least 1): a nurse added later who is not with a doctor (evening free nurse, senior, holiday cover) gets Nurse Clinic only while the day still needs one, otherwise she floats (`roleForExtraNurse`).
    - Senior each day (H1): add an extra senior, else swap a senior into a junior's generated shift, else add anyway.
+   - **Spreading a shortage** (`poolMayStaff`): for each doctor session the pool is the nurses who may work with him (H8). When the pool's hours left are below the hours its sessions still need, each session adds left/needed to a credit (starting at 0.5) and is staffed by the pool only while the credit reaches 1, so missing sessions are spread over the roster instead of all falling at the end. Held back sessions go to 5.6.
    - Second nurse for a partly covered doctor (from spare hours).
    - Float shifts from spare hours for nurses behind pace, always `clinicalRoleId: 'role-float'` (`FLOAT_ROLE_ID`), shown as **Float** everywhere. `floatShift.isFloatShift` also treats older shifts with a department and no doctor as Float (grid, PDF, Excel, CSV, emails, nurse pages, calendar, history).
+   - **5.6 Last resort**: a doctor still without any nurse gets a clinic nurse from outside her list (never an Exclusive Nurse Clinic nurse): first one already floating today (her float becomes the doctor shift, only if every opening hour keeps its free nurse), else one who is off and under her goal. The shift's note is `LAST_RESORT_NOTE`; the checker reports it as `h8-doctor-allocation` WARN ("Check") instead of ERROR. A held back session with no outsider available goes back to the pool's own nurses.
 10. Requests met are tallied.
 
 Ties rotate between nurses by an FNV hash of date and nurse id, so the result is deterministic.

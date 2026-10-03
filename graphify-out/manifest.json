@@ -372,10 +372,10 @@
     "semantic_hash": "4deb99bc79877b1ff3f04f0aa1c96d3d"
   },
   "src/components/views/settings/RulesTab.tsx": {
-    "mtime": 1791031563.0564716,
-    "seen": 1791051157.0646024,
-    "ast_hash": "3b3f46af7f7eed4fb6a22af818869299",
-    "semantic_hash": "3b3f46af7f7eed4fb6a22af818869299"
+    "mtime": 1791052166.05003,
+    "seen": 1791052420.1306279,
+    "ast_hash": "14a8e9ba7bf0986b4d3e922fbeb83298",
+    "semantic_hash": ""
   },
   "src/components/views/settings/SeniorityTab.tsx": {
     "mtime": 1791031563.0564716,
@@ -450,16 +450,16 @@
     "semantic_hash": "7f14f9df033240b364eb865b54a94258"
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1791051900.2273338,
-    "seen": 1791051936.7121952,
-    "ast_hash": "9a1657975a58f562467b280125f9fba6",
+    "mtime": 1791052378.1869488,
+    "seen": 1791052420.1306467,
+    "ast_hash": "dc7e539a9f60162c53f9c3fc88839f37",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
-    "mtime": 1791031563.0677643,
-    "seen": 1791051157.0646243,
-    "ast_hash": "dcc84e618ac046fed97b5699da92a8b2",
-    "semantic_hash": "dcc84e618ac046fed97b5699da92a8b2"
+    "mtime": 1791052148.1468713,
+    "seen": 1791052420.130648,
+    "ast_hash": "eb8768e441ca185b841be80b0a841fe4",
+    "semantic_hash": ""
   },
   "src/services/engine/clinicModel.ts": {
     "mtime": 1791031563.0677643,
@@ -600,10 +600,10 @@
     "semantic_hash": "dddf555a677374043ec357d5016d2a77"
   },
   "src/services/rules/ruleSyncService.ts": {
-    "mtime": 1791031563.0743194,
-    "seen": 1791051157.0646596,
-    "ast_hash": "b9af364b7d176ae89f9ea71440648b51",
-    "semantic_hash": "b9af364b7d176ae89f9ea71440648b51"
+    "mtime": 1791052148.1453469,
+    "seen": 1791052420.1306846,
+    "ast_hash": "5be0d3ad6c3327cc8055c7bc382d97ef",
+    "semantic_hash": ""
   },
   "src/services/schedule/doctorScheduleService.ts": {
     "mtime": 1791031563.0743194,
@@ -642,9 +642,9 @@
     "semantic_hash": "26edda8b21e5847a6cd2ec9a382598a4"
   },
   "src/services/validation/ScheduleValidator.ts": {
-    "mtime": 1791031563.0783193,
-    "seen": 1791051157.064668,
-    "ast_hash": "bef51f3434dbb9ed63446825c9c872a0",
+    "mtime": 1791052318.796525,
+    "seen": 1791052420.1306927,
+    "ast_hash": "3c9e39547b9bdcd868166daf281d8092",
     "semantic_hash": ""
   },
   "src/types/index.ts": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791051931.5356698,
-    "seen": 1791051936.712288,
-    "ast_hash": "004a3320705fc5b2cd9770a6e5b0b741",
+    "mtime": 1791052414.9737585,
+    "seen": 1791052420.1307442,
+    "ast_hash": "6341c056c0386c03174b60e02c5c0be1",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1083,6 +1083,18 @@
     "mtime": 1791051899.7305143,
     "seen": 1791051936.7122662,
     "ast_hash": "6f6a81399d919a5572b72c5c7b3eb478",
+    "semantic_hash": ""
+  },
+  "src/services/engine/lastResort.ts": {
+    "mtime": 1791052279.6147687,
+    "seen": 1791052420.1306539,
+    "ast_hash": "9cbec70830069dd12fbed933023f84be",
+    "semantic_hash": ""
+  },
+  "tests/unit/lastResort.test.ts": {
+    "mtime": 1791052363.6667738,
+    "seen": 1791052420.1307158,
+    "ast_hash": "58250a368e8218f5014ef37ec50b3a57",
     "semantic_hash": ""
   }
 }

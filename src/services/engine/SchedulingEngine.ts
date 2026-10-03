@@ -35,7 +35,8 @@ import {
   GenerationPreflightSummary,
 } from './types';
 import { isExclusiveNurseClinic } from './nurseClinicUtils';
-import { FLOAT_ROLE_ID } from './floatShift';
+import { FLOAT_ROLE_ID, isFloatShift } from './floatShift';
+import { LAST_RESORT_NOTE } from './lastResort';
 import { resolveFullTimeTarget, nurseLeaveHoursInRange, leaveDaysInRange } from '../hours/hoursPolicy';
 import { calculateWorkingHoursForDateRange } from '../periods/workingHoursPeriodService';
 import { generateDoctorSessionsForDateRange } from '../schedule/doctorScheduleService';
@@ -481,7 +482,7 @@ export class SchedulingEngine {
       rules,
       'MAX_CONSECUTIVE_DAYS',
       'rule-h2',
-      ['consecutive duties', 'consecutive working days', 'consecutive days'],
+      ['consecutive shifts', 'consecutive duties', 'consecutive working days', 'consecutive days'],
       LATE_DUTY_RULE_WORDS
     );
     // Switched off: no limit. SOFT: only a scoring penalty (see below), not a hard stop.
@@ -1107,6 +1108,59 @@ export class SchedulingEngine {
       return (spare * Math.max(1, dayBusyness[dayIdx])) / weightLeft;
     };
 
+    // Doctors whose own nurses (those who list the doctor or his specialty) don't have
+    // the hours for all of his sessions, e.g. three Pediatrics doctors and two nurses who
+    // list Pediatrics. Without care those nurses work every session until their hours run
+    // out and all the missing sessions fall at the end of the roster. Instead each session
+    // adds the share those nurses can still cover (their hours left / the hours their
+    // doctors still need) to a credit, and a session is staffed while the credit reaches
+    // one, so the missing sessions are spread over the roster. A session left out is
+    // offered to a last resort nurse (5.6).
+    const sessionPoolKey = new Map<string, string>(); // `${doctorId}|${date}` -> pool key
+    const poolMembers = new Map<string, Nurse[]>();
+    const poolSessions = new Map<string, { date: string; hours: number }[]>();
+    const keptDoctorCover = new Set(
+      Array.from(resultAssignmentsMap.values())
+        .filter((a) => a.kind === 'DOCTOR' && a.doctorId)
+        .map((a) => `${a.doctorId}|${a.date}`)
+    );
+    datesList.forEach((d) => {
+      if (!inFill(d) || clinic.holidays.has(d)) return;
+      doctorSessionsOn(sessions, d).forEach((sess) => {
+        if (keptDoctorCover.has(`${sess.doctorId}|${d}`)) return;
+        const members = sortedNurses.filter((n) => canWorkWithDoctor(n, sess.doctorId, sess));
+        const key = members.map((n) => n.id).join(',');
+        sessionPoolKey.set(`${sess.doctorId}|${d}`, key);
+        poolMembers.set(key, members);
+        if (!poolSessions.has(key)) poolSessions.set(key, []);
+        poolSessions.get(key)!.push({ date: d, hours: shortestCoverHours(sess.startTime, sess.endTime) });
+      });
+    });
+    const poolCredit = new Map<string, number>();
+    const poolHoursDecidedToday = new Map<string, number>(); // `${key}|${date}` -> hours
+    /** False when this doctor's session is one of the sessions left out to spread a shortage. */
+    const poolMayStaff = (doctorId: string, date: string): boolean => {
+      const key = sessionPoolKey.get(`${doctorId}|${date}`);
+      if (key === undefined) return true;
+      const list = poolSessions.get(key)!;
+      const thisSession = list.find((x) => x.date === date)?.hours ?? 0;
+      const decidedToday = poolHoursDecidedToday.get(`${key}|${date}`) || 0;
+      poolHoursDecidedToday.set(`${key}|${date}`, decidedToday + thisSession);
+      const needed = list.filter((x) => x.date >= date).reduce((sum, x) => sum + x.hours, 0) - decidedToday;
+      const left = (poolMembers.get(key) || []).reduce(
+        (sum, n) => sum + Math.max(0, (nurseTargetMap.get(n.id)?.dutyTarget ?? 0) - (nurseStates.get(n.id)?.totalDutyHoursEarned ?? 0)),
+        0
+      );
+      if (needed <= 0 || left >= needed) return true;
+      const credit = (poolCredit.get(key) ?? 0.5) + left / needed;
+      if (credit >= 1) {
+        poolCredit.set(key, credit - 1);
+        return true;
+      }
+      poolCredit.set(key, credit);
+      return false;
+    };
+
     // 5. Day by day
     for (let dayIdx = 0; dayIdx < datesList.length; dayIdx++) {
       const date = datesList[dayIdx];
@@ -1202,6 +1256,7 @@ export class SchedulingEngine {
         .sort((a, b) => b.endTime.localeCompare(a.endTime)); // late ending sessions first
 
       const daySlots: InternalSlot[] = [];
+      const heldBackDoctors = new Set<string>(); // sessions left out today to spread a shortage
       daySessions.forEach((sess) => {
         const hasPriority1Nurse = sortedNurses.some((n) => pairingRank(n, sess.doctorId, sess) === 1);
         daySlots.push({
@@ -1302,6 +1357,9 @@ export class SchedulingEngine {
         let bestNurse: Nurse | null = null;
         let chosenDuty: DutyWindow = fullDayDuty;
         let matchedPairingTier = 0;
+        // Spreading a shortage: this session is left for a last resort nurse (5.6)
+        const heldBack = slot.kind === 'DOCTOR' && !poolMayStaff(slot.targetId, date);
+        if (heldBack) heldBackDoctors.add(slot.targetId);
 
         /** The best nurse in one group for one set of duties (null when nobody fits). */
         const bestInCohort = (
@@ -1440,7 +1498,9 @@ export class SchedulingEngine {
             return tierBest;
         };
 
-        if (slot.kind === 'DOCTOR') {
+        if (heldBack) {
+          // nobody from her own nurses today
+        } else if (slot.kind === 'DOCTOR') {
           // A free nurse at every opening hour is a hard rule and a doctor's preference is not:
           // when the blood collection nurses' hours are running short, they go to a doctor
           // only if no other nurse can take the doctor.
@@ -1899,6 +1959,83 @@ export class SchedulingEngine {
           false,
           false
         );
+      }
+
+      // 5.6 Last resort: a doctor still without a nurse (none of the nurses who list him or
+      // his specialty was free, or his session was left out to spread a shortage) gets a
+      // nurse from outside her list: first one already floating today (no extra hours),
+      // else one who is off and still under her goal. Exclusive Nurse Clinic nurses never
+      // go to a doctor, and the free nurse at every opening hour is kept.
+      const freeCountsWith = (list: Assignment[]) =>
+        openHours.map(
+          (h) =>
+            list.filter(
+              (a) => canBeFreeNurse(nurseMap.get(a.nurseId), roles) && isFreeDuring(a, dutyMapGlobal.get(a.dutyWindowId), allDaySessions, h.start, h.end)
+            ).length
+        );
+      for (const sess of allDaySessions) {
+        if (existingToday().some((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId)) continue;
+        const sessMinutes = Math.max(1, toMinutes(sess.endTime) - toMinutes(sess.startTime));
+        const freeBefore = plusOneEnabled ? freeCountsWith(existingToday()) : [];
+        let best: { nurse: Nurse; duty: DutyWindow; score: number; replacing?: Assignment } | null = null;
+        // Nurses from outside his list first; a session left out to spread a shortage goes
+        // back to his own nurses when no one else can take it.
+        const passes = heldBackDoctors.has(sess.doctorId) ? [false, true] : [false];
+        let fromOwnNurses = false;
+        for (const ownNurses of passes) {
+          if (best) break;
+          fromOwnNurses = ownNurses;
+          for (const nurse of dayOrder) {
+            if (!nurse.isClinicNurse || isExclusiveNurseClinic(nurse, roles)) continue;
+            if (canWorkWithDoctor(nurse, sess.doctorId, sess) !== ownNurses) continue; // his own nurses were asked first
+            const own = resultAssignmentsMap.get(`${nurse.id}_${date}`);
+            if (own && !(own.source === 'GENERATED' && !own.locked && isFloatShift(own))) continue;
+            if (!own && hasPendingTimeOff(nurse.id, date)) continue;
+            const ownHours = own ? calculateDutyDurationHours(dutyMapGlobal.get(own.dutyWindowId)) : 0;
+            for (const duty of activeDuties) {
+              if (!overlaps(duty.startTime, duty.endTime, sess.startTime, sess.endTime)) continue;
+              const hours = calculateDutyDurationHours(duty);
+              const extra = hours - ownHours;
+              if (extra > 0 && hoursOverGoal(nurse.id, extra) > 0) continue;
+              if (!fitsHardRules(nurse, date, duty, extra, { replacingOwnShift: !!own })) continue;
+              if (plusOneEnabled && own) {
+                // Moving a float to the doctor must not leave an opening hour without a free nurse
+                const after = freeCountsWith(
+                  existingToday().map((a) => (a.id === own.id ? { ...a, dutyWindowId: duty.id, kind: 'DOCTOR' as const, doctorId: sess.doctorId, clinicalRoleId: undefined } : a))
+                );
+                if (after.some((n, i) => n < minAdditionalNurses && freeBefore[i] >= minAdditionalNurses)) continue;
+              }
+              const cover = coveredMinutes(duty, sess.startTime, sess.endTime) / sessMinutes;
+              let score = cover >= 1 ? 100 : cover * 50;
+              score -= Math.max(0, hours - sessMinutes / 60) * 6;
+              if (own) score += 40; // already at work: no extra hours
+              score += hoursBehindPace(nurse.id, dayIdx) * 1.5;
+              if (isWeekend && !own) score -= (nurseStates.get(nurse.id)?.weekendsWorked || 0) * 25;
+              score += requestScore(nurse.id, date, duty);
+              if (!best || score > best.score) best = { nurse, duty, score, replacing: own };
+            }
+          }
+        }
+        if (!best) continue; // nobody at all: the checker shows the doctor without a nurse
+        if (best.replacing) removeShift(best.replacing, isWeekend);
+        placeShift(
+          {
+            id: `asgn-gen-${schedule.id}-${best.nurse.id}-${date}-DOCTOR-last`,
+            scheduleId: schedule.id,
+            nurseId: best.nurse.id,
+            date,
+            dutyWindowId: best.duty.id,
+            kind: 'DOCTOR',
+            doctorId: sess.doctorId,
+            locked: false,
+            source: 'GENERATED',
+            note: fromOwnNurses ? undefined : LAST_RESORT_NOTE,
+          },
+          isWeekend,
+          false,
+          false
+        );
+        unmetSlotsCount = Math.max(0, unmetSlotsCount - 1);
       }
     }
 

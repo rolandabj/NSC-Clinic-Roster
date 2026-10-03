@@ -16,6 +16,7 @@
  *    (a day off or a shift she asked for) or has a shift on leave waiting for approval.
  */
 
+import { isLastResortShift } from '../engine/lastResort';
 import { summarizeNurseHours } from '../reports/hoursAccounting';
 import {
   Schedule,
@@ -507,7 +508,7 @@ export class ScheduleValidator {
       rules,
       'MAX_CONSECUTIVE_DAYS',
       'rule-h2',
-      ['consecutive duties', 'consecutive working days', 'consecutive days'],
+      ['consecutive shifts', 'consecutive duties', 'consecutive working days', 'consecutive days'],
       LATE_DUTY_RULE_WORDS
     );
     const maxConsecutiveDaysAllowed = (h2Rule?.enabled !== false && h2Rule?.value) ? h2Rule.value : 6;
@@ -727,11 +728,15 @@ export class ScheduleValidator {
               if (!matchesDoctor && !matchesSpec) {
                 const docName = docObj ? docObj.fullName : 'Doctor';
                 const docSpecName = specialties.find((s) => docSpecIds.includes(s.id))?.name || 'Department';
+                // The generator's last resort (no nurse who lists this doctor was free) is only a Check
+                const lastResort = isLastResortShift(currentAsgn);
                 findings.push({
                   id: `h8-doctor-allocation-${nurse.id}-${date}`,
                   category: 'RULE_VIOLATION',
-                  severity: 'ERROR',
-                  message: `${nurse.fullName} is with ${docName} (${docSpecName}) on ${formatDate(date)}, who isn't one of their doctors.`,
+                  severity: lastResort ? 'WARN' : 'ERROR',
+                  message: lastResort
+                    ? `${nurse.fullName} is with ${docName} (${docSpecName}) on ${formatDate(date)} as a last resort: none of the nurses who list this doctor was free.`
+                    : `${nurse.fullName} is with ${docName} (${docSpecName}) on ${formatDate(date)}, who isn't one of their doctors.`,
                   affectedNurseIds: [nurse.id],
                   cellRefs: [{ nurseId: nurse.id, date }],
                   date,
@@ -799,7 +804,7 @@ export class ScheduleValidator {
               id: `h2-days-${nurse.id}-${date}`,
               category: 'RULE_VIOLATION',
               severity: h2Severity,
-              message: `${nurse.fullName}: ${consecutiveDays} working days in a row (most allowed: ${maxConsecutiveDaysAllowed}), ending ${formatDate(date)}.`,
+              message: `${nurse.fullName}: ${consecutiveDays} shifts in a row (most allowed: ${maxConsecutiveDaysAllowed}), ending ${formatDate(date)}.`,
               affectedNurseIds: [nurse.id],
               cellRefs: [{ nurseId: nurse.id, date }],
               date,

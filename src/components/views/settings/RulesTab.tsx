@@ -13,7 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import { Check, ChevronDown, Lock, Minus, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
-import { RuleSyncService } from '../../../services/rules/ruleSyncService';
+import { MAX_CONSECUTIVE_SHIFTS_NAME, RuleSyncService } from '../../../services/rules/ruleSyncService';
 import { Rule, RuleTemplateKey } from '../../../types';
 import { LATE_DUTY_RULE_WORDS, resolveRule } from '../../../services/engine/SchedulingEngine';
 import { confirmDialog, notify } from '../../common/dialogs';
@@ -117,12 +117,12 @@ const GROUPS: RuleGroup[] = [
       {
         key: 'MAX_CONSECUTIVE_DAYS',
         id: 'rule-h2',
-        keywords: ['consecutive duties', 'consecutive working days', 'consecutive days'],
+        keywords: ['consecutive shifts', 'consecutive duties', 'consecutive working days', 'consecutive days'],
         excludeKeywords: LATE_DUTY_RULE_WORDS,
         fallback: 6,
-        title: 'Days in a row',
-        sentence: 'A nurse works at most {value} days in a row.',
-        help: 'The last days of the previous roster count too.',
+        title: 'Maximum consecutive shifts',
+        sentence: 'A nurse works at most {value} shifts in a row (a nurse works one shift a day, so this is also the most days in a row).',
+        help: 'Change the number to allow more or fewer shifts in a row. The last days of the previous roster count too.',
         value: { min: 1, max: 14 },
         softMeaning: 'Longer runs are avoided where possible.',
       },
@@ -325,7 +325,12 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
   const [isSyncing, setIsSyncing] = useState(false);
   const [showOther, setShowOther] = useState(false);
 
-  const saveRule = async (rule: Rule, updates: Partial<Rule>, message: string) => {
+  const saveRule = async (rule: Rule, baseUpdates: Partial<Rule>, message: string) => {
+    // The consecutive shifts rule keeps a name without a number, so it never contradicts its value.
+    const updates =
+      rule.templateKey === 'MAX_CONSECUTIVE_DAYS' && rule.name !== MAX_CONSECUTIVE_SHIFTS_NAME
+        ? { ...baseUpdates, name: MAX_CONSECUTIVE_SHIFTS_NAME }
+        : baseUpdates;
     setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, ...updates } : r)));
     try {
       await repo.update('rules', rule.id, updates);
