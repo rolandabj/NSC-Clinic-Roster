@@ -246,9 +246,13 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   // The top bar shows this roster's problem count.
   useEffect(() => {
-    if (!validationReport.scheduleId) return;
+    const sched = activeScheduleRef.current;
+    if (!sched || validationReport.scheduleId !== sched.id) return;
     announceProblems({
-      scheduleId: validationReport.scheduleId,
+      scheduleId: sched.id,
+      name: sched.name,
+      startDate: sched.startDate,
+      endDate: sched.endDate,
       mustFix: validationReport.errorCount,
       toCheck: validationReport.warnCount,
     });
@@ -259,6 +263,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [focusRequest, setFocusRequest] = useState<{ nurseId: string; date: string; nonce: number } | undefined>(undefined);
   // True until the page data first loaded, so an empty roster list isn't shown while loading.
   const [isFirstLoad, setIsFirstLoad] = useState(true);
+  // No roster open (e.g. the last one was deleted): the top bar shows none.
+  useEffect(() => {
+    if (!activeSchedule && !isFirstLoad) {
+      announceProblems({ scheduleId: '', name: '', startDate: '', endDate: '', mustFix: 0, toCheck: 0 });
+    }
+  }, [activeSchedule, isFirstLoad]);
 
   // Expanded View & All Days Mode
   const [isExpandedView, setIsExpandedView] = useState(false);

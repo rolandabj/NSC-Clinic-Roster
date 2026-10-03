@@ -34,7 +34,12 @@ export function findPreviousSchedule(schedule: Schedule, schedules: Schedule[]):
     })[0];
 }
 
-export async function loadClinicSetup(repo: IRepository, schedule: Schedule): Promise<ClinicSetup> {
+export async function loadClinicSetup(
+  repo: IRepository,
+  schedule: Schedule,
+  /** withYearToDate: false skips the year's fairness totals (only the generator uses them). */
+  options: { withYearToDate?: boolean } = {}
+): Promise<ClinicSetup> {
   const [clinics, holidays, schedules] = await Promise.all([
     repo.list('clinics'),
     repo.list('holidays'),
@@ -54,6 +59,7 @@ export async function loadClinicSetup(repo: IRepository, schedule: Schedule): Pr
   // Extras that only fine tune the generator: if they can't be loaded the roster still loads.
   const [yearToDate, availabilityRequests] = await Promise.all([
     (async (): Promise<YearToDate | undefined> => {
+      if (options.withYearToDate === false) return undefined;
       const [dutyWindows, roles, rules] = await Promise.all([repo.list('dutyWindows'), repo.list('clinicalRoles'), repo.list('rules')]);
       return loadYearToDate(repo, schedule, dutyWindows, holidayDates, {
         lateThreshold: lateDutyThreshold(rules),

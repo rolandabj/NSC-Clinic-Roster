@@ -22,6 +22,7 @@ import { quotaTracker } from '../../services/firebase/quotaTracker';
 import { Check, AlertTriangle, X } from 'lucide-react';
 import { LoadErrorBoundary } from '../common/LoadErrorBoundary';
 import { chooseScheduleToOpen } from '../../services/schedule/openSchedule';
+import { todayIso } from '../../services/publish/nurseRosterService';
 import { formatDateRange } from '../../utils/dateUtils';
 import { PROBLEMS_EVENT, ProblemCount } from '../../services/dashboard/problemCount';
 
@@ -255,7 +256,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
         try {
           storedId = localStorage.getItem('clinic_roster_active_schedule_id');
         } catch {}
-        const activeSched = chooseScheduleToOpen(schedules, storedId);
+        const activeSched = chooseScheduleToOpen(schedules, storedId, null, todayIso(clinics[0]?.timezone));
         if (activeSched) {
           setClinicContext((prev) => ({
             ...prev,
@@ -283,10 +284,13 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     const handleProblems = (e: Event) => {
       const detail = (e as CustomEvent<ProblemCount>).detail;
       if (!detail) return;
+      // The roster's name, dates and count always change together.
       setClinicContext((prev) => ({
         ...prev,
         warningCount: detail.mustFix + detail.toCheck,
-        activeScheduleId: detail.scheduleId || prev.activeScheduleId,
+        activeScheduleId: detail.scheduleId || null,
+        activeScheduleName: detail.scheduleId ? detail.name : 'No Active Schedule',
+        activeSchedulePeriod: detail.scheduleId ? formatDateRange(detail.startDate, detail.endDate) : '',
       }));
     };
     window.addEventListener(PROBLEMS_EVENT, handleProblems);

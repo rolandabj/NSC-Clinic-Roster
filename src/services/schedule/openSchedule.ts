@@ -24,10 +24,13 @@ export function chooseScheduleToOpen(
 ): Schedule | undefined {
   if (list.length === 0) return undefined;
   const byId = (id?: string | null) => (id ? list.find((s) => s.id === id) : undefined);
+  // Archived rosters are only opened on purpose, never chosen for you.
+  const live = list.filter((s) => s.status !== 'ARCHIVED');
   return (
     byId(openId) ||
     byId(contextId) ||
-    list.find((s) => s.startDate <= today && s.endDate >= today) ||
+    live.find((s) => s.startDate <= today && s.endDate >= today) ||
+    [...live].sort((a, b) => b.startDate.localeCompare(a.startDate))[0] ||
     [...list].sort((a, b) => b.startDate.localeCompare(a.startDate))[0]
   );
 }

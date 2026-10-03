@@ -9,7 +9,11 @@
 export const PROBLEMS_EVENT = 'clinic-roster-problems';
 
 export interface ProblemCount {
+  /** Empty when no roster is open (for example the last one was deleted). */
   scheduleId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
   mustFix: number;
   toCheck: number;
 }

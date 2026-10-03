@@ -48,3 +48,31 @@ test('the next roster is asked for only when the last one ends within three week
   assert.equal(nextRosterNeeded(rosters, '2026-10-03'), null);
   assert.equal(nextRosterNeeded([], '2026-10-15'), null);
 });
+
+test('the next roster never starts in the past, and archived rosters are ignored', () => {
+  assert.deepEqual(nextRosterNeeded([{ startDate: '2026-06-01', endDate: '2026-06-30' }], '2026-10-15'), { from: '2026-10-15' });
+  assert.deepEqual(
+    nextRosterNeeded(
+      [
+        { startDate: '2026-10-01', endDate: '2026-10-31' },
+        { startDate: '2026-11-01', endDate: '2026-11-30', status: 'ARCHIVED' },
+      ],
+      '2026-10-15'
+    ),
+    { from: '2026-11-01' }
+  );
+});
+
+test('a nurse with two shifts shows twice, and inactive nurses are left out', () => {
+  const late = { ...DAY_DUTY, id: 'late', acronym: 'L', startTime: '13:00', endTime: '21:00' };
+  const info = todayAtClinic({
+    date: '2026-10-05',
+    assignments: [shift('a', '2026-10-05', { dutyWindowId: 'late' }), shift('a', '2026-10-05'), shift('x', '2026-10-05')],
+    nurses: [makeNurse('a', { fullName: 'Ana' }), makeNurse('x', { fullName: 'Xi', active: false })],
+    dutyWindows: [DAY_DUTY, late],
+    seniorityLevels: [SENIOR],
+    leaveEntries: [],
+    detailOf: () => '',
+  });
+  assert.deepEqual(info.onDuty.map((e) => `${e.name} ${e.acronym}`), [`Ana ${DAY_DUTY.acronym}`, 'Ana L']);
+});

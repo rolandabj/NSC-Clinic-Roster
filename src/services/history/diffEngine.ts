@@ -196,12 +196,14 @@ export function computeScheduleDiff(
     // Case 3: Both exist — check if anything changed
     else if (baseAsgn && targetAsgn) {
       const isDutyChanged = baseAsgn.dutyWindowId !== targetAsgn.dutyWindowId;
+      // A missing id and an empty one mean the same; pinned is only yes or no
+      // (the same comparison as the dashboard's "changes not sent").
       const isTargetChanged =
-        baseAsgn.doctorId !== targetAsgn.doctorId ||
-        baseAsgn.clinicalRoleId !== targetAsgn.clinicalRoleId ||
-        baseAsgn.specialtyId !== targetAsgn.specialtyId ||
+        (baseAsgn.doctorId || '') !== (targetAsgn.doctorId || '') ||
+        (baseAsgn.clinicalRoleId || '') !== (targetAsgn.clinicalRoleId || '') ||
+        (baseAsgn.specialtyId || '') !== (targetAsgn.specialtyId || '') ||
         baseAsgn.kind !== targetAsgn.kind;
-      const isLockChanged = baseAsgn.locked !== targetAsgn.locked;
+      const isLockChanged = !!baseAsgn.locked !== !!targetAsgn.locked;
 
       if (isDutyChanged || isTargetChanged || isLockChanged) {
         const formattedBefore = formatAssignment(

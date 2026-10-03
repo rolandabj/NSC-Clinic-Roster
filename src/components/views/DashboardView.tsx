@@ -8,7 +8,7 @@
  * as published.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import {
   CalendarRange,
   Users,
@@ -52,7 +52,7 @@ import {
   todayAtClinic,
   TodayAtClinic,
 } from '../../services/dashboard/dashboardSummary';
-import { announceProblems } from '../../services/dashboard/problemCount';
+import { announceProblems, ProblemCount } from '../../services/dashboard/problemCount';
 import { formatDate, formatDateRange } from '../../utils/dateUtils';
 import { PageLoading } from '../common/PageLoading';
 import { Assignment, NurseRosterShift, Schedule } from '../../types';
@@ -76,11 +76,15 @@ interface PlannerData {
   nursesWithoutEmail: number;
   activeNurses: number;
   activeDoctors: number;
+  /** The roster check's counts, announced to the top bar once the page is still showing. */
+  announce: ProblemCount | null;
 }
 
 /** Everything a nurse or viewer's dashboard shows. */
 interface ViewerData {
   today: string;
+  /** Requests waiting for approval (managers only; null for others). */
+  pendingRequests: number | null;
   myShifts: NurseRosterShift[] | null;
   myLeaveDays: string[];
   todayRoster: Schedule | null;
@@ -127,17 +131,19 @@ async function loadPlannerData(timezone: string, canApprove: boolean): Promise<P
 
   // The current roster: its shifts, the roster check, changes since the last publish, read receipts.
   let rosterStatus: PlannerData['rosterStatus'] = null;
+  let announce: ProblemCount | null = null;
   let receipts: PlannerData['receipts'] = null;
   let rosterAssignments: Assignment[] = [];
   if (roster) {
     const by = { field: 'scheduleId', operator: '==' as const, value: roster.id };
-    const [assignments, versionList, setup, requests, acks] = await Promise.all([
+    const [assignments, versionList, setup, acks] = await Promise.all([
       repo.list('assignments', by),
       repo.list('versions', by).then(withoutBackups),
-      loadClinicSetup(repo, roster).catch(() => undefined),
-      repo.list('availabilityRequests').catch(() => []),
+      // The year's fairness totals are only for filling the roster, not checking it.
+      loadClinicSetup(repo, roster, { withYearToDate: false }).catch(() => undefined),
       repo.list('acknowledgments', by).catch(() => []),
     ]);
+    const requests = setup?.availabilityRequests || [];
     rosterAssignments = assignments;
     const report = ScheduleValidator.validate(
       roster,
@@ -170,7 +176,14 @@ async function loadPlannerData(timezone: string, canApprove: boolean): Promise<P
       const r = receiptSummary(acks, lastPublished.id);
       if (r.sent > 0) receipts = { sent: r.sent, confirmed: r.confirmed };
     }
-    announceProblems({ scheduleId: roster.id, mustFix: report.errorCount, toCheck: report.warnCount });
+    announce = {
+      scheduleId: roster.id,
+      name: roster.name,
+      startDate: roster.startDate,
+      endDate: roster.endDate,
+      mustFix: report.errorCount,
+      toCheck: report.warnCount,
+    };
   }
 
   // Today at the clinic, from the roster that covers today (its current shifts).
@@ -205,13 +218,14 @@ async function loadPlannerData(timezone: string, canApprove: boolean): Promise<P
     nursesWithoutEmail: activeNurses.filter((n) => !n.gmail || !n.gmail.includes('@')).length,
     activeNurses: activeNurses.length,
     activeDoctors: activeDoctors.length,
+    announce,
   };
 }
 
-async function loadViewerData(timezone: string, linkedNurseId?: string): Promise<ViewerData> {
+async function loadViewerData(timezone: string, linkedNurseId: string | undefined, canApprove: boolean): Promise<ViewerData> {
   const repo = getRepository();
   const today = todayIso(timezone);
-  const [schedules, nurses, doctors, dutyWindows, seniorityLevels, roles, specialties, leaveEntries, versions] = await Promise.all([
+  const [schedules, nurses, doctors, dutyWindows, seniorityLevels, roles, specialties, leaveEntries] = await Promise.all([
     repo.list('schedules'),
     repo.list('nurses'),
     repo.list('doctors'),
@@ -220,9 +234,12 @@ async function loadViewerData(timezone: string, linkedNurseId?: string): Promise
     repo.list('clinicalRoles'),
     repo.list('specialties'),
     repo.list('leaveEntries'),
-    // Only published copies: nurses see what was sent, and drafts' copies aren't read at all.
-    repo.list('versions', { field: 'isPublished', operator: '==', value: true }),
   ]);
+  // Only the copies of rosters that cover today or later (old rosters' copies aren't read).
+  const recent = schedules.filter((s) => s.endDate >= today && s.status !== 'ARCHIVED');
+  const versions = (
+    await Promise.all(recent.map((s) => repo.list('versions', { field: 'scheduleId', operator: '==', value: s.id })))
+  ).flat();
   const refs = { doctors, clinicalRoles: roles, specialties };
   const published = latestPublishedVersions(versions);
 
@@ -249,7 +266,8 @@ async function loadViewerData(timezone: string, linkedNurseId?: string): Promise
     myShifts = doc.shifts.filter((s) => s.date >= today && s.date <= until);
     myLeaveDays = doc.leaveDays.filter((d) => d >= today && d <= until);
   }
-  return { today, myShifts, myLeaveDays, todayRoster, todayInfo };
+  const pendingRequests = canApprove ? await countPendingApprovals().catch(() => null) : null;
+  return { today, pendingRequests, myShifts, myLeaveDays, todayRoster, todayInfo };
 }
 
 /** A small card with a heading. */
@@ -258,15 +276,20 @@ const Card: React.FC<{ title: string; action?: React.ReactNode; children: React.
   action,
   children,
   className = '',
-}) => (
-  <section className={`bg-white border border-slate-200 rounded-lg shadow-2xs ${className}`} aria-label={title}>
-    <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2 border-b border-slate-100">
-      <h2 className="text-sm font-bold text-slate-900">{title}</h2>
-      {action}
-    </div>
-    <div className="p-4">{children}</div>
-  </section>
-);
+}) => {
+  const headingId = useId();
+  return (
+    <section className={`bg-white border border-slate-200 rounded-lg shadow-2xs ${className}`} aria-labelledby={headingId}>
+      <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2 border-b border-slate-100">
+        <h2 id={headingId} className="text-sm font-bold text-slate-900">
+          {title}
+        </h2>
+        {action}
+      </div>
+      <div className="p-4">{children}</div>
+    </section>
+  );
+};
 
 /** Who works today, as a list. */
 const TodayList: React.FC<{ info: TodayAtClinic | null; roster: Schedule | null; note?: string }> = ({ info, roster, note }) => {
@@ -320,15 +343,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
+  // The time zone is read when loading, not a reason to load again (it arrives
+  // from the clinic profile a moment after the page opens).
+  const timezoneRef = useRef(context.timezone);
+  timezoneRef.current = context.timezone;
+
   useEffect(() => {
     let cancelled = false;
     setError(null);
     const load = isPlanner
-      ? loadPlannerData(context.timezone, canApprove).then((d) => !cancelled && setPlanner(d))
-      : loadViewerData(context.timezone, user?.linkedNurseId).then((d) => !cancelled && setViewer(d));
+      ? loadPlannerData(timezoneRef.current, canApprove).then((d) => {
+          if (cancelled) return;
+          setPlanner(d);
+          // Only a load still on screen may update the top bar's count.
+          if (d.announce) announceProblems(d.announce);
+        })
+      : loadViewerData(timezoneRef.current, user?.linkedNurseId, canApprove).then((d) => !cancelled && setViewer(d));
     load.catch((err) => {
       console.error('Dashboard could not load:', err);
-      if (!cancelled) setError(err?.message || 'The dashboard could not be loaded.');
+      if (!cancelled) setError('Check your connection and try again.');
     });
     const reload = () => setAttempt((n) => n + 1);
     window.addEventListener('clinic-roster-cleared', reload);
@@ -338,7 +371,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
       window.removeEventListener('clinic-roster-cleared', reload);
       window.removeEventListener('clinic-roster-reseeded', reload);
     };
-  }, [isPlanner, canApprove, context.timezone, user?.linkedNurseId, attempt]);
+  }, [isPlanner, canApprove, user?.linkedNurseId, attempt]);
 
   const openCreate = onOpenCreateSchedule || (() => onNavigate('schedules'));
   const today = planner?.today || viewer?.today || todayIso(context.timezone);
@@ -369,7 +402,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
       <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-4">
         {header}
         <div role="alert" className="p-4 rounded border border-rose-200 bg-rose-50 text-xs text-rose-800 flex items-center justify-between gap-3">
-          <span>The dashboard could not be loaded ({error}).</span>
+          <span>The dashboard could not be loaded. {error}</span>
           <button
             type="button"
             onClick={() => setAttempt((n) => n + 1)}
@@ -405,18 +438,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
   const shortcutGrid = (
     <nav aria-label="Shortcuts" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
       {shortcuts.map((s) => (
-        <button
+        <a
           key={s.route}
-          type="button"
-          onClick={() => onNavigate(s.route)}
-          className="text-left bg-white border border-slate-200 hover:border-indigo-300 rounded-lg p-3 cursor-pointer group shadow-2xs"
+          href={`#${s.route}`}
+          onClick={(e) => {
+            e.preventDefault();
+            onNavigate(s.route);
+          }}
+          className="block text-left bg-white border border-slate-200 hover:border-indigo-300 rounded-lg p-3 cursor-pointer group shadow-2xs"
         >
           <span className="text-indigo-700 group-hover:text-indigo-800" aria-hidden="true">
             {s.icon}
           </span>
           <span className="block mt-1.5 text-xs font-semibold text-slate-900">{s.label}</span>
           <span className="block text-[11px] text-slate-500 leading-snug">{s.hint}</span>
-        </button>
+        </a>
       ))}
     </nav>
   );
@@ -464,6 +500,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
           <Card title="Today at the clinic">
             <TodayList info={viewer.todayInfo} roster={viewer.todayRoster} note="No published roster covers today." />
           </Card>
+          {viewer.pendingRequests !== null && (
+            <Card title="Needs your attention">
+              {viewer.pendingRequests > 0 ? (
+                <div className="flex items-start gap-2 text-xs">
+                  <span className="p-1 rounded shrink-0 text-amber-700 bg-amber-50" aria-hidden="true">
+                    <Inbox className="w-4 h-4" />
+                  </span>
+                  <div>
+                    <p className="text-slate-800">
+                      {viewer.pendingRequests} leave or shift request{viewer.pendingRequests === 1 ? '' : 's'} waiting for approval
+                    </p>
+                    <a
+                      href="#availability"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        onNavigate('availability');
+                      }}
+                      className="font-semibold text-indigo-700 hover:underline"
+                    >
+                      Review requests
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-emerald-700 inline-flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4" aria-hidden="true" /> No requests waiting.
+                </p>
+              )}
+            </Card>
+          )}
         </div>
         {shortcutGrid}
       </div>
@@ -480,7 +546,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
       tone: 'red',
       icon: <AlertCircle className="w-4 h-4" />,
       text: `${status.mustFix} problem${status.mustFix === 1 ? '' : 's'} to fix on ${d.roster!.name}`,
-      action: 'Open the roster',
+      action: 'Fix problems',
+      onClick: () => onNavigate('schedules'),
+    });
+  }
+  if (status && status.toCheck > 0) {
+    attention.push({
+      key: 'check',
+      tone: 'amber',
+      icon: <AlertTriangle className="w-4 h-4" />,
+      text: `${status.toCheck} thing${status.toCheck === 1 ? '' : 's'} to check on ${d.roster!.name}`,
+      action: 'Check them',
       onClick: () => onNavigate('schedules'),
     });
   }
@@ -490,7 +566,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
       tone: 'amber',
       icon: <Send className="w-4 h-4" />,
       text: `${status.changed} change${status.changed === 1 ? '' : 's'} not sent to the nurses yet`,
-      action: 'Open the roster',
+      action: 'Send changes',
       onClick: () => onNavigate('schedules'),
     });
   }
@@ -500,7 +576,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
       tone: 'amber',
       icon: <Send className="w-4 h-4" />,
       text: `${d.roster!.name} is filled but not published yet`,
-      action: 'Open the roster',
+      action: 'Publish',
       onClick: () => onNavigate('schedules'),
     });
   }
@@ -595,13 +671,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
             title="Current roster"
             action={
               d.roster ? (
-                <button
-                  type="button"
-                  onClick={() => onNavigate('schedules')}
+                <a
+                  href="#schedules"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onNavigate('schedules');
+                  }}
                   className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
                 >
-                  Open <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
+                  Open {d.roster.name} <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </a>
               ) : undefined
             }
           >
@@ -625,7 +704,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
                       status.published ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                     }`}
                   >
-                    {status.published ? 'Published' : 'Draft'} · v{status.version}
+                    {status.published ? 'Published' : 'Draft'}, version {status.version}
                   </span>
                   <span className="text-xs text-slate-600 inline-flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />

@@ -69,14 +69,17 @@ export function todayAtClinic(input: {
       .filter((le) => le.approved && date >= le.startDate && date <= le.endDate)
       .map((le) => le.nurseId)
   );
+  // Every shift that day (a nurse with two shows twice), except exact repeats.
   const seen = new Set<string>();
   const onDuty: OnDutyEntry[] = [];
   for (const a of input.assignments) {
-    if (a.date !== date || seen.has(a.nurseId) || onLeaveIds.has(a.nurseId)) continue;
+    if (a.date !== date || onLeaveIds.has(a.nurseId)) continue;
     const nurse = nurseMap.get(a.nurseId);
     const duty = dutyMap.get(a.dutyWindowId);
-    if (!nurse || !duty) continue;
-    seen.add(a.nurseId);
+    if (!nurse || nurse.active === false || !duty) continue;
+    const key = `${a.nurseId}|${a.dutyWindowId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     onDuty.push({
       nurseId: nurse.id,
       name: nurse.fullName,
@@ -96,6 +99,11 @@ export function todayAtClinic(input: {
   return { onDuty, onLeave, hasSenior: onDuty.some((e) => e.senior) };
 }
 
+/** Each nurse once, for counts (two shifts are still one nurse). */
+export function nursesOnDuty(info: TodayAtClinic): number {
+  return new Set(info.onDuty.map((e) => e.nurseId)).size;
+}
+
 /** Read receipts for one published version: how many were sent and how many confirmed. */
 export function receiptSummary(acks: Acknowledgment[], versionId: string) {
   const forVersion = acks.filter((a) => a.versionId === versionId);
@@ -107,9 +115,15 @@ export function receiptSummary(acks: Acknowledgment[], versionId: string) {
  * When no roster covers the days soon after the last one ends, the dates the
  * next roster should start from (else null).
  */
-export function nextRosterNeeded(schedules: Pick<Schedule, 'startDate' | 'endDate'>[], today: string): { from: string } | null {
-  if (schedules.length === 0) return null;
-  const lastEnd = schedules.reduce((max, s) => (s.endDate > max ? s.endDate : max), '');
+export function nextRosterNeeded(
+  schedules: (Pick<Schedule, 'startDate' | 'endDate'> & { status?: Schedule['status'] })[],
+  today: string
+): { from: string } | null {
+  const live = schedules.filter((s) => s.status !== 'ARCHIVED');
+  if (live.length === 0) return null;
+  const lastEnd = live.reduce((max, s) => (s.endDate > max ? s.endDate : max), '');
   if (!lastEnd || lastEnd > addDays(today, NEXT_ROSTER_WARNING_DAYS)) return null;
-  return { from: addDays(lastEnd, 1) };
+  // Never a date in the past: after a long gap the next roster starts today.
+  const next = addDays(lastEnd, 1);
+  return { from: next < today ? today : next };
 }

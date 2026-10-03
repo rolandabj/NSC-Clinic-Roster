@@ -4,14 +4,13 @@ import {
   ShieldAlert,
   ChevronDown,
   Keyboard,
-  HelpCircle,
   ShieldCheck,
   Shield,
   LogOut,
-  User,
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { authService, MASTER_ADMIN_EMAIL } from '../../services/auth/authService';
+import { canEditClinicData } from '../../services/auth/access';
 
 interface TopBarProps {
   context: ClinicContextState;
@@ -109,7 +108,8 @@ export const TopBar: React.FC<TopBarProps> = ({
           </button>
         )}
 
-        {/* Warnings Bell with badge */}
+        {/* The roster's problem count, for people who can open the roster */}
+        {canEditClinicData(authService.getCurrentUser()) && (
         <button
           onClick={onOpenWarnings}
           className={`relative p-2 rounded border transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium ${
@@ -132,6 +132,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             {context.warningCount === 1 ? 'problem' : 'problems'}
           </span>
         </button>
+        )}
 
         {/* User Account / Profile Menu */}
         {context.currentUser ? (
