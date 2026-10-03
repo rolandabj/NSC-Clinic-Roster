@@ -2057,6 +2057,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           <ProblemsPanel
             validationReport={validationReport}
             nurseName={nurseName}
+            firstNurseId={nurses[0]?.id}
             onShowInGrid={handleJumpToCell}
             onOpenFullList={() => {
               setIsProblemsOpen(false);

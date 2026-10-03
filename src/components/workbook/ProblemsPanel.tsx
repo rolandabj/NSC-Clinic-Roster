@@ -19,6 +19,8 @@ interface ProblemsPanelProps {
   onClose: () => void;
   /** Extra help under a problem, e.g. who could cover a missing free nurse (null for none). */
   renderHelp?: (finding: ValidationFinding) => React.ReactNode | null;
+  /** A nurse row to go to for a problem about a whole day (the day's column is what matters). */
+  firstNurseId?: string;
 }
 
 const SEVERITY: Record<FindingSeverity, { label: string; order: number; icon: React.ReactNode; tone: string }> = {
@@ -27,7 +29,7 @@ const SEVERITY: Record<FindingSeverity, { label: string; order: number; icon: Re
   INFO: { label: 'Note', order: 2, icon: <Info className="w-3.5 h-3.5 text-slate-500" />, tone: 'border-slate-200 bg-white' },
 };
 
-export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, nurseName, onShowInGrid, onOpenFullList, onClose, renderHelp }) => {
+export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, nurseName, onShowInGrid, onOpenFullList, onClose, renderHelp, firstNurseId }) => {
   const [showNotes, setShowNotes] = useState(false);
   const [openHelpId, setOpenHelpId] = useState<string | null>(null);
   const all = [...validationReport.findings].sort(
@@ -39,7 +41,10 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, 
   const target = (f: ValidationFinding) => {
     const ref = f.cellRefs[0];
     if (ref) return ref;
-    if (f.date && f.affectedNurseIds[0]) return { nurseId: f.affectedNurseIds[0], date: f.date };
+    const date = f.date || f.id.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+    if (date && f.affectedNurseIds[0]) return { nurseId: f.affectedNurseIds[0], date };
+    // A whole day's problem: go to that day's column.
+    if (date && firstNurseId) return { nurseId: firstNurseId, date, wholeDay: true };
     return null;
   };
 
@@ -85,7 +90,7 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, 
                     <p className="text-slate-800 leading-snug">{f.message}</p>
                     {cell && (
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        {nurseName(cell.nurseId)} · {formatDate(cell.date)}
+                        {'wholeDay' in cell ? 'Whole day' : nurseName(cell.nurseId)} · {formatDate(cell.date)}
                       </p>
                     )}
                   </div>

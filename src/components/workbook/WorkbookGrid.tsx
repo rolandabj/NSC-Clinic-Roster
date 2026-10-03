@@ -145,6 +145,10 @@ const SOURCE_WORDS: Record<string, string> = {
 /** A doctor's name with "Dr" in front, unless it already has it. */
 const withDr = (name: string) => (/^dr\.?\s/i.test(name) ? name : `Dr ${name}`);
 
+/** Problems about a whole day (not one nurse's shift), shown on the day's heading. */
+const DAY_PROBLEM_IDS = /^(cov-gap-|h1-senior-|evening-tail-|holiday-|nc-coverage-|role-quota-|session-partial-|unassigned-session-)/;
+const isDayProblem = (f: ValidationFinding) => DAY_PROBLEM_IDS.test(f.id);
+
 const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
@@ -273,11 +277,32 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   const roleMap = new Map(roles.map((r) => [r.id, r]));
   const seniorityMap = new Map(seniorityLevels.map((s) => [s.id, s]));
 
-  // Problem messages per cell (from the validation findings)
+  // Problems from the roster check, by where they show on the grid:
+  //  - about one cell (a shift on leave, too little rest...): a red corner on that cell;
+  //  - about a whole day (no free nurse, no senior nurse, a doctor with no nurse...):
+  //    a badge on that day's heading, not a mark on every shift of the day;
+  //  - about a nurse (hours, no email): a mark by the nurse's name.
   const cellViolationMessages = new Map<string, string[]>();
+  const dayProblems = new Map<string, { messages: string[]; mustFix: boolean }>();
+  const nurseProblems = new Map<string, { messages: string[]; mustFix: boolean }>();
+  const addTo = (map: Map<string, { messages: string[]; mustFix: boolean }>, key: string, f: ValidationFinding) => {
+    const entry = map.get(key) || { messages: [], mustFix: false };
+    if (!entry.messages.includes(f.message)) entry.messages.push(f.message);
+    entry.mustFix = entry.mustFix || f.severity === 'ERROR';
+    map.set(key, entry);
+  };
   validationReport.findings.forEach((f) => {
     // Notes (requests not followed, leave waiting for approval) have their own marks, not the red one.
     if (f.severity === 'INFO') return;
+    if (isDayProblem(f)) {
+      const date = f.date || f.id.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+      if (date) addTo(dayProblems, date, f);
+      return;
+    }
+    if (f.cellRefs.length === 0) {
+      f.affectedNurseIds.forEach((id) => addTo(nurseProblems, id, f));
+      return;
+    }
     f.cellRefs.forEach((r) => {
       const k = `${r.nurseId}_${r.date}`;
       const list = cellViolationMessages.get(k) || [];
@@ -285,6 +310,17 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       cellViolationMessages.set(k, list);
     });
   });
+  // How many problems the marks show on the days on screen (for the switch's label).
+  const shownDates = new Set(blockDates);
+  const shownProblemCount = validationReport.findings.filter(
+    (f) =>
+      f.severity !== 'INFO' &&
+      (isDayProblem(f)
+        ? shownDates.has(f.date || f.id.match(/\d{4}-\d{2}-\d{2}/)?.[0] || '')
+        : f.cellRefs.length === 0
+        ? f.affectedNurseIds.length > 0
+        : f.cellRefs.some((r) => shownDates.has(r.date)))
+  ).length;
 
   // Group nurses if requested
   // The selected cell may be on days not shown now (after paging); then the first cell takes Tab.
@@ -1273,16 +1309,30 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
           </div>
 
           <button
+            type="button"
+            role="switch"
             onClick={() => setHighlightViolations(!highlightViolations)}
-            aria-pressed={highlightViolations}
-            title={highlightViolations ? 'Hide the red problem marks in the grid' : 'Show a red mark on every cell with a problem'}
-            className={`px-2 py-1 rounded border text-xs cursor-pointer ${
+            aria-checked={highlightViolations}
+            title={
+              highlightViolations
+                ? 'Problem marks are on: a red corner on a cell, a badge on a day, a mark by a nurse. Click to hide them.'
+                : 'Problem marks are off. Click to show them.'
+            }
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs cursor-pointer ${
               highlightViolations
                 ? 'bg-amber-50 border-amber-300 text-amber-900 font-medium'
                 : 'border-slate-200 text-slate-600'
             }`}
           >
-            Show problems ({validationReport.errorCount + validationReport.warnCount})
+            <span
+              aria-hidden="true"
+              className={`relative inline-block w-6 h-3.5 rounded-full transition-colors ${highlightViolations ? 'bg-amber-500' : 'bg-slate-300'}`}
+            >
+              <span
+                className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all ${highlightViolations ? 'left-3' : 'left-0.5'}`}
+              />
+            </span>
+            Problem marks ({shownProblemCount} on these days)
           </button>
         </div>
 
@@ -1425,6 +1475,22 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                         />
                       )}
                     </div>
+                    {highlightViolations && dayProblems.has(dateStr) && (() => {
+                      const dp = dayProblems.get(dateStr)!;
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => onNavigateTab && onNavigateTab('warnings')}
+                          title={dp.messages.join('\n')}
+                          aria-label={`${dp.messages.length} problem${dp.messages.length === 1 ? '' : 's'} on ${formatDate(dateStr)}: ${dp.messages.join('. ')}`}
+                          className={`mt-0.5 mx-auto flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold font-sans cursor-pointer ${
+                            dp.mustFix ? 'bg-rose-600 text-white' : 'bg-amber-400 text-amber-950'
+                          }`}
+                        >
+                          {dp.messages.length}
+                        </button>
+                      );
+                    })()}
                   </th>
                 ))}
 
@@ -1486,6 +1552,22 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                         {nurse.contractPercent !== 100 && (
                           <span className="text-[10px] text-slate-500 shrink-0 font-sans">{nurse.contractPercent}% time</span>
                         )}
+                        {highlightViolations && nurseProblems.has(nurse.id) && (() => {
+                          const np = nurseProblems.get(nurse.id)!;
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => onNavigateTab && onNavigateTab('warnings')}
+                              title={np.messages.join('\n')}
+                              aria-label={`${np.messages.length} problem${np.messages.length === 1 ? '' : 's'} for ${nurse.fullName}: ${np.messages.join('. ')}`}
+                              className={`shrink-0 flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold font-sans cursor-pointer ${
+                                np.mustFix ? 'bg-rose-600 text-white' : 'bg-amber-400 text-amber-950'
+                              }`}
+                            >
+                              {np.messages.length}
+                            </button>
+                          );
+                        })()}
                         {hasPhl && (
                           <span title="Blood collection and IV nurse" className="text-rose-600 text-xs font-bold shrink-0 ml-auto">
                             🩸
@@ -2066,7 +2148,13 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                     <span className="relative w-6 h-5 rounded border border-slate-300 bg-white shrink-0" aria-hidden="true">
                       <span className="absolute top-0 right-0 w-0 h-0 border-t-8 border-l-8 border-t-red-600 border-l-transparent" />
                     </span>
-                    <span>Problem: tap or point at the cell to read it</span>
+                    <span>Problem with this shift: tap or point at the cell to read it</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-5 flex items-center justify-center shrink-0" aria-hidden="true">
+                      <span className="min-w-4 h-4 px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center">2</span>
+                    </span>
+                    <span>Problems about a whole day (on the day's heading) or a nurse (by the name); red must be fixed, amber to check</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span
