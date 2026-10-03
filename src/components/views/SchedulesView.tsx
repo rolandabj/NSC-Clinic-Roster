@@ -36,6 +36,8 @@ import { PageLoading } from '../common/PageLoading';
 import { ProblemsPanel } from '../workbook/ProblemsPanel';
 import { withoutBackups } from '../../services/history/versionList';
 import { usePresence } from '../../services/presence/usePresence';
+import { countChangedCells } from '../../services/dashboard/dashboardSummary';
+import { announceProblems } from '../../services/dashboard/problemCount';
 import { WhoCanCover } from '../workbook/WhoCanCover';
 import { nurseClinicRoleOf, canBeFreeNurse } from '../../services/engine/clinicModel';
 import { ClinicContextState } from '../../types/navigation';
@@ -241,6 +243,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   // Toast
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // The top bar shows this roster's problem count.
+  useEffect(() => {
+    if (!validationReport.scheduleId) return;
+    announceProblems({
+      scheduleId: validationReport.scheduleId,
+      mustFix: validationReport.errorCount,
+      toCheck: validationReport.warnCount,
+    });
+  }, [validationReport]);
 
   // Problems side panel, and a request for the grid to show one cell ("Show in grid").
   const [isProblemsOpen, setIsProblemsOpen] = useState(false);
@@ -1472,22 +1484,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const lastPublished = versions
     .filter((v) => v.isPublished && v.scheduleId === activeSchedule?.id)
     .sort((a, b) => b.number - a.number)[0];
-  const changedSincePublish = (() => {
-    if (!lastPublished) return 0;
-    const sig = (a: Assignment) =>
-      `${a.dutyWindowId}|${a.kind}|${a.doctorId || ''}|${a.clinicalRoleId || ''}|${a.specialtyId || ''}|${a.locked ? 'pinned' : ''}`;
-    const cells = (list: Assignment[]) => {
-      const m = new Map<string, string>();
-      for (const a of list) m.set(`${a.nurseId}|${a.date}`, sig(a));
-      return m;
-    };
-    const before = cells(lastPublished.snapshot.assignments);
-    const now = cells(assignments);
-    let changed = 0;
-    for (const [key, value] of now) if (before.get(key) !== value) changed++;
-    for (const key of before.keys()) if (!now.has(key)) changed++;
-    return changed;
-  })();
+  const changedSincePublish = lastPublished ? countChangedCells(lastPublished.snapshot.assignments, assignments) : 0;
   const openPublish = (mode: 'PUBLISH' | 'CHANGE') => {
     setPublishWizardMode(mode);
     setIsPublishModalOpen(true);

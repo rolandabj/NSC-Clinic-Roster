@@ -117,8 +117,8 @@ export const TopBar: React.FC<TopBarProps> = ({
               ? 'border-amber-200 bg-amber-50/70 text-amber-800 hover:bg-amber-100/70 dark:bg-amber-950/40 dark:border-amber-900/60 dark:text-amber-300'
               : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
           }`}
-          title="Open the schedule and its Warnings tab"
-          aria-label={`${context.warningCount} warnings`}
+          title="Open the roster and its problems"
+          aria-label={`${context.warningCount} problems on the roster`}
         >
           {context.warningCount > 0 ? (
             <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
@@ -129,7 +129,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             {context.warningCount}
           </span>
           <span className="text-[11px] font-normal text-slate-600 dark:text-slate-400 hidden md:inline">
-            warnings
+            {context.warningCount === 1 ? 'problem' : 'problems'}
           </span>
         </button>
 

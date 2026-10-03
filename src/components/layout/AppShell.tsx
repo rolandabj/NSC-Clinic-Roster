@@ -21,6 +21,9 @@ import { RosterPublishService } from '../../services/publish/rosterPublishServic
 import { quotaTracker } from '../../services/firebase/quotaTracker';
 import { Check, AlertTriangle, X } from 'lucide-react';
 import { LoadErrorBoundary } from '../common/LoadErrorBoundary';
+import { chooseScheduleToOpen } from '../../services/schedule/openSchedule';
+import { formatDateRange } from '../../utils/dateUtils';
+import { PROBLEMS_EVENT, ProblemCount } from '../../services/dashboard/problemCount';
 
 // Screens load on demand, so the first page does not download the whole app.
 const SchedulesView = lazy(() => import('../views/SchedulesView').then((m) => ({ default: m.SchedulesView })));
@@ -245,14 +248,19 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
           } catch {}
         }
 
-        // Fetch active schedule if present
+        // The roster to show as current: the one last opened in this browser, else
+        // the one covering today, else the latest (same choice as the schedule screen).
         const schedules = await repo.list('schedules');
-        if (schedules.length > 0) {
-          const activeSched = schedules[0];
+        let storedId: string | null = null;
+        try {
+          storedId = localStorage.getItem('clinic_roster_active_schedule_id');
+        } catch {}
+        const activeSched = chooseScheduleToOpen(schedules, storedId);
+        if (activeSched) {
           setClinicContext((prev) => ({
             ...prev,
             activeScheduleName: activeSched.name,
-            activeSchedulePeriod: `${activeSched.startDate} – ${activeSched.endDate}`,
+            activeSchedulePeriod: formatDateRange(activeSched.startDate, activeSched.endDate),
             activeScheduleId: activeSched.id,
           }));
         } else {
@@ -270,6 +278,18 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       }
     }
     bootstrap();
+
+    // The open roster's problem count, for the top bar and the dashboard.
+    const handleProblems = (e: Event) => {
+      const detail = (e as CustomEvent<ProblemCount>).detail;
+      if (!detail) return;
+      setClinicContext((prev) => ({
+        ...prev,
+        warningCount: detail.mustFix + detail.toCheck,
+        activeScheduleId: detail.scheduleId || prev.activeScheduleId,
+      }));
+    };
+    window.addEventListener(PROBLEMS_EVENT, handleProblems);
 
     const handleClinicCleared = () => {
       setClinicContext((prev) => ({
@@ -297,6 +317,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     window.addEventListener('clinic-roster-cleared', handleClinicCleared);
     window.addEventListener('clinic-name-updated', handleClinicNameUpdated);
     return () => {
+      window.removeEventListener(PROBLEMS_EVENT, handleProblems);
       window.removeEventListener('clinic-roster-cleared', handleClinicCleared);
       window.removeEventListener('clinic-name-updated', handleClinicNameUpdated);
     };
@@ -402,6 +423,10 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
           <DashboardView
             context={clinicContext}
             onNavigate={navigateTo}
+            onOpenCreateSchedule={() => {
+              setOpenCreateInSchedules(true);
+              navigateTo('schedules');
+            }}
           />
         );
     }
