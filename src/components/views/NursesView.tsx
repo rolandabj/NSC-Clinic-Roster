@@ -34,8 +34,10 @@ import {
   Specialty,
   Doctor,
   NursePreference,
+  PreferenceFocus,
   LeaveType,
 } from '../../types';
+import { PREFERENCE_FOCUS_LABELS } from '../../services/engine/preferenceOrder';
 import { BulkImportModal } from '../modals/BulkImportModal';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog } from '../common/dialogs';
@@ -75,6 +77,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
     capabilityIds: string[];
     isClinicNurse: boolean;
     preferences: NursePreference[];
+    preferenceFocus: PreferenceFocus;
     leaveQuotas: Record<string, number>;
     active: boolean;
     notes: string;
@@ -88,6 +91,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
     capabilityIds: [],
     isClinicNurse: true,
     preferences: [],
+    preferenceFocus: 'LIST',
     leaveQuotas: {},
     active: true,
     notes: '',
@@ -161,6 +165,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
       capabilityIds: [],
       isClinicNurse: true,
       preferences: [],
+      preferenceFocus: 'LIST',
       leaveQuotas: {},
       active: true,
       notes: '',
@@ -194,6 +199,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
       capabilityIds: nurse.capabilityIds || [],
       isClinicNurse: nurse.isClinicNurse !== false,
       preferences: nurse.preferences || [],
+      preferenceFocus: nurse.preferenceFocus || 'LIST',
       leaveQuotas: normalizedQuotas,
       active: nurse.active,
       notes: nurse.notes || '',
@@ -293,6 +299,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
           capabilityIds: formData.capabilityIds,
           isClinicNurse: formData.isClinicNurse,
           preferences: finalPreferences,
+          preferenceFocus: formData.preferenceFocus,
           leaveQuotas: cleanQuotas,
           active: formData.active,
           notes: formData.notes,
@@ -314,6 +321,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
           capabilityIds: formData.capabilityIds,
           isClinicNurse: formData.isClinicNurse,
           preferences: finalPreferences,
+          preferenceFocus: formData.preferenceFocus,
           leaveQuotas: cleanQuotas,
           active: formData.active,
           notes: formData.notes,
@@ -1195,6 +1203,39 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
                     </div>
                   )}
                 </div>
+
+                {/* Which comes first when her doctors and her specialties all need a nurse the same day */}
+                {formData.preferences.some((p) => p.kind === 'DOCTOR') && formData.preferences.some((p) => p.kind === 'SPECIALTY') && (
+                  <fieldset className="mt-3 p-2.5 rounded border border-slate-200 bg-slate-50 space-y-1.5">
+                    <legend className="px-1 text-[11px] font-semibold text-slate-700">
+                      When her doctors and her specialties need a nurse on the same day
+                    </legend>
+                    {(Object.keys(PREFERENCE_FOCUS_LABELS) as PreferenceFocus[]).map((focus) => (
+                      <label key={focus} className="flex items-start gap-2 text-[11px] text-slate-700 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="preferenceFocus"
+                          className="mt-0.5"
+                          checked={formData.preferenceFocus === focus}
+                          onChange={() => setFormData({ ...formData, preferenceFocus: focus })}
+                        />
+                        <span>
+                          <span className="font-semibold">{PREFERENCE_FOCUS_LABELS[focus]}</span>
+                          <span className="block text-slate-500">
+                            {focus === 'LIST'
+                              ? 'Uses the order of the list above, top first.'
+                              : focus === 'DOCTOR'
+                              ? 'Her named doctors come before her specialties, whatever the order above.'
+                              : 'Her specialties come before her named doctors, whatever the order above.'}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                    <p className="text-[10px] text-slate-500">
+                      For each doctor, nurses who name that doctor are still asked before nurses who only chose the doctor's specialty.
+                    </p>
+                  </fieldset>
+                )}
               </>
             )}
           </div>

@@ -205,6 +205,8 @@ export interface NursePreference {
   rank: number; // 1 = 1st choice, 2 = 2nd choice ...
 }
 
+export type PreferenceFocus = 'LIST' | 'DOCTOR' | 'SPECIALTY';
+
 export interface Nurse {
   id: string;
   fullName: string;
@@ -216,6 +218,12 @@ export interface Nurse {
   capabilityIds: string[]; // ClinicalRole ids (e.g. PHL)
   isClinicNurse: boolean; // default capability flag
   preferences: NursePreference[];
+  /**
+   * Where she goes first when her doctors and her specialties all need a nurse the same day:
+   * 'LIST' (or unset) follows her list order, 'DOCTOR' puts her named doctors first,
+   * 'SPECIALTY' puts her specialties first.
+   */
+  preferenceFocus?: PreferenceFocus;
   leaveQuotas?: Record<string, number>; // leaveTypeId -> annualQuotaDays (annual allowed days per calendar year)
   active: boolean;
   notes?: string;

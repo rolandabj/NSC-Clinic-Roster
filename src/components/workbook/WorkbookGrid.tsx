@@ -61,6 +61,7 @@ import { ValidationReport, ValidationFinding } from '../../services/validation/S
 import { calculateDutyDurationHours, summarizeNurseHours, NurseHoursSummary } from '../../services/reports/hoursAccounting';
 import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
+import { applyPreferenceFocus } from '../../services/engine/preferenceOrder';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { confirmDialog, notify } from '../common/dialogs';
 import { coveredMinutes, doctorSessionsOn, nurseClinicRoleOf, toMinutes } from '../../services/engine/clinicModel';
@@ -1118,32 +1119,27 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     const work: QuickWorkOption[] = [];
     const exclusiveNC = nurse ? isExclusiveNurseClinic(nurse, roles) : false;
 
-    // Doctors in session that day: the nurse's usual doctors first (by rank), then
-    // doctors of her usual departments, then the rest.
+    // Doctors in session that day in the nurse's own order (her doctors and departments
+    // as her list and her "which comes first" setting rank them, like the generator), then the rest.
     if (!exclusiveNC) {
-      const prefs = nurse?.preferences || [];
-      const rankOf = (s: DoctorSession) => {
-        const docPref = prefs.find((p) => p.kind === 'DOCTOR' && p.refId === s.doctorId);
-        if (docPref) return docPref.rank;
+      const prefs = nurse ? applyPreferenceFocus(nurse).preferences || [] : [];
+      const docRankOf = (s: DoctorSession) => prefs.find((p) => p.kind === 'DOCTOR' && p.refId === s.doctorId)?.rank ?? Infinity;
+      const specRankOf = (s: DoctorSession) => {
         const specIds = [s.specialtyId, ...(doctorMap.get(s.doctorId)?.specialtyIds || [])].filter(Boolean);
-        const specPref = prefs
-          .filter((p) => p.kind === 'SPECIALTY' && specialtyPrefMatches(p.refId, specIds))
-          .sort((a, b) => a.rank - b.rank)[0];
-        if (specPref) return 100 + specPref.rank;
-        return 1000;
+        return Math.min(Infinity, ...prefs.filter((p) => p.kind === 'SPECIALTY' && specialtyPrefMatches(p.refId, specIds)).map((p) => p.rank));
       };
+      const rankOf = (s: DoctorSession) => Math.min(docRankOf(s), specRankOf(s));
       const daySessions = doctorSessionsOn(sessions, date)
         .filter((s) => doctorMap.has(s.doctorId))
         .sort((a, b) => rankOf(a) - rankOf(b) || a.startTime.localeCompare(b.startTime));
       for (const sess of daySessions.slice(0, 8)) {
         const doc = doctorMap.get(sess.doctorId)!;
         const duty = bestDutyFor(sess.startTime, sess.endTime, asgn?.dutyWindowId);
-        const rank = rankOf(sess);
         work.push({
           key: `doc-${sess.doctorId}`,
           label: doc.fullName,
           detail: `${sess.startTime} to ${sess.endTime}${duty ? ` · ${shiftWords(duty)}` : ''}`,
-          tag: rank < 100 ? 'Usual' : rank < 1000 ? 'Usual department' : undefined,
+          tag: docRankOf(sess) < Infinity ? 'Usual' : specRankOf(sess) < Infinity ? 'Usual department' : undefined,
           current: asgn?.kind === 'DOCTOR' && asgn.doctorId === sess.doctorId,
           onSelect: pick({ category: 'DUTY', kind: 'DOCTOR', targetRefId: sess.doctorId, dutyId: duty?.id || base.dutyId }),
         });

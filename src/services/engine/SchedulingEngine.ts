@@ -55,6 +55,7 @@ import {
 } from './clinicModel';
 import { yearToDateSeeds } from '../fairness/yearSeed';
 import { isPendingLeave } from './leaveStatus';
+import { applyPreferenceFocus } from './preferenceOrder';
 
 /**
  * Resiliently finds a rule by templateKey, id, or semantic keywords in its name.
@@ -417,7 +418,8 @@ export class SchedulingEngine {
     const inFill = (date: string) => !options.onlyDates || (date >= options.onlyDates.start && date <= options.onlyDates.end);
 
     // 1. Sort inputs deterministically
-    const sortedNurses = [...nurses].sort((a, b) => a.fullName.localeCompare(b.fullName));
+    // Each nurse's doctor and specialty ranks in the order her setting asks for
+    const sortedNurses = nurses.map(applyPreferenceFocus).sort((a, b) => a.fullName.localeCompare(b.fullName));
     const fullDayDuty = dutyWindows.find((d) => d.acronym === 'D') || dutyWindows[0];
     const lateDuty = dutyWindows.find((d) => d.acronym === 'L') || dutyWindows[0];
     const earlyDuty = dutyWindows.find((d) => d.acronym === 'E') || dutyWindows[0];
@@ -974,6 +976,32 @@ export class SchedulingEngine {
       return isNurseAllocatedToDoctorOrSpecialty(nurse, doctorId, docSpecId, docObj?.specialtyIds);
     };
 
+    /** The specialties a doctor's session counts as (the session's own, then the doctor's). */
+    const sessionSpecialties = (doctorId: string, session?: DoctorSession): Specialty[] => {
+      const ids = new Set<string>();
+      if (session?.specialtyId) ids.add(session.specialtyId);
+      doctorSpecialtiesMap.get(doctorId)?.forEach((sid) => ids.add(sid));
+      return [...ids].map((sid) => specialties.find((s) => s.id === sid)).filter((s): s is Specialty => !!s);
+    };
+    /**
+     * How high she ranks working with this doctor: her rank for the doctor by name or for
+     * one of the doctor's specialties, whichever is higher (Infinity when neither is listed).
+     * Doctors and specialties share one list, so the ranks compare directly.
+     */
+    const pairingRank = (nurse: Nurse, doctorId: string, session?: DoctorSession): number => {
+      const specs = sessionSpecialties(doctorId, session);
+      return Math.min(
+        Infinity,
+        ...(nurse.preferences || [])
+          .filter(
+            (p) =>
+              (p.kind === 'DOCTOR' && p.refId === doctorId) ||
+              (p.kind === 'SPECIALTY' && specs.some((s) => p.refId === s.id || specialtyMatchesPref(p.refId, s)))
+          )
+          .map((p) => p.rank)
+      );
+    };
+
     const ncRoleIds = new Set([nurseClinicRole.id, 'role-nurse-clinic']);
     const isNurseClinicAssignment = (a: Assignment) => a.kind === 'CLINICAL_ROLE' && !!a.clinicalRoleId && ncRoleIds.has(a.clinicalRoleId);
 
@@ -1012,17 +1040,17 @@ export class SchedulingEngine {
     });
 
     /**
-     * Hours each nurse should keep for the later sessions of doctors who rank her first:
-     * she is their nurse, so other work must leave room for them (one session a day at
-     * most, and none on her leave, day off locks or public holidays).
+     * Hours each nurse should keep for the later sessions of her first choice (a doctor,
+     * or any doctor of her first choice specialty): other work must leave room for them
+     * (one session a day at most, and none on her leave, day off locks or public holidays).
      */
     const firstChoiceHoursFrom = new Map<string, number[]>();
     sortedNurses.forEach((n) => {
-      const firstChoiceDoctors = new Set((n.preferences || []).filter((p) => p.kind === 'DOCTOR' && p.rank === 1).map((p) => p.refId));
+      const hasFirstChoice = (n.preferences || []).some((p) => (p.kind === 'DOCTOR' || p.kind === 'SPECIALTY') && p.rank === 1);
       const perDay = datesList.map((d) => {
-        if (firstChoiceDoctors.size === 0 || clinic.holidays.has(d) || !inFill(d)) return 0;
+        if (!hasFirstChoice || clinic.holidays.has(d) || !inFill(d)) return 0;
         if (isOnApprovedLeave(n.id, d) || hasDayOffLock(n.id, d)) return 0;
-        const sess = sessions.find((x) => !x.cancelled && x.date === d && firstChoiceDoctors.has(x.doctorId));
+        const sess = sessions.find((x) => !x.cancelled && x.date === d && pairingRank(n, x.doctorId, x) === 1 && canWorkWithDoctor(n, x.doctorId, x));
         return sess ? shortestCoverHours(sess.startTime, sess.endTime) : 0;
       });
       // suffix sums: hours needed from day k (inclusive) to the end
@@ -1166,14 +1194,7 @@ export class SchedulingEngine {
 
       const daySlots: InternalSlot[] = [];
       daySessions.forEach((sess) => {
-        const docSpecialty = specialties.find((s) => s.id === sess.specialtyId);
-        const hasPriority1Nurse = sortedNurses.some((n) =>
-          n.preferences?.some(
-            (p) =>
-              (p.kind === 'DOCTOR' && p.refId === sess.doctorId && p.rank === 1) ||
-              (p.kind === 'SPECIALTY' && specialtyMatchesPref(p.refId, docSpecialty) && p.rank === 1)
-          )
-        );
+        const hasPriority1Nurse = sortedNurses.some((n) => pairingRank(n, sess.doctorId, sess) === 1);
         daySlots.push({
           date,
           kind: 'DOCTOR',
@@ -1231,29 +1252,27 @@ export class SchedulingEngine {
 
         let candidateCohorts: { tierRank: number; nurses: Nurse[] }[];
         if (slot.kind === 'DOCTOR') {
-          const docSpecialtyId = slotSession?.specialtyId;
-          const docSpecialty = docSpecialtyId ? specialties.find((s) => s.id === docSpecialtyId) : null;
-          const prefersDoctor = (n: Nurse, rank?: (r: number) => boolean) =>
-            !!n.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId && (!rank || rank(p.rank)));
-          const prefersSpec = (n: Nurse, rank?: (r: number) => boolean) =>
-            !!docSpecialtyId &&
-            !!n.preferences?.some((p) => p.kind === 'SPECIALTY' && (!rank || rank(p.rank)) && specialtyMatchesPref(p.refId, docSpecialty));
+          const docSpecs = sessionSpecialties(slot.targetId, slotSession);
+          const matchesDocSpec = (p: NursePreference) =>
+            p.kind === 'SPECIALTY' && docSpecs.some((s) => p.refId === s.id || specialtyMatchesPref(p.refId, s));
+          const prefersDoctor = (n: Nurse) => !!n.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId);
+          const prefersSpec = (n: Nurse) => !!n.preferences?.some(matchesDocSpec);
           // Exact preference order: every rank is its own group, so rank 3 always comes before
           // rank 4, and rank 4 before rank 5 (then specialty ranks the same way, then everyone else).
+          // Nurses who name this doctor always come before nurses who only chose the specialty.
           const doctorRank = (n: Nurse) =>
             Math.min(...(n.preferences || []).filter((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId).map((p) => p.rank));
-          const specRank = (n: Nurse) =>
-            Math.min(...(n.preferences || []).filter((p) => p.kind === 'SPECIALTY' && specialtyMatchesPref(p.refId, docSpecialty)).map((p) => p.rank));
+          const specRank = (n: Nurse) => Math.min(...(n.preferences || []).filter(matchesDocSpec).map((p) => p.rank));
           const byRank = (nurses: Nurse[], rankOf: (n: Nurse) => number, tierOf: (rank: number) => number) => {
             const ranks = [...new Set(nurses.map(rankOf))].sort((a, b) => a - b);
             return ranks.map((r) => ({ tierRank: tierOf(r), nurses: nurses.filter((n) => rankOf(n) === r) }));
           };
           const withDoctorPref = dayOrder.filter((n) => prefersDoctor(n));
-          const withSpecPref = docSpecialtyId ? dayOrder.filter((n) => !prefersDoctor(n) && prefersSpec(n)) : [];
+          const withSpecPref = dayOrder.filter((n) => !prefersDoctor(n) && prefersSpec(n));
           candidateCohorts = [
             ...byRank(withDoctorPref, doctorRank, (r) => Math.min(r, 3)),
             ...byRank(withSpecPref, specRank, (r) => (r === 1 ? 4 : 5)),
-            { tierRank: 6, nurses: dayOrder.filter((n) => !prefersDoctor(n) && !(docSpecialtyId && prefersSpec(n))) },
+            { tierRank: 6, nurses: dayOrder.filter((n) => !prefersDoctor(n) && !prefersSpec(n)) },
           ];
         } else {
           const role = roles.find((r) => r.id === slot.targetId);
@@ -1301,22 +1320,21 @@ export class SchedulingEngine {
                 if (withinGoalOnly) {
                   // Within her hours, keeping enough for her first choice doctors' later sessions
                   // (unless this job is one of them).
-                  const isFirstChoiceJob =
-                    slot.kind === 'DOCTOR' && !!nurse.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId && p.rank === 1);
+                  const isFirstChoiceJob = slot.kind === 'DOCTOR' && pairingRank(nurse, slot.targetId, slotSession) === 1;
                   const keep = isFirstChoiceJob ? 0 : keepForFirstChoiceAfter(nurse.id, dayIdx);
                   if (hoursOverGoal(nurse.id, shiftHours + keep) > 0) continue;
                 }
                 if (respectOtherDoctors && slot.kind === 'DOCTOR') {
-                  // Leave her for another doctor today who ranks her higher and still needs a nurse
-                  const myRank = Math.min(Infinity, ...(nurse.preferences || []).filter((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId).map((p) => p.rank));
+                  // Leave her for another doctor today she ranks higher (by name or by specialty,
+                  // in her list order) who still needs a nurse
+                  const myRank = pairingRank(nurse, slot.targetId, slotSession);
                   const filledToday = new Set(existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId).map((a) => a.doctorId!));
-                  const wantedElsewhere = (nurse.preferences || []).some(
-                    (p) =>
-                      p.kind === 'DOCTOR' &&
-                      p.refId !== slot.targetId &&
-                      p.rank < myRank &&
-                      !filledToday.has(p.refId) &&
-                      daySessions.some((x) => x.doctorId === p.refId)
+                  const wantedElsewhere = daySessions.some(
+                    (x) =>
+                      x.doctorId !== slot.targetId &&
+                      !filledToday.has(x.doctorId) &&
+                      pairingRank(nurse, x.doctorId, x) < myRank &&
+                      canWorkWithDoctor(nurse, x.doctorId, x)
                   );
                   if (wantedElsewhere) continue;
                 }
@@ -1344,30 +1362,27 @@ export class SchedulingEngine {
                   const ncPref = nurse.preferences?.find((p) => p.kind === 'CLINICAL_ROLE' && ncRoleIds.has(p.refId));
                   if (ncPref) score += ncPref.rank === 1 ? 40 : 20;
                   // Keep nurses for the doctors who rank them today (more so for a higher rank)
-                  const todaysRanks = (nurse.preferences || [])
-                    .filter((p) => p.kind === 'DOCTOR' && daySessions.some((x) => x.doctorId === p.refId))
-                    .map((p) => p.rank);
-                  if (todaysRanks.length > 0) score -= Math.max(40, 160 - 20 * Math.min(...todaysRanks));
-                  else if (nurse.preferences?.some((p) => p.kind === 'DOCTOR')) score -= 20;
+                  // (by name or by specialty)
+                  const bestToday = Math.min(
+                    Infinity,
+                    ...daySessions.filter((x) => canWorkWithDoctor(nurse, x.doctorId, x)).map((x) => pairingRank(nurse, x.doctorId, x))
+                  );
+                  if (bestToday < Infinity) score -= Math.max(40, 160 - 20 * bestToday);
+                  else if (nurse.preferences?.some((p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY')) score -= 20;
                 }
 
                 if (slot.kind === 'DOCTOR') {
                   const pref = nurse.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === slot.targetId);
-                  const docSpecialty = slotSession ? specialties.find((s) => s.id === slotSession.specialtyId) : null;
-                  const specPref = nurse.preferences?.find((p) => p.kind === 'SPECIALTY' && specialtyMatchesPref(p.refId, docSpecialty));
+                  const specRankHere = pref ? Infinity : pairingRank(nurse, slot.targetId, slotSession);
                   if (pref) score += pref.rank === 1 ? 80 : pref.rank === 2 ? 40 : 20;
-                  else if (specPref) score += specPref.rank === 1 ? 70 : specPref.rank === 2 ? 35 : 15;
+                  else if (specRankHere < Infinity) score += specRankHere === 1 ? 70 : specRankHere === 2 ? 35 : 15;
 
-                  // Keep nurses whose first choice is another doctor working today for that doctor
-                  const otherFirstChoices = daySessions.filter((other) => {
-                    if (other.doctorId === slot.targetId) return false;
-                    const otherSpec = specialties.find((s) => s.id === other.specialtyId);
-                    return nurse.preferences?.some(
-                      (p) =>
-                        p.rank === 1 &&
-                        ((p.kind === 'DOCTOR' && p.refId === other.doctorId) || (p.kind === 'SPECIALTY' && specialtyMatchesPref(p.refId, otherSpec)))
-                    );
-                  }).length;
+                  // Keep nurses whose first choice is another doctor working today (by name or
+                  // by specialty) for that doctor, unless this doctor is a first choice too
+                  const otherFirstChoices =
+                    pairingRank(nurse, slot.targetId, slotSession) === 1
+                      ? 0
+                      : daySessions.filter((other) => other.doctorId !== slot.targetId && pairingRank(nurse, other.doctorId, other) === 1).length;
                   score -= 50 * otherFirstChoices;
                 } else if (!isNurseClinicSlot) {
                   const role = roles.find((r) => r.id === slot.targetId);
@@ -1462,8 +1477,9 @@ export class SchedulingEngine {
             new Set(existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId).map((a) => a.doctorId!));
           const firstChoiceOfOpenDoctor = (n: Nurse) => {
             const filled = filledDoctorsToday();
-            return (n.preferences || []).some(
-              (p) => p.kind === 'DOCTOR' && p.rank === 1 && !filled.has(p.refId) && daySessions.some((x) => x.doctorId === p.refId)
+            // Her first choice by name or by specialty
+            return daySessions.some(
+              (x) => !filled.has(x.doctorId) && pairingRank(n, x.doctorId, x) === 1 && canWorkWithDoctor(n, x.doctorId, x)
             );
           };
           cohorts: for (const withinGoalOnly of [true, false])
@@ -1661,8 +1677,9 @@ export class SchedulingEngine {
         // later. Jobs not tied to a doctor are tried first; a doctor's job only when the senior
         // ranks at least as high for that doctor as the nurse she replaces.
         if (!done) {
+          // Her rank for the doctor by name or by specialty
           const rankFor = (n: Nurse | undefined, doctorId?: string) =>
-            Math.min(Infinity, ...((n?.preferences || []).filter((p) => p.kind === 'DOCTOR' && p.refId === doctorId).map((p) => p.rank)));
+            n && doctorId ? pairingRank(n, doctorId, allDaySessions.find((s) => s.doctorId === doctorId)) : Infinity;
           const juniorShifts = existingToday()
             .filter((a) => a.source === 'GENERATED' && !a.locked)
             .sort((a, b) => (a.kind === 'DOCTOR' ? 1 : 0) - (b.kind === 'DOCTOR' ? 1 : 0));
@@ -1763,10 +1780,10 @@ export class SchedulingEngine {
               if (isSenior(nurse) && hours > seniorFloatBudget) continue;
               if (hoursOverGoal(nurse.id, hours + keepForFirstChoiceAfter(nurse.id, dayIdx)) > 0) continue;
               if (!fitsHardRules(nurse, date, duty, hours)) continue;
-              const pref = nurse.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === sess.doctorId);
+              const prefRank = pairingRank(nurse, sess.doctorId, sess);
               let score = cover; // cover as much of the gap as possible
               score -= hours * 2; // with the shortest shift that does it
-              if (pref) score += Math.max(0, 60 - pref.rank * 10);
+              if (prefRank < Infinity) score += Math.max(0, 60 - prefRank * 10);
               score += hoursBehindPace(nurse.id, dayIdx) * 1.5;
               score += requestScore(nurse.id, date, duty);
               if (!best || score > best.score) best = { nurse, duty, score };
@@ -1839,9 +1856,11 @@ export class SchedulingEngine {
         if (needsPhlReserve && canBeFreeNurse(nurse, roles)) phlFloatBudget -= calculateDutyDurationHours(selected);
         if (isSenior(nurse)) seniorFloatBudget -= calculateDutyDurationHours(selected);
 
-        // A nurse with a specialty in her profile floats in that specialty, otherwise in the general pool.
+        // A nurse with a specialty in her profile floats in her highest ranked one, otherwise in the general pool.
         const canTakeSpecialty = nurse.isClinicNurse && !isExclusiveNurseClinic(nurse, roles);
-        const specPref = canTakeSpecialty ? nurse.preferences?.find((p) => p.kind === 'SPECIALTY') : undefined;
+        const specPref = canTakeSpecialty
+          ? [...(nurse.preferences || [])].filter((p) => p.kind === 'SPECIALTY').sort((a, b) => a.rank - b.rank)[0]
+          : undefined;
         const spec = specPref ? specialties.find((s) => specialtyMatchesPref(specPref.refId, s)) : null;
         placeShift(
           {
