@@ -450,9 +450,9 @@
     "semantic_hash": "7f14f9df033240b364eb865b54a94258"
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1791055859.951225,
-    "seen": 1791055901.680609,
-    "ast_hash": "ccc120e25f638e61ccde0f3615d49cc0",
+    "mtime": 1791056775.9226635,
+    "seen": 1791056810.4288576,
+    "ast_hash": "7953e08d2dfa211f37827175151f288e",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791055896.579062,
-    "seen": 1791055901.6807156,
-    "ast_hash": "50e029fa04e5bb1a3ac6f8c98e4ba0be",
+    "mtime": 1791056804.8118303,
+    "seen": 1791056810.4289563,
+    "ast_hash": "2f48eca72b2e380c203a1489a0644290",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1113,6 +1113,12 @@
     "mtime": 1791055859.1033676,
     "seen": 1791055901.6806996,
     "ast_hash": "536f3f4105902adb09af6e0f4dc75a36",
+    "semantic_hash": ""
+  },
+  "tests/unit/hoursTopUp.test.ts": {
+    "mtime": 1791056775.110539,
+    "seen": 1791056810.4289293,
+    "ast_hash": "5f8ad6dc2592c50ea5ca9ab1dce6a01b",
     "semantic_hash": ""
   }
 }

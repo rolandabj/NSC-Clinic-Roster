@@ -1206,9 +1206,9 @@ export class SchedulingEngine {
     /**
      * Hours a nurse may spend on optional work today (a float, a longer shift) and still
      * keep her part of what the doctors she can work with need after today. For each of
-     * her groups of doctors, the nurses whose first choice they are cover the need first,
-     * in proportion to their hours left; the rest (what they can't cover) falls on the
-     * other nurses of the group in proportion to theirs. Mary (Pediatrics second) keeps
+     * her groups of doctors, the nurses whose first choice they are keep what the other
+     * nurses of the group can't give it, in proportion to their hours left; what the first
+     * choice nurses can't cover falls on the other nurses in proportion to theirs. Mary (Pediatrics second) keeps
      * only her part of what Alaa and Noveline can't cover, and floats with the rest.
      */
     const optionalHoursFree = (nurseId: string, date: string): number => {
@@ -1226,9 +1226,17 @@ export class SchedulingEngine {
         const isFirst = (n: Nurse) => !!sess && pairingRank(n, sess.doctorId, sess) === 1;
         const firstLeft = members.filter(isFirst).reduce((sum, n) => sum + remainingOf(n), 0);
         const othersLeft = members.filter((n) => !isFirst(n)).reduce((sum, n) => sum + remainingOf(n), 0);
+        // What the other nurses of the group can give it (their hours shared between the groups
+        // of doctors they can work with): the first choice nurses only keep the rest.
+        const othersShare = members
+          .filter((n) => !isFirst(n))
+          .reduce((sum, n) => {
+            const groups = (poolsOfNurse.get(n.id) || []).filter((k) => poolSessions.get(k)!.some((x) => x.date > date)).length;
+            return sum + remainingOf(n) / Math.max(1, groups);
+          }, 0);
         const reserve = isFirst(me)
           ? firstLeft > 0
-            ? Math.min(mine, (needed * mine) / firstLeft)
+            ? Math.min(mine, (Math.max(0, needed - othersShare) * mine) / firstLeft)
             : 0
           : othersLeft > 0
           ? Math.min(mine, (Math.max(0, needed - firstLeft) * mine) / othersLeft)
@@ -1563,10 +1571,19 @@ export class SchedulingEngine {
 
                 // Weekend fairness
                 if (isWeekend) score -= state.weekendsWorked * 25;
-                // Late shift fairness: nurses who already have more late shifts than average
-                // (this roster and earlier ones this year) are asked less often
-                // (a penalty only: a bonus below average would pull nurses onto longer late shifts)
-                if (isLate(candidateDuty)) score -= Math.max(0, lateShiftsAboveAverage(nurse)) * 15;
+                // Late shift fairness (shifts ending at the late time, 9 pm by default): a nurse with
+                // more late shifts than average (this roster and earlier ones this year) is asked
+                // less often, and one with fewer is asked more often, even for a longer shift
+                // (e.g. 9-9 with a doctor who leaves at 6:30, staying on as a free nurse).
+                // A longer shift than the job needs is only encouraged when her doctors won't need
+                // those hours later (Samia, the only Dermatology nurse, keeps hers for Dr Reem).
+                if (isLate(candidateDuty)) {
+                  const lateGap = Math.max(-4, Math.min(6, lateShiftsAboveAverage(nurse)));
+                  const extraBeyondJob = Math.max(0, shiftHours - slotMinutes / 60);
+                  // (her hours left still include today's job, so the whole shift must fit)
+                  const mayStayOn = lateGap > 0 || extraBeyondJob === 0 || shiftHours <= optionalHoursFree(nurse.id, date);
+                  if (mayStayOn) score -= lateGap * 15;
+                }
                 // Her requests for this day (soft)
                 score += requestScore(nurse.id, date, candidateDuty);
 
@@ -2048,9 +2065,12 @@ export class SchedulingEngine {
       // a free nurse. Like a float it comes from today's spare hours, stays within her goal
       // (keeping hours for her first choice doctors), and never takes hours that the nurses
       // of a doctor she can work with need later (optionalHoursFree).
+      // Nurses with fewer late shifts first (a longer shift usually ends at the late time), then
+      // those furthest behind their hours
+      const lateGap = (id: string) => (nurseMap.get(id) ? lateShiftsAboveAverage(nurseMap.get(id)!) : 0);
       const lengthenOrder = existingToday()
         .filter((a) => a.kind === 'DOCTOR' && a.source === 'GENERATED' && !a.locked)
-        .sort((a, b) => hoursBehindPace(b.nurseId, dayIdx) - hoursBehindPace(a.nurseId, dayIdx));
+        .sort((a, b) => lateGap(a.nurseId) - lateGap(b.nurseId) || hoursBehindPace(b.nurseId, dayIdx) - hoursBehindPace(a.nurseId, dayIdx));
       for (const asgn of lengthenOrder) {
         if (floatBudget <= 0) break;
         const nurse = nurseMap.get(asgn.nurseId);
@@ -2313,6 +2333,212 @@ export class SchedulingEngine {
           }
         }
       }
+    }
+
+    // 5.8 Repair: a doctor's session still partly covered because his own nurse ran out of
+    // hours (e.g. Zeinab on a 9-3 on the last day) takes back hours she spent on optional
+    // extras on other days: a longer shift than her doctor needed (staying on after he left)
+    // goes back to the shorter one, or a float is removed, wherever every opening hour of
+    // that day keeps its free nurse. Then her shift is lengthened to cover her doctor.
+    const freeNurseCountsOn = (date: string, list: Assignment[]): number[] => {
+      const daySessions = doctorSessionsOn(sessions, date);
+      return openHours.map(
+        (h) =>
+          list.filter(
+            (a) =>
+              a.date === date &&
+              canBeFreeNurse(nurseMap.get(a.nurseId), roles) &&
+              isFreeDuring(a, dutyMapGlobal.get(a.dutyWindowId), daySessions, h.start, h.end)
+          ).length
+      );
+    };
+    const keepsFreeNurses = (date: string, changed: Assignment | null, removedId?: string): boolean => {
+      if (!plusOneEnabled || minAdditionalNurses <= 0) return true;
+      const before = Array.from(resultAssignmentsMap.values()).filter((a) => a.date === date);
+      const after = before
+        .filter((a) => a.id !== removedId)
+        .map((a) => (changed && a.id === changed.id ? changed : a));
+      const b = freeNurseCountsOn(date, before);
+      return freeNurseCountsOn(date, after).every((n, i) => n >= minAdditionalNurses || n >= b[i]);
+    };
+    for (const date of datesList.filter((d) => inFill(d) && !clinic.holidays.has(d))) {
+      for (const sess of doctorSessionsOn(sessions, date)) {
+        const linked = Array.from(resultAssignmentsMap.values()).filter((a) => a.date === date && a.kind === 'DOCTOR' && a.doctorId === sess.doctorId);
+        if (linked.length !== 1) continue;
+        const asgn = linked[0];
+        const nurse = nurseMap.get(asgn.nurseId);
+        const oldDuty = dutyMapGlobal.get(asgn.dutyWindowId);
+        if (!nurse || !oldDuty || asgn.source !== 'GENERATED' || asgn.locked) continue;
+        if (uncoveredParts(sess.startTime, sess.endTime, [oldDuty]).length === 0) continue;
+        // the shortest longer shift containing hers that covers his whole session
+        const target = activeDuties
+          .filter((d) => d.startTime <= oldDuty.startTime && d.endTime >= oldDuty.endTime && d.startTime <= sess.startTime && d.endTime >= sess.endTime)
+          .sort((a, b) => calculateDutyDurationHours(a) - calculateDutyDurationHours(b))[0];
+        if (!target) continue;
+        const need = calculateDutyDurationHours(target) - calculateDutyDurationHours(oldDuty);
+        if (!fitsHardRules(nurse, date, target, 0, { replacingOwnShift: true })) continue;
+        // hours she can give back on other days
+        const giveBacks: { date: string; apply: () => void; hours: number }[] = [];
+        for (const other of Array.from(resultAssignmentsMap.values())) {
+          if (other.nurseId !== nurse.id || other.date === date || other.source !== 'GENERATED' || other.locked) continue;
+          const duty = dutyMapGlobal.get(other.dutyWindowId);
+          if (!duty) continue;
+          if (isFloatShift(other)) {
+            if (keepsFreeNurses(other.date, null, other.id)) {
+              giveBacks.push({ date: other.date, hours: calculateDutyDurationHours(duty), apply: () => removeShift(other, isWeekendDate(other.date)) });
+            }
+            continue;
+          }
+          if (other.kind !== 'DOCTOR' || !other.doctorId) continue;
+          const otherSess = doctorSessionsOn(sessions, other.date).find((x) => x.doctorId === other.doctorId);
+          if (!otherSess) continue;
+          const shorter = activeDuties
+            .filter((d) => d.startTime <= otherSess.startTime && d.endTime >= otherSess.endTime && calculateDutyDurationHours(d) < calculateDutyDurationHours(duty))
+            .sort((a, b) => calculateDutyDurationHours(b) - calculateDutyDurationHours(a))[0];
+          if (!shorter) continue;
+          const changed = { ...other, dutyWindowId: shorter.id };
+          if (!keepsFreeNurses(other.date, changed)) continue;
+          giveBacks.push({
+            date: other.date,
+            hours: calculateDutyDurationHours(duty) - calculateDutyDurationHours(shorter),
+            apply: () => {
+              resultAssignmentsMap.set(`${other.nurseId}_${other.date}`, changed);
+              const st = nurseStates.get(other.nurseId);
+              if (st) {
+                st.totalDutyHoursEarned -= calculateDutyDurationHours(duty) - calculateDutyDurationHours(shorter);
+                st.lateShiftsWorked += (isLate(shorter) ? 1 : 0) - (isLate(duty) ? 1 : 0);
+              }
+            },
+          });
+        }
+        const room = -hoursOverGoal(nurse.id, 0);
+        let freed = Math.max(0, room);
+        const chosen: typeof giveBacks = [];
+        for (const g of giveBacks.sort((a, b) => a.hours - b.hours)) {
+          if (freed >= need) break;
+          chosen.push(g);
+          freed += g.hours;
+        }
+        if (freed < need) continue;
+        chosen.forEach((g) => g.apply());
+        resultAssignmentsMap.set(`${asgn.nurseId}_${date}`, {
+          ...asgn,
+          dutyWindowId: target.id,
+          note: asgn.note ? `${asgn.note} (longer shift to cover the doctor's session)` : "Longer shift to cover the doctor's session",
+        });
+        const st = nurseStates.get(nurse.id);
+        if (st) {
+          st.totalDutyHoursEarned += need;
+          st.lateShiftsWorked += (isLate(target) ? 1 : 0) - (isLate(oldDuty) ? 1 : 0);
+        }
+      }
+    }
+
+    // 6. Top up: every nurse reaches her hours goal where the rules allow. After all days are
+    // filled, a nurse still under her goal gets a longer shift (containing her shift) or a
+    // float shift on a day off, as close to her missing hours as possible without going over
+    // them. Every hard rule is checked against the finished roster (days in a row, rest and
+    // late runs on both sides). Busier days and, for a nurse with few late shifts, shifts
+    // ending at the late time come first, so the late shifts stay fairly shared.
+    const fillDates = datesList.filter((d) => inFill(d));
+    /** A doctor that day whose session still has hours without a nurse that this shift would cover. */
+    const doctorGapCoveredBy = (nurse: Nurse, date: string, duty: DutyWindow): DoctorSession | undefined => {
+      if (!nurse.isClinicNurse || isExclusiveNurseClinic(nurse, roles) || clinic.holidays.has(date)) return undefined;
+      const onDay = Array.from(resultAssignmentsMap.values()).filter((a) => a.date === date);
+      return doctorSessionsOn(sessions, date).find((sess) => {
+        const linked = onDay
+          .filter((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId)
+          .map((a) => dutyMapGlobal.get(a.dutyWindowId))
+          .filter((d): d is DutyWindow => !!d);
+        return uncoveredParts(sess.startTime, sess.endTime, linked).some((g) => coveredMinutes(duty, g.start, g.end) > 0);
+      });
+    };
+    const shiftsOnDate = (d: string) => Array.from(resultAssignmentsMap.values()).filter((a) => a.date === d).length;
+    const smallestShift = Math.min(...activeDuties.map((d) => calculateDutyDurationHours(d)), 24);
+    for (let round = 0; round < 60; round++) {
+      let changed = false;
+      for (const nurse of [...sortedNurses].sort((a, b) => hoursOverGoal(a.id, 0) - hoursOverGoal(b.id, 0))) {
+        const limits = nurseTargetMap.get(nurse.id);
+        const state = nurseStates.get(nurse.id);
+        if (!limits || !state || nurse.active === false) continue;
+        const missing = limits.dutyTarget - state.totalDutyHoursEarned;
+        if (missing <= 0) continue;
+        const lateBonus = (d: DutyWindow) => (isLate(d) ? -Math.max(-4, Math.min(6, lateShiftsAboveAverage(nurse))) * 3 : 0);
+        let best: { date: string; duty: DutyWindow; extra: number; replacing?: Assignment; score: number; doctor?: DoctorSession } | null = null;
+        for (const date of fillDates) {
+          // A public holiday has its own cover (one nurse for the opening hours)
+          if (clinic.holidays.has(date)) continue;
+          const own = resultAssignmentsMap.get(`${nurse.id}_${date}`);
+          if (own) {
+            // a longer shift containing hers (generated, not pinned; a Nurse Clinic shift
+            // shortened in 5.7 stays short)
+            if (own.source !== 'GENERATED' || own.locked || isNurseClinicAssignment(own)) continue;
+            const oldDuty = dutyMapGlobal.get(own.dutyWindowId);
+            if (!oldDuty) continue;
+            for (const d of activeDuties) {
+              const extra = calculateDutyDurationHours(d) - calculateDutyDurationHours(oldDuty);
+              if (extra <= 0 || extra > missing || d.startTime > oldDuty.startTime || d.endTime < oldDuty.endTime) continue;
+              if (!fitsHardRules(nurse, date, d, extra, { replacingOwnShift: true })) continue;
+              const score = extra * 10 + lateBonus(d) + 5; // no extra day at work
+              if (!best || score > best.score) best = { date, duty: d, extra, replacing: own, score };
+            }
+            continue;
+          }
+          if (missing < smallestShift || hasPendingTimeOff(nurse.id, date)) continue;
+          // An extra day keeps within the most shifts in a row even when that rule is "try to"
+          if (
+            Number.isFinite(maxConsecutiveDays) &&
+            getConsecutiveDaysWorkedEndingYesterday(nurse.id, date) + 1 + getConsecutiveDaysFixedFromTomorrow(nurse.id, date) > maxConsecutiveDays
+          )
+            continue;
+          for (const d of activeDuties) {
+            const hours = calculateDutyDurationHours(d);
+            if (hours > missing || !fitsHardRules(nurse, date, d, hours)) continue;
+            // A doctor's session still partly (or not) covered that day comes first
+            const gapDoctor = doctorGapCoveredBy(nurse, date, d);
+            const score = hours * 10 + lateBonus(d) - shiftsOnDate(date) * 2 - (isWeekendDate(date) ? 8 : 0) + (gapDoctor ? 1000 : 0);
+            if (!best || score > best.score) best = { date, duty: d, extra: hours, score, doctor: gapDoctor };
+          }
+        }
+        if (!best) continue;
+        if (best.replacing) {
+          const oldDuty = dutyMapGlobal.get(best.replacing.dutyWindowId);
+          resultAssignmentsMap.set(`${nurse.id}_${best.date}`, {
+            ...best.replacing,
+            dutyWindowId: best.duty.id,
+            note: best.replacing.note ? `${best.replacing.note} (longer shift to reach her hours)` : 'Longer shift to reach her hours',
+          });
+          state.totalDutyHoursEarned += best.extra;
+          state.lateShiftsWorked += (isLate(best.duty) ? 1 : 0) - (isLate(oldDuty) ? 1 : 0);
+        } else {
+          const gap = best.doctor;
+          placeShift(
+            {
+              id: `asgn-gen-${schedule.id}-${nurse.id}-${best.date}-TOPUP`,
+              scheduleId: schedule.id,
+              nurseId: nurse.id,
+              date: best.date,
+              dutyWindowId: best.duty.id,
+              ...(gap
+                ? {
+                    kind: 'DOCTOR' as const,
+                    doctorId: gap.doctorId,
+                    note: canWorkWithDoctor(nurse, gap.doctorId, gap)
+                      ? "Second nurse with the doctor for the hours his first nurse can't cover"
+                      : LAST_RESORT_NOTE,
+                  }
+                : { kind: 'CLINICAL_ROLE' as const, clinicalRoleId: FLOAT_ROLE_ID, note: 'Float (to reach her hours)' }),
+              locked: false,
+              source: 'GENERATED',
+            },
+            isWeekendDate(best.date),
+            clinic.holidays.has(best.date),
+            false
+          );
+        }
+        changed = true;
+      }
+      if (!changed) break;
     }
 
     // How many of the nurses' requests this roster meets: the shift asked for, or no shift
