@@ -640,11 +640,15 @@ export class ScheduleValidator {
         const wait = request?.status === 'PENDING' ? ' (waiting for approval)' : '';
         // An approved day off is already a pinned day off (reported above when broken).
         if (request && !request.available && asgnsToday.length > 0 && !(dayOffLock && request.status === 'APPROVED')) {
+          const approvedOff = request.status === 'APPROVED';
           findings.push({
             id: `request-dayoff-shift-${nurse.id}-${date}`,
-            category: 'DATA_ISSUE',
-            severity: 'INFO',
-            message: `${nurse.fullName} asked for ${formatDate(date)} off${wait} but has a shift.`,
+            category: approvedOff ? 'RULE_VIOLATION' : 'DATA_ISSUE',
+            // An approved day off is a day off even without its pin: a shift on it needs checking
+            severity: approvedOff ? 'WARN' : 'INFO',
+            message: approvedOff
+              ? `${nurse.fullName} has an approved day off on ${formatDate(date)} but has a shift. Remove the shift, or decline the request in Availability → All requests.`
+              : `${nurse.fullName} asked for ${formatDate(date)} off${wait} but has a shift.`,
             affectedNurseIds: [nurse.id],
             cellRefs: [{ nurseId: nurse.id, date }],
             date,

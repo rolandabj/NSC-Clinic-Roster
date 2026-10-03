@@ -642,16 +642,20 @@ export class SchedulingEngine {
 
     const isOnApprovedLeave = (nurseId: string, date: string) =>
       leaveEntries.some((le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate);
+    // A day off: an OFF pin, or an approved day off request (also after its pin was removed;
+    // to let her work that day the request is declined or deleted).
     const hasDayOffLock = (nurseId: string, date: string) =>
+      approvedDayOff.has(`${nurseId}_${date}`) ||
       activeLocks.some((l) => l.nurseId === nurseId && l.date === date && l.mode === 'OFF');
     const isSenior = (nurse?: Nurse) => !!nurse && seniorLevelIds.has(nurse.seniorityLevelId);
     const isLate = (duty?: DutyWindow) => isLateDuty(duty, lateThreshold);
 
-    // Nurses' requests for this roster. They only change scores ("try to"): coverage,
-    // hours and the hard rules always come first. Approving a day off request already
-    // adds a day off lock, which is handled as a hard rule above.
+    // Nurses' requests for this roster. An approved day off is a hard day off (see
+    // hasDayOffLock); the others only change scores ("try to"): coverage, hours and the
+    // hard rules always come first.
     const inRange = (date: string) => date >= schedule.startDate && date <= schedule.endDate;
     const requests = (clinicSetup?.availabilityRequests || []).filter((r) => nurseMap.has(r.nurseId) && inRange(r.date));
+    const approvedDayOff = new Set(requests.filter((r) => !r.available && r.status === 'APPROVED').map((r) => `${r.nurseId}_${r.date}`));
     const preferredDutyRequests = new Map<string, { dutyWindowId: string; bonus: number }>();
     requests
       .filter((r) => r.available && r.preferredDutyWindowId && (r.status === 'APPROVED' || r.status === 'PENDING'))
@@ -1056,7 +1060,11 @@ export class SchedulingEngine {
         if (!hasFirstChoice || clinic.holidays.has(d) || !inFill(d)) return 0;
         if (isOnApprovedLeave(n.id, d) || hasDayOffLock(n.id, d)) return 0;
         const sess = sessions.find((x) => !x.cancelled && x.date === d && pairingRank(n, x.doctorId, x) === 1 && canWorkWithDoctor(n, x.doctorId, x));
-        return sess ? shortestCoverHours(sess.startTime, sess.endTime) : 0;
+        if (!sess) return 0;
+        // Shared with the other nurses whose first choice this session is too (four nurses
+        // with Primary Care first keep a quarter each, not the whole session each).
+        const sharers = sortedNurses.filter((o) => pairingRank(o, sess.doctorId, sess) === 1 && canWorkWithDoctor(o, sess.doctorId, sess)).length;
+        return shortestCoverHours(sess.startTime, sess.endTime) / Math.max(1, sharers);
       });
       // suffix sums: hours needed from day k (inclusive) to the end
       const fromDay = new Array(datesList.length + 1).fill(0);
@@ -1118,6 +1126,7 @@ export class SchedulingEngine {
     // offered to a last resort nurse (5.6).
     const sessionPoolKey = new Map<string, string>(); // `${doctorId}|${date}` -> pool key
     const poolMembers = new Map<string, Nurse[]>();
+    const poolDoctor = new Map<string, DoctorSession>(); // one session of the pool's doctors
     const poolSessions = new Map<string, { date: string; hours: number }[]>();
     const keptDoctorCover = new Set(
       Array.from(resultAssignmentsMap.values())
@@ -1132,10 +1141,28 @@ export class SchedulingEngine {
         const key = members.map((n) => n.id).join(',');
         sessionPoolKey.set(`${sess.doctorId}|${d}`, key);
         poolMembers.set(key, members);
+        if (!poolDoctor.has(key)) poolDoctor.set(key, sess);
         if (!poolSessions.has(key)) poolSessions.set(key, []);
         poolSessions.get(key)!.push({ date: d, hours: shortestCoverHours(sess.startTime, sess.endTime) });
       });
     });
+    const dayIndexOf = new Map(datesList.map((d, i) => [d, i]));
+    /**
+     * Hours the pool's nurses still have for its doctors. A nurse counts in full for the
+     * doctors who are her first choice; for the others her hours are shared between all
+     * the groups of doctors she can work with that still need hours. Mary (Primary Care
+     * first, then Pediatrics, Endocrinology, ENT) counts a quarter of her hours for
+     * Pediatrics, so a Pediatrics shortage shows from the start, not in the last week.
+     */
+    const poolHoursLeft = (key: string, date: string): number => {
+      const sess = poolDoctor.get(key);
+      return (poolMembers.get(key) || []).reduce((sum, n) => {
+        const remaining = Math.max(0, (nurseTargetMap.get(n.id)?.dutyTarget ?? 0) - (nurseStates.get(n.id)?.totalDutyHoursEarned ?? 0));
+        if (sess && pairingRank(n, sess.doctorId, sess) === 1) return sum + remaining;
+        const groupsInNeed = (poolsOfNurse.get(n.id) || []).filter((k) => poolSessions.get(k)!.some((x) => x.date >= date)).length;
+        return sum + remaining / Math.max(1, groupsInNeed);
+      }, 0);
+    };
     const poolCredit = new Map<string, number>();
     const poolHoursDecidedToday = new Map<string, number>(); // `${key}|${date}` -> hours
     /** False when this doctor's session is one of the sessions left out to spread a shortage. */
@@ -1147,10 +1174,7 @@ export class SchedulingEngine {
       const decidedToday = poolHoursDecidedToday.get(`${key}|${date}`) || 0;
       poolHoursDecidedToday.set(`${key}|${date}`, decidedToday + thisSession);
       const needed = list.filter((x) => x.date >= date).reduce((sum, x) => sum + x.hours, 0) - decidedToday;
-      const left = (poolMembers.get(key) || []).reduce(
-        (sum, n) => sum + Math.max(0, (nurseTargetMap.get(n.id)?.dutyTarget ?? 0) - (nurseStates.get(n.id)?.totalDutyHoursEarned ?? 0)),
-        0
-      );
+      const left = poolHoursLeft(key, date);
       if (needed <= 0 || left >= needed) return true;
       const credit = (poolCredit.get(key) ?? 0.5) + left / needed;
       if (credit >= 1) {
@@ -1161,20 +1185,22 @@ export class SchedulingEngine {
       return false;
     };
 
-    /** Nurses in a pool whose hours left are below what its doctors still need after `date`. */
-    const nursesInShortPools = (date: string): Set<string> => {
-      const out = new Set<string>();
-      poolSessions.forEach((list, key) => {
-        const needed = list.filter((x) => x.date > date).reduce((sum, x) => sum + x.hours, 0);
-        if (needed <= 0) return;
-        const members = poolMembers.get(key) || [];
-        const left = members.reduce(
-          (sum, n) => sum + Math.max(0, (nurseTargetMap.get(n.id)?.dutyTarget ?? 0) - (nurseStates.get(n.id)?.totalDutyHoursEarned ?? 0)),
-          0
-        );
-        if (left < needed) members.forEach((n) => out.add(n.id));
-      });
-      return out;
+    const poolsOfNurse = new Map<string, string[]>();
+    poolMembers.forEach((members, key) => members.forEach((n) => poolsOfNurse.set(n.id, [...(poolsOfNurse.get(n.id) || []), key])));
+    /**
+     * Hours a nurse may spend on optional work today (a float, a longer shift) and still
+     * leave the nurses of every doctor she can work with enough hours for his sessions
+     * after today. Mary, whose list has Pediatrics second, keeps her hours for the
+     * Pediatrics sessions that Alaa and Noveline can't cover instead of floating.
+     */
+    const optionalHoursFree = (nurseId: string, date: string): number => {
+      let free = Infinity;
+      for (const key of poolsOfNurse.get(nurseId) || []) {
+        const needed = poolSessions.get(key)!.filter((x) => x.date > date).reduce((sum, x) => sum + x.hours, 0);
+        if (needed <= 0) continue;
+        free = Math.min(free, poolHoursLeft(key, date) - needed);
+      }
+      return free;
     };
 
     // 5. Day by day
@@ -1856,6 +1882,51 @@ export class SchedulingEngine {
       let phlFloatBudget = needsPhlReserve ? spareHoursForToday(dayIdx, 'bloodCollection') : Infinity;
       let seniorFloatBudget = spareHoursForToday(dayIdx, 'senior');
 
+      // 5.5a0 A doctor only partly covered: first his own nurse's shift is lengthened to cover
+      // the rest of his session (e.g. 9-7 to 9-9 for a doctor working until 9 pm), when it fits
+      // her goal (keeping her first choice hours) and the hard rules. Only then does a second
+      // nurse come (5.5a).
+      for (const sess of allDaySessions) {
+        const linked = existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId);
+        const linkedDuties = () => linked.map((a) => dutyMapGlobal.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d);
+        if (linked.length === 0 || uncoveredParts(sess.startTime, sess.endTime, linkedDuties()).length === 0) continue;
+        for (const asgn of linked.filter((a) => a.source === 'GENERATED' && !a.locked)) {
+          const nurse = nurseMap.get(asgn.nurseId);
+          const oldDuty = dutyMapGlobal.get(asgn.dutyWindowId);
+          if (!nurse || !oldDuty) continue;
+          const others = linked
+            .filter((a) => a.id !== asgn.id)
+            .map((a) => dutyMapGlobal.get(a.dutyWindowId))
+            .filter((d): d is DutyWindow => !!d);
+          const gapMinutes = (d: DutyWindow) =>
+            uncoveredParts(sess.startTime, sess.endTime, [...others, d]).reduce((sum, g) => sum + toMinutes(g.end) - toMinutes(g.start), 0);
+          const best = activeDuties
+            .filter((d) => d.id !== oldDuty.id && d.startTime <= oldDuty.startTime && d.endTime >= oldDuty.endTime)
+            .map((d) => ({ d, extra: calculateDutyDurationHours(d) - calculateDutyDurationHours(oldDuty), gap: gapMinutes(d) }))
+            .filter(({ d, extra, gap }) =>
+              extra > 0 &&
+              gap < gapMinutes(oldDuty) &&
+              // within her goal, keeping her hours for her first choice doctors' later sessions
+              hoursOverGoal(nurse.id, extra + keepForFirstChoiceAfter(nurse.id, dayIdx)) === 0 &&
+              fitsHardRules(nurse, date, d, extra, { replacingOwnShift: true })
+            )
+            .sort((x, y) => x.gap - y.gap || x.extra - y.extra)[0];
+          if (!best) continue;
+          resultAssignmentsMap.set(`${asgn.nurseId}_${date}`, {
+            ...asgn,
+            dutyWindowId: best.d.id,
+            note: asgn.note ? `${asgn.note} (longer shift to cover the doctor's session)` : "Longer shift to cover the doctor's session",
+          });
+          const state = nurseStates.get(nurse.id);
+          if (state) {
+            state.totalDutyHoursEarned += best.extra;
+            state.lastDutyEndTime = `${date} ${best.d.endTime}`;
+            state.lateShiftsWorked += (isLate(best.d) ? 1 : 0) - (isLate(oldDuty) ? 1 : 0);
+          }
+          break;
+        }
+      }
+
       // 5.5a A doctor still only partly covered gets a second nurse for the hours her first
       // nurse can't cover. Partial cover is acceptable, so this comes after the free nurse
       // and the senior nurse, and works like a float: from today's spare hours only, within
@@ -1919,9 +1990,8 @@ export class SchedulingEngine {
       // 5.5b A doctor's nurse who is behind her hours works on after his session: her shift
       // is lengthened (e.g. 9-7 to 9-9 when Dr Rayya works 9 to 7), and once he leaves she is
       // a free nurse. Like a float it comes from today's spare hours, stays within her goal
-      // (keeping hours for her first choice doctors), and never uses the hours of nurses
-      // whose doctors are short of them.
-      const shortPoolNurses = nursesInShortPools(date);
+      // (keeping hours for her first choice doctors), and never takes hours that the nurses
+      // of a doctor she can work with need later (optionalHoursFree).
       const lengthenOrder = existingToday()
         .filter((a) => a.kind === 'DOCTOR' && a.source === 'GENERATED' && !a.locked)
         .sort((a, b) => hoursBehindPace(b.nurseId, dayIdx) - hoursBehindPace(a.nurseId, dayIdx));
@@ -1929,7 +1999,7 @@ export class SchedulingEngine {
         if (floatBudget <= 0) break;
         const nurse = nurseMap.get(asgn.nurseId);
         const oldDuty = dutyMapGlobal.get(asgn.dutyWindowId);
-        if (!nurse || !oldDuty || shortPoolNurses.has(nurse.id)) continue;
+        if (!nurse || !oldDuty) continue;
         const behind = hoursBehindPace(nurse.id, dayIdx);
         if (behind <= 0) continue; // on or ahead of her pace
         const longer = activeDuties
@@ -1937,6 +2007,7 @@ export class SchedulingEngine {
           .map((d) => ({ d, extra: calculateDutyDurationHours(d) - calculateDutyDurationHours(oldDuty) }))
           .filter(({ d, extra }) => {
             if (extra <= 0 || extra > floatBudget || extra > behind) return false; // only the hours she is behind
+            if (extra > optionalHoursFree(nurse.id, date)) return false; // her doctors need them later
             if (needsPhlReserve && canBeFreeNurse(nurse, roles) && extra > phlFloatBudget) return false;
             if (isSenior(nurse) && extra > seniorFloatBudget) return false;
             // Seniors' hours are needed for a senior every day: keep a margin of one long shift
@@ -1992,6 +2063,7 @@ export class SchedulingEngine {
             if (needsPhlReserve && canBeFreeNurse(nurse, roles) && hours > phlFloatBudget) continue;
             if (isSenior(nurse) && hours > seniorFloatBudget) continue; // keep seniors' hours for later days
             if (hoursBehindPace(nurse.id, dayIdx) <= 0) continue; // ahead of her pace: no extra shift today
+            if (hours > optionalHoursFree(nurse.id, date)) continue; // her doctors need these hours later
             if (hoursOverGoal(nurse.id, hours + keepForFirstChoiceAfter(nurse.id, dayIdx)) > 0) continue;
             if (!fitsHardRules(nurse, date, cand, hours)) continue;
             selected = cand;

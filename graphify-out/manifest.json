@@ -450,9 +450,9 @@
     "semantic_hash": "7f14f9df033240b364eb865b54a94258"
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1791052629.0185332,
-    "seen": 1791052655.8816283,
-    "ast_hash": "fd308672abe7e95f50c1dda702872ba2",
+    "mtime": 1791053598.3029947,
+    "seen": 1791053630.7371078,
+    "ast_hash": "80fad89239d3fecd1bd9b1253b94449e",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
@@ -642,9 +642,9 @@
     "semantic_hash": "26edda8b21e5847a6cd2ec9a382598a4"
   },
   "src/services/validation/ScheduleValidator.ts": {
-    "mtime": 1791052318.796525,
-    "seen": 1791052420.1306927,
-    "ast_hash": "3c9e39547b9bdcd868166daf281d8092",
+    "mtime": 1791053580.3606322,
+    "seen": 1791053630.7371628,
+    "ast_hash": "cdafcaa303243f40e234974e9e1a8ab8",
     "semantic_hash": ""
   },
   "src/types/index.ts": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791052836.7966769,
-    "seen": 1791052842.2262566,
-    "ast_hash": "9ef0f91677a2bddb844dd5dd2e09a021",
+    "mtime": 1791053625.4841735,
+    "seen": 1791053630.7372158,
+    "ast_hash": "e283fd5d52257e53fe59173b85021209",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1095,6 +1095,12 @@
     "mtime": 1791052622.814789,
     "seen": 1791052655.881698,
     "ast_hash": "6ac8e40b4c3c002ff9c50b9f29e07627",
+    "semantic_hash": ""
+  },
+  "tests/unit/approvedDayOff.test.ts": {
+    "mtime": 1791053598.3034446,
+    "seen": 1791053630.7371747,
+    "ast_hash": "5e723d8e6c7cbbaeb5831397cd93b226",
     "semantic_hash": ""
   }
 }
