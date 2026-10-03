@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  * 
  * Export dialog: a PDF of the nurses' and doctors' rosters, an Excel workbook,
- * CSV files, and a printed page for each nurse.
+ * CSV files, a printed page for each nurse, and a full JSON file for analysis.
  */
 
 import { resolveFullTimeTarget } from '../../services/hours/hoursPolicy';
@@ -21,6 +21,7 @@ import {
   Clock,
   Sparkles,
   Info,
+  FileJson,
 } from 'lucide-react';
 import {
   Schedule,
@@ -36,7 +37,11 @@ import {
   Specialty,
   Rule,
   WorkingHoursPeriod,
+  LockEntry,
+  AvailabilityRequest,
 } from '../../types';
+import type { ClinicSetup } from '../../services/engine/clinicModel';
+import { analysisFileName, downloadRosterAnalysis } from '../../services/export/analysisExportService';
 import {
   exportRosterToExcel,
   exportRosterToCsvMatrix,
@@ -71,11 +76,16 @@ interface ExportModalProps {
   versionNumber?: number;
   /** Public holiday dates, marked in the PDF. */
   holidayDates?: string[];
+  /** For the analysis file: pinned days, nurses' requests and the clinic setup the engine uses. */
+  locks?: LockEntry[];
+  availabilityRequests?: AvailabilityRequest[];
+  clinicSetup?: ClinicSetup;
+  timezone?: string;
   isOpen: boolean;
   onClose: () => void;
 }
 
-type ExportTab = 'excel' | 'csv' | 'print_roster' | 'print_packets';
+type ExportTab = 'excel' | 'csv' | 'print_roster' | 'print_packets' | 'analysis';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -103,6 +113,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   onClose,
   workingHoursPeriods = [],
   holidayDates = [],
+  locks = [],
+  availabilityRequests = [],
+  clinicSetup,
+  timezone,
 }) => {
   const [activeTab, setActiveTab] = useState<ExportTab>('print_roster');
   const [pdfSplit, setPdfSplit] = useState(false);
@@ -240,6 +254,39 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     });
   };
 
+  // 5. Analysis file (JSON): everything about the roster, for study by a program or Claude
+  const handleDownloadAnalysis = () => {
+    try {
+      const analysis = downloadRosterAnalysis({
+        clinicName,
+        timezone,
+        schedule,
+        versionNumber,
+        assignments,
+        nurses,
+        dutyWindows,
+        leaveEntries,
+        leaveTypes,
+        seniorityLevels,
+        doctors,
+        sessions,
+        roles,
+        specialties,
+        rules,
+        workingHoursPeriods,
+        locks,
+        availabilityRequests,
+        clinicSetup,
+      });
+      notify(
+        `Analysis file downloaded: ${analysis.shifts.length} shifts, ${analysis.problems.length} problems.`,
+        'success'
+      );
+    } catch (err: any) {
+      notify(`The analysis file could not be created: ${err?.message || err}`, 'error');
+    }
+  };
+
   // 4. Trigger Native Print
   const handleTriggerPrint = () => {
     window.print();
@@ -356,6 +403,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           >
             <Users className="w-4 h-4 text-purple-600" aria-hidden="true" />
             <span>A page for each nurse</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('analysis')}
+            className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
+              activeTab === 'analysis'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FileJson className="w-4 h-4 text-amber-600" aria-hidden="true" />
+            <span>Full report for analysis</span>
           </button>
         </div>
 
@@ -545,6 +605,58 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               >
                 <Download className="w-4 h-4" aria-hidden="true" />
                 <span>{isPdfBusy ? 'Creating the PDF…' : 'Download PDF'}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Full report for analysis (JSON) */}
+          {activeTab === 'analysis' && (
+            <div className="space-y-4">
+              <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-lg space-y-2">
+                <div className="flex items-center gap-2">
+                  <FileJson className="w-5 h-5 text-amber-600 shrink-0" aria-hidden="true" />
+                  <h3 className="text-sm font-bold text-amber-950">Full roster report (.json)</h3>
+                </div>
+                <p className="text-xs text-amber-950/80 leading-relaxed">
+                  One file with everything about this roster, made to be read by a program or given to Claude to study
+                  how the roster was filled and to improve the way it is generated. It is not meant to be opened in Excel.
+                </p>
+                <div className="grid grid-cols-2 gap-2 pt-2 text-[11px] text-amber-950">
+                  {[
+                    'Shift types, rules, leave types, skills',
+                    'Nurses: preferences, hours goal and hours worked',
+                    'Doctors and their sessions each day',
+                    'Who worked with which doctor, and her rank for him',
+                    'Hours the clinic needs and hours rostered, per day',
+                    'Every problem the checker finds now',
+                    'Leave, day off and shift requests (followed or not)',
+                    'Pinned days and the end of the previous roster',
+                  ].map((label) => (
+                    <span key={label} className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-600 shrink-0" aria-hidden="true" /> {label}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[11px] text-amber-900/80 pt-1">
+                  Email addresses, dates of birth and profile notes are left out. File name:{' '}
+                  <code>{analysisFileName(clinicName, schedule, versionNumber)}</code>
+                </p>
+              </div>
+
+              {!clinicSetup && (
+                <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">
+                  Opening hours, public holidays and the previous roster are not loaded yet, so the file will use the
+                  default opening hours and no holidays. Reload the page first for a complete report.
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={handleDownloadAnalysis}
+                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+              >
+                <Download className="w-4 h-4" aria-hidden="true" />
+                <span>Download full report</span>
               </button>
             </div>
           )}

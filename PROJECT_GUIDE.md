@@ -21,7 +21,7 @@ Last updated: 2026-10-03, at commit `9c0b819` on `main`.
 | `npm install --legacy-peer-deps` | Install (the flag is needed for esbuild/vite peer conflicts) |
 | `npm run dev` | Express + Vite dev server on port 3000 |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 138 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 146 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `dist/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -111,7 +111,7 @@ src/
     requests/    staffRequestService.ts
     history/     diffEngine.ts, versionList.ts
     dashboard/   dashboardSummary.ts, problemCount.ts
-    export/      icsExportService.ts, rosterExportService.ts, rosterPdfService.ts
+    export/      icsExportService.ts, rosterExportService.ts, rosterPdfService.ts, analysisExportService.ts
     presence/    usePresence.ts, presenceRules.ts
     seed/        seedData.ts, seedRunner.ts
     settings/    emailSettingsStore.ts
@@ -379,7 +379,7 @@ Reminders (PublishView) re-use the original ack token. Private links: `/#me?t=nr
 
 **Publish, History, Reports, Audit**: see sections 11 and 12; Reports has Ledger, Equity, Quotas, payroll and timesheet CSV; Audit has filters and a before/after inspector.
 
-**Exports**: PDF (`rosterPdfService`, A4 landscape, nurses and doctors grids), Excel (`rosterExportService`, sheets Roster, Legend, Long, Hours, Doctors), CSV (formula injection safe, `utils/csv.ts`), ICS (`icsExportService`).
+**Exports**: PDF (`rosterPdfService`, A4 landscape, nurses and doctors grids), Excel (`rosterExportService`, sheets Roster, Legend, Long, Hours, Doctors), CSV (formula injection safe, `utils/csv.ts`), ICS (`icsExportService`), and **Full report for analysis** (`analysisExportService.buildRosterAnalysis`, a JSON file, format `nsc-roster-analysis` v1): clinic setup, shift types, rules, nurses with preferences and hours (goal, shifts, leave, difference, counts), doctors, each day with hours needed (doctor sessions + opening hours for the free nurse) and hours rostered, who covered each doctor session and the nurse's rank for that doctor, every shift, leave, request (followed or not), pinned day, the checker's problems run at export time, hourly coverage and the previous roster's tail. Emails, dates of birth and profile notes are left out. Made for the owner to hand back to Claude to study and tune the engine.
 
 ---
 
@@ -409,7 +409,7 @@ The server verifies Firebase ID tokens itself (jose, Google JWKS) and reads `use
 
 ## 15. Tests
 
-`tests/unit/` (Node test runner, `node --import tsx --test`): assignmentChecks, backupCheck, changeAlerts, clinicModel (main engine + validator scenarios), csv, dashboard, explainCell, generatorRequests, hoursAccounting, hoursPolicy, hoursRules, liveCollectionCache, liveUpdates, newRosterDates, nurseRoster, preferenceFocus, requestFindings, rosterSaving, ruleChecker, rules, schedulingEngine, yearFairness.
+`tests/unit/` (Node test runner, `node --import tsx --test`): analysisExport, assignmentChecks, backupCheck, changeAlerts, clinicModel (main engine + validator scenarios), csv, dashboard, explainCell, generatorRequests, hoursAccounting, hoursPolicy, hoursRules, liveCollectionCache, liveUpdates, newRosterDates, nurseRoster, preferenceFocus, requestFindings, rosterSaving, ruleChecker, rules, schedulingEngine, yearFairness.
 
 `fixtures.ts` helpers: `DAY_DUTY` (09:00 to 17:00), `SENIOR`, `makeNurse(id, overrides)`, `makeSchedule(overrides)` (week of 2026-10-05, 40 h), `ANNUAL_LEAVE`, `UNPAID_LEAVE`, `makeLeave`, `makeLock`, `hoursOnlyRules()` (turns off the Nurse Clinic and plus one rules).
 

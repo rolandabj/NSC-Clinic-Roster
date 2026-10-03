@@ -2540,6 +2540,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           blockDates={blockDates}
           versionNumber={activeSchedule.activeVersionNumber || 1}
           holidayDates={holidays.map((h) => h.date)}
+          locks={locks}
+          availabilityRequests={availabilityRequests}
+          clinicSetup={clinicSetupRef.current}
+          timezone={context.timezone}
           isOpen={isExportModalOpen}
           onClose={() => setIsExportModalOpen(false)}
         />
