@@ -24,6 +24,7 @@ Last updated: 2026-10-03, at commit `9c0b819` on `main`.
 | `npm test` | Unit tests (Node test runner via tsx), currently 138 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `dist/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
+| `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
 
 **Working agreements with the owner (important).**
 
