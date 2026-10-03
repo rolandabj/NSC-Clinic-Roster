@@ -1030,6 +1030,28 @@ export class SchedulingEngine {
     const shortestCoverHours = (start: string, end: string): number => hoursToCover(start, end, activeDuties);
     const shortestShiftHours = Math.min(...activeDuties.map((d) => calculateDutyDurationHours(d)), 24);
     const longestShiftHours = Math.max(...activeDuties.map((d) => calculateDutyDurationHours(d)), 0);
+    // A shift covering the whole opening hours (9-9 at this clinic) is used only when nothing
+    // shorter does the job: a doctor working the whole opening hours, or no other way to keep
+    // a free nurse.
+    const isLongShift = (d: DutyWindow) => d.startTime <= clinic.openTime && d.endTime >= clinic.closeTime;
+
+    // Variety of shifts: when several shifts suit a job, the ones used least so far in this
+    // roster get a bonus, more for the "used first" (priority) shifts and less for the others,
+    // so the roster uses 11-9, 1-9, 11-7, 9-5 and so on, not only 9-7. The 9-9 is left out
+    // (it is only used when needed). Counts are refreshed at the start of each day.
+    let dutyUsage = new Map<string, number>();
+    const refreshDutyUsage = () => {
+      dutyUsage = new Map();
+      resultAssignmentsMap.forEach((a) => dutyUsage.set(a.dutyWindowId, (dutyUsage.get(a.dutyWindowId) || 0) + 1));
+    };
+    const varietyBonus = (d: DutyWindow): number => {
+      if (isLongShift(d)) return 0;
+      const group = activeDuties.filter((x) => !isLongShift(x) && !!x.isPriority === !!d.isPriority);
+      if (group.length < 2) return 0;
+      const mean = group.reduce((sum, x) => sum + (dutyUsage.get(x.id) || 0), 0) / group.length;
+      const gap = (mean - (dutyUsage.get(d.id) || 0)) / Math.max(4, mean);
+      return Math.max(-1, Math.min(1, gap)) * (d.isPriority ? 20 : 10);
+    };
     const fixedHoursByDate = new Map<string, number>();
     // Only fixed shifts that do a needed job (a doctor or the free nurse) reduce that day's need
     resultAssignmentsMap.forEach((a) => {
@@ -1267,6 +1289,7 @@ export class SchedulingEngine {
       // Nurses in a fresh, fair order for today (used for ties)
       const dayOrder = [...sortedNurses].sort((a, b) => tieOrder(a.id, date) - tieOrder(b.id, date));
       const existingToday = () => Array.from(resultAssignmentsMap.values()).filter((a) => a.date === date);
+      refreshDutyUsage();
       /** The job of a nurse added who is not with a doctor: Nurse Clinic while today still needs one, otherwise float. */
       const roleForExtraNurse = (nurse: Nurse): string =>
         canBeFreeNurse(nurse, roles) && existingToday().filter(isNurseClinicAssignment).length < ncShiftsPerDay
@@ -1573,17 +1596,15 @@ export class SchedulingEngine {
                 if (isWeekend) score -= state.weekendsWorked * 25;
                 // Late shift fairness (shifts ending at the late time, 9 pm by default): a nurse with
                 // more late shifts than average (this roster and earlier ones this year) is asked
-                // less often, and one with fewer is asked more often, even for a longer shift
-                // (e.g. 9-9 with a doctor who leaves at 6:30, staying on as a free nurse).
-                // A longer shift than the job needs is only encouraged when her doctors won't need
-                // those hours later (Samia, the only Dermatology nurse, keeps hers for Dr Reem).
+                // less often, and one with fewer more often, for a shift that ends when the job
+                // does. Never a reason to stay on after the job: that would be a longer shift.
+                const extraBeyondJob = Math.max(0, shiftHours - slotMinutes / 60);
                 if (isLate(candidateDuty)) {
                   const lateGap = Math.max(-4, Math.min(6, lateShiftsAboveAverage(nurse)));
-                  const extraBeyondJob = Math.max(0, shiftHours - slotMinutes / 60);
-                  // (her hours left still include today's job, so the whole shift must fit)
-                  const mayStayOn = lateGap > 0 || extraBeyondJob === 0 || shiftHours <= optionalHoursFree(nurse.id, date);
-                  if (mayStayOn) score -= lateGap * 15;
+                  if (lateGap > 0 || extraBeyondJob === 0) score -= lateGap * 15;
                 }
+                // The longest shift (9-9) only when the job needs it
+                if (isLongShift(candidateDuty) && extraBeyondJob > 0) score -= 40;
                 // Her requests for this day (soft)
                 score += requestScore(nurse.id, date, candidateDuty);
 
@@ -1598,6 +1619,7 @@ export class SchedulingEngine {
                 if (isSenior(nurse)) score += 10;
 
                 if (candidateDuty.isPriority) score += 30;
+                score += varietyBonus(candidateDuty);
                 score += (candidateDuty.priorityRank ?? 100) * 0.05;
 
                 if (score > tierBestScore) {
@@ -1666,12 +1688,11 @@ export class SchedulingEngine {
               (x) => !filled.has(x.doctorId) && pairingRank(n, x.doctorId, x) === 1 && canWorkWithDoctor(n, x.doctorId, x)
             );
           };
-          // Nurse Clinic runs the whole opening hours: a shift that covers them all comes
-          // first, and a shorter one only when nobody can work it. A shorter shift leaves
-          // hours that need another free nurse, so it costs a second nurse.
-          const coversSlot = (d: DutyWindow) => d.startTime <= slot.startTime && d.endTime >= slot.endTime;
+          // Nurse Clinic may work any shift, and the longest one (9-9) only when nobody can work
+          // a shorter one: the rest of the opening hours get another free nurse (5.3), e.g. a
+          // 1-9 float or a doctor's nurse once her doctor has left.
           const coverSets: ((d: DutyWindow) => boolean)[] = isNurseClinicSlot
-            ? [coversSlot, (d) => !coversSlot(d)]
+            ? [(d) => !isLongShift(d), (d) => isLongShift(d)]
             : [() => true];
           cohorts: for (const withinGoalOnly of [true, false])
             for (const keepForDoctors of isNurseClinicSlot ? [true, false] : [false])
@@ -1743,7 +1764,10 @@ export class SchedulingEngine {
           const gap = gaps[0];
           let fixed = false;
 
-          // A: stretch a generated free nurse's shift over the gap (a longer duty that keeps her hours)
+          // A: stretch a generated free nurse's shift over the gap (a longer duty that keeps her
+          // hours), not into the longest shift; B: else add another nurse on a shorter shift
+          // (e.g. 1-9); only then stretch into the longest shift.
+          const tryStretch = (allowLong: boolean): boolean => {
           const stretchable = existingToday()
             .filter((a) => a.source === 'GENERATED' && !a.locked && a.kind !== 'DOCTOR' && canBeFreeNurse(nurseMap.get(a.nurseId), roles))
             .sort((a, b) => hoursBehindPace(b.nurseId, dayIdx) - hoursBehindPace(a.nurseId, dayIdx));
@@ -1753,6 +1777,7 @@ export class SchedulingEngine {
             if (!nurse || !oldDuty) continue;
             const longer = activeDuties
               .filter((d) => d.startTime <= oldDuty.startTime && d.endTime >= oldDuty.endTime && d.id !== oldDuty.id && overlaps(d.startTime, d.endTime, gap.start, gap.end))
+              .filter((d) => allowLong || !isLongShift(d))
               .sort((a, b) => calculateDutyDurationHours(a) - calculateDutyDurationHours(b))[0];
             if (!longer) continue;
             const added = calculateDutyDurationHours(longer) - calculateDutyDurationHours(oldDuty);
@@ -1772,7 +1797,9 @@ export class SchedulingEngine {
             fixed = true;
             break;
           }
-          if (fixed) continue;
+          return fixed;
+          };
+          if (tryStretch(false)) continue;
 
           // B: add another qualified nurse, on the duty that covers the most uncovered hours
           const gapCover = (d: DutyWindow) => gaps.filter((h) => overlaps(d.startTime, d.endTime, h.start, h.end)).length;
@@ -1785,6 +1812,9 @@ export class SchedulingEngine {
               if (!canBeFreeNurse(nurse, roles)) continue;
               if (!fitsHardRules(nurse, date, duty, calculateDutyDurationHours(duty))) continue;
               let score = gapCover(duty) * 20 + hoursBehindPace(nurse.id, dayIdx) * 1.5;
+              if (isLongShift(duty)) score -= 30; // a shorter shift that covers the gap first
+              if (isLate(duty)) score -= Math.max(-4, Math.min(6, lateShiftsAboveAverage(nurse))) * 10; // late shifts shared
+              score += varietyBonus(duty) / 2;
               score -= overGoalPenalty(nurse.id, calculateDutyDurationHours(duty));
               if (isExclusiveNurseClinic(nurse, roles)) score += 50;
               if (isWeekend) score -= (nurseStates.get(nurse.id)?.weekendsWorked || 0) * 25;
@@ -1792,7 +1822,10 @@ export class SchedulingEngine {
               if (!added || score > added.score) added = { nurse, duty, score };
             }
           }
-          if (!added) break; // nobody qualified is free: the validator will flag the gap
+          if (!added) {
+            if (tryStretch(true)) continue;
+            break; // nobody qualified is free: the validator will flag the gap
+          }
           // Today's Nurse Clinic nurse may already be on duty (e.g. until 19:00): the nurse
           // added for the remaining hours then floats, so a day has one Nurse Clinic.
           const freeRole = roleForExtraNurse(added.nurse);
@@ -2083,6 +2116,7 @@ export class SchedulingEngine {
           .map((d) => ({ d, extra: calculateDutyDurationHours(d) - calculateDutyDurationHours(oldDuty) }))
           .filter(({ d, extra }) => {
             if (extra <= 0 || extra > floatBudget || extra > behind) return false; // only the hours she is behind
+            if (isLongShift(d)) return false; // never into the longest shift just for hours
             if (extra > optionalHoursFree(nurse.id, date)) return false; // her doctors need them later
             if (needsPhlReserve && canBeFreeNurse(nurse, roles) && extra > phlFloatBudget) return false;
             if (isSenior(nurse) && extra > seniorFloatBudget) return false;
@@ -2124,12 +2158,18 @@ export class SchedulingEngine {
 
         // Floats are optional, so they must fit within her goal: the shift she asked for first,
         // then longer shifts, then shorter ones
-        const byLength = (list: DutyWindow[]) => [...list].sort((a, b) => calculateDutyDurationHours(b) - calculateDutyDurationHours(a));
+        // Within a group: the less used shifts first (variety), a late one first for a nurse with
+        // fewer late shifts than average, then the longer ones
+        const lateWish = -Math.max(-4, Math.min(6, lateShiftsAboveAverage(nurse)));
+        const floatRank = (d: DutyWindow) => varietyBonus(d) + (isLate(d) ? lateWish * 5 : 0) + calculateDutyDurationHours(d);
+        const byLength = (list: DutyWindow[]) => [...list].sort((a, b) => floatRank(b) - floatRank(a));
         const asked = activeDuties.filter((d) => d.id === preferredDutyOn(nurse.id, date));
+        // the longest shift (9-9) last
         const poolTiers = [
           asked,
-          byLength(activeDuties.filter((d) => d.isPriority && !asked.includes(d))),
-          byLength(activeDuties.filter((d) => !d.isPriority && !asked.includes(d))),
+          byLength(activeDuties.filter((d) => d.isPriority && !asked.includes(d) && !isLongShift(d))),
+          byLength(activeDuties.filter((d) => !d.isPriority && !asked.includes(d) && !isLongShift(d))),
+          byLength(activeDuties.filter((d) => !asked.includes(d) && isLongShift(d))),
         ];
         let selected: DutyWindow | null = null;
         for (const tier of poolTiers) {
@@ -2478,8 +2518,10 @@ export class SchedulingEngine {
             for (const d of activeDuties) {
               const extra = calculateDutyDurationHours(d) - calculateDutyDurationHours(oldDuty);
               if (extra <= 0 || extra > missing || d.startTime > oldDuty.startTime || d.endTime < oldDuty.endTime) continue;
+              if (isLongShift(d)) continue; // never stretched into a 9-9 just for hours
               if (!fitsHardRules(nurse, date, d, extra, { replacingOwnShift: true })) continue;
-              const score = extra * 10 + lateBonus(d) + 5; // no extra day at work
+              // no extra day at work; the less used shift types take turns here too
+              const score = extra * 4 + lateBonus(d) + varietyBonus(d) - varietyBonus(oldDuty) + 5;
               if (!best || score > best.score) best = { date, duty: d, extra, replacing: own, score };
             }
             continue;
@@ -2496,7 +2538,9 @@ export class SchedulingEngine {
             if (hours > missing || !fitsHardRules(nurse, date, d, hours)) continue;
             // A doctor's session still partly (or not) covered that day comes first
             const gapDoctor = doctorGapCoveredBy(nurse, date, d);
-            const score = hours * 10 + lateBonus(d) - shiftsOnDate(date) * 2 - (isWeekendDate(date) ? 8 : 0) + (gapDoctor ? 1000 : 0);
+            const score =
+              // a longer shift needs fewer extra days, but the less used shift types take turns
+              hours * 4 + lateBonus(d) + varietyBonus(d) - shiftsOnDate(date) * 2 - (isWeekendDate(date) ? 8 : 0) + (gapDoctor ? 1000 : 0) - (isLongShift(d) ? 60 : 0);
             if (!best || score > best.score) best = { date, duty: d, extra: hours, score, doctor: gapDoctor };
           }
         }

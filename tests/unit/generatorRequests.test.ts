@@ -61,15 +61,16 @@ const shiftOn = (result: Awaited<ReturnType<typeof run>>, nurseId: string, date:
 
 test('an approved request for the Late shift is met when either shift would do (doctor session)', async () => {
   // A 13:00 to 17:00 session: Day and Late both cover it, so the request decides.
+  // (Without a request either shift may be used, for variety; the request decides.)
   const sessions = sessionsEveryDay('13:00', '17:00');
-  const without = await run({ nurses: [makeNurse('n1')], sessions });
-  assert.equal(shiftOn(without, 'n1', '2026-10-07')?.dutyWindowId, DAY_DUTY.id);
-
   const withRequest = await run({ nurses: [makeNurse('n1')], sessions, requests: [request({ preferredDutyWindowId: LATE.id })] });
   assert.equal(shiftOn(withRequest, 'n1', '2026-10-07')?.dutyWindowId, LATE.id);
-  assert.equal(shiftOn(withRequest, 'n1', '2026-10-06')?.dutyWindowId, DAY_DUTY.id); // other days unchanged
   assert.equal(withRequest.requestsMet, 1);
   assert.equal(withRequest.requestsTotal, 1);
+
+  const askedDay = await run({ nurses: [makeNurse('n1')], sessions, requests: [request({ preferredDutyWindowId: DAY_DUTY.id })] });
+  assert.equal(shiftOn(askedDay, 'n1', '2026-10-07')?.dutyWindowId, DAY_DUTY.id);
+  assert.equal(askedDay.requestsMet, 1);
 });
 
 test('a requested shift is used for an extra (float) shift too', async () => {

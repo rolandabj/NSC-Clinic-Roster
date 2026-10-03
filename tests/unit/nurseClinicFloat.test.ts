@@ -38,18 +38,17 @@ test('no shift covers the opening hours: one Nurse Clinic, the evening nurse flo
   others.forEach((a) => assert.equal(a.clinicalRoleId, FLOAT_ROLE_ID));
 });
 
-test('Nurse Clinic gets a shift covering all opening hours when a nurse can work it', async () => {
-  // Amy (Nurse Clinic only) worked late yesterday and may not do two late shifts in a row,
-  // so she can only work 9-7. Ben can work 9-9 and runs Nurse Clinic for the whole day.
-  const lateRule = { id: 'rule-s1', name: 'Consecutive late duties', templateKey: 'MAX_CONSECUTIVE_LATE_DUTIES', enabled: true, severity: 'HARD', value: 1, params: { thresholdTime: '21:00' } } as any;
-  const prior = [{ id: 'p', scheduleId: 'prev', nurseId: 'amy', date: '2026-11-02', dutyWindowId: 'd', kind: 'CLINICAL_ROLE', clinicalRoleId: NC.id, locked: false, source: 'GENERATED' } as Assignment];
-  const amy = makeNurse('amy', { isClinicNurse: false, capabilityIds: [NC.id] });
+test('no 9-9 when shorter shifts can keep a free nurse all day: Nurse Clinic and an evening float', async () => {
+  // Amy and Ben can both run Nurse Clinic. Instead of one 9-9, Nurse Clinic works a shorter
+  // shift and the rest of the opening hours get a float on a shorter shift.
+  const amy = makeNurse('amy', { capabilityIds: [NC.id] });
   const ben = makeNurse('ben', { capabilityIds: [NC.id] });
-  const shifts = await run([amy, ben], [FULL, NINE_SEVEN], { rules: [lateRule], prior });
+  const shifts = await run([amy, ben], [FULL, NINE_SEVEN, LATE], { target: 12 });
   const nc = ncShifts(shifts);
   assert.equal(nc.length, 1);
-  assert.equal(nc[0].nurseId, 'ben');
-  assert.equal(nc[0].dutyWindowId, FULL.id);
+  assert.equal(shifts.filter((a) => a.dutyWindowId === FULL.id).length, 0, 'no 9-9');
+  // the whole day still has a free nurse: someone works until 9 pm
+  assert.ok(shifts.some((a) => a.dutyWindowId === LATE.id || a.dutyWindowId === FULL.id));
 });
 
 test('a float shift says Float, not the department in her list', async () => {
