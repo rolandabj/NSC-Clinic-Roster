@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-03, after the engine fixes from the Oct 19 to Nov 18 roster analysis (section 16, items 11 and 12).
+Last updated: 2026-10-03, after the engine fixes from the Oct 19 to Nov 18 roster analysis (section 16, items 11 to 13).
 
 ---
 
@@ -21,7 +21,7 @@ Last updated: 2026-10-03, after the engine fixes from the Oct 19 to Nov 18 roste
 | `npm install --legacy-peer-deps` | Install (the flag is needed for esbuild/vite peer conflicts) |
 | `npm run dev` | Express + Vite dev server on port 3000 |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 157 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 158 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `dist/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -283,7 +283,7 @@ Modes (`engine/types.ts`): GENERATE_ALL (rebuild; keeps hand edits when `keepMan
    - **Doctor slot queue**: nurses who name the doctor (by rank, ranks 1, 2, 3+), then nurses whose specialty matches one of the doctor's specialties (rank 1, then others), then everyone else. `pairingRank(nurse, doctorId, session)` = her best rank for that doctor by name or by specialty.
    - Passes, first hit wins: within goal before over goal; "leave her for a doctor she ranks higher today" before ignoring that; nurses not needed for blood collection first when blood collection hours are short; full cover shifts before partial.
    - Score terms (higher wins): full cover +40; wasted hours −6/h; near days in a row limit −60; Nurse Clinic: exclusive NC +200, −25 per NC shift so far, NC preference +40/+20, kept for doctors who rank her −(40…160); doctor: named rank 1 +80, 2 +40, else +20; specialty rank 1 +70, 2 +35, else +15; −50 per other first choice doctor today; behind pace +1.5/h; over goal −(300 + 20/h); at target −150; weekend −25 per weekend worked; late shifts above average −15 each; request score; late run near limit −50/−150; senior +10; priority duty +30.
-   - Nurse Clinic slot: a shift covering all opening hours first; a shorter one only when nobody can work it.
+   - Nurse Clinic slot: a shift covering all opening hours first; a shorter one only when nobody can work it. Nurse Clinic may work any shift: step 5.7 shortens it at the end of the day when other free nurses cover the rest.
    - Free nurse each hour (plus one rule): stretch an existing shift, else add a nurse.
    - **One Nurse Clinic a day** (the DEDICATED_NURSE_CLINIC rule value, at least 1): a nurse added later who is not with a doctor (evening free nurse, senior, holiday cover) gets Nurse Clinic only while the day still needs one, otherwise she floats (`roleForExtraNurse`).
    - Senior each day (H1): add an extra senior, else swap a senior into a junior's generated shift, else add anyway.
@@ -293,6 +293,7 @@ Modes (`engine/types.ts`): GENERATE_ALL (rebuild; keeps hand edits when `keepMan
    - **5.5b Longer shift for a doctor's nurse**: a nurse with a doctor who is behind her pace gets a longer shift containing hers (e.g. 9-7 to 9-9 when the doctor works 9 to 7; she is a free nurse once he leaves). From today's spare hours, at most the hours she is behind, within her goal (keeping her first choice hours), never more than `optionalHoursFree` (hours her pools can spare after their later sessions; floats use the same limit), and for seniors only with one long shift of senior spare hours to spare. Note "Longer shift to make up her hours".
    - Float shifts from spare hours for nurses behind pace, always `clinicalRoleId: 'role-float'` (`FLOAT_ROLE_ID`), shown as **Float** everywhere. `floatShift.isFloatShift` also treats older shifts with a department and no doctor as Float (grid, PDF, Excel, CSV, emails, nurse pages, calendar, history).
    - **5.6 Last resort**: a doctor still without any nurse gets a clinic nurse from outside her list (never an Exclusive Nurse Clinic nurse): first one already floating today (her float becomes the doctor shift, only if every opening hour keeps its free nurse), else one who is off and under her goal. The shift's note is `LAST_RESORT_NOTE`; the checker reports it as `h8-doctor-allocation` WARN ("Check") instead of ERROR. A held back session with no outsider available goes back to the pool's own nurses.
+   - **5.7 Nurse Clinic fitted to the day**: a free nurse is any nurse who can run Nurse Clinic and is not with a doctor at that hour (a doctor's nurse after her doctor leaves, a float). Once the day is filled, each generated Nurse Clinic shift becomes the shortest shift (any type) that keeps a free nurse at every opening hour, e.g. 9-9 to 9-7 when a doctor's nurse works until 9 pm and her doctor leaves at 7. Only when she stays on her pace after giving up the hours (an Exclusive Nurse Clinic nurse keeps a margin of one long shift). Note "(shorter: other free nurses cover the rest of the opening hours)".
 10. Requests met are tallied.
 
 Ties rotate between nurses by an FNV hash of date and nurse id, so the result is deterministic.
@@ -450,6 +451,7 @@ Completed and on `main`, in order:
 10. From the Sep 19 to Oct 18 2026 roster analysis: one Nurse Clinic a day and a 9-9 Nurse Clinic shift first; nurses not with a doctor are Float everywhere (`floatShift.ts`); last resort nurse for a doctor with nobody, reported as Check (`lastResort.ts`); shortages of a doctor's own nurses spread over the roster; the consecutive days rule renamed "Maximum consecutive shifts"; a doctor's nurse behind her hours gets a longer shift (9-7 to 9-9).
 11. From the Oct 19 to Nov 18 2026 roster analysis: approved day off requests are hard days off without their pin (checker: WARN on a shift there); shared first choice reservation; pool hours count a shared nurse's hours once (so Mary keeps hours for Pediatrics instead of floating, and last resort days spread over the month); a partly covered doctor's own nurse is lengthened first.
 12. Availability → **All requests** (`AllRequestsPanel.tsx`): every day off and shift request, decided or not, with approve, decline, back to waiting, change and delete; the approved day off pin follows (`staffRequestService.syncDayOffLock`). Unpinning an approved day off (roster or Availability) declines its request. The Rules tab renames an old "... = 6" consecutive shifts rule name on open.
+13. Nurse Clinic may work any shift: a doctor's nurse who can run Nurse Clinic counts as the free nurse after her doctor leaves, so the Nurse Clinic shift is shortened to what the day still needs (engine step 5.7).
 
 ---
 

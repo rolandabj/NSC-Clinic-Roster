@@ -450,9 +450,9 @@
     "semantic_hash": "7f14f9df033240b364eb865b54a94258"
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1791053598.3029947,
-    "seen": 1791053630.7371078,
-    "ast_hash": "80fad89239d3fecd1bd9b1253b94449e",
+    "mtime": 1791054709.7932184,
+    "seen": 1791054740.0487816,
+    "ast_hash": "24ddac8d104650688006a50882499a56",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791053849.3575754,
-    "seen": 1791053862.2276213,
-    "ast_hash": "51ffcb3f5ef9469c0811930d1a6ba9e4",
+    "mtime": 1791054734.53852,
+    "seen": 1791054740.0488944,
+    "ast_hash": "a5a21e13c9d42585ed851b515e82a0bd",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1080,9 +1080,9 @@
     "semantic_hash": ""
   },
   "tests/unit/nurseClinicFloat.test.ts": {
-    "mtime": 1791051899.7305143,
-    "seen": 1791051936.7122662,
-    "ast_hash": "6f6a81399d919a5572b72c5c7b3eb478",
+    "mtime": 1791054702.688835,
+    "seen": 1791054740.048854,
+    "ast_hash": "584bab9a5d9400f2c05eecd4034dbc59",
     "semantic_hash": ""
   },
   "src/services/engine/lastResort.ts": {

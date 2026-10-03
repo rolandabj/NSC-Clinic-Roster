@@ -95,3 +95,23 @@ test('a whole month: never more than one Nurse Clinic a day, and no department f
   }
   assert.equal(assignments.filter((a) => a.kind === 'SPECIALTY').length, 0);
 });
+
+test('Nurse Clinic works a shorter shift when a doctor\'s nurse is free after her doctor leaves', async () => {
+  // Dr Ortho works 9 to 7. Ben is with him on a 9-9 (set by hand), so Ben is a free nurse
+  // from 7 to 9 pm and the Nurse Clinic nurse only needs 9 to 7.
+  const ORTHO = { id: 'sp-o', name: 'Orthopedics', code: 'ORTH' };
+  const DR = { id: 'doc-o', fullName: 'Dr Ortho', specialtyIds: [ORTHO.id], weeklyPattern: [], active: true };
+  const sess = { id: 's', doctorId: DR.id, date: DATE, startTime: '09:00', endTime: '19:00', specialtyId: ORTHO.id, source: 'PATTERN', cancelled: false } as DoctorSession;
+  const amy = makeNurse('amy', { capabilityIds: [NC.id] }); // a 9-9 on day one puts her ahead of her pace
+  const ben = makeNurse('ben', { capabilityIds: [NC.id], preferences: [{ kind: 'SPECIALTY', refId: ORTHO.id, rank: 1 }] });
+  const benShift = { id: 'm', scheduleId: 'sched-1', nurseId: 'ben', date: DATE, dutyWindowId: FULL.id, kind: 'DOCTOR', doctorId: DR.id, locked: false, source: 'MANUAL' } as Assignment;
+  const schedule = makeSchedule({ startDate: DATE, endDate: '2026-11-04', hoursTargetFullTime: 12 });
+  const { assignments } = await SchedulingEngine.generate(
+    schedule, 'GENERATE_ALL', [benShift], [amy, ben], [SENIOR], [FULL, NINE_SEVEN, EARLY], [NC] as any, [ORTHO], [sess], [], [], [],
+    undefined, [], [DR] as any, []
+  );
+  const nc = ncShifts(assignments);
+  assert.equal(nc.length, 1, JSON.stringify(assignments.map((a) => [a.nurseId, a.dutyWindowId, a.kind, a.clinicalRoleId, a.date])));
+  assert.equal(nc[0].nurseId, 'amy');
+  assert.equal(nc[0].dutyWindowId, NINE_SEVEN.id, '9-7, not 9-9 (Ben covers 7 to 9) and not 9-5 (nobody free 5 to 7)');
+});

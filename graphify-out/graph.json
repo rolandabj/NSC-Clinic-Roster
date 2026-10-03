@@ -11111,7 +11111,7 @@
       "node_kind": "heading",
       "norm_label": "10. hours",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L319"
+      "source_location": "L320"
     },
     {
       "id": "tsconfig",
@@ -11629,7 +11629,7 @@
       "node_kind": "heading",
       "norm_label": "16. history of work (for context)",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L438"
+      "source_location": "L439"
     },
     {
       "id": "src_components_common_menubutton",
@@ -12544,7 +12544,7 @@
       "node_kind": "heading",
       "norm_label": "15. tests",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L416"
+      "source_location": "L417"
     },
     {
       "id": "claude_skills_graphify_skill",
@@ -13278,7 +13278,7 @@
       "node_kind": "heading",
       "norm_label": "12. publishing and nurse links",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L344"
+      "source_location": "L345"
     },
     {
       "id": "tests_unit_fixtures",
@@ -13664,7 +13664,7 @@
       "node_kind": "heading",
       "norm_label": "13. screens in detail",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L360"
+      "source_location": "L361"
     },
     {
       "id": "src_components_modals_walkthroughmodal",
@@ -13698,7 +13698,7 @@
       "node_kind": "heading",
       "norm_label": "17. known quirks and ideas for later",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L456"
+      "source_location": "L458"
     },
     {
       "id": "src_components_workbook_grid_quickcellpopup",
@@ -13976,7 +13976,7 @@
       "node_kind": "heading",
       "norm_label": "14. server, security and config",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L392"
+      "source_location": "L393"
     },
     {
       "id": "project_guide_1_features_at_a_glance",
@@ -14036,7 +14036,7 @@
       "node_kind": "heading",
       "norm_label": "9. checking a roster (`src/services/validation/schedulevalidator.ts`)",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L309"
+      "source_location": "L310"
     },
     {
       "id": "project_guide_entry_points",
@@ -14084,7 +14084,7 @@
       "node_kind": "heading",
       "norm_label": "other engine files",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L300"
+      "source_location": "L301"
     },
     {
       "id": "server_middleware_auth",
@@ -15325,7 +15325,7 @@
       "node_kind": "heading",
       "norm_label": "11. saving, live updates, versions",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L331"
+      "source_location": "L332"
     },
     {
       "id": "tests_unit_preferencefocus_test",
@@ -62863,7 +62863,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L300",
+      "source_location": "L301",
       "weight": 1.0
     },
     {
@@ -62940,7 +62940,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L309",
+      "source_location": "L310",
       "weight": 1.0
     },
     {
@@ -62951,7 +62951,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L319",
+      "source_location": "L320",
       "weight": 1.0
     },
     {
@@ -62962,7 +62962,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L331",
+      "source_location": "L332",
       "weight": 1.0
     },
     {
@@ -62973,7 +62973,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L344",
+      "source_location": "L345",
       "weight": 1.0
     },
     {
@@ -62984,7 +62984,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L360",
+      "source_location": "L361",
       "weight": 1.0
     },
     {
@@ -62995,7 +62995,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L392",
+      "source_location": "L393",
       "weight": 1.0
     },
     {
@@ -63017,7 +63017,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L416",
+      "source_location": "L417",
       "weight": 1.0
     },
     {
@@ -63028,7 +63028,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L438",
+      "source_location": "L439",
       "weight": 1.0
     },
     {
@@ -63039,7 +63039,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L456",
+      "source_location": "L458",
       "weight": 1.0
     },
     {
@@ -74360,7 +74360,7 @@
       "confidence_score": 0.95,
       "context": "AllRequestsPanel",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L382",
+      "source_location": "L383",
       "weight": 1.0
     },
     {
@@ -74384,7 +74384,7 @@
       "confidence_score": 0.95,
       "context": "ApprovalsQueuePanel",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L382",
+      "source_location": "L383",
       "weight": 1.0
     },
     {
@@ -74468,7 +74468,7 @@
       "confidence_score": 0.95,
       "context": "CollectionSyncer",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L335",
+      "source_location": "L336",
       "weight": 1.0
     },
     {
@@ -74504,7 +74504,7 @@
       "confidence_score": 0.95,
       "context": "DoctorsScheduleSheet",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L380",
+      "source_location": "L381",
       "weight": 1.0
     },
     {
@@ -74540,7 +74540,7 @@
       "confidence_score": 0.95,
       "context": "FirestoreRepository",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L333",
+      "source_location": "L334",
       "weight": 1.0
     },
     {
@@ -74648,7 +74648,7 @@
       "confidence_score": 0.95,
       "context": "NurseSelfServicePanel",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L382",
+      "source_location": "L383",
       "weight": 1.0
     },
     {
@@ -74696,7 +74696,7 @@
       "confidence_score": 0.95,
       "context": "RosterPublishService.generatePersonalEmailHtml",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L351",
+      "source_location": "L352",
       "weight": 1.0
     },
     {
@@ -74780,7 +74780,7 @@
       "confidence_score": 0.95,
       "context": "WalkthroughModal",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L463",
+      "source_location": "L465",
       "weight": 1.0
     },
     {
@@ -74804,7 +74804,7 @@
       "confidence_score": 0.95,
       "context": "analysisExportService.buildRosterAnalysis",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L388",
+      "source_location": "L389",
       "weight": 1.0
     },
     {
@@ -74816,7 +74816,7 @@
       "confidence_score": 0.95,
       "context": "announceProblems",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L362",
+      "source_location": "L363",
       "weight": 1.0
     },
     {
@@ -74924,7 +74924,7 @@
       "confidence_score": 0.95,
       "context": "computeScheduleDiff",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L340",
+      "source_location": "L341",
       "weight": 1.0
     },
     {
@@ -74936,7 +74936,7 @@
       "confidence_score": 0.95,
       "context": "deleteAvailabilityRequest",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L382",
+      "source_location": "L383",
       "weight": 1.0
     },
     {
@@ -74948,7 +74948,7 @@
       "confidence_score": 0.95,
       "context": "deleteDoctorShift",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L380",
+      "source_location": "L381",
       "weight": 1.0
     },
     {
@@ -74960,7 +74960,7 @@
       "confidence_score": 0.95,
       "context": "dispatchEmail",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L351",
+      "source_location": "L352",
       "weight": 1.0
     },
     {
@@ -74972,7 +74972,7 @@
       "confidence_score": 0.95,
       "context": "doctorScheduleService.saveDoctorShift",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L380",
+      "source_location": "L381",
       "weight": 1.0
     },
     {
@@ -74984,7 +74984,7 @@
       "confidence_score": 0.95,
       "context": "doctorSessionsOn",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L460",
+      "source_location": "L462",
       "weight": 1.0
     },
     {
@@ -74996,7 +74996,7 @@
       "confidence_score": 0.95,
       "context": "escapeHtml",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L351",
+      "source_location": "L352",
       "weight": 1.0
     },
     {
@@ -75008,7 +75008,7 @@
       "confidence_score": 0.95,
       "context": "explainDay",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L303",
+      "source_location": "L304",
       "weight": 1.0
     },
     {
@@ -75020,7 +75020,7 @@
       "confidence_score": 0.95,
       "context": "explainNurseDay",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L303",
+      "source_location": "L304",
       "weight": 1.0
     },
     {
@@ -75044,7 +75044,7 @@
       "confidence_score": 0.95,
       "context": "getRepository()",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L333",
+      "source_location": "L334",
       "weight": 1.0
     },
     {
@@ -75056,7 +75056,7 @@
       "confidence_score": 0.95,
       "context": "hoursAccounting.summarizeNurseHours",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L324",
+      "source_location": "L325",
       "weight": 1.0
     },
     {
@@ -75068,7 +75068,7 @@
       "confidence_score": 0.95,
       "context": "hoursOnlyRules()",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L420",
+      "source_location": "L421",
       "weight": 1.0
     },
     {
@@ -75080,7 +75080,7 @@
       "confidence_score": 0.95,
       "context": "hoursPolicy.resolveFullTimeTarget",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L321",
+      "source_location": "L322",
       "weight": 1.0
     },
     {
@@ -75116,7 +75116,7 @@
       "confidence_score": 0.95,
       "context": "makeLeave",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L420",
+      "source_location": "L421",
       "weight": 1.0
     },
     {
@@ -75128,7 +75128,7 @@
       "confidence_score": 0.95,
       "context": "makeLock",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L420",
+      "source_location": "L421",
       "weight": 1.0
     },
     {
@@ -75140,7 +75140,7 @@
       "confidence_score": 0.95,
       "context": "nurseRosterService.ensureNurseLink",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L350",
+      "source_location": "L351",
       "weight": 1.0
     },
     {
@@ -75152,7 +75152,7 @@
       "confidence_score": 0.95,
       "context": "publicRosterService.syncPublicRoster",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L349",
+      "source_location": "L350",
       "weight": 1.0
     },
     {
@@ -75164,7 +75164,7 @@
       "confidence_score": 0.95,
       "context": "reopenAvailabilityRequest",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L382",
+      "source_location": "L383",
       "weight": 1.0
     },
     {
@@ -75188,7 +75188,7 @@
       "confidence_score": 0.95,
       "context": "safeColor",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L351",
+      "source_location": "L352",
       "weight": 1.0
     },
     {
@@ -75200,7 +75200,7 @@
       "confidence_score": 0.95,
       "context": "staffRequestService.decideRequest",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L382",
+      "source_location": "L383",
       "weight": 1.0
     },
     {
@@ -75224,7 +75224,7 @@
       "confidence_score": 0.95,
       "context": "staffRequestService.syncDayOffLock",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L452",
+      "source_location": "L453",
       "weight": 1.0
     },
     {
@@ -75236,7 +75236,7 @@
       "confidence_score": 0.95,
       "context": "syncNurseRosters",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L350",
+      "source_location": "L351",
       "weight": 1.0
     },
     {
@@ -75248,7 +75248,7 @@
       "confidence_score": 0.95,
       "context": "syncScheduleAssignments",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L339",
+      "source_location": "L340",
       "weight": 1.0
     },
     {
@@ -75260,7 +75260,7 @@
       "confidence_score": 0.95,
       "context": "syncScheduleAssignments",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L462",
+      "source_location": "L464",
       "weight": 1.0
     },
     {
@@ -75272,7 +75272,7 @@
       "confidence_score": 0.95,
       "context": "updateAvailabilityRequest",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L382",
+      "source_location": "L383",
       "weight": 1.0
     },
     {
@@ -75289,5 +75289,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "8bf713bf7c43479373a1f2f1d5546a4825fe9603"
+  "built_at_commit": "8e954cbcc79ce439df6df10ee5af5ba42695c992"
 }

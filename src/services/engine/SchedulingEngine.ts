@@ -2172,6 +2172,48 @@ export class SchedulingEngine {
         );
         unmetSlotsCount = Math.max(0, unmetSlotsCount - 1);
       }
+
+      // 5.7 The Nurse Clinic shift fits the day. Nurse Clinic may work any shift: every other
+      // nurse who can run Nurse Clinic and is not with a doctor at that hour is a free nurse
+      // too, e.g. a doctor's nurse who stays after her doctor leaves, or a float. Once the day
+      // is filled, the Nurse Clinic nurse gets the shortest shift that still leaves a free
+      // nurse at every opening hour (the Nurse Clinic 9-9 becomes 9-7 when a doctor's nurse
+      // works until 9 pm and her doctor leaves at 7). Not when she is behind her hours: then
+      // she keeps the longer shift.
+      if (plusOneEnabled && minAdditionalNurses > 0) {
+        for (const nc of existingToday().filter((a) => isNurseClinicAssignment(a) && a.source === 'GENERATED' && !a.locked)) {
+          const nurse = nurseMap.get(nc.nurseId);
+          const oldDuty = dutyMapGlobal.get(nc.dutyWindowId);
+          if (!nurse || !oldDuty) continue;
+          const oldHours = calculateDutyDurationHours(oldDuty);
+          const freeBefore = freeCountsWith(existingToday());
+          const shorter = activeDuties
+            .map((d) => ({ d, saved: oldHours - calculateDutyDurationHours(d) }))
+            .filter(({ saved }) => saved > 0)
+            // She stays on (or ahead of) her pace after giving up these hours. A nurse who only
+            // does Nurse Clinic can't make hours up elsewhere, so she keeps a margin of one shift.
+            .filter(({ saved }) => hoursBehindPace(nurse.id, dayIdx) + saved <= (isExclusiveNurseClinic(nurse, roles) ? -longestShiftHours : 0))
+            .filter(({ d }) => {
+              const after = freeCountsWith(existingToday().map((a) => (a.id === nc.id ? { ...a, dutyWindowId: d.id } : a)));
+              // every opening hour keeps its free nurse (an hour already short is not made worse)
+              return after.every((n, i) => n >= minAdditionalNurses || n >= freeBefore[i]);
+            })
+            .filter(({ d, saved }) => fitsHardRules(nurse, date, d, -saved, { replacingOwnShift: true }))
+            .sort((x, y) => y.saved - x.saved || requestScore(nurse.id, date, y.d) - requestScore(nurse.id, date, x.d))[0];
+          if (!shorter) continue;
+          resultAssignmentsMap.set(`${nc.nurseId}_${date}`, {
+            ...nc,
+            dutyWindowId: shorter.d.id,
+            note: `${nc.note || 'Nurse Clinic'} (shorter: other free nurses cover the rest of the opening hours)`,
+          });
+          const state = nurseStates.get(nurse.id);
+          if (state) {
+            state.totalDutyHoursEarned -= shorter.saved;
+            state.lastDutyEndTime = `${date} ${shorter.d.endTime}`;
+            state.lateShiftsWorked += (isLate(shorter.d) ? 1 : 0) - (isLate(oldDuty) ? 1 : 0);
+          }
+        }
+      }
     }
 
     // How many of the nurses' requests this roster meets: the shift asked for, or no shift

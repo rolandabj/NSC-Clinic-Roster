@@ -1,7 +1,7 @@
 # Graph Report - NSC-Clinic-Roster  (2026-10-03)
 
 ## Corpus Check
-- 183 files · ~227,135 words
+- 183 files · ~227,916 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 6 file(s) not represented in the graph (top: (none) 2, .example 1, .lock 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `8bf713bf`
+- Built from commit: `8e954cbc`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
