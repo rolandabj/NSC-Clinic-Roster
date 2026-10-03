@@ -18,6 +18,7 @@ import {
 } from '../../types';
 import { getRepository } from '../repository';
 import { UserProfile } from '../auth/authService';
+import { canApproveRequests } from '../auth/access';
 
 const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -246,8 +247,9 @@ export async function decideRequest(
   decision: 'APPROVED' | 'REJECTED',
   notes?: string
 ): Promise<void> {
-  if (!isManagerOrOwner(reviewer)) {
-    throw new Error('Approvals are restricted to clinical managers and the clinic administrator.');
+  // Same people as canApprove() in firestore.rules: the owner, editors and managers
+  if (!canApproveRequests(reviewer)) {
+    throw new Error('Approvals are restricted to planners, clinical managers and the clinic administrator.');
   }
 
   const repo = getRepository();
@@ -291,34 +293,7 @@ export async function decideRequest(
     reviewNotes: notes || existing.reviewNotes,
   });
 
-  if (existing.available === false) {
-    const lockId = `lock-off-${existing.nurseId}-${existing.date}`;
-    if (decision === 'APPROVED') {
-      const locks = (await repo.list('locks', {
-        field: 'nurseId',
-        operator: '==',
-        value: existing.nurseId,
-      })) as LockEntry[];
-      const sameDay = locks.filter((l) => l.date === existing.date);
-      // An approved day off wins over a pinned shift on the same day.
-      for (const l of sameDay.filter((l) => l.mode !== 'OFF')) {
-        await repo.remove('locks', l.id);
-      }
-      if (!sameDay.some((l) => l.mode === 'OFF')) {
-        await repo.create('locks', {
-          id: lockId,
-          nurseId: existing.nurseId,
-          date: existing.date,
-          mode: 'OFF',
-          note: `Approved day off request: ${existing.note || 'Rest day'}`,
-          createdAt: now,
-        });
-      }
-    } else {
-      const lock = await repo.get('locks', lockId);
-      if (lock) await repo.remove('locks', lockId);
-    }
-  }
+  await syncDayOffLock(existing, existing.available === false && decision === 'APPROVED');
 
   await repo.create('audit', {
     id: `audit-${uuidv4()}`,
@@ -328,5 +303,129 @@ export async function decideRequest(
     entityId: requestId,
     note: `Availability request for nurse ${existing.nurseId} on ${existing.date} was ${decision} by ${reviewerName}`,
     timestamp: now,
+  });
+}
+
+/** The pinned day off that goes with an approved day off request. */
+const dayOffLockId = (r: Pick<AvailabilityRequest, 'nurseId' | 'date'>) => `lock-off-${r.nurseId}-${r.date}`;
+
+/**
+ * Keeps the pinned day off in step with a day off request: `wanted` adds it (and
+ * removes a pinned shift that day, since an approved day off wins), otherwise the
+ * day off pin made for the request is removed.
+ */
+async function syncDayOffLock(request: Pick<AvailabilityRequest, 'nurseId' | 'date' | 'note'>, wanted: boolean): Promise<void> {
+  const repo = getRepository();
+  if (!wanted) {
+    const lock = await repo.get('locks', dayOffLockId(request));
+    if (lock) await repo.remove('locks', lock.id);
+    return;
+  }
+  const locks = (await repo.list('locks', { field: 'nurseId', operator: '==', value: request.nurseId })) as LockEntry[];
+  const sameDay = locks.filter((l) => l.date === request.date);
+  for (const l of sameDay.filter((l) => l.mode !== 'OFF')) await repo.remove('locks', l.id);
+  if (!sameDay.some((l) => l.mode === 'OFF')) {
+    await repo.create('locks', {
+      id: dayOffLockId(request),
+      nurseId: request.nurseId,
+      date: request.date,
+      mode: 'OFF',
+      note: `Approved day off request: ${request.note || 'Rest day'}`,
+      createdAt: new Date().toISOString(),
+    });
+  }
+}
+
+/** Every day off and shift request of every nurse, newest date first (for planners and managers). */
+export async function listAllAvailabilityRequests(): Promise<AvailabilityRequest[]> {
+  const list = await getRepository().list('availabilityRequests');
+  return [...list].sort((a, b) => b.date.localeCompare(a.date) || (b.submittedAt || '').localeCompare(a.submittedAt || ''));
+}
+
+/**
+ * Changes a request after it was filed or decided: the date, a day off or a shift, the
+ * shift asked for, the note. Its decision stays; an approved day off moves its pin with it.
+ */
+export async function updateAvailabilityRequest(
+  reviewer: UserProfile | null | undefined,
+  requestId: string,
+  changes: { date?: string; available?: boolean; preferredDutyWindowId?: string | null; note?: string }
+): Promise<AvailabilityRequest> {
+  if (!canApproveRequests(reviewer)) throw new Error('Only planners and managers can change requests.');
+  const repo = getRepository();
+  const existing = await repo.get('availabilityRequests', requestId);
+  if (!existing) throw new Error('Request not found.');
+  const next: AvailabilityRequest = {
+    ...existing,
+    date: changes.date || existing.date,
+    available: changes.available ?? existing.available,
+    preferredDutyWindowId:
+      (changes.available ?? existing.available)
+        ? changes.preferredDutyWindowId === undefined
+          ? existing.preferredDutyWindowId
+          : changes.preferredDutyWindowId || undefined
+        : undefined,
+    note: changes.note === undefined ? existing.note : changes.note || undefined,
+  };
+  const wasApprovedOff = existing.status === 'APPROVED' && existing.available === false;
+  const isApprovedOff = next.status === 'APPROVED' && next.available === false;
+  if (wasApprovedOff && (!isApprovedOff || next.date !== existing.date)) await syncDayOffLock(existing, false);
+  await repo.update('availabilityRequests', requestId, {
+    date: next.date,
+    available: next.available,
+    preferredDutyWindowId: next.preferredDutyWindowId ?? null,
+    note: next.note ?? null,
+  } as any);
+  if (isApprovedOff) await syncDayOffLock(next, true);
+  await repo.create('audit', {
+    id: `audit-${uuidv4()}`,
+    actor: reviewer!.name || reviewer!.email,
+    action: 'UPDATE',
+    entity: 'AvailabilityRequest',
+    entityId: requestId,
+    before: existing,
+    after: next,
+    note: `Request for nurse ${existing.nurseId} changed (${existing.date} to ${next.date}).`,
+    timestamp: new Date().toISOString(),
+  });
+  return next;
+}
+
+/** Deletes a request whatever its decision; an approved day off also loses its pin. */
+export async function deleteAvailabilityRequest(reviewer: UserProfile | null | undefined, requestId: string): Promise<void> {
+  if (!canApproveRequests(reviewer)) throw new Error('Only planners and managers can delete requests.');
+  const repo = getRepository();
+  const existing = await repo.get('availabilityRequests', requestId);
+  if (!existing) return;
+  if (existing.available === false && existing.status === 'APPROVED') await syncDayOffLock(existing, false);
+  await repo.remove('availabilityRequests', requestId);
+  await repo.create('audit', {
+    id: `audit-${uuidv4()}`,
+    actor: reviewer!.name || reviewer!.email,
+    action: 'DELETE',
+    entity: 'AvailabilityRequest',
+    entityId: requestId,
+    before: existing,
+    note: `Request for nurse ${existing.nurseId} on ${existing.date} deleted.`,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/** Puts a decided request back to waiting for a decision (an approved day off loses its pin). */
+export async function reopenAvailabilityRequest(reviewer: UserProfile | null | undefined, requestId: string): Promise<void> {
+  if (!canApproveRequests(reviewer)) throw new Error('Only planners and managers can change requests.');
+  const repo = getRepository();
+  const existing = await repo.get('availabilityRequests', requestId);
+  if (!existing) throw new Error('Request not found.');
+  if (existing.available === false && existing.status === 'APPROVED') await syncDayOffLock(existing, false);
+  await repo.update('availabilityRequests', requestId, { status: 'PENDING' });
+  await repo.create('audit', {
+    id: `audit-${uuidv4()}`,
+    actor: reviewer!.name || reviewer!.email,
+    action: 'UPDATE',
+    entity: 'AvailabilityRequest',
+    entityId: requestId,
+    note: `Request for nurse ${existing.nurseId} on ${existing.date} put back to waiting for a decision.`,
+    timestamp: new Date().toISOString(),
   });
 }

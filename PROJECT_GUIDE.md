@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-03, after the engine fixes from the Oct 19 to Nov 18 roster analysis (section 16, item 11).
+Last updated: 2026-10-03, after the engine fixes from the Oct 19 to Nov 18 roster analysis (section 16, items 11 and 12).
 
 ---
 
@@ -157,7 +157,7 @@ vite.config.ts, tsconfig.json, index.html, .github/workflows/ci.yml, .env.exampl
 
 **Screens per role** (`src/services/auth/access.ts` `canAccessRoute`): editors see every route; everyone else sees dashboard, availability, history, reports, published. The Firestore rules are what actually enforce access; `access.ts` only shapes the UI.
 
-**Known UI gaps.** History's Restore/Delete and Reports' payroll export are visible to viewers (rules block the writes). The Pending Approvals tab shows for `isManager || owner`, while the dashboard counts pending requests for any approver including editors. `staffRequestService.decideRequest` allows only owner or manager.
+**Known UI gaps.** History's Restore/Delete and Reports' payroll export are visible to viewers (rules block the writes). The Pending Approvals tab shows for `isManager || owner`, while the dashboard counts pending requests for any approver including editors. `staffRequestService.decideRequest` and the All requests tab allow every approver (`canApproveRequests`: owner, editor, manager), as `firestore.rules` does.
 
 ---
 
@@ -379,7 +379,7 @@ Reminders (PublishView) re-use the original ack token. Private links: `/#me?t=nr
 
 **Doctors** (`DoctorsView.tsx`): directory, specialties, weekly pattern editor, expand pattern into sessions over a date range, ad hoc sessions, cancel/restore. In the roster: `DoctorsScheduleSheet` changes one day or a weekday every week (`doctorScheduleService.saveDoctorShift` / `deleteDoctorShift`).
 
-**Availability** (`AvailabilityView.tsx`): 31 day master grid (editors), drag to record leave, quota badges, pin shift locks, public holidays as PH, leave CSV import; "My Availability & Leave Requests" (`NurseSelfServicePanel`); "Pending Approvals" (`ApprovalsQueuePanel`, `staffRequestService.decideRequest`; approving a day off creates an OFF lock).
+**Availability** (`AvailabilityView.tsx`): 31 day master grid (editors), drag to record leave, quota badges, pin shift locks, public holidays as PH, leave CSV import; "My Availability & Leave Requests" (`NurseSelfServicePanel`); "Pending Approvals" (`ApprovalsQueuePanel`, `staffRequestService.decideRequest`; approving a day off creates an OFF lock `lock-off-{nurseId}-{date}`); "All requests" (`AllRequestsPanel`, approvers): every day off and shift request whatever its decision, filters by status, type, nurse and date, and approve, decline, back to waiting (`reopenAvailabilityRequest`), change date/type/shift/note (`updateAvailabilityRequest`, the pin moves with an approved day off) and delete (`deleteAvailabilityRequest`, removes the pin). Removing the pin of an approved day off declines the request (the engine treats approved day off requests as days off even without a pin).
 
 **Settings** (`SettingsView.tsx` + `settings/*`): Clinic profile, Public holidays, Time periods; Rules (plain sentences, on/off, "Must"/"Try to"), Shifts; Leave types, Seniority, Nurse skills (NC and PHL built in), Specialties; Access & permissions (owner only), Email (mock mode, sender name, test send, log), Database & backup (owner only: counts, download backup, restore, delete all data with CLEAR typed).
 
@@ -447,8 +447,9 @@ Completed and on `main`, in order:
 7. Grid problem marks fix (day badges, nurse badges, switch).
 8. Doctor vs specialty preferences: shared ranked list fixes in the engine and the per nurse "which comes first" setting (commit `9c0b819`).
 9. Export: "Full report for analysis" JSON (`analysisExportService`), for the owner to hand a roster back to Claude.
-11. From the Oct 19 to Nov 18 2026 roster analysis: approved day off requests are hard days off without their pin (checker: WARN on a shift there); shared first choice reservation; pool hours count a shared nurse's hours once (so Mary keeps hours for Pediatrics instead of floating, and last resort days spread over the month); a partly covered doctor's own nurse is lengthened first.
 10. From the Sep 19 to Oct 18 2026 roster analysis: one Nurse Clinic a day and a 9-9 Nurse Clinic shift first; nurses not with a doctor are Float everywhere (`floatShift.ts`); last resort nurse for a doctor with nobody, reported as Check (`lastResort.ts`); shortages of a doctor's own nurses spread over the roster; the consecutive days rule renamed "Maximum consecutive shifts"; a doctor's nurse behind her hours gets a longer shift (9-7 to 9-9).
+11. From the Oct 19 to Nov 18 2026 roster analysis: approved day off requests are hard days off without their pin (checker: WARN on a shift there); shared first choice reservation; pool hours count a shared nurse's hours once (so Mary keeps hours for Pediatrics instead of floating, and last resort days spread over the month); a partly covered doctor's own nurse is lengthened first.
+12. Availability → **All requests** (`AllRequestsPanel.tsx`): every day off and shift request, decided or not, with approve, decline, back to waiting, change and delete; the approved day off pin follows (`staffRequestService.syncDayOffLock`). Unpinning an approved day off (roster or Availability) declines its request. The Rules tab renames an old "... = 6" consecutive shifts rule name on open.
 
 ---
 

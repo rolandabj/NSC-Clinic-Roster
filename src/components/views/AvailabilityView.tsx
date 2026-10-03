@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useId } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import {
   CalendarCheck2,
+  ListChecks,
   Lock,
   Unlock,
   Plus,
@@ -43,10 +44,11 @@ import {
   LockMode,
 } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
-import { countPendingApprovals } from '../../services/requests/staffRequestService';
-import { canEditClinicData } from '../../services/auth/access';
+import { countPendingApprovals, decideRequest } from '../../services/requests/staffRequestService';
+import { canApproveRequests, canEditClinicData } from '../../services/auth/access';
 import { authService } from '../../services/auth/authService';
 import { ApprovalsQueuePanel } from './ApprovalsQueuePanel';
+import { AllRequestsPanel } from './AllRequestsPanel';
 import { NurseSelfServicePanel } from './NurseSelfServicePanel';
 
 interface AvailabilityViewProps {
@@ -61,7 +63,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   const isManager = Boolean(currentUser?.isManager) || isMasterAdmin;
 
   const canEdit = canEditClinicData(currentUser);
-  const [activeTab, setActiveTab] = useState<'calendar' | 'self-service' | 'approvals'>(canEdit ? 'calendar' : 'self-service');
+  // Planners and managers see and manage every request, decided or not
+  const canManageRequests = canApproveRequests(currentUser);
+  const [activeTab, setActiveTab] = useState<'calendar' | 'self-service' | 'approvals' | 'requests'>(canEdit ? 'calendar' : 'self-service');
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
 
   const [nurses, setNurses] = useState<Nurse[]>([]);
@@ -492,6 +496,14 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
     try {
       await repo.remove('locks', activeLockToOverride.id);
+      // An approved day off stays a day off while its request is approved: unpinning declines it
+      if (activeLockToOverride.mode === 'OFF') {
+        const theirs = await repo.list('availabilityRequests', { field: 'nurseId', operator: '==', value: activeLockToOverride.nurseId });
+        const request = theirs.find((r) => !r.available && r.status === 'APPROVED' && r.date === activeLockToOverride.date);
+        if (request) {
+          await decideRequest(currentUser, 'AVAILABILITY', request.id, 'REJECTED', 'Declined when the pinned day off was removed.');
+        }
+      }
       // Write an AuditEvent for lock removal
       await repo.create('audit', {
         actor: context.currentUser?.name || 'Admin',
@@ -812,7 +824,26 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             )}
           </button>
         )}
+
+        {canManageRequests && (
+          <button
+            onClick={() => setActiveTab('requests')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
+              activeTab === 'requests'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+            }`}
+          >
+            <ListChecks className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>All requests</span>
+          </button>
+        )}
       </div>
+
+      {/* VIEW PANEL: EVERY REQUEST, DECIDED OR NOT */}
+      {activeTab === 'requests' && canManageRequests && (
+        <AllRequestsPanel currentUser={currentUser || undefined} nurses={nurses} dutyWindows={dutyWindows} onChanged={loadData} />
+      )}
 
       {/* VIEW PANEL 1: MANAGER APPROVALS QUEUE */}
       {activeTab === 'approvals' && isManager && (
@@ -1611,6 +1642,12 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               {activeLockToOverride.note && (
                 <p className="text-[10px] text-red-700 italic">
                   Note: "{activeLockToOverride.note}"
+                </p>
+              )}
+              {activeLockToOverride.mode === 'OFF' && activeLockToOverride.id.startsWith('lock-off-') && (
+                <p className="text-[11px] text-red-800">
+                  If this day off comes from an approved request, removing the pin also declines the request. You can approve it
+                  again in All requests.
                 </p>
               )}
             </div>

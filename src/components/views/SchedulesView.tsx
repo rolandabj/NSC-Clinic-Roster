@@ -66,6 +66,8 @@ import {
   AvailabilityRequest,
 } from '../../types';
 import { loadClinicSetup } from '../../services/engine/clinicSetupService';
+import { decideRequest } from '../../services/requests/staffRequestService';
+import { authService } from '../../services/auth/authService';
 import type { ClinicSetup } from '../../services/engine/clinicModel';
 import { SchedulingEngine } from '../../services/engine/SchedulingEngine';
 import { calculateWorkingHoursForDateRange } from '../../services/periods/workingHoursPeriodService';
@@ -1299,12 +1301,26 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     }
   };
 
+  /** The approved day off request a pinned day off comes from, if any. */
+  const approvedDayOffRequestFor = (lock: LockEntry | null) =>
+    lock && lock.mode === 'OFF'
+      ? availabilityRequests.find((r) => !r.available && r.status === 'APPROVED' && r.nurseId === lock.nurseId && r.date === lock.date)
+      : undefined;
+
   // --- UNPIN A DAY ---
   const handleExecuteLockOverride = async () => {
     if (!activeLockToOverride) return;
 
     try {
       const lock = activeLockToOverride;
+      // An approved day off stays a day off while its request is approved, so unpinning
+      // it declines the request (it can be approved again in Availability, All requests).
+      const request = approvedDayOffRequestFor(lock);
+      if (request) {
+        await decideRequest(authService.getCurrentUser(), 'AVAILABILITY', request.id, 'REJECTED', 'Declined when the pinned day off was removed from the roster.');
+        setAvailabilityRequests((prev) => prev.map((r) => (r.id === request.id ? { ...r, status: 'REJECTED' } : r)));
+        availabilityRequestsRef.current = availabilityRequestsRef.current.map((r) => (r.id === request.id ? { ...r, status: 'REJECTED' } : r));
+      }
       // The pinned shift becomes a normal hand edit, so later fills may change it.
       const unpinned = assignments.map((a) =>
         a.nurseId === lock.nurseId && a.date === lock.date && (a.locked || a.source === 'LOCK')
@@ -2233,6 +2249,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               {nurseName(activeLockToOverride.nurseId)} on {formatDate(activeLockToOverride.date)} is pinned, so filling the
               roster never changes it. If you unpin it, the shift stays for now as a hand change, and you can then edit it.
             </p>
+            {approvedDayOffRequestFor(activeLockToOverride) && (
+              <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed">
+                This day off comes from {nurseName(activeLockToOverride.nurseId)}&apos;s approved request. Unpinning also declines the
+                request, so she can be given a shift that day. You can approve it again in Availability, All requests.
+              </p>
+            )}
             <div className="pt-2 flex items-center justify-end gap-2">
               <button
                 type="button"

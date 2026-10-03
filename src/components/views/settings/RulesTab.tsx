@@ -325,6 +325,15 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
   const [isSyncing, setIsSyncing] = useState(false);
   const [showOther, setShowOther] = useState(false);
 
+  // An old consecutive shifts rule name with a number in it ("... = 6") is renamed once,
+  // so it never contradicts the number set here.
+  useEffect(() => {
+    const stale = rules.find((r) => r.templateKey === 'MAX_CONSECUTIVE_DAYS' && r.name !== MAX_CONSECUTIVE_SHIFTS_NAME);
+    if (!stale) return;
+    setRules((prev) => prev.map((r) => (r.id === stale.id ? { ...r, name: MAX_CONSECUTIVE_SHIFTS_NAME } : r)));
+    repo.update('rules', stale.id, { name: MAX_CONSECUTIVE_SHIFTS_NAME }).catch((err) => console.warn('Could not rename the rule:', err));
+  }, [rules]);
+
   const saveRule = async (rule: Rule, baseUpdates: Partial<Rule>, message: string) => {
     // The consecutive shifts rule keeps a name without a number, so it never contradicts its value.
     const updates =
