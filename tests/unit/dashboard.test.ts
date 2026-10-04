@@ -49,7 +49,7 @@ test('the next roster is asked for only when the last one ends within three week
   assert.equal(nextRosterNeeded([], '2026-10-15'), null);
 });
 
-test('the next roster never starts in the past, and archived rosters are ignored', () => {
+test('the next roster never starts in the past or on dates retained by archived rosters', () => {
   assert.deepEqual(nextRosterNeeded([{ startDate: '2026-06-01', endDate: '2026-06-30' }], '2026-10-15'), { from: '2026-10-15' });
   assert.deepEqual(
     nextRosterNeeded(
@@ -59,7 +59,7 @@ test('the next roster never starts in the past, and archived rosters are ignored
       ],
       '2026-10-15'
     ),
-    { from: '2026-11-01' }
+    null
   );
 });
 

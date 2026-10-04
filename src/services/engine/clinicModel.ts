@@ -20,6 +20,8 @@
  *     for consecutive days, rest and late duty rules.
  */
 
+import type { HoursHistory } from '../hours/hoursBalance';
+
 import { Assignment, AvailabilityRequest, ClinicalRole, DoctorSession, DutyWindow, Nurse } from '../../types';
 
 /** One nurse's totals over the earlier rosters of this calendar year. */
@@ -40,6 +42,7 @@ export interface YearToDateCounts {
 export type YearToDate = Record<string, YearToDateCounts>;
 
 export interface ClinicSetup {
+  hoursHistory?: HoursHistory;
   /** 'HH:mm', default '09:00' */
   openTime?: string;
   /** 'HH:mm', default '21:00' */

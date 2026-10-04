@@ -164,7 +164,7 @@ export const DeleteScheduleModal: React.FC<DeleteScheduleModalProps> = ({
             <div className="leading-snug space-y-1">
               <strong className="font-bold">Everything in this roster is deleted:</strong>
               <p>
-                All its shifts, saved versions, share links and the record of emails sent. It also disappears from the roster list and from all reports.
+                All its shifts, saved versions, share links and the record of emails sent. It also disappears from the roster list and from all reports. Later rosters will recalculate their hours balances using the remaining history.
               </p>
             </div>
           </div>

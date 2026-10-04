@@ -6,6 +6,8 @@
  * and full backup export and import.
  */
 
+import { mergeScheduleRanges } from '../schedule/scheduleRanges';
+
 import { IRepository } from '../repository/IRepository';
 import { SEED_WORKING_HOURS_PERIODS } from './seedData';
 import { CollectionName } from '../../types';
@@ -339,6 +341,11 @@ export function checkBackup(jsonString: string): BackupCheck {
     counts[name] = records.length;
     total += records.length;
   }
+  if (Array.isArray(collections.schedules)) {
+    try { mergeScheduleRanges({}, collections.schedules); }
+    catch (err: any) { return fail(`The backup contains invalid or overlapping rosters: ${err.message}`); }
+    if (collections.schedules.length >= 450) return fail('Restore fewer than 450 rosters at a time.');
+  }
   if (total === 0) return fail('The backup is empty, so restoring it would only delete data.');
 
   return {
@@ -372,7 +379,7 @@ export async function importFullDatabaseBackup(
     const records = collections[col];
     if (!Array.isArray(records) || records.length === 0) continue;
     try {
-      const keep = col === 'systemMetadata' ? records.filter((r) => r.id !== 'initialization_state') : records;
+      const keep = col === 'systemMetadata' ? records.filter((r) => r.id !== 'initialization_state' && r.id !== 'scheduleCalendar') : records;
       await repo.bulkUpsert(col, keep as any);
       counts[col] = keep.length;
     } catch (e) {

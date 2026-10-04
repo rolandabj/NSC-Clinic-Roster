@@ -10,6 +10,8 @@
  * Hours follow the shared rule (summarizeNurseHours).
  */
 
+import { countHoursInRange, hoursCheckpoints, resolveNurseHoursBalance, type HoursHistory } from '../hours/hoursBalance';
+
 import {
   Assignment,
   AvailabilityRequest,
@@ -42,6 +44,7 @@ export interface ExplainDayInput {
   rules: Rule[];
   seniorityLevels?: SeniorityLevel[];
   workingHoursPeriods?: WorkingHoursPeriod[];
+  hoursHistory?: HoursHistory;
   leaveTypes?: LeaveType[];
   /** Not needed for the checks today; accepted so callers can pass the whole roster. */
   sessions?: DoctorSession[];
@@ -216,7 +219,7 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
   const isSenior = !!nurse && seniorIds.has(nurse.seniorityLevelId);
 
   const summary = nurse
-    ? summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, input.workingHoursPeriods || [])
+    ? summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, input.workingHoursPeriods || [], undefined, input.hoursHistory)
     : { totalHours: 0, targetHours: 0 };
   const worked = summary.totalHours;
   const goal = summary.targetHours;
@@ -278,7 +281,7 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
   ]);
   const h7Blocks = (h7Rule ? h7Rule.enabled !== false : true) && h7Rule?.severity !== 'SOFT';
   const tolerance = (h7Rule?.value ? h7Rule.value : 105) / 100;
-  const maxAllowed = h7Blocks && goal > 0 ? Math.max(goal, Math.min(goal + 8, Math.round(goal * tolerance))) : null;
+  const maxAllowed = h7Blocks ? Math.max(goal, Math.min(goal + 8, Math.round(goal * tolerance))) : null;
 
   const possible: PossibleShift[] = [];
   const blocked: BlockedShift[] = [];
@@ -320,6 +323,19 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
         reasons: [`Would go over the most hours allowed (${hoursAfter} h; the limit is ${maxAllowed} h).`],
       });
       continue;
+    }
+    if (h7Blocks && input.hoursHistory && nurse) {
+      const overBoundary = hoursCheckpoints(schedule, input.workingHoursPeriods || []).find(end => {
+        if (date > end || end === schedule.endDate) return false;
+        const budget = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, input.workingHoursPeriods, input.hoursHistory, end).targetHours;
+        const used = countHoursInRange(nurseId, schedule.startDate, end, assignments, dutyWindows, leaveEntries, leaveTypes).totalHours;
+        const ceiling = Math.max(budget, Math.min(budget + 8, Math.round(budget * tolerance)));
+        return used + calculateDutyDurationHours(duty) > ceiling;
+      });
+      if (overBoundary) {
+        blocked.push({ dutyWindowId: duty.id, label: duty.acronym, reasons: [`Would exceed the hours available through ${overBoundary}.`] });
+        continue;
+      }
     }
     const soft = checkAssignment({ ...ctx, rules: softAsHard }, cell);
     for (const r of soft) softNotes.push(`Allowed, but not ideal on ${duty.acronym}: ${plainReason(r, name, date, wording)}`);

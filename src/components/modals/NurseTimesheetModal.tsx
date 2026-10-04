@@ -200,7 +200,13 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
           </div>
         </div>
 
-        {/* Top KPI Cards */}
+        <div className="px-6 py-3 text-xs text-slate-600 bg-indigo-50">
+        Tracking from {accounting.balance.trackingStartDate}. Base goal: {fmtHours(accounting.balance.baseTargetHours)}.
+        {' '}Carried into this roster: {fmtHours(Math.abs(accounting.balance.carriedHours))} {accounting.balance.carriedHours >= 0 ? 'owed' : 'ahead'}.
+        {' '}Earlier credited hours: {fmtHours(accounting.balance.previousCreditedHours)}.
+        {' '}Total target through {schedule.endDate}: {fmtHours(accounting.balance.cumulativeTargetHours)}.
+      </div>
+      {/* Top KPI Cards */}
         <div className="p-6 bg-slate-50/50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-6 gap-3">
           <div className="bg-white p-3 rounded border border-slate-200 shadow-2xs">
             <span className="text-[10px] font-medium text-slate-500 block">Hours goal</span>
@@ -243,7 +249,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
           </div>
 
           <div className="bg-white p-3 rounded border border-slate-200 shadow-2xs">
-            <span className="text-[10px] font-medium text-slate-500 block">Difference from goal</span>
+            <span className="text-[10px] font-medium text-slate-500 block">Closing balance</span>
             <span
               className={`text-lg font-bold font-mono mt-0.5 block ${
                 varianceHours > 0

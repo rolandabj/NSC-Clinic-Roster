@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-04, after the Schedule Deletion share links permission fix (section 16, item 19).
+Last updated: 2026-10-04, after continuous hours accounting and roster overlap protection (section 16, item 20).
 
 ---
 
@@ -21,7 +21,7 @@ Last updated: 2026-10-04, after the Schedule Deletion share links permission fix
 | `npm install --legacy-peer-deps` | Install (the flag is needed for esbuild/vite peer conflicts) |
 | `npm run dev` | Express + Vite dev server on port 3000 |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 168 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 187 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `dist/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -98,7 +98,7 @@ src/
                  clinicSetupService.ts, explainCell.ts, leaveStatus.ts, nurseClinicUtils.ts,
                  preferenceOrder.ts, types.ts
     validation/  ScheduleValidator.ts
-    hours/       hoursPolicy.ts         reports/ hoursAccounting.ts
+    hours/       hoursPolicy.ts, hoursBalance.ts         reports/ hoursAccounting.ts
     periods/     workingHoursPeriodService.ts
     fairness/    yearToDate.ts, yearSeed.ts
     schedule/    doctorScheduleService.ts, newRosterDates.ts, openSchedule.ts, scheduleDeletionService.ts
@@ -220,7 +220,7 @@ From `src/services/engine/clinicModel.ts`:
 - Every opening hour needs a **free nurse**: not with a doctor at that hour and qualified for blood collection. The free nurse job is called **Nurse Clinic (NC)**. `canBeFreeNurse` needs the NC capability (if an NC role exists) and the PHL capability (if a PHL role exists).
 - At least **one senior nurse** works each day.
 - On a **public holiday** doctor sessions are ignored and one nurse covers the opening hours.
-- The previous roster's last 31 days count for the look back rules (days in a row, rest, late runs).
+- The all earlier rosters' shifts in the last 31 days and the continuous hours history count for the look back rules (days in a row, rest, late runs).
 - **Exclusive Nurse Clinic nurse** (`isExclusiveNurseClinic`): not a clinic nurse, no doctor or specialty preferences, only the NC capability. Never goes to a doctor or specialty. NursesView strips doctor/specialty preferences from such a nurse on save.
 - **Strict allocation (H8)**: a nurse with any doctor or specialty in her list works only with those doctors or with doctors of those specialties. A nurse with none works with anyone.
 
@@ -273,7 +273,7 @@ Modes (`engine/types.ts`): GENERATE_ALL (rebuild; keeps hand edits when `keepMan
 2. Rules are read (NC quota, plus one, H1, H7 tolerance, S1, H2, H3).
 3. Locks become LOCK assignments; OFF locks are hard days off. An **approved day off request is a hard day off too**, even after its pin was removed (`hasDayOffLock` checks `approvedDayOff`); to let her work, the request is declined or deleted.
 4. Requests: approved preferred shift +30, pending +15; pending time off −60 (`REQUEST_WEIGHTS`). Rejected requests are ignored.
-5. Hours: `contractTarget = round(fullTime × contractPercent/100)`, `dutyTarget = contractTarget − leave hours`, `maxAllowed = max(dutyTarget, min(dutyTarget + 8, round(dutyTarget × tolerance)))`. `hoursBehindPace` drives fairness through the period.
+5. Hours: `contractTarget = max(0, cumulative target through roster end − earlier credited hours)`, `dutyTarget = contractTarget − leave hours`, `maxAllowed = max(dutyTarget, min(dutyTarget + 8, round(dutyTarget × tolerance)))`. `hoursBehindPace` drives fairness through the roster. Cumulative ceilings are checked at every dedicated period boundary so a later period cannot fund earlier shifts. The target includes shortages and excess hours from earlier saved drafts, published and archived rosters.
 6. `fitsHardRules(nurse, date, duty, hours)`: one shift a day, leave and day off locks, days in a row (HARD), rest (HARD), hours ceiling (HARD), late run (HARD).
 7. Day needs and **spare hours**: hours that later days will need are kept back (with a margin of 10% of the next 7 days' need, so extra help is spread evenly over the roster instead of piling up at the end; the raw check used for reserves still uses 10% of all later need); only the surplus may go on extra shifts, shared out by how busy each day is. Separate budgets for blood collection nurses and seniors.
 8. **First choice reservation**: for each nurse, hours are kept for later sessions of her rank 1 doctor or rank 1 specialty, each session's hours shared by the nurses whose first choice it is (four nurses with Primary Care first keep a quarter each).
@@ -308,7 +308,7 @@ Ties rotate between nurses by an FNV hash of date and nurse id, so the result is
 
 - `assignmentChecks.ts` `checkAssignment(ctx, cell)`: hard rule reasons for hand moves, swaps and explanations (H8 and H7 not checked here).
 - `explainCell.ts`: `explainNurseDay` (why a nurse is off, which shifts she could take, hours after) and `explainDay` (who could cover a day). Used by the grid popup and "Who could cover?".
-- `clinicSetupService.ts` `loadClinicSetup(repo, schedule, { withYearToDate })`: opening hours, holidays, previous roster's last 31 days, year to date totals, requests.
+- `clinicSetupService.ts` `loadClinicSetup(repo, schedule, { withYearToDate })`: opening hours, holidays, all earlier rosters' shifts in the last 31 days and the continuous hours history, year to date totals, requests.
 - `leaveStatus.ts` `isPendingLeave`.
 
 ---
@@ -325,10 +325,15 @@ Whole day problems (marked on the date heading in the grid): `cov-gap-`, `h1-sen
 
 ## 10. Hours
 
-- **Full time target** (`hoursPolicy.resolveFullTimeTarget`): a working hours period covering the roster (prorated per day if partial), else `schedule.hoursTargetFullTime`, else 40 hours a week prorated.
+- **Base full time target** (`hoursPolicy.resolveFullTimeTarget`): a working hours period covering the roster (prorated per day if partial), else `schedule.hoursTargetFullTime`, else 40 hours a week prorated.
+- **Continuous balance** (`hoursBalance.resolveNurseHoursBalance`): start at zero on the first day of the earliest saved roster. Count current assignments from drafts, published and archived rosters once, together with approved leave. Versions and backups do not add hours. Every calendar day accrues its dedicated period target, including dates with no roster. Unconfigured gaps accrue 40 hours per week. A roster with no configured period uses its saved target spread over its dates.
+- **Carry and rounding**: calculate exact daily fractions, apply the nurse's contract share, then round cumulative target endpoints. The current base target is the difference between endpoints, avoiding lost hours when splitting a period. Earlier credited hours are subtracted from the cumulative target to obtain this roster's adjusted goal, floored at zero. Surplus beyond the whole roster remains in the closing balance and carries onward. A missing contract share defaults to 100%.
+- **Example**: October 19 to November 18 is 230h. October 19 to November 1 has a base target of 104h. If the first roster credits 120h, November 2 to 18 has a base of 126h, 16h already ahead, and an adjusted goal of 110h. If those remaining dates have no roster and the next period is 210h, the next goal is 320h, including the missing 110h.
+- **One balance across consumers**: the grid, Hours sheet, Reports, generator, validator, cover suggestions, fairness, personal emails, Excel, payroll CSV, nurse packets and analysis JSON share the balance. Timesheets show the tracking start, earlier credits and cumulative target. Closing balance is positive for hours ahead and negative for hours owed. The PDF roster totals remain the shifts and leave printed for that roster.
+- **Live changes and failed reads**: changes to earlier saved assignments, schedules or leave refresh balances. Filling and publishing require the saved history to load. Publishing checks it again before saving a published version. Existing overlapping rosters are listed as blocking problems; Reports and exports do not present a balance until overlaps are resolved. Existing records are never automatically deleted to resolve a conflict.
 - **Working hours periods**: clinic cycles from the 19th to the 18th, e.g. Dec 19 to Jan 18 = 210 h. Seeded for 2025–26 by "Load 2025–2026 Baseline".
 - **Leave credit per day**: 0 when the leave type does not count; else the type's creditedHours; else entry hoursCredited ÷ days; else 8. `dayHours[date]` overrides one day. Only approved leave counts.
-- **One counting rule** everywhere (`hoursAccounting.summarizeNurseHours`): a leave day counts its leave, not a shift on it; one shift per day; target = full time × contract share.
+- **One counting rule** everywhere (`hoursAccounting.summarizeNurseHours`): a leave day counts its leave, not a shift on it; one shift per day; base target = full time × contract share; the adjusted goal also includes carried hours.
 - Report status bands: under 75% critical, under 90% under, over 110% over, over 120% critical.
 
 **Fairness across the year** (`fairness/yearToDate.ts`, `yearSeed.ts`): earlier published rosters this year give each nurse counts of weekends, holidays, late shifts and Nurse Clinic shifts. These become small head start seeds (capped at ±3) so the engine evens things out over the year.
@@ -338,6 +343,7 @@ Whole day problems (marked on the date heading in the grid): `cov-gap-`, `h1-sen
 ## 11. Saving, live updates, versions
 
 - **Repository**: `getRepository()` → `FirestoreRepository` (only mode). Methods: list (with `==`/`!=` filter), get, create, update (merge), remove, bulkUpsert (chunks of 450, `replace` option), bulkRemove, clearCollection, subscribe. Writes check `quotaTracker` first (Firestore daily quota; resets midnight Pacific; a banner shows when exceeded). A failed read throws instead of returning `[]`.
+- **Roster date reservations**: `FirestoreRepository.writeSchedules` serializes every roster create, update, import and delete with `systemMetadata/scheduleCalendar` in a Firestore transaction. The index is bootstrapped from existing rosters on the first write. All statuses reserve their dates. Inclusive date overlaps are refused, including simultaneous planner saves. A date change checks the new range; metadata updates can preserve an existing record while old overlaps are resolved. Imports of fewer than 450 rosters are atomic; invalid or overlapping backup dates are rejected before clearing existing data. The derived calendar index is skipped during metadata restores and cannot be edited through the repository. These are application transaction guards; direct console writes or older clients bypassing this repository must not be used to change roster dates after rollout.
 - **Live cache** (`liveCollectionCache.ts`): the first unfiltered list starts an `onSnapshot` listener; later reads come from memory. audit and emailLog are never cached. Idle listeners stop after 5 minutes.
 - **Save queue** (`collectionSyncer.ts` `CollectionSyncer`): the roster editor saves only what changed (assignments, locks, leave), one save at a time, retries every 30 s, never deletes records it did not know about. There is no Save button; the toolbar shows "Saving…", "All changes saved ✓" or an error with "Retry now".
 - **Edits** all go through `applyEdit` in `SchedulesView.tsx`: one undo step (up to 50; Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z), persist, validate after 300 ms.
@@ -353,7 +359,7 @@ Whole day problems (marked on the date heading in the grid): `cov-gap-`, `h1-sen
 
 `PublishModal.tsx` steps: VALIDATION (blocked while any "must fix") → DETAILS (whole roster or changes only, recipients, note, include link) → PREVIEW → SENDING → DONE.
 
-1. Saves one published version per run (retries reuse it), sets the roster PUBLISHED.
+1. Reloads hours history and validates again, then saves one published version per run (retries reuse it), sets the roster PUBLISHED.
 2. Points all share links at the new version and rebuilds their public snapshots (`publicRosterService.syncPublicRoster`).
 3. Makes sure every nurse on the roster has a private link (`nurseRosterService.ensureNurseLink`) and rewrites their private pages (`syncNurseRosters`; covers rosters ending in the last 31 days, published versions only).
 4. Writes an emailLog entry before sending, then emails each nurse (`RosterPublishService.generatePersonalEmailHtml` + `dispatchEmail` → `POST /api/email/test`), creating `acknowledgments/{ackToken}` per email. All user text goes through `escapeHtml`, colours through `safeColor`.
@@ -423,7 +429,7 @@ The server verifies Firebase ID tokens itself (jose, Google JWKS) and reads `use
 
 ## 15. Tests
 
-`tests/unit/` (Node test runner, `node --import tsx --test`): analysisExport, assignmentChecks, backupCheck, changeAlerts, clinicModel (main engine + validator scenarios), csv, dashboard, explainCell, generatorRequests, hoursAccounting, hoursPolicy, hoursRules, liveCollectionCache, liveUpdates, newRosterDates, nurseRoster, preferenceFocus, requestFindings, rosterSaving, ruleChecker, rules, schedulingEngine, yearFairness.
+`tests/unit/` (Node test runner, `node --import tsx --test`): analysisExport, assignmentChecks, backupCheck, changeAlerts, clinicModel (main engine + validator scenarios), continuousHours, csv, dashboard, explainCell, generatorRequests, hoursAccounting, hoursPolicy, hoursRules, liveCollectionCache, liveUpdates, newRosterDates, nurseRoster, preferenceFocus, requestFindings, rosterSaving, ruleChecker, rules, schedulingEngine, yearFairness.
 
 `fixtures.ts` helpers: `DAY_DUTY` (09:00 to 17:00), `SENIOR`, `makeNurse(id, overrides)`, `makeSchedule(overrides)` (week of 2026-10-05, 40 h), `ANNUAL_LEAVE`, `UNPAID_LEAVE`, `makeLeave`, `makeLock`, `hoursOnlyRules()` (turns off the Nurse Clinic and plus one rules).
 
@@ -441,13 +447,15 @@ const result = await SchedulingEngine.generate(
 
 `tests/unit/versionCompareModal.test.ts`: renders the comparison dialog with no roster, both closed and asked to open, and verifies that a loaded roster still shows the saved version versus draft changes. The missing roster cases reproduced the History startup crash before the fix.
 
+**Roster transaction tests**: `tests/integration/scheduleTransactions.test.ts` uses the real Firestore repository and a local demo emulator. See `tests/integration/README.md` for the command. It checks simultaneous planners, legacy index bootstrap, date edits, publishing metadata, atomic imports, deletion and stale index restores. No Firestore rules change is needed for these application transactions.
+
 **Browser checks**: there is no Firebase emulator UI setup in the repo. In earlier sessions an in memory test page was built in the session scratchpad (a copy of the app wired to fake data), copied into a temporary `_preview/` folder, run with `npx vite --port 5179`, and driven with Playwright scripts (Chromium is preinstalled; `NODE_PATH=$(npm root -g)`). Delete `_preview/` before committing. A new session needs to rebuild such a page if it wants browser checks.
 
 ---
 
 ## 16. History of work (for context)
 
-Completed and on `main`, in order:
+Earlier entries are on `main`. The latest entry states whether it has been published.
 1. Security: Firestore rules with role lookup, Google sign in only, server verifies Firebase tokens, locked down endpoints, escaped email HTML, strong tokens, local JSON database removed.
 2. P1: self service leave and approvals, public share links and read receipts without sign in, reminders and .ics, Firestore only repository with chunked batches and changed cell sync, role based navigation.
 3. P2: one hours calculation, rule settings honoured, engine edge cases, weekend definition, fairness and swap checks, fake features removed.
@@ -469,11 +477,13 @@ Completed and on `main`, in order:
 
 18. Version History startup: the closed comparison dialog accessed `schedule.id` before History loaded its roster and caused the whole screen to show "This screen couldn't be opened". The dialog now accepts an absent roster, safely checks its id, and waits for a roster before opening or moving focus. Three regression tests cover the missing roster states and normal comparison. Type check, all 166 unit tests and production build pass. Chromium checks with an in memory repository pass for delayed loading, empty history, version selection, all four studio tabs, comparison and popout dialogs, and the restore confirmation dialog. The owner approved pushing the fix to `main` on 2026-10-04.
 19. Schedule deletion and share links: deleting a schedule failed with "Missing or insufficient permissions" when purging share links. The Firestore rule for `publicRosters` had `|| isEditor()` nested inside `resource.data.revoked != true && (...)`, denying editors access once a snapshot was marked revoked and causing read-after-write to fail during deletion. The rule now evaluates `isEditor() ||` first. In addition, `publicRosterService.removePublicRoster` safely handles read-after-write errors before removal, `FirestoreRepository.update` falls back safely when read-after-write is restricted, and `scheduleDeletionService` ensures public snapshot removal errors do not prevent deleting share link records and completing schedule deletion. Two unit tests and rules tests cover these scenarios. All 168 unit tests pass and rules have been deployed.
+20. Continuous hours and roster dates: implemented in four phases after the owner confirmed that drafts, published and archived records count, tracking begins at the earliest saved roster, gaps accrue target, and both shortages and excess carry into later periods. Added the shared balance, period boundary checks, transactional date reservations, live history refresh, report and export breakdowns, and fresh publishing validation. Includes 19 new unit tests, bringing the total to 187. The real Firestore emulator checks simultaneous saves and imports; Chromium checks the roster workspace, Hours, timesheet, live Reports, overlap blocking, valid adjacent creation and historical exports. Type check and production build pass. Prepared on the working branch for review before any push to main.
+
 ---
 
 ## 17. Known quirks and ideas for later
 
-- A nurse with no `contractPercent` gives NaN in the engine and validator (reports treat it as 100%).
+- Historical hours use the current nurse contract share, shift durations, leave settings and working hours periods. The app does not store dated employment or contract changes, attendance records, or a separate opening balance per nurse. Editing those settings recalculates history. Deleting the earliest saved roster also moves the tracking start to the earliest remaining roster.
 - SOFT rules in the engine: H2 SOFT is only a −60 score; H3 SOFT is not checked; S1 SOFT gives −150/−50; H7 SOFT removes the ceiling (over goal penalties still apply). The validator reports SOFT breaks as "Check".
 - `dayNeedHours` and the first choice reservation use the raw sessions list, not `doctorSessionsOn`.
 - The hours report counts late shifts at a fixed 21:00, while the engine uses the rule threshold.

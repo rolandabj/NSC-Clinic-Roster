@@ -1,3 +1,4 @@
+import type { HoursHistory } from '../../services/hours/hoursBalance';
 import { isWeekendDay } from '../../utils/weekend';
 import { leaveCreditOnDate } from '../../services/hours/hoursPolicy';
 import React, { useState, useEffect, useRef, useId, useMemo } from 'react';
@@ -72,6 +73,7 @@ import { describeRequest, explainNurseDay, isPendingLeave, pendingLeaveOn, reque
 interface WorkbookGridProps {
   schedule: Schedule;
   workingHoursPeriods?: WorkingHoursPeriod[];
+  hoursHistory?: HoursHistory;
   assignments: Assignment[];
   nurses: Nurse[];
   doctors: Doctor[];
@@ -155,6 +157,7 @@ const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   workingHoursPeriods = [],
+  hoursHistory,
   schedule,
   assignments,
   nurses,
@@ -342,10 +345,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   const hoursByNurse = useMemo(() => {
     const map = new Map<string, NurseHoursSummary>();
     for (const n of nurses) {
-      map.set(n.id, summarizeNurseHours(n, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods));
+      map.set(n.id, summarizeNurseHours(n, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods, undefined, hoursHistory));
     }
     return map;
-  }, [nurses, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods]);
+  }, [nurses, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods, hoursHistory]);
 
   const getNurseHoursProgress = (nurse: Nurse) => {
     const h = hoursByNurse.get(nurse.id)!;
@@ -364,11 +367,11 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
         summarizeNurseHours(n, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods, {
           start: blockStart,
           end: blockEnd,
-        })
+        }, hoursHistory)
       );
     }
     return map;
-  }, [nurses, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods, blockStart, blockEnd]);
+  }, [nurses, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods, hoursHistory, blockStart, blockEnd]);
 
   // Per cell lookups, keyed `${nurseId}_${date}`, so each cell does not scan every list.
   const rosterStart = schedule.startDate;
@@ -2889,6 +2892,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             sessions,
             doctors,
             priorAssignments,
+            hoursHistory,
             availabilityRequests,
           });
           // Requests and leave waiting for approval are shown in their own line at the top.

@@ -16,6 +16,8 @@
  *    (a day off or a shift she asked for) or has a shift on leave waiting for approval.
  */
 
+import { countHoursInRange, hoursCheckpoints, hoursHistoryOverlaps, resolveNurseHoursBalance } from '../hours/hoursBalance';
+
 import { isLastResortShift } from '../engine/lastResort';
 import { summarizeNurseHours } from '../reports/hoursAccounting';
 import {
@@ -37,7 +39,7 @@ import {
 } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../engine/nurseClinicUtils';
-import { resolveFullTimeTarget, leaveCreditInRange } from '../hours/hoursPolicy';
+import { leaveCreditInRange } from '../hours/hoursPolicy';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
 import { resolveRule, LATE_DUTY_RULE_WORDS } from '../engine/SchedulingEngine';
 import { pendingLeaveOn, requestOn } from '../engine/explainCell';
@@ -116,6 +118,12 @@ export class ScheduleValidator {
     availabilityRequests: AvailabilityRequest[] = []
   ): ValidationReport {
     const findings: ValidationFinding[] = [];
+    const rosterOverlaps = hoursHistoryOverlaps(schedule, clinicSetup?.hoursHistory);
+    for (const overlap of rosterOverlaps) findings.push({
+      id: `schedule-overlap-${overlap.first.id}-${overlap.second.id}`, category: 'RULE_VIOLATION', severity: 'ERROR',
+      message: `"${overlap.first.name}" overlaps "${overlap.second.name}". Resolve these rosters before hours can be balanced or this roster published.`,
+      affectedNurseIds: [], cellRefs: [],
+    });
     const clinic = resolveClinicSetup(clinicSetup);
     const openHours = openingHourSlots(clinic);
     const phlRole = bloodCollectionRole(roles);
@@ -856,11 +864,20 @@ export class ScheduleValidator {
       // and a day with two shifts counts one, as in the Hours tab and the emails.
       totalHours = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, workingHoursPeriods).totalHours;
 
-      // Full time target hours (shared rule, same as the engine and reports)
-      const effectiveFullTimeTarget = resolveFullTimeTarget(schedule, workingHoursPeriods).hours;
-
       // CATEGORY 4: HOURS IMBALANCE CHECKS & RULE H7 (Maximum Working Hours Limit)
-      const target = Math.round(effectiveFullTimeTarget * (nurse.contractPercent / 100));
+      const target = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup?.hoursHistory).targetHours;
+      if (clinicSetup?.hoursHistory && rosterOverlaps.length === 0 && h7Enabled) {
+        for (const end of hoursCheckpoints(schedule, workingHoursPeriods).filter(d => d < schedule.endDate)) {
+          const budget = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup.hoursHistory, end).targetHours;
+          const credited = countHoursInRange(nurse.id, schedule.startDate, end, assignments, dutyWindows, leaveEntries, leaveTypes).totalHours;
+          const ceiling = Math.max(budget, Math.min(budget + 8, Math.round(budget * h7TolerancePct)));
+          if (credited > ceiling) findings.push({
+            id: `h7-period-${nurse.id}-${end}`, category: 'RULE_VIOLATION', severity: h7Severity,
+            message: `${nurse.fullName}: ${Math.round(credited * 10) / 10} h by ${end}, above the ${ceiling} h limit after carried hours.`,
+            affectedNurseIds: [nurse.id], cellRefs: [],
+          });
+        }
+      }
       const maxAllowed = Math.max(target, Math.min(target + 8, Math.round(target * h7TolerancePct)));
       const paceRatio = target > 0 ? totalHours / target : 1;
       const h = (n: number) => Math.round(n * 10) / 10;

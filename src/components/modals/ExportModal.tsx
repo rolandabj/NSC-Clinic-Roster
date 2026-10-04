@@ -6,6 +6,10 @@
  * CSV files, a printed page for each nurse, and a full JSON file for analysis.
  */
 
+import { hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
+import { loadClinicSetup } from '../../services/engine/clinicSetupService';
+import { getRepository } from '../../services/repository';
+
 import { resolveFullTimeTarget } from '../../services/hours/hoursPolicy';
 import React, { useEffect, useId, useState } from 'react';
 import {
@@ -112,13 +116,29 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   versionNumber = schedule.activeVersionNumber || 1,
   isOpen,
   onClose,
-  workingHoursPeriods = [],
+  workingHoursPeriods: providedPeriods = [],
   holidayDates = [],
   locks = [],
   availabilityRequests = [],
-  clinicSetup,
+  clinicSetup: providedClinicSetup,
   timezone,
 }) => {
+  const [loadedClinicSetup, setLoadedClinicSetup] = useState<ClinicSetup>();
+  const [loadedPeriods, setLoadedPeriods] = useState<WorkingHoursPeriod[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const clinicSetup = providedClinicSetup || loadedClinicSetup;
+  const workingHoursPeriods = providedPeriods.length ? providedPeriods : loadedPeriods;
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setLoadedClinicSetup(undefined);
+    setHistoryError(null);
+    const repo = getRepository();
+    Promise.all([loadClinicSetup(repo, schedule, { withYearToDate: false }), repo.list('workingHoursPeriods')])
+      .then(([setup, periods]) => { if (!cancelled) { setLoadedClinicSetup(setup); setLoadedPeriods(periods); } })
+      .catch(() => { if (!cancelled) setHistoryError('The saved hours history could not be loaded. Close this dialog and try again.'); });
+    return () => { cancelled = true; };
+  }, [isOpen, schedule.id]);
   const [activeTab, setActiveTab] = useState<ExportTab>('print_roster');
   const [pdfSplit, setPdfSplit] = useState(false);
   const [pdfScope, setPdfScope] = useState<'ALL' | 'ACTIVE_BLOCK'>('ALL');
@@ -141,6 +161,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   }, [isOpen]);
 
   if (!isOpen) return null;
+  const overlap = hoursHistoryOverlaps(schedule, clinicSetup?.hoursHistory)[0];
+  if (historyError || !clinicSetup?.hoursHistory || overlap) return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Export roster" className="rounded bg-white p-6 max-w-lg">
+        <p role="status">{historyError || (overlap ? `Resolve the overlap between "${overlap.first.name}" and "${overlap.second.name}" before exporting hours.` : 'Loading saved hours history…')}</p>
+        <button type="button" onClick={onClose} className="mt-4 rounded border px-3 py-2">Close</button>
+      </div>
+    </div>
+  );
 
   const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
   const nurseMap = new Map(nurses.map((n) => [n.id, n]));
@@ -158,6 +187,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     try {
       await exportRosterToExcel({
       workingHoursPeriods,
+      hoursHistory: clinicSetup?.hoursHistory,
       clinicName,
       schedule,
       assignments,
@@ -307,7 +337,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       roles,
       specialties,
       [],
-      workingHoursPeriods
+      workingHoursPeriods,
+      clinicSetup?.hoursHistory
     )
   );
 
@@ -737,7 +768,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="text-right font-mono text-[10px]">
                 <p className="font-bold">VERSION {versionNumber}</p>
                 <p className="text-slate-600">Printed: {new Date().toLocaleString()}</p>
-                <p className="text-slate-600">Full time goal: {resolveFullTimeTarget(schedule, workingHoursPeriods).hours}h</p>
+                <p className="text-slate-600">Base full time goal: {resolveFullTimeTarget(schedule, workingHoursPeriods).hours}h</p>
               </div>
             </div>
 

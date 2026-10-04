@@ -5,6 +5,8 @@
  * Hours Accounting, Contract Proportions & Payroll Ledger Service (Phase 9)
  */
 
+import { HoursHistory, NurseHoursBalance, countHoursInRange, dutyDurationHours, nurseContractShare, resolveNurseHoursBalance } from '../hours/hoursBalance';
+
 import { isWeekendDay } from '../../utils/weekend';
 import {
   Schedule,
@@ -50,6 +52,8 @@ export interface NurseDayTimelineEntry {
 }
 
 export interface NurseHoursAccounting {
+  balance: NurseHoursBalance;
+  closingBalanceHours: number;
   nurse: Nurse;
   seniority?: SeniorityLevel;
   contractPercent: number;
@@ -151,29 +155,12 @@ const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 /**
  * Calculates exact duty duration from duty window start & end times.
  */
-export function calculateDutyDurationHours(duty?: DutyWindow): number {
-  // A shift whose type was deleted counts nothing (it used to count a made up 8 h).
-  if (!duty) return 0;
-  try {
-    const [sh, sm] = duty.startTime.split(':').map(Number);
-    const [eh, em] = duty.endTime.split(':').map(Number);
-    let duration = (eh * 60 + em - (sh * 60 + sm)) / 60;
-    if (duration <= 0) {
-      duration += 24; // overnight shift handling
-    }
-    return duration > 0 ? duration : 8;
-  } catch {
-    return 8;
-  }
-}
-
-/** A nurse's contract as a share of full time (0.5 for 50%); a missing contract counts as full time. */
-export function contractShare(nurse: Pick<Nurse, 'contractPercent'>): number {
-  const pct = Number(nurse.contractPercent);
-  return Number.isFinite(pct) && pct >= 0 ? pct / 100 : 1;
-}
+export const calculateDutyDurationHours = dutyDurationHours;
+export const contractShare = nurseContractShare;
 
 export interface NurseHoursSummary {
+  balance: NurseHoursBalance;
+  closingBalanceHours: number;
   dutyHours: number;
   leaveHours: number;
   totalHours: number;
@@ -199,48 +186,19 @@ export function summarizeNurseHours(
   leaveEntries: LeaveEntry[],
   leaveTypes: LeaveType[] | Map<string, LeaveType>,
   workingHoursPeriods: WorkingHoursPeriod[] = [],
-  range: { start: string; end: string } = { start: schedule.startDate, end: schedule.endDate }
+  range: { start: string; end: string } = { start: schedule.startDate, end: schedule.endDate },
+  hoursHistory?: HoursHistory
 ): NurseHoursSummary {
-  const dutyMap = dutyWindows instanceof Map ? dutyWindows : new Map(dutyWindows.map((d) => [d.id, d]));
-  const typeMap = leaveTypes instanceof Map ? leaveTypes : new Map(leaveTypes.map((t) => [t.id, t]));
-  const shiftByDate = new Map<string, Assignment>();
-  for (const a of assignments) {
-    if (a.nurseId === nurse.id && a.date >= range.start && a.date <= range.end && !shiftByDate.has(a.date)) {
-      shiftByDate.set(a.date, a);
-    }
-  }
-  const leaves = leaveEntries.filter(
-    (le) => le.nurseId === nurse.id && le.approved && le.endDate >= range.start && le.startDate <= range.end
-  );
-
-  let dutyHours = 0;
-  let leaveHours = 0;
-  const days = new Set<string>([...shiftByDate.keys()]);
-  for (const le of leaves) {
-    const from = le.startDate > range.start ? le.startDate : range.start;
-    const to = le.endDate < range.end ? le.endDate : range.end;
-    for (let d = new Date(`${from}T00:00:00Z`); d.toISOString().slice(0, 10) <= to; d.setUTCDate(d.getUTCDate() + 1)) {
-      days.add(d.toISOString().slice(0, 10));
-    }
-  }
-  for (const date of days) {
-    const leave = leaves.find((le) => date >= le.startDate && date <= le.endDate);
-    if (leave) {
-      leaveHours += leaveCreditOnDate(leave, typeMap.get(leave.leaveTypeId), date);
-    } else {
-      const shift = shiftByDate.get(date);
-      if (shift) dutyHours += calculateDutyDurationHours(dutyMap.get(shift.dutyWindowId));
-    }
-  }
+  const tally = countHoursInRange(nurse.id, range.start, range.end, assignments, dutyWindows, leaveEntries, leaveTypes);
+  const balance = resolveNurseHoursBalance(nurse, schedule as Schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, hoursHistory);
   const round1 = (n: number) => Math.round(n * 10) / 10;
-  const targetHours = Math.round(resolveFullTimeTarget(schedule, workingHoursPeriods).hours * contractShare(nurse));
-  const totalHours = round1(dutyHours + leaveHours);
+  const totalHours = round1(tally.totalHours);
   return {
-    dutyHours: round1(dutyHours),
-    leaveHours: round1(leaveHours),
-    totalHours,
-    targetHours,
-    percent: targetHours > 0 ? Math.round((totalHours / targetHours) * 100) : 0,
+    dutyHours: round1(tally.dutyHours), leaveHours: round1(tally.leaveHours), totalHours,
+    targetHours: balance.targetHours,
+    percent: balance.targetHours > 0 ? Math.round(totalHours / balance.targetHours * 100) : 100,
+    balance,
+    closingBalanceHours: round1(balance.previousCreditedHours + totalHours - balance.cumulativeTargetHours),
   };
 }
 
@@ -259,7 +217,8 @@ export function calculateNurseHoursAccounting(
   roles: ClinicalRole[],
   specialties: Specialty[],
   quotas: NurseHoursQuota[] = [],
-  workingHoursPeriods: WorkingHoursPeriod[] = []
+  workingHoursPeriods: WorkingHoursPeriod[] = [],
+  hoursHistory?: HoursHistory
 ): NurseHoursAccounting {
   const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
   const leaveTypeMap = new Map(leaveTypes.map((l) => [l.id, l]));
@@ -271,7 +230,8 @@ export function calculateNurseHoursAccounting(
   const seniority = seniorityMap.get(nurse.seniorityLevelId);
   // Shared rule, same as the engine and validator
   const fullTimeTargetHours = resolveFullTimeTarget(schedule, workingHoursPeriods).hours;
-  const targetHours = Math.round(fullTimeTargetHours * (contractShare(nurse)));
+  const balance = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, hoursHistory);
+  const targetHours = balance.targetHours;
 
   // Filter nurse assignments in schedule period
   const nurseAssignments = assignments.filter(
@@ -405,17 +365,18 @@ export function calculateNurseHoursAccounting(
 
   leaveHours = Math.round(leaveHours * 10) / 10;
   const totalEarnedHours = Math.round((dutyHours + leaveHours) * 10) / 10;
-  const varianceHours = Math.round((totalEarnedHours - targetHours) * 10) / 10;
+  const varianceHours = Math.round((balance.previousCreditedHours + totalEarnedHours - balance.cumulativeTargetHours) * 10) / 10;
   const pacePercent = targetHours > 0 ? Math.round((totalEarnedHours / targetHours) * 100) : 100;
 
+  const balancePercent = balance.cumulativeTargetHours > 0 ? (balance.previousCreditedHours + totalEarnedHours) / balance.cumulativeTargetHours * 100 : 100;
   let status: HoursAccountingStatus = 'OPTIMAL';
-  if (pacePercent < 75) {
+  if (balancePercent < 75) {
     status = 'CRITICAL_UNDER';
-  } else if (pacePercent < 90) {
+  } else if (balancePercent < 90) {
     status = 'UNDER';
-  } else if (pacePercent > 120) {
+  } else if (balancePercent > 120) {
     status = 'CRITICAL_OVER';
-  } else if (pacePercent > 110) {
+  } else if (balancePercent > 110) {
     status = 'OVER';
   }
 
@@ -461,6 +422,8 @@ export function calculateNurseHoursAccounting(
 
   return {
     nurse,
+    balance,
+    closingBalanceHours: varianceHours,
     seniority,
     contractPercent: nurse.contractPercent,
     fullTimeTargetHours,

@@ -119,7 +119,8 @@ export function nextRosterNeeded(
   schedules: (Pick<Schedule, 'startDate' | 'endDate'> & { status?: Schedule['status'] })[],
   today: string
 ): { from: string } | null {
-  const live = schedules.filter((s) => s.status !== 'ARCHIVED');
+  // Archived rosters retain their dates and hours in the continuous balance.
+  const live = schedules;
   if (live.length === 0) return null;
   const lastEnd = live.reduce((max, s) => (s.endDate > max ? s.endDate : max), '');
   if (!lastEnd || lastEnd > addDays(today, NEXT_ROSTER_WARNING_DAYS)) return null;

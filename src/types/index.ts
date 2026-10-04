@@ -461,6 +461,8 @@ export interface AuditEvent {
 // 23. SystemMetadata (Initialization & Persistent Tombstone State)
 export interface SystemMetadata {
   id: string; // e.g. 'initialization_state', 'email_settings'
+  /** On 'scheduleCalendar': date reservations maintained by roster transactions. */
+  ranges?: Record<string, Pick<Schedule, 'id' | 'name' | 'startDate' | 'endDate'>>;
   status?: 'CLEARED' | 'INITIALIZED' | 'RESTORED';
   /** On 'email_settings': Sandbox (true) or Live (false), shared by every planner. */
   emailMockMode?: boolean;

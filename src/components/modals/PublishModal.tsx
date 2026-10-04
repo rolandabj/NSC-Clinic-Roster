@@ -6,6 +6,8 @@
  * previews each nurse's email and sends them.
  */
 
+import type { HoursHistory } from '../../services/hours/hoursBalance';
+
 import React, { useState, useEffect, useId, useRef } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify } from '../common/dialogs';
@@ -117,6 +119,8 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   initialMode = 'PUBLISH',
   onShowProblems,
 }) => {
+  const [hoursHistory, setHoursHistory] = useState<HoursHistory>();
+  const hoursHistoryRef = useRef<HoursHistory | undefined>(undefined);
   const [currentStep, setCurrentStep] = useState<Step>('VALIDATION');
   const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
   const [acknowledgeWarnings, setAcknowledgeWarnings] = useState(false);
@@ -245,6 +249,8 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       loadClinicSetup(repo, schedule)
         .then((setup) => {
           if (checkId !== validationRunRef.current) return;
+          setHoursHistory(setup.hoursHistory);
+          hoursHistoryRef.current = setup.hoursHistory;
           setValidationReport(
             ScheduleValidator.validate(
               schedule, assignments, nurses, seniorityLevels, dutyWindows, sessions, leaveEntries, locks,
@@ -252,7 +258,12 @@ export const PublishModal: React.FC<PublishModalProps> = ({
             )
           );
         })
-        .catch((err) => console.warn('[PublishModal] Clinic details could not be loaded for the check:', err))
+        .catch((err) => {
+          console.warn('[PublishModal] Clinic details could not be loaded for the check:', err);
+          if (checkId === validationRunRef.current) setValidationReport(previous => previous ? ({ ...previous, errorCount: previous.errorCount + 1,
+            findings: [...previous.findings, { id: 'hours-history-unavailable', category: 'RULE_VIOLATION', severity: 'ERROR',
+              message: 'The saved hours history could not be loaded. Close this dialog and try again before publishing.', affectedNurseIds: [], cellRefs: [] }] }) : previous);
+        })
         .finally(() => {
           if (checkId === validationRunRef.current) setIsClinicCheckPending(false);
         });
@@ -358,6 +369,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         ackToken: 'preview-token',
         isChangeAlert: publishKind === 'CHANGE',
         workingHoursPeriods,
+        hoursHistory,
       })
     : null;
 
@@ -377,6 +389,13 @@ export const PublishModal: React.FC<PublishModalProps> = ({
    * instead of making a second one.
    */
   const savePublish = async (logs: string[]) => {
+    const setup = await loadClinicSetup(repo, schedule);
+    const freshCheck = ScheduleValidator.validate(schedule, assignments, nurses, seniorityLevels, dutyWindows, sessions,
+      leaveEntries, locks, roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes, setup);
+    setValidationReport(freshCheck);
+    if (freshCheck.errorCount > 0) throw new Error('The roster has problems that must be fixed before publishing. Review Problems and try again.');
+    hoursHistoryRef.current = setup.hoursHistory;
+    setHoursHistory(setup.hoursHistory);
     if (!runRef.current) await saveVersion();
     const run = runRef.current!;
     const { version: newVersion } = run;
@@ -533,6 +552,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           ackToken,
           isChangeAlert: publishKind === 'CHANGE',
           workingHoursPeriods,
+          hoursHistory: hoursHistoryRef.current,
         });
         const result = await RosterPublishService.dispatchEmail(
           emailConfig,

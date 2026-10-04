@@ -6,6 +6,8 @@
  * Supports Multi-Sheet Excel (.xlsx via SheetJS), Matrix/Long CSV, and Formatted Print Datasets.
  */
 
+import type { HoursHistory } from '../hours/hoursBalance';
+
 import { resolveFullTimeTarget } from '../hours/hoursPolicy';
 import { isWeekendDay } from '../../utils/weekend';
 import { CsvValue, downloadCsv, toCsv } from '../../utils/csv';
@@ -46,6 +48,7 @@ export interface RosterExportOptions {
   specialties: Specialty[];
   rules?: Rule[];
   workingHoursPeriods?: WorkingHoursPeriod[];
+  hoursHistory?: HoursHistory;
   versionNumber?: number;
   blockIndex?: number; // Optional specific block export
   blockDates?: string[]; // Optional specific block dates
@@ -116,7 +119,7 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
 
   // Title / Metadata Banner Rows
   rosterAoa.push([clinicName.toUpperCase(), '', '', '', '', `SCHEDULE: ${schedule.name}`, '', '', `VERSION: v${versionNumber}`]);
-  rosterAoa.push([`Period: ${schedule.startDate} to ${schedule.endDate}`, '', '', '', '', `Full time goal: ${resolveFullTimeTarget(schedule, workingHoursPeriods).hours}h`, '', '', `Exported: ${new Date().toLocaleString()}`]);
+  rosterAoa.push([`Period: ${schedule.startDate} to ${schedule.endDate}`, '', '', '', '', `Base full time goal: ${resolveFullTimeTarget(schedule, workingHoursPeriods).hours}h`, '', '', `Exported: ${new Date().toLocaleString()}`]);
   rosterAoa.push([]); // blank separator
 
   // Header Row: Staff info + Dates
@@ -143,7 +146,8 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
       roles,
       specialties,
       [],
-      workingHoursPeriods
+      workingHoursPeriods,
+      options.hoursHistory
     );
     nurseAccountingMap.set(nurse.id, acct);
   });
@@ -333,11 +337,13 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
     'Full Name',
     'Seniority',
     'Contract %',
-    'Target Hours',
+    'Base Target Hours',
+    'Carried Hours Owed',
+    'Adjusted Target Hours',
     'Duty Hours Earned',
     'Leave Hours Credited',
     'Total Earned Hours',
-    'Net Variance Hours',
+    'Closing Balance Hours',
     'Pace %',
     'Weekend Shifts Count',
     'Late Duties Count (21:00)',
@@ -353,6 +359,8 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
       nurse.fullName,
       acct.seniority?.name || 'Staff',
       `${acct.contractPercent}%`,
+      acct.balance.baseTargetHours,
+      acct.balance.carriedHours,
       acct.targetHours,
       acct.dutyHours,
       acct.leaveHours,

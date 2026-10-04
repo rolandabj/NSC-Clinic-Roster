@@ -35,3 +35,19 @@ test('records without a usable id are refused', () => {
   assert.equal(checkBackup(backup({ nurses: [{ id: '' }] })).ok, false);
   assert.equal(checkBackup(backup({ nurses: [{ id: 'a/b' }] })).ok, false);
 });
+
+test('overlapping rosters are rejected before a database restore can delete existing data', () => {
+  const schedules = [
+    { id: 'a', name: 'First', startDate: '2026-10-19', endDate: '2026-11-18' },
+    { id: 'b', name: 'Second', startDate: '2026-11-01', endDate: '2026-11-30' },
+  ];
+  const result = checkBackup(backup({ schedules }));
+  assert.equal(result.ok, false);
+  assert.match(result.error!, /overlap/);
+});
+
+test('roster dates that normalize to a different calendar date are rejected', () => {
+  const result = checkBackup(backup({ schedules: [{ id: 'a', name: 'Invalid', startDate: '2026-02-31', endDate: '2026-03-10' }] }));
+  assert.equal(result.ok, false);
+  assert.match(result.error!, /valid/);
+});

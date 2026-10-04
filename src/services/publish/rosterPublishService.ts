@@ -5,6 +5,8 @@
  * Roster Publishing, Personalized Email Generator & Dispatch Engine (Phase 13)
  */
 
+import type { HoursHistory } from '../hours/hoursBalance';
+
 import { summarizeNurseHours } from '../reports/hoursAccounting';
 import {
   Schedule,
@@ -54,6 +56,7 @@ export interface GenerateEmailPayloadParams {
   ackToken: string;
   isChangeAlert?: boolean;
   workingHoursPeriods?: WorkingHoursPeriod[];
+  hoursHistory?: HoursHistory;
 }
 
 export interface DispatchResult {
@@ -106,12 +109,12 @@ export class RosterPublishService {
       .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
     // Hours by the shared rule (a leave day counts its leave, not also a shift)
-    const hours = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, ltMap, workingHoursPeriods);
+    const hours = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, ltMap, workingHoursPeriods, undefined, params.hoursHistory);
     const dutyHours = hours.dutyHours;
     const leaveCreditedHours = hours.leaveHours;
     const targetHours = hours.targetHours;
     const totalEarnedHours = hours.totalHours;
-    const variance = Math.round((totalEarnedHours - targetHours) * 10) / 10;
+    const variance = hours.closingBalanceHours;
 
     const origin = typeof window !== 'undefined' ? window.location.origin : 'https://clinicroster.app';
     // No link unless the planner chose to include one (never a made up token).
@@ -242,7 +245,7 @@ export class RosterPublishService {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-bottom: 24px;">
                 <tr>
                   <td style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; text-align: center; width: 25%;">
-                    <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 600;">Contract Target</div>
+                    <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 600;">Adjusted Goal</div>
                     <div style="font-size: 18px; font-weight: 700; color: #0f172a; margin-top: 2px;">${targetHours}h</div>
                   </td>
                   <td style="width: 8px;"></td>
@@ -257,7 +260,7 @@ export class RosterPublishService {
                   </td>
                   <td style="width: 8px;"></td>
                   <td style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; text-align: center; width: 25%;">
-                    <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 600;">Net Balance</div>
+                    <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 600;">Closing Balance</div>
                     <div style="font-size: 18px; font-weight: 700; color: ${variance >= 0 ? '#15803d' : '#b91c1c'}; margin-top: 2px;">
                       ${variance >= 0 ? `+${variance}h` : `${variance}h`}
                     </div>
@@ -265,6 +268,7 @@ export class RosterPublishService {
                 </tr>
               </table>
 
+              <p style="font-size: 12px; color: #64748b;">Base goal: ${hours.balance.baseTargetHours}h. Carried from earlier rosters: ${Math.round(Math.abs(hours.balance.carriedHours) * 10) / 10}h ${hours.balance.carriedHours >= 0 ? 'owed' : 'ahead'}.</p>
               <!-- Shift Timetable -->
               <h3 style="margin: 0 0 10px 0; font-size: 14px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 0.5px;">
                 Your Assigned Clinical Shifts (${nurseAsgns.length} Days)

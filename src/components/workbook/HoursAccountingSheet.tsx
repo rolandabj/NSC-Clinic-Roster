@@ -5,6 +5,8 @@
  * Hours tab: each nurse's shift and leave hours against their goal.
  */
 
+import { hoursHistoryOverlaps, type HoursHistory } from '../../services/hours/hoursBalance';
+
 import React, { useState, useMemo } from 'react';
 import {
   Scale,
@@ -59,6 +61,7 @@ interface HoursAccountingSheetProps {
   specialties: Specialty[];
   quotas: NurseHoursQuota[];
   workingHoursPeriods?: WorkingHoursPeriod[];
+  hoursHistory?: HoursHistory;
   onGoToReports?: () => void;
 }
 
@@ -76,6 +79,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
   quotas,
   onGoToReports,
   workingHoursPeriods = [],
+  hoursHistory,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | HoursAccountingStatus>('ALL');
@@ -84,6 +88,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
 
   // Compute accounting rows
   const nurseRows: NurseHoursAccounting[] = useMemo(() => {
+    if (hoursHistoryOverlaps(schedule, hoursHistory).length) return [];
     return nurses.map((nurse) =>
       calculateNurseHoursAccounting(
         nurse,
@@ -97,7 +102,8 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
         roles,
         specialties,
         quotas,
-        workingHoursPeriods
+        workingHoursPeriods,
+        hoursHistory
       )
     );
   }, [
@@ -112,6 +118,8 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
     roles,
     specialties,
     quotas,
+    workingHoursPeriods,
+    hoursHistory,
   ]);
 
   const metrics = useMemo(() => {
@@ -189,6 +197,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
         </div>
       </div>
 
+      <p className="px-4 py-2 text-[11px] text-slate-600">Goals include hours carried from saved drafts, published and archived rosters. A positive closing balance means hours ahead; a negative balance means hours owed.</p>
       {/* Main Table */}
       <div className="flex-1 overflow-auto bg-white p-3">
         <div className="border border-slate-200 rounded overflow-hidden shadow-2xs">
@@ -197,11 +206,11 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
               <tr>
                 <th className="py-2 px-3">Nurse</th>
                 <th className="py-2 px-3 text-center">Contract</th>
-                <th className="py-2 px-3">Goal</th>
+                <th className="py-2 px-3">Adjusted goal</th>
                 <th className="py-2 px-3">Shifts</th>
                 <th className="py-2 px-3">Leave</th>
                 <th className="py-2 px-3">Total (shifts + leave)</th>
-                <th className="py-2 px-3">Difference from goal</th>
+                <th className="py-2 px-3">Closing balance</th>
                 <th className="py-2 px-3 text-center">Weekends</th>
                 <th className="py-2 px-3 text-center">Late shifts</th>
                 <th className="py-2 px-3 w-36">Share of goal</th>
@@ -239,6 +248,9 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
 
                     <td className="py-2 px-3 font-bold text-slate-800">
                       {fmtHours(r.targetHours)}
+                      <span className="block text-[10px] font-normal text-slate-500">
+                        Base {Math.round(r.balance.baseTargetHours * 10) / 10}h · {Math.round(Math.abs(r.balance.carriedHours) * 10) / 10}h {r.balance.carriedHours >= 0 ? 'owed from before' : 'ahead from before'}
+                      </span>
                     </td>
 
                     <td className="py-2 px-3 text-indigo-700 font-semibold">

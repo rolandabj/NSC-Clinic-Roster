@@ -40,20 +40,21 @@ export async function loadClinicSetup(
   /** withYearToDate: false skips the year's fairness totals (only the generator uses them). */
   options: { withYearToDate?: boolean } = {}
 ): Promise<ClinicSetup> {
-  const [clinics, holidays, schedules] = await Promise.all([
+  const [clinics, holidays, schedules, allAssignments, allLeaves] = await Promise.all([
     repo.list('clinics'),
     repo.list('holidays'),
     repo.list('schedules'),
+    repo.list('assignments'),
+    repo.list('leaveEntries'),
   ]);
   const profile = clinics[0];
 
-  let priorAssignments: Assignment[] = [];
-  const previous = findPreviousSchedule(schedule, schedules);
-  if (previous) {
-    const from = daysBefore(schedule.startDate, PRIOR_DAYS);
-    const list = await repo.list('assignments', { field: 'scheduleId', operator: '==', value: previous.id });
-    priorAssignments = list.filter((a) => a.date >= from && a.date < schedule.startDate);
-  }
+  const from = daysBefore(schedule.startDate, PRIOR_DAYS);
+  const earlier = new Map(schedules.filter(s => s.id !== schedule.id).map(s => [s.id, s]));
+  const priorAssignments = allAssignments.filter(a => {
+    const owner = earlier.get(a.scheduleId);
+    return owner && a.date >= owner.startDate && a.date <= owner.endDate && a.date >= from && a.date < schedule.startDate;
+  });
 
   const holidayDates = holidays.map((h) => h.date);
   // Extras that only fine tune the generator: if they can't be loaded the roster still loads.
@@ -80,6 +81,7 @@ export async function loadClinicSetup(
   ]);
 
   return {
+    hoursHistory: { schedules, assignments: allAssignments, leaveEntries: allLeaves },
     openTime: profile?.openTime,
     closeTime: profile?.closeTime,
     holidayDates,

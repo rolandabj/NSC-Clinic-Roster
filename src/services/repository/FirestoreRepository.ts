@@ -19,9 +19,12 @@ import {
   query,
   where,
   writeBatch,
+  runTransaction,
+  getDocsFromServer,
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
-import { CollectionName, EntityForCollection } from '../../types';
+import { CollectionName, EntityForCollection, Schedule } from '../../types';
+import { mergeScheduleRanges, ScheduleRange } from '../schedule/scheduleRanges';
 import { IRepository, SubscribeCallback, Unsubscribe } from './IRepository';
 import { quotaTracker } from '../firebase/quotaTracker';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
@@ -29,6 +32,7 @@ import { LiveCollectionCache } from './liveCollectionCache';
 
 // Firestore allows at most 500 writes in one batch; stay safely below it.
 const BATCH_LIMIT = 450;
+const SCHEDULE_CALENDAR = 'scheduleCalendar';
 
 export interface FirebaseClientConfig {
   apiKey: string;
@@ -61,6 +65,29 @@ export class FirestoreRepository implements IRepository {
   private db: Firestore;
   private app: FirebaseApp;
   private cache: LiveCollectionCache;
+
+  /** One transaction serializes date reservations across all planner sessions. */
+  private async writeSchedules(items: Partial<Schedule>[], removeIds: string[] = [], replace = false): Promise<Schedule[]> {
+    const calendarRef = doc(this.db, 'systemMetadata', SCHEDULE_CALENDAR);
+    // Bootstrap the index from existing rosters. Once created, every roster
+    // mutation updates it in the same transaction as the roster document.
+    const calendar = await getDoc(calendarRef);
+    const legacy = calendar.exists() ? [] : (await getDocsFromServer(collection(this.db, 'schedules'))).docs
+      .map(s => ({ ...s.data(), id: s.id } as Schedule));
+    return runTransaction(this.db, async transaction => {
+      const snapshot = await transaction.get(calendarRef);
+      const existing = snapshot.exists() ? snapshot.data().ranges as Record<string, ScheduleRange>
+        : Object.fromEntries(legacy.map(s => [s.id, { id: s.id, name: s.name, startDate: s.startDate, endDate: s.endDate }]));
+      const documents = await Promise.all(items.map(item => transaction.get(doc(this.db, 'schedules', item.id!))));
+      const next = items.map((item, i) => sanitizePayload({ ...(replace ? {} : documents[i].data()), ...item }) as Schedule);
+      const ranges = mergeScheduleRanges(existing, next.map(s => ({ id: s.id, name: s.name, startDate: s.startDate, endDate: s.endDate })));
+      for (const id of removeIds) delete ranges[id];
+      for (const item of next) transaction.set(doc(this.db, 'schedules', item.id), item);
+      for (const id of removeIds) transaction.delete(doc(this.db, 'schedules', id));
+      transaction.set(calendarRef, { id: SCHEDULE_CALENDAR, ranges });
+      return next;
+    });
+  }
 
   constructor(config: FirebaseClientConfig) {
     if (!getApps().length) {
@@ -134,6 +161,8 @@ export class FirestoreRepository implements IRepository {
     const docRef = doc(this.db, colName, docId);
     const entity = sanitizePayload({ ...data, id: docId }) as EntityForCollection<T>;
     try {
+      if (colName === 'schedules') return (await this.writeSchedules([entity as Schedule], [], true))[0] as EntityForCollection<T>;
+      if (colName === 'systemMetadata' && docId === SCHEDULE_CALENDAR) throw new Error('The roster calendar is maintained automatically.');
       await setDoc(docRef, entity);
       return entity;
     } catch (err: any) {
@@ -151,6 +180,8 @@ export class FirestoreRepository implements IRepository {
     const docRef = doc(this.db, colName, id);
     const cleanData = sanitizePayload(data);
     try {
+      if (colName === 'schedules') return (await this.writeSchedules([{ ...cleanData, id }]))[0] as EntityForCollection<T>;
+      if (colName === 'systemMetadata' && id === SCHEDULE_CALENDAR) throw new Error('The roster calendar is maintained automatically.');
       await setDoc(docRef, cleanData, { merge: true });
       const cached = this.cache.getDoc(colName, id);
       if (cached?.item) return cached.item as EntityForCollection<T>;
@@ -174,6 +205,8 @@ export class FirestoreRepository implements IRepository {
     quotaTracker.assertWritable();
     const docRef = doc(this.db, colName, id);
     try {
+      if (colName === 'schedules') { await this.writeSchedules([], [id]); return; }
+      if (colName === 'systemMetadata' && id === SCHEDULE_CALENDAR) return;
       await deleteDoc(docRef);
     } catch (err: any) {
       quotaTracker.notifyQuotaExceeded(err);
@@ -196,6 +229,13 @@ export class FirestoreRepository implements IRepository {
     // Fail loudly instead of skipping, so the caller can tell the user nothing was saved.
     quotaTracker.assertWritable();
     try {
+      if (colName === 'schedules') {
+        // A roster import is all or nothing, including its date reservations.
+        if (items.length >= BATCH_LIMIT) throw new Error('Import fewer than 450 rosters at a time.');
+        await this.writeSchedules(items as Schedule[], [], options?.replace === true);
+        return;
+      }
+      if (colName === 'systemMetadata') items = items.filter(item => item.id !== SCHEDULE_CALENDAR);
       for (let i = 0; i < items.length; i += BATCH_LIMIT) {
         const chunk = items.slice(i, i + BATCH_LIMIT);
         const batch = writeBatch(this.db);
@@ -222,6 +262,11 @@ export class FirestoreRepository implements IRepository {
     if (!ids || ids.length === 0) return;
     quotaTracker.assertWritable();
     try {
+      if (colName === 'schedules') {
+        for (let i = 0; i < ids.length; i += BATCH_LIMIT) await this.writeSchedules([], ids.slice(i, i + BATCH_LIMIT));
+        return;
+      }
+      if (colName === 'systemMetadata') ids = ids.filter(id => id !== SCHEDULE_CALENDAR);
       for (let i = 0; i < ids.length; i += BATCH_LIMIT) {
         const chunk = ids.slice(i, i + BATCH_LIMIT);
         const batch = writeBatch(this.db);

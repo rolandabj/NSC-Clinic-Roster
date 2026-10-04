@@ -102,7 +102,8 @@ test('nurse hours: goal from the contract, shifts and leave counted once', () =>
   const a = buildRosterAnalysis(input());
   const amy = a.nurses.find((n) => n.id === 'amy')!;
   const ben = a.nurses.find((n) => n.id === 'ben')!;
-  assert.deepEqual(amy.hours, { target: 24, shifts: 16, leave: 0, total: 16, difference: -8, percentOfTarget: 67 });
+  assert.deepEqual(amy.hours, { target: 24, shifts: 16, leave: 0, total: 16, difference: -8, percentOfTarget: 67,
+    baseTarget: 24, carriedHoursOwed: 0, previousCreditedHours: 0, cumulativeTarget: 24, trackingStartDate: SCHEDULE.startDate });
   assert.equal(ben.hours.target, 12);
   assert.equal(ben.hours.shifts, 8);
   assert.equal(ben.hours.leave, 8);

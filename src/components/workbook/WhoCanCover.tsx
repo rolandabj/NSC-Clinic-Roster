@@ -62,6 +62,7 @@ export const WhoCanCover: React.FC<WhoCanCoverProps> = ({ date, hour, onPick, ma
     data.rules,
     data.seniorityLevels,
     data.workingHoursPeriods,
+    data.hoursHistory,
     data.leaveTypes,
   ]);
 

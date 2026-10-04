@@ -413,7 +413,7 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
   const nurseRows = [...nurses]
     .sort((a, b) => a.fullName.localeCompare(b.fullName))
     .map((n) => {
-      const hours = summarizeNurseHours(n, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods);
+      const hours = summarizeNurseHours(n, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods, undefined, clinicSetup?.hoursHistory);
       const mine = shifts.filter((s) => s.nurseId === n.id && !s.onApprovedLeave);
       const prefs = [...(n.preferences || [])].sort((a, b) => a.rank - b.rank);
       // Longest run of working days in a row inside this roster.
@@ -454,7 +454,12 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
           shifts: hours.dutyHours,
           leave: hours.leaveHours,
           total: hours.totalHours,
-          difference: round1(hours.totalHours - hours.targetHours),
+          difference: hours.closingBalanceHours,
+          baseTarget: hours.balance.baseTargetHours,
+          carriedHoursOwed: hours.balance.carriedHours,
+          previousCreditedHours: hours.balance.previousCreditedHours,
+          cumulativeTarget: hours.balance.cumulativeTargetHours,
+          trackingStartDate: hours.balance.trackingStartDate,
           percentOfTarget: hours.percent,
         },
         counts: {

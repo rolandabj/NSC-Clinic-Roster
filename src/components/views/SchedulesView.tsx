@@ -1,3 +1,4 @@
+import { HoursHistory, hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
 import React, { useState, useEffect, useRef, useId } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog } from '../common/dialogs';
@@ -152,6 +153,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [rules, setRules] = useState<Rule[]>([]);
   const [holidays, setHolidays] = useState<PublicHoliday[]>([]);
   // Opening hours, public holidays and the end of the previous roster, for the engine and the checker
+  const [hoursHistory, setHoursHistory] = useState<HoursHistory | undefined>();
   const clinicSetupRef = useRef<ClinicSetup | undefined>(undefined);
   const [quotas, setQuotas] = useState<NurseHoursQuota[]>([]);
   // Nurses' day off and shift wishes (shown on the grid; the checker notes when they aren't followed).
@@ -534,6 +536,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     syncers.assignments.replaceKnown(list, (a) => a.scheduleId === sched.id);
     loadingRef.current = false;
     clinicSetupRef.current = setup;
+    setHoursHistory(setup?.hoursHistory);
     setClinicSetupError(
       setup ? null : 'Public holidays, opening hours and the previous roster could not be loaded. Reload the page before generating.'
     );
@@ -828,6 +831,19 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     };
   };
 
+  useEffect(() => {
+    const stopSchedules = repo.subscribe('schedules', list => setHoursHistory(old => old ? { ...old, schedules: list } : old));
+    const stopAssignments = repo.subscribe('assignments', list => setHoursHistory(old => old ? { ...old, assignments: list } : old));
+    const stopLeaves = repo.subscribe('leaveEntries', list => setHoursHistory(old => old ? { ...old, leaveEntries: list } : old));
+    return () => { stopSchedules(); stopAssignments(); stopLeaves(); };
+  }, [repo]);
+
+  useEffect(() => {
+    if (!hoursHistory || !clinicSetupRef.current || !activeSchedule) return;
+    clinicSetupRef.current = { ...clinicSetupRef.current, hoursHistory };
+    runValidation(activeSchedule, assignments);
+  }, [hoursHistory]);
+
   // Keep the clinic details current when another roster is opened or holidays change
   useEffect(() => {
     if (!activeSchedule) return;
@@ -836,6 +852,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       .then((setup) => {
         if (cancelled) return;
         clinicSetupRef.current = setup;
+        setHoursHistory(setup?.hoursHistory);
         setClinicSetupError(null);
       })
       .catch((err) => {
@@ -960,6 +977,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         return;
       }
       clinicSetupRef.current = generationClinicSetup;
+      setHoursHistory(generationClinicSetup.hoursHistory);
       setClinicSetupError(null);
 
       // A backup copy of the roster as it is now, so a fill or clear can be undone
@@ -1882,6 +1900,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         </div>
       )}
 
+      {activeSchedule && hoursHistoryOverlaps(activeSchedule, hoursHistory).length > 0 && (
+        <div role="alert" className="mx-4 mt-2 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+          Hours balances are unavailable because saved rosters overlap. Resolve the rosters listed in Problems before filling or publishing. Current roster totals remain visible.
+        </div>
+      )}
       {/* Main Viewport: Swappable Workbook Sheets */}
       <div className="flex-1 overflow-hidden relative flex">
         <div className="flex-1 min-w-0 overflow-hidden relative">
@@ -1914,6 +1937,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           <>
             {activeTab === 'roster' && (
               <WorkbookGrid
+                hoursHistory={hoursHistory}
                 workingHoursPeriods={workingHoursPeriods}
                 schedule={activeSchedule}
                 assignments={assignments}
@@ -2005,6 +2029,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
             {activeTab === 'hours' && (
               <HoursAccountingSheet
+                hoursHistory={hoursHistory}
                 schedule={activeSchedule}
                 assignments={assignments}
                 nurses={nurses}
@@ -2084,6 +2109,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               // Only for a missing free nurse (or nobody on a public holiday), which one added nurse fixes.
               f.date && (f.id.startsWith('cov-gap-') || f.id.startsWith('holiday-gap-') || f.id.startsWith('holiday-no-nurse-')) ? (
                 <WhoCanCover
+                  hoursHistory={hoursHistory}
                   date={f.date}
                   hour={f.hour}
                   schedule={activeSchedule}
@@ -2759,6 +2785,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       {/* --- FAIRNESS & PARITY MODAL (Phase 14.1) --- */}
       {isFairnessModalOpen && activeSchedule && (
         <FairnessModal
+          hoursHistory={hoursHistory}
           schedule={activeSchedule}
           assignments={assignments}
           nurses={nurses}

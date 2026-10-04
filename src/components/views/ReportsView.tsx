@@ -5,6 +5,8 @@
  * Phase 9 — Hours Accounting, Contract Proportions, Leave Credits & Payroll Ledger
  */
 
+import { HoursHistory, hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
+
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   BarChart3,
@@ -87,6 +89,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
   const [leaveEntries, setLeaveEntries] = useState<LeaveEntry[]>([]);
   const [workingHoursPeriods, setWorkingHoursPeriods] = useState<WorkingHoursPeriod[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [hoursHistory, setHoursHistory] = useState<HoursHistory>();
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [seniorityLevels, setSeniorityLevels] = useState<SeniorityLevel[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [roles, setClinicalRoles] = useState<ClinicalRole[]>([]);
@@ -143,6 +147,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
 
       const uniqueSchedules = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
       setSchedules(uniqueSchedules);
+      setHoursHistory({ schedules: uniqueSchedules, assignments: asgnList, leaveEntries: leList });
+      setLoadError(null);
       setDutyWindows(dwList);
       setLeaveEntries(leList);
       setLeaveTypes(ltList);
@@ -165,11 +171,18 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
       }
     } catch (err) {
       console.error('Error loading reports data:', err);
+      setLoadError('The hours history could not be loaded. Reload before relying on these balances.');
     }
   };
 
   useEffect(() => {
     loadData();
+    const stopSchedules = repo.subscribe('schedules', list => setHoursHistory(old => old ? { ...old, schedules: list } : old));
+    const stopAssignments = repo.subscribe('assignments', list => setHoursHistory(old => old ? { ...old, assignments: list } : old));
+    const stopLeaves = repo.subscribe('leaveEntries', list => { setLeaveEntries(list); setHoursHistory(old => old ? { ...old, leaveEntries: list } : old); });
+    const stopPeriods = repo.subscribe('workingHoursPeriods', setWorkingHoursPeriods);
+    const stopDuties = repo.subscribe('dutyWindows', setDutyWindows);
+    return () => { stopSchedules(); stopAssignments(); stopLeaves(); stopPeriods(); stopDuties(); };
   }, []);
 
   const triggerToast = (msg: string) => {
@@ -189,12 +202,12 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
 
   // Compute Nurse Hours Accounting for all nurses
   const nurseAccountingRows: NurseHoursAccounting[] = useMemo(() => {
-    if (!activeSchedule) return [];
+    if (!activeSchedule || !hoursHistory || loadError || hoursHistoryOverlaps(activeSchedule, hoursHistory).length) return [];
     return nurses.map((nurse) =>
       calculateNurseHoursAccounting(
         nurse,
         activeSchedule,
-        assignments,
+        hoursHistory.assignments.filter(a => a.scheduleId === activeSchedule.id),
         dutyWindows,
         leaveEntries,
         leaveTypes,
@@ -203,7 +216,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
         roles,
         specialties,
         quotas,
-        workingHoursPeriods
+        workingHoursPeriods,
+        hoursHistory
       )
     );
   }, [
@@ -219,6 +233,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
     specialties,
     quotas,
     workingHoursPeriods,
+    hoursHistory,
+    loadError,
   ]);
 
   // Compute high-level clinic metrics & fairness equity indices
@@ -343,11 +359,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
       'Full Name',
       'Seniority',
       'Contract %',
-      'Target Hours (h)',
+      'Base Target (h)',
+      'Carried Hours Owed (h)',
+      'Adjusted Target Hours (h)',
       'Clinical Duties (h)',
       'Credited Leave (h)',
       'Total Earned (h)',
-      'Net Variance (h)',
+      'Closing Balance (h)',
       'Pace %',
       'Weekend Shifts Count',
       'Late Duties Count (21:00)',
@@ -362,6 +380,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
         r.nurse.fullName,
         r.seniority?.name || 'Staff',
         `${r.contractPercent}%`,
+        r.balance.baseTargetHours,
+        r.balance.carriedHours,
         r.targetHours,
         r.dutyHours,
         r.leaveHours,
@@ -433,8 +453,11 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
     window.print();
   };
 
+  const historyProblem = loadError || (activeSchedule && hoursHistoryOverlaps(activeSchedule, hoursHistory).length
+    ? 'Hours balances are unavailable because saved rosters overlap. Resolve those rosters in Schedules first.' : null);
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 select-none print:p-0 print:max-w-none">
+      {historyProblem && <div role="alert" className="p-3 bg-rose-50 text-rose-800">{historyProblem}</div>}
       {/* Toast Notification */}
       {notification && (
         <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150 print:hidden">
@@ -562,7 +585,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
 
         {/* 5. Net Overtime / Deficit */}
         <div className="bg-white border border-slate-200 rounded p-3.5 shadow-2xs">
-          <span className="text-[11px] font-medium text-slate-500 block">Net Balance Variance</span>
+          <span className="text-[11px] font-medium text-slate-500 block">Closing hours balance</span>
           <div className="flex items-center gap-1.5 mt-1 font-mono">
             <span className="text-xs text-emerald-600 font-bold">
               +{clinicMetrics.totalOvertimeHours}h OT
@@ -822,7 +845,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
                       className="py-2.5 px-3 cursor-pointer hover:bg-slate-100 transition-colors"
                     >
                       <div className="flex items-center gap-1">
-                        <span>Variance</span>
+                        <span>Closing balance</span>
                         {sortField === 'variance' && (
                           <ChevronDown
                             className={`w-3 h-3 transition-transform ${
@@ -935,6 +958,9 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
 
                         <td className="py-2.5 px-3 font-bold text-slate-800">
                           {r.targetHours}h
+                      <span className="block text-[10px] font-normal text-slate-500">
+                        Base {Math.round(r.balance.baseTargetHours * 10) / 10}h · {Math.round(Math.abs(r.balance.carriedHours) * 10) / 10}h {r.balance.carriedHours >= 0 ? 'owed from before' : 'ahead from before'}
+                      </span>
                         </td>
 
                         <td className="py-2.5 px-3 text-indigo-700 font-semibold">

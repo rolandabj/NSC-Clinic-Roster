@@ -266,6 +266,9 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
 
     try {
       const repo = getRepository();
+      const latestSchedules = await repo.list('schedules');
+      const conflict = latestSchedules.find(s => s.startDate <= endDate && s.endDate >= startDate);
+      if (conflict) throw new Error(`These dates overlap "${conflict.name}". Open that roster or choose different dates.`);
       const user = authService.getCurrentUser();
       const author = user?.name || user?.email || 'Planner';
 
@@ -537,7 +540,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                 <Info className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                 <span>
                   These dates overlap the roster{' '}
-                  <strong>"{overlappingSchedule.name}"</strong> ({overlappingSchedule.startDate} to {overlappingSchedule.endDate}). You can still create it, for example to try a different plan.
+                  <strong>"{overlappingSchedule.name}"</strong> ({overlappingSchedule.startDate} to {overlappingSchedule.endDate}). Open that roster or choose different dates. Rosters cannot overlap because hours carry forward.
                   {onOpenExisting && (
                     <>
                       {' '}
@@ -726,7 +729,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
 
             <button
               type="submit"
-              disabled={isSubmitting || !metrics.isValid}
+              disabled={isSubmitting || !metrics.isValid || !!overlappingSchedule}
               className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               {isSubmitting ? (

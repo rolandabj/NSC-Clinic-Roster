@@ -7,6 +7,8 @@
  * and progressive chunked generation to never freeze the UI.
  */
 
+import { countHoursInRange, hoursCheckpoints, hoursHistoryOverlaps, resolveNurseHoursBalance } from '../hours/hoursBalance';
+
 import { isWeekendDate, isWeekendDay } from '../../utils/weekend';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -223,7 +225,7 @@ export class SchedulingEngine {
     if (fullTimeTarget.source === 'PERIOD' && workingHoursPeriods) {
       const calc = calculateWorkingHoursForDateRange(schedule.startDate, schedule.endDate, workingHoursPeriods);
       isProratedPeriod = !calc.isExactMatch;
-      hoursTargetDescription = calc.description;
+      hoursTargetDescription = `${calc.description}. This is the base target; each nurse’s balance from earlier rosters adjusts her goal.`;
     } else {
       hoursTargetDescription =
         fullTimeTarget.source === 'SCHEDULE'
@@ -412,6 +414,8 @@ export class SchedulingEngine {
     clinicSetup?: ClinicSetup,
     options: { keepManual?: boolean; onlyDates?: { start: string; end: string } } = {}
   ): Promise<GenerationResult> {
+    const conflicts = hoursHistoryOverlaps(schedule, clinicSetup?.hoursHistory);
+    if (conflicts.length) throw new Error(`Hours cannot be calculated because "${conflicts[0].first.name}" overlaps "${conflicts[0].second.name}". Resolve the overlapping rosters first.`);
     const startTimeMs = performance.now();
     // Hand edits are kept unless the planner asks to replace them (GENERATE_ALL only).
     const keepManual = options.keepManual !== false;
@@ -700,7 +704,7 @@ export class SchedulingEngine {
     const nurseStates = new Map<string, NurseDayState>();
     sortedNurses.forEach((nurse) => {
       // Only the leave days inside this schedule count (shared hours rule)
-      const nurseLeaveHours = nurseLeaveHoursInRange(nurse.id, leaveEntries, leaveTypes, schedule.startDate, schedule.endDate);
+      const nurseLeaveHours = countHoursInRange(nurse.id, schedule.startDate, schedule.endDate, [], dutyWindows, leaveEntries, leaveTypes).leaveHours;
 
       // Retained (pinned, hand set) shifts are committed up front and not counted again on their day.
       let initialPreservedDutyHours = 0;
@@ -739,13 +743,21 @@ export class SchedulingEngine {
     // Each nurse's goal (contract share of the full time target, minus leave) and hard ceiling.
     const nurseTargetMap = new Map<string, { contractTarget: number; dutyTarget: number; maxAllowedHours: number }>();
     sortedNurses.forEach((nurse) => {
-      const contractTarget = Math.round(effectiveFullTimeTarget * (nurse.contractPercent / 100));
+      const contractTarget = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup?.hoursHistory).targetHours;
       const leaveHours = nurseStates.get(nurse.id)?.leaveHoursCredited || 0;
       const dutyTarget = Math.max(0, contractTarget - leaveHours);
       // The ceiling allows one shift's worth over the goal at most (8h, or the H7 tolerance if smaller)
       const maxAllowed = Math.max(dutyTarget, Math.min(dutyTarget + 8, Math.round(dutyTarget * maxHoursToleranceRatio)));
       nurseTargetMap.set(nurse.id, { contractTarget, dutyTarget, maxAllowedHours: maxAllowed });
     });
+
+    const checkpoints = hoursCheckpoints(schedule, workingHoursPeriods || []);
+    const periodBudgets = new Map(sortedNurses.map(nurse => [nurse.id, checkpoints.map(end => {
+      const target = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup?.hoursHistory, end).targetHours;
+      const leave = countHoursInRange(nurse.id, schedule.startDate, end, [], dutyWindows, leaveEntries, leaveTypes).leaveHours;
+      const dutyTarget = Math.max(0, target - leave);
+      return { end, dutyTarget, max: Math.max(dutyTarget, Math.min(dutyTarget + 8, Math.round(dutyTarget * maxHoursToleranceRatio))) };
+    })]));
 
     /**
      * Pacing: by the end of day N a nurse should have worked about N/total of
@@ -852,6 +864,16 @@ export class SchedulingEngine {
       const state = nurseStates.get(nurse.id);
       if (maxHoursEnabled && maxHoursSeverity === 'HARD' && limits && state && state.totalDutyHoursEarned + extraHours > limits.maxAllowedHours) {
         return false;
+      }
+
+      // A later period's budget cannot be spent before its dates begin.
+      if (clinicSetup?.hoursHistory && maxHoursEnabled && maxHoursSeverity === 'HARD') {
+        for (const budget of periodBudgets.get(nurse.id) || []) {
+          if (date > budget.end) continue;
+          const used = countHoursInRange(nurse.id, schedule.startDate, budget.end,
+            [...resultAssignmentsMap.values()], dutyMapGlobal, leaveEntries, leaveTypes).dutyHours;
+          if (used + extraHours > budget.max + 1e-8) return false;
+        }
       }
 
       // S1: max consecutive late duties, both sides of this day

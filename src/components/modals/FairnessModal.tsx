@@ -6,6 +6,8 @@
  * between nurses, and suggested shift moves that even them out.
  */
 
+import type { HoursHistory } from '../../services/hours/hoursBalance';
+
 import { summarizeNurseHours } from '../../services/reports/hoursAccounting';
 import { isWeekendDate, isWeekendDay } from '../../utils/weekend';
 import React, { useState, useMemo, useId, useEffect, useRef } from 'react';
@@ -60,6 +62,7 @@ interface FairnessModalProps {
   rules?: Rule[];
   leaveTypes?: LeaveType[];
   workingHoursPeriods?: WorkingHoursPeriod[];
+  hoursHistory?: HoursHistory;
   isOpen: boolean;
   onClose: () => void;
   onApplyAssignments: (updated: Assignment[], note: string) => void;
@@ -103,6 +106,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
   onApplyAssignments,
   leaveTypes = [],
   workingHoursPeriods = [],
+  hoursHistory,
 }) => {
   const [activeTab, setActiveTab] = useState<'METRICS' | 'REBALANCE'>('METRICS');
   const [selectedSwaps, setSelectedSwaps] = useState<Set<string>>(new Set());
@@ -198,10 +202,10 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
 
       const weekendsOff = Math.max(0, totalWeekendDays - weekendsWorked);
       // Hours and goal by the shared rule (leave counts, period targets apply), as in the Hours tab.
-      const summary = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, workingHoursPeriods);
+      const summary = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, workingHoursPeriods, undefined, hoursHistory);
       totalDutyHours = Math.round(summary.totalHours * 10) / 10;
       const targetHours = summary.targetHours;
-      const hoursDelta = Math.round((totalDutyHours - targetHours) * 10) / 10;
+      const hoursDelta = summary.closingBalanceHours;
 
       return {
         nurse,
@@ -214,7 +218,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
         lateEndsCount,
       };
     });
-  }, [nurses, assignments, dutyMap, holidayDateSet, schedule, leaveEntries, leaveTypes, workingHoursPeriods, lateThreshold]);
+  }, [nurses, assignments, dutyMap, holidayDateSet, schedule, leaveEntries, leaveTypes, workingHoursPeriods, hoursHistory, lateThreshold]);
 
   /** This year so far: the earlier rosters plus this one. */
   const thisYear = (m: NurseFairnessMetrics) => {
@@ -467,7 +471,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                       <th className="py-2.5 px-3">Contract</th>
                       <th className="py-2.5 px-3">Goal</th>
                       <th className="py-2.5 px-3">Hours (shifts + leave)</th>
-                      <th className="py-2.5 px-3">Difference from goal</th>
+                      <th className="py-2.5 px-3">Closing balance</th>
                       <th className="py-2.5 px-3">Weekend days off</th>
                       <th className="py-2.5 px-3">Holidays worked</th>
                       <th className="py-2.5 px-3">Late shifts (end {lateThreshold} or later)</th>
