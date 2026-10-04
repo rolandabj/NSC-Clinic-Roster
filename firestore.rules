@@ -102,10 +102,11 @@ service cloud.firestore {
     // signed in email addresses (and for editors, who manage the links).
     // ---------------------------------------------------------------------
     match /publicRosters/{token} {
-      allow get: if resource.data.revoked != true && (
-        resource.data.isPublic == true
-        || (signedIn() && myEmail() in resource.data.allowedEmails)
-        || isEditor()
+      allow get: if isEditor() || (
+        resource.data.revoked != true && (
+          resource.data.isPublic == true
+          || (signedIn() && myEmail() in resource.data.allowedEmails)
+        )
       );
       allow list: if false;
       allow write: if isEditor();
@@ -117,7 +118,7 @@ service cloud.firestore {
     // that nurse's own published shifts. The tokens themselves are for editors.
     // ---------------------------------------------------------------------
     match /nurseRosters/{token} {
-      allow get: if resource.data.revoked != true || isEditor();
+      allow get: if isEditor() || resource.data.revoked != true;
       allow list: if false;
       allow write: if isEditor();
     }

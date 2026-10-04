@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-04, after the Version History startup crash fix (section 16, item 18).
+Last updated: 2026-10-04, after the Schedule Deletion share links permission fix (section 16, item 19).
 
 ---
 
@@ -21,7 +21,7 @@ Last updated: 2026-10-04, after the Version History startup crash fix (section 1
 | `npm install --legacy-peer-deps` | Install (the flag is needed for esbuild/vite peer conflicts) |
 | `npm run dev` | Express + Vite dev server on port 3000 |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 166 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 168 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `dist/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -468,6 +468,7 @@ Completed and on `main`, in order:
 17. Roster Doctors sheet: adding or changing a doctor's session no longer offers a specialty choice; it shows the doctor's specialty from his profile.
 
 18. Version History startup: the closed comparison dialog accessed `schedule.id` before History loaded its roster and caused the whole screen to show "This screen couldn't be opened". The dialog now accepts an absent roster, safely checks its id, and waits for a roster before opening or moving focus. Three regression tests cover the missing roster states and normal comparison. Type check, all 166 unit tests and production build pass. Chromium checks with an in memory repository pass for delayed loading, empty history, version selection, all four studio tabs, comparison and popout dialogs, and the restore confirmation dialog. The owner approved pushing the fix to `main` on 2026-10-04.
+19. Schedule deletion and share links: deleting a schedule failed with "Missing or insufficient permissions" when purging share links. The Firestore rule for `publicRosters` had `|| isEditor()` nested inside `resource.data.revoked != true && (...)`, denying editors access once a snapshot was marked revoked and causing read-after-write to fail during deletion. The rule now evaluates `isEditor() ||` first. In addition, `publicRosterService.removePublicRoster` safely handles read-after-write errors before removal, `FirestoreRepository.update` falls back safely when read-after-write is restricted, and `scheduleDeletionService` ensures public snapshot removal errors do not prevent deleting share link records and completing schedule deletion. Two unit tests and rules tests cover these scenarios. All 168 unit tests pass and rules have been deployed.
 ---
 
 ## 17. Known quirks and ideas for later

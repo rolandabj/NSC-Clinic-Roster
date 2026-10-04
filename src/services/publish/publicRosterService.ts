@@ -23,6 +23,7 @@ import {
   Specialty,
 } from '../../types';
 import { getRepository } from '../repository';
+import type { IRepository } from '../repository/IRepository';
 
 /**
  * Bumped when the snapshot's contents change (2: only this roster's people and
@@ -149,10 +150,16 @@ export async function syncPublicRoster(link: ShareLink): Promise<void> {
  * Removes a link's public snapshot. It is marked revoked first, so even if the delete
  * fails the database rules already refuse to show it. Errors are passed on to the caller.
  */
-export async function removePublicRoster(token: string): Promise<void> {
-  const repo = getRepository();
+export async function removePublicRoster(token: string, customRepo?: IRepository): Promise<void> {
+  const repo = customRepo || getRepository();
   const existing = await repo.get('publicRosters', token).catch(() => null);
-  if (existing) await repo.update('publicRosters', token, { revoked: true } as any);
+  if (existing) {
+    try {
+      await repo.update('publicRosters', token, { revoked: true } as any);
+    } catch (err) {
+      console.warn(`[publicRosterService] Could not mark snapshot revoked before delete for token ${token}:`, err);
+    }
+  }
   await repo.remove('publicRosters', token);
 }
 

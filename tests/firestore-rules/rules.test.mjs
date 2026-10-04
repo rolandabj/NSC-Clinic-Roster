@@ -101,6 +101,7 @@ await t('allowed email reads restricted roster', true, getDoc(doc(env.authentica
 await t('other email cannot read restricted roster', false, getDoc(doc(stranger, 'publicRosters/sh_priv')));
 await t('approved viewer not on list cannot read restricted roster', false, getDoc(doc(viewer, 'publicRosters/sh_priv')));
 await t('editor reads restricted roster', true, getDoc(doc(editor, 'publicRosters/sh_priv')));
+await t('editor reads revoked public roster', true, getDoc(doc(editor, 'publicRosters/sh_rev')));
 await t('revoked roster unreadable', false, getDoc(doc(anon, 'publicRosters/sh_rev')));
 await t('viewer cannot write public roster', false, setDoc(doc(viewer, 'publicRosters/sh_new'), { isPublic: true }));
 await t('editor writes public roster', true, setDoc(doc(editor, 'publicRosters/sh_new'), { isPublic: true, allowedEmails: [], revoked: false }));

@@ -154,8 +154,13 @@ export class FirestoreRepository implements IRepository {
       await setDoc(docRef, cleanData, { merge: true });
       const cached = this.cache.getDoc(colName, id);
       if (cached?.item) return cached.item as EntityForCollection<T>;
-      const snap = await getDoc(docRef);
-      return { id: snap.id, ...snap.data() } as EntityForCollection<T>;
+      try {
+        const snap = await getDoc(docRef);
+        return { id: snap.id, ...snap.data() } as EntityForCollection<T>;
+      } catch (readErr: any) {
+        console.warn(`[FirestoreRepository] Read-after-write failed for ${colName}/${id}:`, readErr?.message || readErr);
+        return { id, ...cleanData } as EntityForCollection<T>;
+      }
     } catch (err: any) {
       quotaTracker.notifyQuotaExceeded(err);
       throw err;

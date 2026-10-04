@@ -52,7 +52,13 @@ export async function deleteEntireSchedule(
   await purge('share links', async () => {
     const links = await repo.list('shareLinks', bySchedule);
     for (const l of links) {
-      if (l.token) await removePublicRoster(l.token);
+      if (l.token) {
+        try {
+          await removePublicRoster(l.token, repo);
+        } catch (err) {
+          console.warn(`Could not remove public snapshot for token ${l.token}:`, err);
+        }
+      }
     }
     if (links.length > 0) await repo.bulkRemove('shareLinks', links.map((l) => l.id));
   });
