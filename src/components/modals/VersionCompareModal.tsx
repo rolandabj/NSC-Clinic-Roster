@@ -43,7 +43,8 @@ import { formatDate } from '../../utils/dateUtils';
 const CHANGE_LABELS: Record<string, string> = { ADDED: 'Added', REMOVED: 'Removed', MODIFIED: 'Changed' };
 
 interface VersionCompareModalProps {
-  schedule: Schedule;
+  // History mounts this dialog before its async roster lookup has finished.
+  schedule?: Schedule | null;
   versions: ScheduleVersion[];
   activeAssignments: Assignment[];
   nurses: Nurse[];
@@ -89,12 +90,12 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
   // The modal stays mounted, so the versions to compare are set again each time it opens
   // (and when the roster's versions change): by default the latest published one against now.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !schedule) return;
     const known = (id?: string) => !!id && (id === 'DRAFT' || versions.some((v) => v.id === id));
     const latestPublished = [...versions].filter((v) => v.isPublished).sort((a, b) => b.number - a.number)[0];
     setBaseId(known(initialBaseVersionId) ? initialBaseVersionId! : latestPublished?.id || versions[0]?.id || 'DRAFT');
     setTargetId(known(initialTargetVersionId) ? initialTargetVersionId! : 'DRAFT');
-  }, [isOpen, initialBaseVersionId, initialTargetVersionId, schedule.id, versions.length]);
+  }, [isOpen, initialBaseVersionId, initialTargetVersionId, schedule?.id, versions.length]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [changeTypeFilter, setChangeTypeFilter] = useState<'ALL' | 'ADDED' | 'REMOVED' | 'MODIFIED'>('ALL');
@@ -137,9 +138,9 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
   ]);
 
   const titleId = useId();
-  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
+  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen && !!schedule, onClose);
 
-  if (!isOpen) return null;
+  if (!isOpen || !schedule) return null;
 
   const filteredChanges = diffResult.allChanges.filter((item) => {
     const matchesSearch =

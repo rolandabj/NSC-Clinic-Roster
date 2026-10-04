@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-03, after the engine fixes from the Oct 19 to Nov 18 roster analysis (section 16, items 11 to 17).
+Last updated: 2026-10-04, after the Version History startup crash fix (section 16, item 18).
 
 ---
 
@@ -21,7 +21,7 @@ Last updated: 2026-10-03, after the engine fixes from the Oct 19 to Nov 18 roste
 | `npm install --legacy-peer-deps` | Install (the flag is needed for esbuild/vite peer conflicts) |
 | `npm run dev` | Express + Vite dev server on port 3000 |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 163 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 166 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `dist/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -344,6 +344,7 @@ Whole day problems (marked on the date heading in the grid): `cov-gap-`, `h1-sen
 - **Live updates**: assignments of the open roster are subscribed; other people's changes are merged once local saves are idle ("Updated with a change made by someone else"). Presence shows "X is also here".
 - **Backups**: before every fill or clear a `BACKUP` version is saved (newest 5 kept). Restore brings back shifts only and can be undone.
 - **Named copies** ("Keep a copy…"): versions with the next number. History can restore a version (uses the older `syncScheduleAssignments`, which replaces all shifts of the roster).
+- **History startup**: `VersionCompareModal` stays mounted while History loads its data. Its roster can be absent during loading or in an empty clinic, so it waits for a roster before opening or moving focus. Hook dependencies use `schedule?.id` to keep the screen from crashing before the first Firestore read finishes.
 - **Diff** (`history/diffEngine.ts` `computeScheduleDiff`): ADDED/REMOVED/MODIFIED by `nurseId|date`. Pin only changes are not emailed.
 
 ---
@@ -438,6 +439,8 @@ const result = await SchedulingEngine.generate(
 
 `tests/firestore-rules/rules.test.mjs`: emulator tests for every role and collection.
 
+`tests/unit/versionCompareModal.test.ts`: renders the comparison dialog with no roster, both closed and asked to open, and verifies that a loaded roster still shows the saved version versus draft changes. The missing roster cases reproduced the History startup crash before the fix.
+
 **Browser checks**: there is no Firebase emulator UI setup in the repo. In earlier sessions an in memory test page was built in the session scratchpad (a copy of the app wired to fake data), copied into a temporary `_preview/` folder, run with `npx vite --port 5179`, and driven with Playwright scripts (Chromium is preinstalled; `NODE_PATH=$(npm root -g)`). Delete `_preview/` before committing. A new session needs to rebuild such a page if it wants browser checks.
 
 ---
@@ -463,6 +466,8 @@ Completed and on `main`, in order:
 15. Hours and late shifts: a final top up brings every nurse to her hours goal where the rules allow (floats, longer shifts, doctor gaps first); late shifts are shared (a bonus for nurses below average, not only a penalty above); a repair step gives a doctor's only nurse back hours from earlier extras to cover his session. Replaying Oct 19 to Nov 18: 10 of 12 nurses at 230 h (Alaa and Noveline 228: twelve hour Pediatrics shifts can't add up to 230), late shifts 10 to 19 per nurse instead of 0 to 19 (Samia 5: all her hours go to Dr Reem).
 16. Fewest 9-9 shifts and more variety: a 9-9 only when the job needs it (replaying Oct 19 to Nov 18: 62 instead of 169, 61 of them for doctors working until 9 pm), shorter shifts and more working days reach the hours; less used shift types (11-9, 1-9, 9-5, 11-7, 9-3) take turns, more so the "used first" ones.
 17. Roster Doctors sheet: adding or changing a doctor's session no longer offers a specialty choice; it shows the doctor's specialty from his profile.
+
+18. Version History startup: the closed comparison dialog accessed `schedule.id` before History loaded its roster and caused the whole screen to show "This screen couldn't be opened". The dialog now accepts an absent roster, safely checks its id, and waits for a roster before opening or moving focus. Three regression tests cover the missing roster states and normal comparison. Type check, all 166 unit tests and production build pass. Chromium checks with an in memory repository pass for delayed loading, empty history, version selection, all four studio tabs, comparison and popout dialogs, and the restore confirmation dialog. The owner approved pushing the fix to `main` on 2026-10-04.
 ---
 
 ## 17. Known quirks and ideas for later
