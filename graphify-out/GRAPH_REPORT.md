@@ -1,17 +1,17 @@
-# Graph Report - NSC-Clinic-Roster  (2026-10-03)
+# Graph Report - NSC-Clinic-Roster  (2026-10-04)
 
 ## Corpus Check
-- 185 files · ~232,616 words
+- 185 files · ~232,698 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 6 file(s) not represented in the graph (top: (none) 2, .example 1, .lock 1)
 
 ## Summary
-- 1391 nodes · 5060 edges · 65 communities (57 shown, 8 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 125 edges (avg confidence: 0.9)
+- 1391 nodes · 5061 edges · 65 communities (57 shown, 8 thin omitted)
+- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 126 edges (avg confidence: 0.9)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `50d5f841`
+- Built from commit: `b06a9467`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

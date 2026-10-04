@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-03, after the engine fixes from the Oct 19 to Nov 18 roster analysis (section 16, items 11 to 16).
+Last updated: 2026-10-03, after the engine fixes from the Oct 19 to Nov 18 roster analysis (section 16, items 11 to 17).
 
 ---
 
@@ -384,7 +384,7 @@ Reminders (PublishView) re-use the original ack token. Private links: `/#me?t=nr
 
 **Nurses** (`NursesView.tsx`): list with filters and badges (Exclusive NC, PHL, top preferences). Profile: identity (gmail required, unique), seniority, contract %, Clinic Nurse checkbox, capabilities, ordered doctor/specialty list (drag or Move up/down), "When her doctors and her specialties need a nurse on the same day" radios (shown when both kinds are present), annual leave quotas in days, active, notes. Bulk CSV import.
 
-**Doctors** (`DoctorsView.tsx`): directory, specialties, weekly pattern editor, expand pattern into sessions over a date range, ad hoc sessions, cancel/restore. In the roster: `DoctorsScheduleSheet` changes one day or a weekday every week (`doctorScheduleService.saveDoctorShift` / `deleteDoctorShift`).
+**Doctors** (`DoctorsView.tsx`): directory, specialties, weekly pattern editor, expand pattern into sessions over a date range, ad hoc sessions, cancel/restore. In the roster: `DoctorsScheduleSheet` changes one day or a weekday every week (`doctorScheduleService.saveDoctorShift` / `deleteDoctorShift`), through `EditDoctorShiftModal`, where the specialty is shown read only from the doctor's profile (a session always carries the doctor's specialty).
 
 **Availability** (`AvailabilityView.tsx`): 31 day master grid (editors), drag to record leave, quota badges, pin shift locks, public holidays as PH, leave CSV import; "My Availability & Leave Requests" (`NurseSelfServicePanel`); "Pending Approvals" (`ApprovalsQueuePanel`, `staffRequestService.decideRequest`; approving a day off creates an OFF lock `lock-off-{nurseId}-{date}`); "All requests" (`AllRequestsPanel`, approvers): every day off and shift request whatever its decision, filters by status, type, nurse and date, and approve, decline, back to waiting (`reopenAvailabilityRequest`), change date/type/shift/note (`updateAvailabilityRequest`, the pin moves with an approved day off) and delete (`deleteAvailabilityRequest`, removes the pin). Removing the pin of an approved day off declines the request (the engine treats approved day off requests as days off even without a pin).
 
@@ -462,6 +462,7 @@ Completed and on `main`, in order:
 
 15. Hours and late shifts: a final top up brings every nurse to her hours goal where the rules allow (floats, longer shifts, doctor gaps first); late shifts are shared (a bonus for nurses below average, not only a penalty above); a repair step gives a doctor's only nurse back hours from earlier extras to cover his session. Replaying Oct 19 to Nov 18: 10 of 12 nurses at 230 h (Alaa and Noveline 228: twelve hour Pediatrics shifts can't add up to 230), late shifts 10 to 19 per nurse instead of 0 to 19 (Samia 5: all her hours go to Dr Reem).
 16. Fewest 9-9 shifts and more variety: a 9-9 only when the job needs it (replaying Oct 19 to Nov 18: 62 instead of 169, 61 of them for doctors working until 9 pm), shorter shifts and more working days reach the hours; less used shift types (11-9, 1-9, 9-5, 11-7, 9-3) take turns, more so the "used first" ones.
+17. Roster Doctors sheet: adding or changing a doctor's session no longer offers a specialty choice; it shows the doctor's specialty from his profile.
 ---
 
 ## 17. Known quirks and ideas for later

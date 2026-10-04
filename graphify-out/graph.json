@@ -14552,7 +14552,7 @@
       "node_kind": "heading",
       "norm_label": "17. known quirks and ideas for later",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L467"
+      "source_location": "L468"
     },
     {
       "id": "claude_skills_graphify_references_exports",
@@ -17449,7 +17449,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/modals/EditDoctorShiftModal.tsx",
-      "source_location": "L121",
+      "source_location": "L126",
       "weight": 1.0
     },
     {
@@ -17461,7 +17461,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/modals/EditDoctorShiftModal.tsx",
-      "source_location": "L142",
+      "source_location": "L147",
       "weight": 1.0
     },
     {
@@ -17473,7 +17473,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/modals/EditDoctorShiftModal.tsx",
-      "source_location": "L208",
+      "source_location": "L213",
       "weight": 1.0
     },
     {
@@ -63659,7 +63659,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L467",
+      "source_location": "L468",
       "weight": 1.0
     },
     {
@@ -75316,6 +75316,18 @@
       "weight": 1.0
     },
     {
+      "source": "project_guide_13_screens_in_detail",
+      "target": "src_components_modals_editdoctorshiftmodal_editdoctorshiftmodal",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "context": "EditDoctorShiftModal",
+      "source_file": "PROJECT_GUIDE.md",
+      "source_location": "L387",
+      "weight": 1.0
+    },
+    {
       "source": "project_guide_4_navigation_and_app_shell",
       "target": "src_components_common_emailhtmlpreview_emailhtmlpreview",
       "relation": "references",
@@ -75576,7 +75588,7 @@
       "confidence_score": 0.95,
       "context": "WalkthroughModal",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L474",
+      "source_location": "L475",
       "weight": 1.0
     },
     {
@@ -75780,7 +75792,7 @@
       "confidence_score": 0.95,
       "context": "doctorSessionsOn",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L471",
+      "source_location": "L472",
       "weight": 1.0
     },
     {
@@ -76056,7 +76068,7 @@
       "confidence_score": 0.95,
       "context": "syncScheduleAssignments",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L473",
+      "source_location": "L474",
       "weight": 1.0
     },
     {
@@ -76085,5 +76097,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "50d5f84186220af5c16412e69d52855784338acf"
+  "built_at_commit": "b06a9467dc99088a3d67cc2442ccf8a873836292"
 }

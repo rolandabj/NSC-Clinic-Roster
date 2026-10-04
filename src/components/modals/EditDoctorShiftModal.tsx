@@ -95,20 +95,25 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
         setStartTime(existingSession.startTime);
         setEndTime(existingSession.endTime);
         setRoom(existingSession.room || '');
-        setSpecialtyId(existingSession.specialtyId || doctor.specialtyIds[0] || '');
+        // The session keeps the doctor's specialty (it can't be changed here)
+        setSpecialtyId(
+          existingSession.specialtyId && doctor.specialtyIds.includes(existingSession.specialtyId)
+            ? existingSession.specialtyId
+            : doctor.specialtyIds[0] || ''
+        );
         // A change starts as "this date only"; changing every matching weekday is a deliberate choice.
         setUpdateScope('THIS_DATE_ONLY');
       } else if (recurringPatternSlot) {
         setStartTime(recurringPatternSlot.startTime);
         setEndTime(recurringPatternSlot.endTime);
         setRoom(recurringPatternSlot.room || '');
-        setSpecialtyId(doctor.specialtyIds[0] || (specialties[0]?.id ?? ''));
+        setSpecialtyId(doctor.specialtyIds[0] || '');
         setUpdateScope('THIS_DATE_ONLY');
       } else {
         setStartTime('09:00');
         setEndTime('13:00');
         setRoom('');
-        setSpecialtyId(doctor.specialtyIds[0] || (specialties[0]?.id ?? ''));
+        setSpecialtyId(doctor.specialtyIds[0] || '');
         setUpdateScope('THIS_DATE_ONLY');
       }
       setShowDeleteConfirm(false);
@@ -323,21 +328,18 @@ export const EditDoctorShiftModal: React.FC<EditDoctorShiftModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                Specialty
-              </label>
-              <select
+              {/* The doctor's specialty, from his profile: not changed per session */}
+              <span className="block text-[11px] font-semibold text-slate-700 mb-1">Specialty</span>
+              <p
                 aria-label="Specialty"
-                value={specialtyId}
-                onChange={(e) => setSpecialtyId(e.target.value)}
-                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                title="Set in the doctor's profile (Doctors screen)"
+                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 bg-slate-50"
               >
-                {specialties.map((sp) => (
-                  <option key={sp.id} value={sp.id}>
-                    {sp.name} ({sp.code})
-                  </option>
-                ))}
-              </select>
+                {(() => {
+                  const sp = specialties.find((x) => x.id === specialtyId);
+                  return sp ? `${sp.name} (${sp.code})` : 'No specialty in the doctor\'s profile';
+                })()}
+              </p>
             </div>
           </div>
 
