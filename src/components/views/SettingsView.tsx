@@ -593,3 +593,5 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     </div>
   );
 };
+
+export default SettingsView;

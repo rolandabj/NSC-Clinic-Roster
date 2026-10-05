@@ -4,6 +4,7 @@ import { LocalModeBanner } from './LocalModeBanner';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 import { DashboardView } from '../views/DashboardView';
+import { SettingsView } from '../views/SettingsView';
 import { AuthModal } from '../modals/AuthModal';
 import { PageLoading } from '../common/PageLoading';
 import { ShortcutsModal } from '../modals/ShortcutsModal';
@@ -34,7 +35,6 @@ const DoctorsView = lazy(() => import('../views/DoctorsView').then((m) => ({ def
 const HistoryView = lazy(() => import('../views/HistoryView').then((m) => ({ default: m.HistoryView })));
 const PublishView = lazy(() => import('../views/PublishView').then((m) => ({ default: m.PublishView })));
 const ReportsView = lazy(() => import('../views/ReportsView').then((m) => ({ default: m.ReportsView })));
-const SettingsView = lazy(() => import('../views/SettingsView').then((m) => ({ default: m.SettingsView })));
 const PublishedRosterView = lazy(() => import('../views/PublishedRosterView').then((m) => ({ default: m.PublishedRosterView })));
 const MyRosterView = lazy(() => import('../views/MyRosterView').then((m) => ({ default: m.MyRosterView })));
 const AuditTrailView = lazy(() => import('../views/AuditTrailView').then((m) => ({ default: m.AuditTrailView })));
