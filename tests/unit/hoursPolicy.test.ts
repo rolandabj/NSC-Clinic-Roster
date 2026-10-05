@@ -7,6 +7,7 @@ import {
   resolveFullTimeTarget,
 } from '../../src/services/hours/hoursPolicy';
 import { ANNUAL_LEAVE, UNPAID_LEAVE, makeLeave, makeSchedule } from './fixtures';
+import { calculateWorkingHoursForDateRange } from '../../src/services/periods/workingHoursPeriodService';
 
 test('inclusiveDays counts both ends', () => {
   assert.equal(inclusiveDays('2026-10-01', '2026-10-01'), 1);
@@ -37,13 +38,13 @@ test('only leave days inside the schedule count', () => {
   assert.equal(leaveCreditInRange(leave, ANNUAL_LEAVE, '2026-11-01', '2026-11-30'), 0);
 });
 
-test('full time target: schedule target when no period covers the dates', () => {
+test('full time target: schedule target is ignored when no period covers the dates', () => {
   const schedule = makeSchedule({ startDate: '2026-10-01', endDate: '2026-10-31', hoursTargetFullTime: 168 });
   const periodsElsewhere = [
     { id: 'p', year: '2025', name: 'Jan 2025', startDate: '2025-01-01', endDate: '2025-01-31', workingHours: 170 },
   ] as any;
-  assert.deepEqual(resolveFullTimeTarget(schedule, periodsElsewhere).hours, 168);
-  assert.equal(resolveFullTimeTarget(schedule, periodsElsewhere).source, 'SCHEDULE');
+  assert.equal(resolveFullTimeTarget(schedule, periodsElsewhere).hours, 0);
+  assert.equal(resolveFullTimeTarget(schedule, periodsElsewhere).source, 'DEFAULT');
 });
 
 test('full time target: a matching dedicated period wins', () => {
@@ -56,7 +57,25 @@ test('full time target: a matching dedicated period wins', () => {
   assert.equal(target.source, 'PERIOD');
 });
 
-test('full time target: 40h per week when nothing else is set', () => {
+test('full time target: uncovered dates accrue no target hours', () => {
   const schedule = makeSchedule({ startDate: '2026-10-05', endDate: '2026-10-18', hoursTargetFullTime: 0 });
-  assert.equal(resolveFullTimeTarget(schedule, []).hours, 80);
+  assert.equal(resolveFullTimeTarget(schedule, []).hours, 0);
+});
+
+
+test('uncovered days are excluded from period prorating', () => {
+  const periods = [
+    { id: 'p', year: '2026', name: 'October', startDate: '2026-10-01', endDate: '2026-10-31', workingHours: 310 },
+  ] as any;
+  const result = calculateWorkingHoursForDateRange('2026-10-30', '2026-11-02', periods);
+  assert.equal(result.targetHours, 20);
+  assert.equal(result.fallbackDays, 2);
+  assert.match(result.description, /2 uncovered days excluded/);
+});
+
+test('dates with no dedicated period accrue no target', () => {
+  const result = calculateWorkingHoursForDateRange('2026-10-05', '2026-10-18', []);
+  assert.equal(result.targetHours, 0);
+  assert.equal(result.fallbackDays, 14);
+  assert.match(result.description, /no hours target is accrued/);
 });
