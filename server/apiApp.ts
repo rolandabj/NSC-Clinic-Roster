@@ -19,10 +19,15 @@ import { calendarRouter } from './routes/calendar';
 
 export function createApiApp() {
   const app = express();
-  // The build contains server.js beside the browser assets. Never serve it,
-  // including when Vite's own preview server serves dist directly.
+  // The backend lives outside dist. Also block legacy bundles and Vite file
+  // URLs, decoding first to match the static server's interpretation of a URL.
   app.use((req: Request, res: Response, next) => {
-    if (/^\/server\.js(\.map)?$/i.test(req.path)) { res.status(404).end(); return; }
+    let requestPath: string;
+    try { requestPath = decodeURIComponent(req.path).replace(/\\/g, '/'); }
+    catch { res.status(400).end(); return; }
+    if (/(?:^|\/)(?:build|server\.js(?:\.map)?)(?:\/|$)/i.test(requestPath)) {
+      res.status(404).end(); return;
+    }
     next();
   });
   // The app runs behind one hosting proxy: use the visitor's address it passes on,

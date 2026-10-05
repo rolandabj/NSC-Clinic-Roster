@@ -4,7 +4,7 @@
  * 
  * ClinicRoster Server Bootstrap Entrypoint
  * Under Node.js ESM execution (npm run start / node server.ts):
- * - If bundled in production (dist/server.js exists), imports the standalone bundle.
+ * - If bundled in production (build/server.js exists), imports the standalone bundle.
  * - Otherwise (in dev via tsx), imports the application source module.
  */
 
@@ -14,12 +14,12 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const distServer = path.resolve(__dirname, 'dist', 'server.js');
+const builtServer = path.resolve(__dirname, 'build', 'server.js');
 
-if (fs.existsSync(distServer)) {
+if (fs.existsSync(builtServer)) {
   process.env.NODE_ENV ||= 'production';
-  const dynamicDistPath = './dist/server.js';
-  await import(dynamicDistPath);
+  const builtServerPath = './build/server.js';
+  await import(builtServerPath);
 } else {
   await import('./server/app.ts');
 }

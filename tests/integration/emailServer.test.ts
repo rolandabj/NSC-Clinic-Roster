@@ -2,6 +2,10 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
+import { existsSync } from 'node:fs';
+
+assert.equal(existsSync('build/server.js'), true, 'build the backend outside the public assets');
+assert.equal(existsSync('dist/server.js'), false, 'the public build must contain no backend bundle');
 
 async function availablePort(): Promise<number> {
   const socket = createServer();
@@ -49,7 +53,11 @@ for (const mode of ['dev', 'start', 'vite', 'preview']) {
     const page = await fetch(base);
     assert.equal(page.status, 200);
     assert.match(page.headers.get('content-type') || '', /text\/html/);
-    assert.equal((await fetch(base + '/server.js')).status, 404, 'the server bundle must not be downloadable');
+    for (const path of ['/server.js', '/%73erver.js', '/server%2ejs', '/server.js.map',
+      '/build/server.js', '/%62uild%2fserver.js', '/dist/server.js',
+      `/@fs${process.cwd()}/build/server.js`]) {
+      assert.equal((await fetch(base + path)).status, 404, `${mode}: backend file blocked at ${path}`);
+    }
     console.log(`PASS ${mode}: web app and protected email routes share one server; API errors stay JSON`);
   } finally {
     if (child.pid) { try { process.kill(-child.pid, 'SIGTERM'); } catch {} }

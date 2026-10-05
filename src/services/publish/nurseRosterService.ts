@@ -224,10 +224,11 @@ export function buildNurseRosterDoc(input: BuildNurseRosterInput): NurseRosterDo
   const shifts = new Map<string, NurseRosterShift>();
   const leaveDays = new Set<string>();
 
-  for (const schedule of input.schedules) {
-    if (!schedule.endDate || schedule.endDate < cutoff) continue;
-    const version = latest.get(schedule.id);
+  for (const draft of input.schedules) {
+    const version = latest.get(draft.id);
     if (!version) continue;
+    const schedule = version.snapshot.schedule || draft;
+    if (!schedule.endDate || schedule.endDate < cutoff) continue;
     const from = schedule.startDate > cutoff ? schedule.startDate : cutoff;
     const to = schedule.endDate;
     const inRange = (d: string) => d >= from && d <= to;
@@ -379,14 +380,19 @@ export async function syncNurseRosters(repo: IRepository, nurseIds?: string[], j
   const today = todayIso(clinic?.timezone || 'Asia/Dubai');
   const cutoff = addDaysIso(today, -NURSE_ROSTER_LOOKBACK_DAYS);
 
-  // Only the versions of rosters that can still show on a page.
-  const recentSchedules = schedules.filter((s) => s.endDate && s.endDate >= cutoff);
+  // A draft can move outside the lookback window while its published version
+  // still belongs on a nurse's page. Read versions before filtering by dates.
   const versionLists = await Promise.all(
-    recentSchedules.map((s) => repo.list('versions', { field: 'scheduleId', operator: '==', value: s.id }))
+    schedules.map((s) => repo.list('versions', { field: 'scheduleId', operator: '==', value: s.id }))
   );
   // A live cache may not yet contain the version whose write just completed.
   const versions = [...versionLists.flat(), ...justPublished];
   const latest = latestPublishedVersions(versions);
+  const recentSchedules = schedules.filter(draft => {
+    const version = latest.get(draft.id);
+    const publishedSchedule = version?.snapshot.schedule || draft;
+    return version && publishedSchedule.endDate && publishedSchedule.endDate >= cutoff;
+  });
   const teamRosters = recentSchedules.filter(s => latest.has(s.id)).map(schedule => buildTeamRosterSheet({
     schedule, version: latest.get(schedule.id)!, nurses, dutyWindows, doctors, clinicalRoles, specialties, weekendDays: clinic?.weekendDays,
   })).sort((a, b) => a.startDate.localeCompare(b.startDate));

@@ -28,6 +28,44 @@ test('team sheet uses published dates even after draft dates change', () => {
   assert.equal(sheet.nurses[0].cells.length, 1);
 });
 
+test('personal calendar and leave retain published dates and name after draft edits', () => {
+  for (const draft of [
+    { ...schedule, name: 'Unpublished name', startDate: addDaysIso(today, 2) },
+    { ...schedule, name: 'Unpublished name', startDate: addDaysIso(today, -60), endDate: addDaysIso(today, -40) },
+  ]) {
+    const doc = buildNurseRosterDoc({ ...refs, nurse: nurses[0], token: 'nr_test', schedules: [draft], versions: [published], today });
+    assert.deepEqual(doc.shifts.map(s => s.date), [schedule.startDate]);
+    assert.equal(doc.shifts[0].scheduleName, schedule.name);
+    assert.match(buildNurseRosterIcs(doc), new RegExp(schedule.startDate.replaceAll('-', '')));
+    const onLeave = buildNurseRosterDoc({ ...refs, nurse: nurses[1], token: 'nr_test', schedules: [draft], versions: [published], today });
+    assert.deepEqual(onLeave.leaveDays, [schedule.startDate]);
+  }
+});
+
+test('private page sync selects recent rosters by published dates, not edited draft dates', async () => {
+  const oldSchedule = makeSchedule({ id: 'old', startDate: addDaysIso(today, -60), endDate: addDaysIso(today, -40) });
+  const oldVersion = { ...published, id: 'old-version', scheduleId: oldSchedule.id, snapshot: { ...published.snapshot, schedule: oldSchedule, assignments: [] } };
+  const data: Record<string, any[]> = {
+    ...refs,
+    schedules: [
+      { ...schedule, startDate: oldSchedule.startDate, endDate: oldSchedule.endDate },
+      { ...oldSchedule, startDate: today, endDate: schedule.endDate },
+    ],
+    versions: [published, oldVersion],
+    nurseLinks: [{ id: 'n1', nurseId: 'n1', token: 'nr_n1', revoked: false }],
+    clinics: [{ name: 'Clinic', timezone: 'Asia/Dubai' }],
+  };
+  const saved: any[] = [];
+  const repo = {
+    list: async (name: string, filter?: { field: string; value: string }) => (data[name] || []).filter(item => !filter || item[filter.field] === filter.value),
+    create: async (_name: string, doc: any) => { saved.push(doc); return doc; },
+  };
+  const result = await syncNurseRosters(repo as any);
+  assert.equal(result.synced, 1);
+  assert.deepEqual(saved[0].teamRosters.map((s: any) => s.scheduleId), [schedule.id]);
+  assert.deepEqual(saved[0].shifts.map((s: any) => s.date), [schedule.startDate]);
+});
+
 test('personal calendar does not include teammates and suppresses shifts on leave days', () => {
   const teamRosters = [buildTeamRosterSheet({ ...refs, schedule, version: published })];
   const doc = buildNurseRosterDoc({ ...refs, nurse: nurses[1], token: 'nr_test', schedules: [schedule], versions: [published], today: schedule.startDate, teamRosters });

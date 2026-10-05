@@ -46,7 +46,7 @@
 
 ### Development
 ```bash
-npm install
+npm install --legacy-peer-deps
 npm run dev
 ```
 The application will be accessible at `http://localhost:3000`.
@@ -62,3 +62,5 @@ npm start
 npm run test
 ```
 Runs the full suite of unit tests validating the scheduling engine, cascade deletions, period calculations, and constraints.
+
+See [PROJECT_GUIDE.md](PROJECT_GUIDE.md) for architecture, deployment, security, and the full testing workflow. Browser assets build into `dist/`; the backend builds separately into `build/server.js` and is loaded by `npm start`.

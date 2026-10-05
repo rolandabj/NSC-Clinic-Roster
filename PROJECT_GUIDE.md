@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-05, after the AI Studio preview email API routing fix (section 16, item 22).
+Last updated: 2026-10-05, after the server bundle and published calendar review fixes (section 16, item 23).
 
 ---
 
@@ -23,8 +23,8 @@ Last updated: 2026-10-05, after the AI Studio preview email API routing fix (sec
 | `npm start` | Built server in production mode, or current source when no build exists |
 | `npm run preview` | Vite preview with the shared protected API mounted before the web app fallback |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 201 passing |
-| `npm run build` | Vite client build + esbuild server bundle to `dist/server.js` |
+| `npm test` | Unit tests (Node test runner via tsx), currently 203 passing |
+| `npm run build` | Vite client build + esbuild server bundle to `build/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
 
@@ -66,7 +66,7 @@ Last updated: 2026-10-05, after the AI Studio preview email API routing fix (sec
 ## 2. Repository layout
 
 ```
-server.ts                         Start entry: loads dist/server.js in production if built, else server/app.ts
+server.ts                         Start entry: loads build/server.js in production if built, else server/app.ts
 server/
   app.ts                          Starts the shared API plus Vite middleware or built static assets
   apiApp.ts                       Shared Express API: helmet, rate limits, auth, routes, JSON errors
@@ -203,7 +203,7 @@ All types are in `src/types/index.ts`. Every document stores its own `id`.
 | shareLinks | `ShareLink`: token `sh_{uuid}`, public, allowedEmails, revoked, pointsToVersionId |
 | publicRosters | `{token}`: a cleaned snapshot readable without signing in (`PublicRosterDoc`, format 2). Not listable. |
 | nurseLinks | `{nurseId}`: private token `nr_{uuid}`. Editors only. |
-| nurseRosters | `{token}`: personal calendar data and cleaned published team sheets (`NurseRosterDoc`, optional `teamRosters`). Readable by token. Not listable. No emails, private notes, employee codes or reasons for leave. |
+| nurseRosters | `{token}`: personal calendar data and cleaned published team sheets (`NurseRosterDoc`, optional `teamRosters`). Readable by token. Not listable. Calendar data and team sheets use published dates and names, even when draft dates change. No emails, private notes, employee codes or reasons for leave. |
 | acknowledgments | Read receipts; doc id = the emailed token `ack-{uuid}`; ackAt set once |
 | emailLog | `PublishLog`: kind PUBLISH/CHANGE/TEST/REMINDER, recipients with status |
 | audit | `AuditEvent`: actor, action (CREATE, UPDATE, DELETE, RESTORE, LOCK, OVERRIDE_LOCK, PUBLISH, SWAP, TEMPLATE_APPLY, REBALANCE), before/after |
@@ -434,7 +434,7 @@ The server verifies Firebase ID tokens itself (jose, Google JWKS) and reads `use
 
 **Firebase**: project `gen-lang-client-0671372661`, a **named** Firestore database (`ai-studio-clinicroster-…`), config in `firebase-applet-config.json`.
 
-**Preview routing**: `server/apiApp.ts` builds the single shared API with no listener or frontend fallback. `server/app.ts` mounts it in Express. The `clinic-api` Vite plugin also mounts it before the SPA fallback when AI Studio starts Vite directly or uses Vite preview. It skips middleware mode because Express already owns the API there. Unknown API routes and request parser failures return JSON. The shared middleware blocks downloads of the compiled server bundle in every mode. `npm run dev` runs current source even after a build; `npm start` uses `tsx server.ts` and defaults a built bundle to production mode. After syncing these changes, restart the AI Studio preview so the new server configuration is loaded.
+**Preview routing**: `server/apiApp.ts` builds the single shared API with no listener or frontend fallback. `server/app.ts` mounts it in Express. The `clinic-api` Vite plugin also mounts it before the SPA fallback when AI Studio starts Vite directly or uses Vite preview. It skips middleware mode because Express already owns the API there. Unknown API routes and request parser failures return JSON. The backend compiles into `build/server.js`, outside the public `dist` folder. Shared middleware decodes URL paths before refusing backend bundle and build folder downloads, including encoded URLs and Vite filesystem URLs. The build removes the old public bundle, and `npm run clean` removes both build folders. `npm run dev` runs current source even after a build; `npm start` uses `tsx server.ts` and defaults a built bundle to production mode. After syncing these changes, restart the AI Studio preview so the new server configuration is loaded.
 
 **Deploy**: push to GitHub `main` → AI Studio syncs and redeploys. Rules: publish by hand in the Firebase console. CI (`.github/workflows/ci.yml`, ignored by AI Studio): type check, unit tests, build, rules tests in the emulator.
 
@@ -462,7 +462,7 @@ const result = await SchedulingEngine.generate(
 
 **Roster transaction tests**: `tests/integration/scheduleTransactions.test.ts` uses the real Firestore repository and a local demo emulator. See `tests/integration/README.md` for the command. It checks simultaneous planners, legacy index bootstrap, date edits, publishing metadata, atomic imports, deletion and stale index restores. No Firestore rules change is needed for these application transactions.
 
-**Email server integration**: after `npm run build`, run `node --import tsx tests/integration/emailServer.test.ts`. This starts dev, production, direct Vite and Vite preview locally. Each must serve the web app, return authenticated JSON API errors, handle malformed JSON without an HTML error page and block the server bundle download. It sends no email and needs no Firebase credentials. CI runs it after the build.
+**Email server integration**: after `npm run build`, run `node --import tsx tests/integration/emailServer.test.ts`. This starts dev, production, direct Vite and Vite preview locally. Each must serve the web app, return authenticated JSON API errors, handle malformed JSON without an HTML error page and block plain, encoded, source map, build folder and Vite filesystem URLs for the backend bundle. The integration test also checks that the backend exists in `build` and is absent from `dist`. It sends no email and needs no Firebase credentials. CI runs it after the build.
 
 **Browser checks**: there is no Firebase emulator UI setup in the repo. In earlier sessions an in memory test page was built in the session scratchpad (a copy of the app wired to fake data), copied into a temporary `_preview/` folder, run with `npx vite --port 5179`, and driven with Playwright scripts (Chromium is preinstalled; `NODE_PATH=$(npm root -g)`). Delete `_preview/` before committing. A new session needs to rebuild such a page if it wants browser checks.
 
@@ -495,10 +495,13 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 20. Continuous hours and roster dates: implemented in four phases after the owner confirmed that drafts, published and archived records count, tracking begins at the earliest saved roster, gaps accrue target, and both shortages and excess carry into later periods. Added the shared balance, period boundary checks, transactional date reservations, live history refresh, report and export breakdowns, and fresh publishing validation. Includes 19 new unit tests, bringing the total to 187. The real Firestore emulator checks simultaneous saves and imports; Chromium checks the roster workspace, Hours, timesheet, live Reports, overlap blocking, valid adjacent creation and historical exports. Type check and production build pass. The owner approved the push on 2026-10-04; published to main as `6a1ed6b`.
 
 
-21. Email and team roster access: added server configuration and SMTP connection checks, refreshed shared settings before sends and retries, fixed stale MOCK provider overrides, corrected port 465 TLS, normalized Google app passwords, bounded SMTP waits, checked recipient acceptance, and separated simulated sends from actual emails and read receipts. Private nurse pages now include cleaned team snapshots, with My schedule and Team schedule using a shared PDF style grid and landscape print. Latest snapshots are supplied explicitly after publishing to avoid stale cache data. The owner confirmed access through existing private links without sign in. All 199 unit tests, type check, build and 91 Firestore permission checks pass. Browser tests cover preflight failure before saving a version, partial sends and retry without duplicate emails, updated private pages, settings connection checks, personal and team views, mobile layout, and landscape print. No real emails were sent. The later screenshot identified an HTML response in AI Studio preview; see item 22. Server secrets and live inbox delivery have not been verified. Prepared on the working branch for review, not pushed to main.
+21. Email and team roster access: added server configuration and SMTP connection checks, refreshed shared settings before sends and retries, fixed stale MOCK provider overrides, corrected port 465 TLS, normalized Google app passwords, bounded SMTP waits, checked recipient acceptance, and separated simulated sends from actual emails and read receipts. Private nurse pages now include cleaned team snapshots, with My schedule and Team schedule using a shared PDF style grid and landscape print. Latest snapshots are supplied explicitly after publishing to avoid stale cache data. The owner confirmed access through existing private links without sign in. All 199 unit tests, type check, build and 91 Firestore permission checks pass. Browser tests cover preflight failure before saving a version, partial sends and retry without duplicate emails, updated private pages, settings connection checks, personal and team views, mobile layout, and landscape print. No real emails were sent. The later screenshot identified an HTML response in AI Studio preview; see item 22. Server secrets and live inbox delivery have not been verified. Published to main as part of `cc5e348` with owner approval on 2026-10-05.
 
 
-22. AI Studio preview email routing: the owner supplied a screenshot of `Unexpected token '<', "<!doctype ..." is not valid JSON` and confirmed the error occurred inside AI Studio preview. The client had received HTML instead of an email API response. Direct Vite and Vite preview previously had no email API. Extracted the shared Express API and mounted it in both Vite modes before frontend fallback; middleware mode avoids double mounting. Fixed startup selection so dev does not run a stale server bundle and built starts use production mode. All email responses now detect HTML clearly, and server request failures remain JSON. The new integration check passes in four startup modes; all 201 unit tests, type check and build pass. No real emails sent. Prepared as a follow up on the working branch, not pushed to main. The AI Studio preview must restart after syncing the fix; live email acceptance still depends on the configured server sending account.
+22. AI Studio preview email routing: the owner supplied a screenshot of `Unexpected token '<', "<!doctype ..." is not valid JSON` and confirmed the error occurred inside AI Studio preview. The client had received HTML instead of an email API response. Direct Vite and Vite preview previously had no email API. Extracted the shared Express API and mounted it in both Vite modes before frontend fallback; middleware mode avoids double mounting. Fixed startup selection so dev does not run a stale server bundle and built starts use production mode. All email responses now detect HTML clearly, and server request failures remain JSON. The new integration check passes in four startup modes; all 201 unit tests, type check and build pass. No real emails sent. Published to main in `cc5e348` with owner approval on 2026-10-05. The AI Studio preview must restart after syncing the fix; live email acceptance still depends on the configured server sending account.
+
+
+23. Review fixes: moved the compiled backend out of public assets into `build/server.js`, updated startup and cleanup, and decoded file paths before blocking backend downloads. Expanded integration coverage to encoded paths, source maps and Vite filesystem URLs in all four startup modes. Nurse calendar data, leave and schedule names now use the latest published snapshot; page synchronization filters by published dates only after loading versions, so editing draft dates cannot remove published shifts or revive old published sheets. Two regression tests failed before the fix and pass afterward. All 203 unit tests, type check, build and the four startup integration modes pass. Reviewed every file added by the last two commits: all have a runtime, testing or documentation purpose, and no exact duplicate tracked files were found. Kept those files, removed the stale local graph rebuild lock and ignored future runtime locks, and aligned README setup with this guide. No real emails sent and no Firestore rules changed. Prepared on `fix/review-publishing-safety`; not pushed to main.
 
 ---
 
