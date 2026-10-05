@@ -26,7 +26,7 @@ export function inclusiveDays(startDate: string, endDate: string): number {
 
 export interface FullTimeTarget {
   hours: number;
-  source: 'PERIOD' | 'NONE';
+  source: 'PERIOD' | 'SCHEDULE' | 'NONE';
   periodName?: string;
 }
 
@@ -49,6 +49,10 @@ export function resolveFullTimeTarget(
           calc.matchedPeriod?.name || (calc.isProrated ? `${calc.totalScheduleDays}d Prorated` : schedule.periodName),
       };
     }
+  }
+
+  if (schedule.hoursTargetFullTime && schedule.hoursTargetFullTime > 0) {
+    return { hours: schedule.hoursTargetFullTime, source: 'SCHEDULE', periodName: schedule.periodName };
   }
 
   return { hours: 0, source: 'NONE', periodName: schedule.periodName };
