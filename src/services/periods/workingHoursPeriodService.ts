@@ -95,14 +95,13 @@ export function getDatesInRange(startDate: string, endDate: string): string[] {
  * 2. If date range is a subset (a few days to a few weeks) or spans across periods:
  *    - Each calendar day is mapped to its containing dedicated period.
  *    - Each period's daily rate (workingHours / totalDaysInPeriod) is summed for all overlapping days.
- * 3. If any days fall outside defined periods, fallback to standard outpatient rate (40h/week = ~5.714h/day).
- * 4. The total is rounded to the nearest integer.
+ * 3. Days outside defined periods do not accrue a target.
+ * 4. The total covered hours are rounded to the nearest integer.
  */
 export function calculateWorkingHoursForDateRange(
   startDate: string,
   endDate: string,
-  periods: WorkingHoursPeriod[],
-  fallbackHoursPerWeek = 40
+  periods: WorkingHoursPeriod[]
 ): WorkingHoursCalculationResult {
   const totalScheduleDays = getInclusiveDays(startDate, endDate);
 
@@ -184,13 +183,7 @@ export function calculateWorkingHoursForDateRange(
     }
   });
 
-  // Handle any fallback days outside defined periods
-  if (fallbackDaysCount > 0) {
-    const fallbackDailyRate = fallbackHoursPerWeek / 7;
-    rawHoursSum += fallbackDailyRate * fallbackDaysCount;
-  }
-
-  const roundedTarget = Math.max(1, Math.round(rawHoursSum));
+  const roundedTarget = Math.round(rawHoursSum);
   const primaryPeriod = breakdown.length > 0 ? periods.find((p) => p.id === breakdown[0].periodId) : undefined;
 
   // Build human-friendly description
@@ -202,14 +195,17 @@ export function calculateWorkingHoursForDateRange(
     const parts = breakdown.map((b) => `${b.daysCovered}d from ${b.periodName}`).join(' + ');
     description = `Prorated across periods: ${parts} = ${roundedTarget}h`;
   } else {
-    description = `Standard outpatient calculation: ${totalScheduleDays} days (~${fallbackHoursPerWeek}h/week) = ${roundedTarget}h`;
+    description = 'No dedicated period covers these dates; no hours target is accrued.';
+  }
+  if (breakdown.length > 0 && fallbackDaysCount > 0) {
+    description += `; ${fallbackDaysCount} uncovered days excluded`;
   }
 
   return {
     targetHours: roundedTarget,
     isExactMatch: false,
     matchedPeriod: primaryPeriod,
-    isProrated: true,
+    isProrated: breakdown.length > 0,
     totalScheduleDays,
     breakdown,
     fallbackDays: fallbackDaysCount,
