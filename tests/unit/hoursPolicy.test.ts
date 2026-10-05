@@ -38,13 +38,13 @@ test('only leave days inside the schedule count', () => {
   assert.equal(leaveCreditInRange(leave, ANNUAL_LEAVE, '2026-11-01', '2026-11-30'), 0);
 });
 
-test('full time target: schedule target is ignored when no period covers the dates', () => {
+test('full time target: roster target applies when no period covers the dates', () => {
   const schedule = makeSchedule({ startDate: '2026-10-01', endDate: '2026-10-31', hoursTargetFullTime: 168 });
   const periodsElsewhere = [
     { id: 'p', year: '2025', name: 'Jan 2025', startDate: '2025-01-01', endDate: '2025-01-31', workingHours: 170 },
   ] as any;
-  assert.equal(resolveFullTimeTarget(schedule, periodsElsewhere).hours, 0);
-  assert.equal(resolveFullTimeTarget(schedule, periodsElsewhere).source, 'NONE');
+  assert.equal(resolveFullTimeTarget(schedule, periodsElsewhere).hours, 168);
+  assert.equal(resolveFullTimeTarget(schedule, periodsElsewhere).source, 'SCHEDULE');
 });
 
 test('full time target: a matching dedicated period wins', () => {
