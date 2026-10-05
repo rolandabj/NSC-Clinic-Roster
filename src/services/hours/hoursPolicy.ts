@@ -26,7 +26,7 @@ export function inclusiveDays(startDate: string, endDate: string): number {
 
 export interface FullTimeTarget {
   hours: number;
-  source: 'PERIOD' | 'SCHEDULE' | 'DEFAULT';
+  source: 'PERIOD' | 'NONE';
   periodName?: string;
 }
 
@@ -51,7 +51,7 @@ export function resolveFullTimeTarget(
     }
   }
 
-  return { hours: 0, source: 'DEFAULT', periodName: schedule.periodName };
+  return { hours: 0, source: 'NONE', periodName: schedule.periodName };
 }
 
 type CreditEntry = Pick<LeaveEntry, 'startDate' | 'endDate' | 'hoursCredited'> & { dayHours?: Record<string, number> };
