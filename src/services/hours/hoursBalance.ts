@@ -1,5 +1,5 @@
 import { Assignment, DutyWindow, LeaveEntry, LeaveType, Nurse, Schedule, WorkingHoursPeriod } from '../../types';
-import { inclusiveDays, leaveCreditOnDate, resolveFullTimeTarget } from './hoursPolicy';
+import { leaveCreditOnDate, resolveFullTimeTarget } from './hoursPolicy';
 import { getDatesInRange, getPeriodDailyRate } from '../periods/workingHoursPeriodService';
 import { findScheduleOverlaps, ScheduleOverlap } from '../schedule/scheduleRanges';
 
@@ -102,13 +102,10 @@ export function resolveNurseHoursBalance(
   });
   const before = shiftIsoDate(schedule.startDate, -1);
   const previousCreditedHours = countHoursInRange(nurse.id, trackingStartDate, before, previousAssignments, duties, history.leaveEntries || leaves, types).totalHours;
-  const rates = new Map(schedules.map(s => [s.id, periods.some(p => p.startDate <= s.endDate && p.endDate >= s.startDate)
-    ? 40 / 7 : resolveFullTimeTarget(s, periods).hours / Math.max(1, inclusiveDays(s.startDate, s.endDate))]));
   let rawBefore = 0, rawCurrent = 0;
   for (const date of getDatesInRange(trackingStartDate, through)) {
     const period = periods.find(p => p.startDate <= date && p.endDate >= date);
-    const roster = schedules.find(s => s.startDate <= date && s.endDate >= date);
-    const rate = period ? getPeriodDailyRate(period) : roster ? rates.get(roster.id)! : 40 / 7;
+    const rate = period ? getPeriodDailyRate(period) : 0;
     if (date < schedule.startDate) rawBefore += rate * share;
     else rawCurrent += rate * share;
   }
