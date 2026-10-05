@@ -197,7 +197,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
         setScheduleName(generateSuggestedName(startDate, endDate));
       }
       if (periodCalculation) {
-        setHoursTarget(periodCalculation.targetHours);
+        setHoursTarget(periodCalculation.targetHours > 0 ? periodCalculation.targetHours : metrics.suggestedHours);
         if (periodCalculation.isExactMatch && periodCalculation.matchedPeriod) {
           setSelectedPeriodId(periodCalculation.matchedPeriod.id);
         } else {
@@ -484,22 +484,26 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
                   />
                   <div className="min-w-0">
                     <span className="font-bold block truncate">
-                      {periodCalculation.isExactMatch ? (
+                      {periodCalculation.targetHours === 0 ? (
+                        <>No dedicated period covers these dates. The roster's own target will be used.</>
+                      ) : periodCalculation.isExactMatch ? (
                         <>✓ Time period: {periodCalculation.matchedPeriod?.name} ({periodCalculation.targetHours}h for a full time nurse)</>
                       ) : (
                         <>✓ Worked out from {periodCalculation.description}</>
                       )}
                     </span>
                     <span className="text-[11px] text-slate-600 block mt-0.5">
-                      {periodCalculation.isExactMatch
-                        ? `${periodCalculation.totalScheduleDays} days, the whole time period`
-                        : `${periodCalculation.totalScheduleDays} days = ${periodCalculation.targetHours} working hours`}
+                      {periodCalculation.targetHours === 0
+                        ? `${metrics.totalDays} days, using the roster target`
+                        : periodCalculation.isExactMatch
+                          ? `${periodCalculation.totalScheduleDays} days, the whole time period`
+                          : `${periodCalculation.totalScheduleDays} days = ${periodCalculation.targetHours} working hours`}
                     </span>
                   </div>
                 </div>
                 <div className="shrink-0 flex items-center gap-1.5">
                   <span className="px-2 py-0.5 rounded font-mono font-bold text-xs bg-white border border-slate-200 shadow-2xs">
-                    {periodCalculation.targetHours}h full time
+                    {periodCalculation.targetHours === 0 ? hoursTarget : periodCalculation.targetHours}h full time
                   </span>
                   {periodCalculation.isProrated && (
                     <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded">
