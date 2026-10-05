@@ -230,7 +230,7 @@ export class SchedulingEngine {
       hoursTargetDescription =
         fullTimeTarget.source === 'SCHEDULE'
           ? `Schedule target: ${fullTimeTarget.hours}h full time`
-          : `No dedicated period covers these dates: ${fullTimeTarget.hours}h (40h per week)`;
+          : 'No dedicated period covers these dates; no hours target is accrued.';
     }
 
     let scheduleSessions = sessions.filter(
