@@ -26,15 +26,14 @@ export function inclusiveDays(startDate: string, endDate: string): number {
 
 export interface FullTimeTarget {
   hours: number;
-  source: 'PERIOD' | 'SCHEDULE' | 'DEFAULT';
+  source: 'PERIOD' | 'NONE';
   periodName?: string;
 }
 
 /**
  * Full time target hours for a schedule.
  * 1. Dedicated working hours periods, when at least one covers part of the schedule.
- * 2. Otherwise the schedule's own full time target.
- * 3. Otherwise 40 hours per week, prorated to the schedule length.
+ * 2. Dates outside dedicated periods do not accrue target hours.
  */
 export function resolveFullTimeTarget(
   schedule: Pick<Schedule, 'startDate' | 'endDate' | 'hoursTargetFullTime' | 'periodName'>,
@@ -52,12 +51,7 @@ export function resolveFullTimeTarget(
     }
   }
 
-  if (schedule.hoursTargetFullTime && schedule.hoursTargetFullTime > 0) {
-    return { hours: schedule.hoursTargetFullTime, source: 'SCHEDULE', periodName: schedule.periodName };
-  }
-
-  const days = Math.max(1, inclusiveDays(schedule.startDate, schedule.endDate));
-  return { hours: Math.max(24, Math.round((days * 40) / 7)), source: 'DEFAULT', periodName: schedule.periodName };
+  return { hours: 0, source: 'NONE', periodName: schedule.periodName };
 }
 
 type CreditEntry = Pick<LeaveEntry, 'startDate' | 'endDate' | 'hoursCredited'> & { dayHours?: Record<string, number> };

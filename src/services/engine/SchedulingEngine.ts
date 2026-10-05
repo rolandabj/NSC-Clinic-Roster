@@ -227,10 +227,7 @@ export class SchedulingEngine {
       isProratedPeriod = !calc.isExactMatch;
       hoursTargetDescription = `${calc.description}. This is the base target; each nurse’s balance from earlier rosters adjusts her goal.`;
     } else {
-      hoursTargetDescription =
-        fullTimeTarget.source === 'SCHEDULE'
-          ? `Schedule target: ${fullTimeTarget.hours}h full time`
-          : `No dedicated period covers these dates: ${fullTimeTarget.hours}h (40h per week)`;
+      hoursTargetDescription = 'No dedicated period covers these dates; no hours target is accrued.';
     }
 
     let scheduleSessions = sessions.filter(
