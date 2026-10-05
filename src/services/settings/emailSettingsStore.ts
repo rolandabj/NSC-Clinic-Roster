@@ -33,19 +33,22 @@ function cache(config: EmailSettingsConfig) {
 }
 
 /** Reads the clinic's shared settings (falls back to this browser's copy when unreadable). */
-export async function loadEmailSettings(repo: IRepository): Promise<EmailSettingsConfig> {
+export async function loadEmailSettings(repo: IRepository, strict = false): Promise<EmailSettingsConfig> {
   const local = cachedEmailSettings();
   try {
     const shared = await repo.get('systemMetadata', DOC_ID);
     if (!shared) return local;
     const config: EmailSettingsConfig = {
       ...local,
+      // The shared mode wins over an old browser cache with provider MOCK.
+      provider: 'GOOGLE',
       mockMode: shared.emailMockMode !== false,
       senderName: shared.emailSenderName || local.senderName,
     };
     cache(config);
     return config;
   } catch (err) {
+    if (strict) throw new Error('The shared email settings could not be loaded. Check your connection and try again.');
     console.warn('[EmailSettings] Shared email settings could not be read; using this browser\'s copy.', err);
     return local;
   }
@@ -53,7 +56,6 @@ export async function loadEmailSettings(repo: IRepository): Promise<EmailSetting
 
 /** Saves the shared settings for everyone (throws if Firestore refuses). */
 export async function saveEmailSettings(repo: IRepository, config: EmailSettingsConfig, byEmail?: string): Promise<void> {
-  cache(config);
   const existing = await repo.get('systemMetadata', DOC_ID).catch(() => null);
   const data = {
     emailMockMode: config.mockMode !== false,
@@ -63,4 +65,5 @@ export async function saveEmailSettings(repo: IRepository, config: EmailSettings
   };
   if (existing) await repo.update('systemMetadata', DOC_ID, data);
   else await repo.create('systemMetadata', { id: DOC_ID, ...data });
+  cache({ ...config, provider: 'GOOGLE' });
 }

@@ -30,6 +30,7 @@ import { AssignmentDiffItem } from '../history/diffEngine';
 import { getRepository } from '../repository';
 import { authService } from '../auth/authService';
 import { canEditClinicData } from '../auth/access';
+import { readEmailResponse } from '../email/emailResponse';
 import { escapeHtml, safeColor } from '../../utils/escapeHtml';
 import { leaveCreditInRange, resolveFullTimeTarget } from '../hours/hoursPolicy';
 
@@ -51,7 +52,7 @@ export interface GenerateEmailPayloadParams {
   changes?: AssignmentDiffItem[];
   generalNote?: string;
   shareToken?: string;
-  /** The nurse's own private page (only her shifts), when she has one. */
+  /** The nurse's private page with personal and team schedules, when available. */
   privateRosterUrl?: string;
   ackToken: string;
   isChangeAlert?: boolean;
@@ -298,7 +299,7 @@ export class RosterPublishService {
                 ${privateRosterUrl ? `<tr>
                   <td align="center" style="padding-top: 14px;">
                     <a href="${h(privateRosterUrl)}" style="font-size: 13px; font-weight: 600; color: #4338ca; text-decoration: underline;">
-                      See my shifts (this link is just for you)
+                      Open my schedule and team roster
                     </a>
                   </td>
                 </tr>` : ''}
@@ -342,7 +343,7 @@ export class RosterPublishService {
     nurse: Nurse;
     ackToken: string;
     shareToken?: string;
-    /** The nurse's own private page (only her shifts), when she has one. */
+    /** The nurse's private page with personal and team schedules, when available. */
     privateRosterUrl?: string;
   }): { subject: string; bodyPreview: string; html: string } {
     const h = escapeHtml;
@@ -363,7 +364,7 @@ export class RosterPublishService {
   <p style="text-align: center; margin: 24px 0;">
     <a href="${h(ackUrl)}" style="display: inline-block; background-color: #b45309; color: #ffffff; text-decoration: none; font-weight: 700; padding: 12px 22px; border-radius: 6px;">Confirm Receipt of My Roster</a>
   </p>
-  ${params.privateRosterUrl ? `<p style="text-align: center; font-size: 13px;"><a href="${h(params.privateRosterUrl)}" style="color: #4338ca; font-weight: 600;">See my shifts (this link is just for you)</a></p>` : ''}
+  ${params.privateRosterUrl ? `<p style="text-align: center; font-size: 13px;"><a href="${h(params.privateRosterUrl)}" style="color: #4338ca; font-weight: 600;">Open my schedule and team roster</a></p>` : ''}
   ${viewUrl ? `<p style="text-align: center; font-size: 12px;"><a href="${h(viewUrl)}" style="color: #4f46e5;">${params.privateRosterUrl ? 'View the whole roster' : 'View my roster'}</a></p>` : ''}
 </div>`;
     return { subject, bodyPreview, html };
@@ -444,19 +445,18 @@ export class RosterPublishService {
         }),
       });
 
+      const json = await readEmailResponse(response);
       if (response.ok) {
-        const json = await response.json();
         // The server reports the real delivery result in data.status.
         if (json.data?.status === 'SENT' || json.data?.status === 'MOCK_SENT') {
           recipientLog.status = json.data.status;
         } else {
-          recipientLog.status = json.data?.status || 'FAILED';
+          recipientLog.status = 'FAILED';
           recipientLog.errorMessage = json.data?.error || 'Dispatch error returned from server';
         }
       } else {
-        const errJson = await response.json().catch(() => ({}));
         recipientLog.status = 'FAILED';
-        recipientLog.errorMessage = errJson.message || `Server returned ${response.status}: ${response.statusText}`;
+        recipientLog.errorMessage = json.message || `Server returned ${response.status}: ${response.statusText}`;
       }
     } catch (err: any) {
       console.warn('[rosterPublishService] Server Google dispatch network error:', err);

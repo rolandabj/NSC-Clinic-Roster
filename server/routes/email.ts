@@ -15,6 +15,15 @@ import { fetchStaffEmails } from '../services/auth/firebaseIdentityService';
 
 export const emailRouter = Router();
 
+emailRouter.get('/email/status', requirePlanner, (_req, res) => {
+  res.json({ data: EmailService.readiness() });
+});
+
+emailRouter.post('/email/check', requirePlanner, async (_req, res) => {
+  const result = await EmailService.checkConnection();
+  res.status(result.ready ? 200 : 503).json({ data: result });
+});
+
 /**
  * POST /api/email/test
  * Dispatches a test email, or a roster email built in the browser, via Google (SMTP or Mock mode).

@@ -5,11 +5,13 @@
  * Settings > Email tab.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Mail, CheckCircle2, AlertTriangle, Send, Save, Check, RefreshCw } from 'lucide-react';
 import { ClinicContextState } from '../../../types/navigation';
 import { getRepository } from '../../../services/repository';
-import { authService } from '../../../services/auth/authService';
+import { authorizedFetch } from '../../../services/auth/authService';
+import { checkEmailReadiness, EmailReadiness } from '../../../services/email/emailReadiness';
+import { readEmailResponse } from '../../../services/email/emailResponse';
 import { escapeHtml } from '../../../utils/escapeHtml';
 import { EmailSettingsConfig } from '../../../types/settings';
 import { SaveStatus } from './shared';
@@ -35,6 +37,21 @@ export const EmailTab: React.FC<EmailTabProps> = ({
 
   // Test email status
   const [testEmailResult, setTestEmailResult] = useState<string | null>(null);
+  const [readiness, setReadiness] = useState<EmailReadiness>();
+  const [checking, setChecking] = useState(false);
+  useEffect(() => {
+    let active = true;
+    checkEmailReadiness().then(r => { if (active) setReadiness(r); }).catch(err => {
+      if (active) setReadiness({ ready: false, sender: '', message: err.message });
+    });
+    return () => { active = false; };
+  }, []);
+  const checkConnection = async () => {
+    setChecking(true);
+    try { setReadiness(await checkEmailReadiness(true)); }
+    catch (err: any) { setReadiness({ ready: false, sender: '', message: err.message }); }
+    finally { setChecking(false); }
+  };
 
   const handleSendTestEmail = async () => {
     setTestEmailResult('Dispatching test email...');
@@ -51,11 +68,10 @@ export const EmailTab: React.FC<EmailTabProps> = ({
     let status: 'SENT' | 'MOCK_SENT' | 'FAILED' = 'FAILED';
     let errorMessage = '';
     try {
-      const res = await fetch('/api/email/test', {
+      const res = await authorizedFetch('/api/email/test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${authService.getToken() || ''}`,
         },
         body: JSON.stringify({
           to: sender,
@@ -63,7 +79,7 @@ export const EmailTab: React.FC<EmailTabProps> = ({
           config: { provider: isMock ? 'MOCK' : 'GOOGLE', mockMode: isMock, senderName: emailConfig.senderName },
         }),
       });
-      const json = await res.json().catch(() => ({}));
+      const json = await readEmailResponse(res);
       if (res.ok && (json.data?.status === 'SENT' || json.data?.status === 'MOCK_SENT')) {
         status = json.data.status;
       } else {
@@ -118,7 +134,7 @@ export const EmailTab: React.FC<EmailTabProps> = ({
             </h2>
           </div>
           <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-1 leading-relaxed">
-            All roster announcements, personal shift notices, and change alerts are routed exclusively through Google accounts. Choose your sender Google address and dispatch preferences below.
+            Roster emails are sent by the clinic account configured on the server. Check the connection and choose Live to send real emails.
           </p>
         </div>
         <div className="shrink-0 pt-0.5">
@@ -144,6 +160,14 @@ export const EmailTab: React.FC<EmailTabProps> = ({
       </div>
 
       {/* Sender */}
+      <section className="p-4 rounded-lg border border-slate-200 bg-white space-y-2" aria-label="Email connection">
+        <h3 className="font-semibold text-slate-900">Email connection</h3>
+        <p role="status" className={readiness?.ready ? 'text-emerald-700' : 'text-rose-700'}>{readiness?.message || 'Checking server configuration…'}</p>
+        {readiness?.sender && <p>Sending account: <strong>{readiness.sender}</strong></p>}
+        <button type="button" disabled={checking} onClick={checkConnection} className="rounded border border-slate-300 px-3 py-2 font-semibold disabled:opacity-50">
+          {checking ? 'Checking connection…' : 'Check connection without sending'}
+        </button>
+      </section>
       <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-2 shadow-2xs">
         <label htmlFor="email-sender-name" className="block font-semibold text-slate-800">
           Sender name

@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * A nurse's private page, opened from her own link (#me?t=TOKEN) without
- * signing in. It reads one document, nurseRosters/{token}, which holds only her
- * published shifts and leave days. Made for phones first.
+ * signing in. It reads one document, nurseRosters/{token}, containing personal
+ * calendar data and cleaned published team sheets. Older pages keep their list view.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { CalendarPlus, Rss, Copy, Check, Lock, AlertTriangle, Loader2, ChevronDown } from 'lucide-react';
 import type { NurseRosterDoc, NurseRosterShift } from '../../types';
+import { PublishedRosterSheet } from '../roster/PublishedRosterSheet';
 import { getRepository } from '../../services/repository';
 import { buildNurseRosterIcs, downloadIcsFile } from '../../services/export/icsExportService';
 import {
@@ -54,6 +55,7 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
   const [showEarlier, setShowEarlier] = useState(false);
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [status, setStatus] = useState('');
+  const [scheduleId, setScheduleId] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +87,8 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
   const doc = state.kind === 'ready' ? state.doc : null;
   const today = doc ? todayIso(doc.timezone) : '';
   const thisMonday = today ? mondayOf(today) : '';
+  const sheets = doc?.teamRosters || [];
+  const sheet = sheets.find(s => s.scheduleId === scheduleId) || sheets.find(s => s.endDate >= today) || sheets.at(-1);
 
   const days: DayEntry[] = useMemo(() => {
     if (!doc) return [];
@@ -176,19 +180,19 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-800">
-      <div className="max-w-xl mx-auto px-4 py-5 space-y-4">
+      <div className={`${sheet ? 'max-w-[1600px]' : 'max-w-xl'} mx-auto px-4 sm:px-6 py-6 space-y-5`}>
         <header className="space-y-1">
           {state.doc.clinicName && (
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{state.doc.clinicName}</p>
           )}
           <h1 className="text-2xl font-bold text-slate-900">Hi {firstName}</h1>
-          <p className="text-sm text-slate-600">Here are your shifts from the published roster.</p>
+          <p className="text-sm text-slate-600">Your published shifts and the team schedule, together in one place.</p>
         </header>
 
         <div className="flex items-start gap-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900">
           <Lock className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
           <p>
-            <strong>This link is just for you.</strong> Please don't share it. Anyone with it can see your shifts.
+            <strong>Keep this link within the clinic.</strong> Anyone with it can view your shifts{sheet ? ' and the published team schedule' : ''}.
           </p>
         </div>
 
@@ -271,7 +275,20 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
           </p>
         )}
 
-        {earlierCount > 0 && (
+        {sheet && <section className="space-y-4" aria-label="Published schedules">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="text-sm font-semibold text-slate-700">Published roster
+              <select aria-label="Published roster" value={sheet.scheduleId} onChange={e => setScheduleId(e.target.value)} className="ml-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal">
+                {sheets.map(s => <option key={s.scheduleId} value={s.scheduleId}>{s.name}</option>)}
+              </select>
+            </label>
+            <button type="button" onClick={() => setAttempt(n => n + 1)} className="text-sm font-semibold text-teal-700">Refresh schedule</button>
+          </div>
+          <PublishedRosterSheet key={sheet.scheduleId} sheet={sheet} clinicName={state.doc.clinicName} timezone={state.doc.timezone} myNurseId={state.doc.nurseId} />
+        </section>}
+        {!sheet && <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">The team view will appear after your planner publishes again or selects Update all pages in Publish, Private links.</p>}
+
+        {!sheet && earlierCount > 0 && (
           <button
             type="button"
             onClick={() => setShowEarlier((v) => !v)}
@@ -283,7 +300,7 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
           </button>
         )}
 
-        {weeks.length === 0 ? (
+        {!sheet && (weeks.length === 0 ? (
           <p className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
             No upcoming shifts yet. They show here once your planner publishes the roster.
           </p>
@@ -339,7 +356,7 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
               </ul>
             </section>
           ))
-        )}
+        ))}
 
         <footer className="pt-2 text-xs text-slate-500">
           {!Number.isNaN(Date.parse(state.doc.updatedAt)) && <>Updated {new Date(state.doc.updatedAt).toLocaleString()}. </>}

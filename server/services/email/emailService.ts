@@ -42,6 +42,20 @@ export interface SendEmailResult {
   error?: string;
 }
 
+export interface EmailReadiness {
+  ready: boolean;
+  message: string;
+  sender: string;
+}
+
+/** Do not return SMTP responses or credentials to the browser. */
+export function emailFailureMessage(err: any): string {
+  if (err?.code === 'EAUTH') return 'Google rejected the sending account credentials. Update GOOGLE_SMTP_USER and GOOGLE_APP_PASSWORD in the server secrets, then redeploy. Use a Google app password, not the account password.';
+  if (['ETIMEDOUT', 'ECONNECTION', 'ECONNREFUSED', 'EDNS', 'ESOCKET'].includes(err?.code)) return 'The server could not connect to the email provider. Check SMTP_HOST, SMTP_PORT and the server network, then try again.';
+  if (err?.code === 'EENVELOPE') return 'The email provider rejected the sender or recipient address. Check the sending account and the nurse email address.';
+  return 'The email provider could not complete the request. Check the server email configuration and try again.';
+}
+
 /** The email settings plus the SMTP connection, which only the server environment provides. */
 interface ServerEmailConfig extends EmailSettingsConfig {
   smtpHost?: string;
@@ -81,6 +95,37 @@ function pickRequestOverrides(config: any): Partial<EmailSettingsConfig> {
 }
 
 export class EmailService {
+  private static transport(config: ServerEmailConfig) {
+    const user = (config.smtpUser || '').trim();
+    const pass = config.googleAppPassword ? config.googleAppPassword.replace(/\s/g, '') : config.smtpPass || '';
+    const port = config.smtpPort || 587;
+    return nodemailer.createTransport({
+      host: config.smtpHost || 'smtp.gmail.com', port,
+      secure: port === 465, requireTLS: true,
+      auth: { user, pass },
+      connectionTimeout: 10000, greetingTimeout: 10000, socketTimeout: 20000,
+    });
+  }
+
+  public static readiness(): EmailReadiness {
+    const config = this.getConfig();
+    const missing = [!config.smtpUser?.trim() && 'GOOGLE_SMTP_USER', !(config.googleAppPassword || config.smtpPass)?.trim() && 'GOOGLE_APP_PASSWORD'].filter(Boolean);
+    return { ready: missing.length === 0, sender: config.smtpUser?.trim() || '',
+      message: missing.length ? `Email is not configured. Add ${missing.join(' and ')} in AI Studio server secrets, then redeploy.` : 'Sending account configured. Check the connection before sending.' };
+  }
+
+  /** Authenticates to SMTP without sending an email. */
+  public static async checkConnection(): Promise<EmailReadiness> {
+    const status = this.readiness();
+    if (!status.ready) return status;
+    const transport = this.transport(this.getConfig());
+    try {
+      await transport.verify();
+      return { ...status, message: 'Email connection verified. Ready to send.' };
+    } catch (err) {
+      return { ...status, ready: false, message: emailFailureMessage(err) };
+    } finally { transport.close(); }
+  }
   /**
    * Resolves effective email configuration from repository or environment
    */
@@ -147,24 +192,9 @@ export class EmailService {
     // 2. Live Google SMTP Provider (smtp.gmail.com, port 587, STARTTLS)
     else {
       try {
-        const smtpHost = config.smtpHost || 'smtp.gmail.com';
-        const smtpPort = config.smtpPort || 587;
-        const smtpUser = config.smtpUser || '';
-        const smtpPass = config.googleAppPassword || config.smtpPass || '';
-        if (!smtpUser || !smtpPass) {
-          throw new Error('SMTP credentials are not configured. Add GOOGLE_SMTP_USER and GOOGLE_APP_PASSWORD in AI Studio Secrets.');
-        }
-
-        const transporter = nodemailer.createTransport({
-          host: smtpHost,
-          port: smtpPort,
-          secure: config.smtpSecure ?? false, // false for 587 with STARTTLS
-          requireTLS: true,
-          auth: {
-            user: smtpUser,
-            pass: smtpPass,
-          },
-        });
+        const readiness = this.readiness();
+        if (!readiness.ready) return { success: false, provider: 'GOOGLE', messageId: '', recipients: toList, status: 'FAILED', error: readiness.message };
+        const transporter = this.transport(config);
 
         const info = await transporter.sendMail({
           from: fromAddress,
@@ -172,7 +202,10 @@ export class EmailService {
           subject: payload.subject,
           html: payload.html,
           text: payload.text || payload.html.replace(/<[^>]*>/g, ''),
-        });
+        }).finally(() => transporter.close());
+        if (!info.accepted?.length || info.rejected?.length) {
+          throw Object.assign(new Error('Recipient rejected'), { code: 'EENVELOPE' });
+        }
 
         result = {
           success: true,
@@ -182,14 +215,14 @@ export class EmailService {
           status: 'SENT',
         };
       } catch (err: any) {
-        console.error('[EmailService:GOOGLE-SMTP] Dispatch Error:', err);
+        console.error('[EmailService:GOOGLE-SMTP] Dispatch Error:', err?.code || 'UNKNOWN');
         result = {
           success: false,
           provider: 'GOOGLE',
           messageId: `err-${uuidv4().slice(0, 8)}`,
           recipients: toList,
           status: 'FAILED',
-          error: err.message || 'Google SMTP dispatch failure',
+          error: emailFailureMessage(err),
         };
       }
     }

@@ -17,6 +17,7 @@ const __dirname = path.dirname(__filename);
 const distServer = path.resolve(__dirname, 'dist', 'server.js');
 
 if (fs.existsSync(distServer)) {
+  process.env.NODE_ENV ||= 'production';
   const dynamicDistPath = './dist/server.js';
   await import(dynamicDistPath);
 } else {

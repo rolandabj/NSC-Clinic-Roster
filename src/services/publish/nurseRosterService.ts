@@ -5,8 +5,8 @@
  * Private Nurse Links
  * Each nurse has one private link (nurseLinks/{nurseId}, editors only) whose
  * random token is the id of her page, nurseRosters/{token}. The page holds only
- * her own published shifts and leave days, already worded, so the link opens
- * without signing in and shows nothing about anyone else. Firestore rules allow
+ * her own calendar and cleaned published team sheets, so the link opens
+ * without signing in. Firestore rules allow
  * reading it by its token (never listing) until it is revoked.
  *
  * Everything here takes the repository as a parameter and imports no Firebase
@@ -26,6 +26,7 @@ import type {
   ScheduleVersion,
   Specialty,
   Assignment,
+  TeamRosterSheet,
 } from '../../types';
 import type { IRepository } from '../repository/IRepository';
 
@@ -205,6 +206,7 @@ export interface BuildNurseRosterInput extends ShiftRefs {
   /** 'YYYY-MM-DD'; defaults to today in the clinic's time zone. */
   today?: string;
   nowIso?: string;
+  teamRosters?: TeamRosterSheet[];
 }
 
 /**
@@ -263,8 +265,46 @@ export function buildNurseRosterDoc(input: BuildNurseRosterInput): NurseRosterDo
     timezone,
     revoked: false,
     updatedAt: input.nowIso || new Date().toISOString(),
-    shifts: [...shifts.values()].sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime)),
+    shifts: [...shifts.values()].filter(s => !leaveDays.has(s.date)).sort((a, b) => (a.date + a.startTime).localeCompare(b.date + b.startTime)),
     leaveDays: [...leaveDays].sort(),
+    ...(input.teamRosters ? { teamRosters: input.teamRosters } : {}),
+  };
+}
+
+/** Build only the latest published snapshot. Draft shifts and private staff fields never enter the sheet. */
+export function buildTeamRosterSheet(input: ShiftRefs & {
+  schedule: Pick<Schedule, 'id' | 'name' | 'startDate' | 'endDate'>;
+  version: ScheduleVersion;
+  nurses: Pick<Nurse, 'id' | 'fullName' | 'active'>[];
+  dutyWindows: Pick<DutyWindow, 'id' | 'name' | 'acronym' | 'startTime' | 'endTime' | 'color'>[];
+  weekendDays?: number[];
+}): TeamRosterSheet {
+  const { version } = input;
+  // Dates are part of the published snapshot, not the mutable draft.
+  const schedule = version.snapshot.schedule || input.schedule;
+  const inRange = (date: string) => date >= schedule.startDate && date <= schedule.endDate;
+  const assignments = version.snapshot.assignments.filter(a => inRange(a.date) && (!a.scheduleId || a.scheduleId === schedule.id));
+  const leaves = (version.snapshot.leaveEntries || []).filter(l => l.approved && l.status !== 'REJECTED' && l.endDate >= schedule.startDate && l.startDate <= schedule.endDate);
+  const present = new Set([...assignments.map(a => a.nurseId), ...leaves.map(l => l.nurseId)]);
+  const usedDuties = new Set(assignments.map(a => a.dutyWindowId));
+  return {
+    scheduleId: schedule.id, name: schedule.name, startDate: schedule.startDate, endDate: schedule.endDate,
+    version: version.number, publishedAt: version.publishedAt || version.timestamp,
+    weekendDays: input.weekendDays || [6, 0],
+    duties: input.dutyWindows.filter(d => usedDuties.has(d.id)).map(d => ({ id: d.id, name: d.name, acronym: d.acronym, startTime: d.startTime, endTime: d.endTime, color: d.color || '#64748b' })),
+    nurses: input.nurses.filter(n => n.active || present.has(n.id)).map(n => {
+      const cells = new Map<string, TeamRosterSheet['nurses'][number]['cells'][number]>();
+      for (const a of assignments.filter(a => a.nurseId === n.id)) {
+        if (!cells.has(a.date)) cells.set(a.date, { date: a.date, dutyId: a.dutyWindowId, detail: shiftDetail(a, input) });
+      }
+      for (const l of leaves.filter(l => l.nurseId === n.id)) {
+        const end = l.endDate < schedule.endDate ? l.endDate : schedule.endDate;
+        for (let day = l.startDate > schedule.startDate ? l.startDate : schedule.startDate; day <= end; day = addDaysIso(day, 1)) {
+          cells.set(day, { date: day, leave: true });
+        }
+      }
+      return { id: n.id, name: n.fullName, cells: [...cells.values()].sort((a, b) => a.date.localeCompare(b.date)) };
+    }).sort((a, b) => a.name.localeCompare(b.name)),
   };
 }
 
@@ -324,7 +364,7 @@ export interface SyncNurseRostersResult {
  * that were removed from the roster disappear. Nurses without a working link
  * are skipped; one failed page never stops the others.
  */
-export async function syncNurseRosters(repo: IRepository, nurseIds?: string[]): Promise<SyncNurseRostersResult> {
+export async function syncNurseRosters(repo: IRepository, nurseIds?: string[], justPublished: ScheduleVersion[] = []): Promise<SyncNurseRostersResult> {
   const [nurses, links, schedules, clinics, dutyWindows, doctors, clinicalRoles, specialties] = await Promise.all([
     repo.list('nurses'),
     repo.list('nurseLinks'),
@@ -344,7 +384,12 @@ export async function syncNurseRosters(repo: IRepository, nurseIds?: string[]): 
   const versionLists = await Promise.all(
     recentSchedules.map((s) => repo.list('versions', { field: 'scheduleId', operator: '==', value: s.id }))
   );
-  const versions = versionLists.flat();
+  // A live cache may not yet contain the version whose write just completed.
+  const versions = [...versionLists.flat(), ...justPublished];
+  const latest = latestPublishedVersions(versions);
+  const teamRosters = recentSchedules.filter(s => latest.has(s.id)).map(schedule => buildTeamRosterSheet({
+    schedule, version: latest.get(schedule.id)!, nurses, dutyWindows, doctors, clinicalRoles, specialties, weekendDays: clinic?.weekendDays,
+  })).sort((a, b) => a.startDate.localeCompare(b.startDate));
 
   const linkMap = new Map(links.filter((l) => !l.revoked && l.token).map((l) => [l.nurseId || l.id, l]));
   const nurseMap = new Map(nurses.map((n) => [n.id, n]));
@@ -371,6 +416,7 @@ export async function syncNurseRosters(repo: IRepository, nurseIds?: string[]): 
         specialties,
         today,
         nowIso,
+        teamRosters,
       });
       // create() replaces the whole document.
       await repo.create('nurseRosters', doc);

@@ -63,6 +63,7 @@ import { ensureNurseLink, syncNurseRosters, nurseLinkUrl } from '../../services/
 import { escapeHtml } from '../../utils/escapeHtml';
 import { EmailHtmlPreview } from '../common/EmailHtmlPreview';
 import { cachedEmailSettings, loadEmailSettings } from '../../services/settings/emailSettingsStore';
+import { checkEmailReadiness } from '../../services/email/emailReadiness';
 
 interface PublishModalProps {
   context: ClinicContextState;
@@ -148,9 +149,22 @@ export const PublishModal: React.FC<PublishModalProps> = ({
 
   // Email Config
   const [emailConfig, setEmailConfig] = useState<EmailSettingsConfig>(() => cachedEmailSettings());
+  const [emailIssue, setEmailIssue] = useState('');
+  const sendingRef = useRef(false);
   // The clinic's shared Sandbox / Live setting (not just this browser's)
   useEffect(() => {
-    if (isOpen) loadEmailSettings(getRepository()).then(setEmailConfig).catch(() => {});
+    if (!isOpen) return;
+    let active = true;
+    setEmailIssue('');
+    loadEmailSettings(getRepository(), true).then(async config => {
+      if (!active) return;
+      setEmailConfig(config);
+      if (!config.mockMode) {
+        const status = await checkEmailReadiness();
+        if (active && !status.ready) setEmailIssue(status.message);
+      }
+    }).catch(err => { if (active) setEmailIssue(err.message); });
+    return () => { active = false; };
   }, [isOpen]);
 
   // Diff against previous published version
@@ -437,7 +451,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       }
     }
 
-    // Each nurse's private page (only her own shifts) gets the new version. Like the share
+    // Each nurse's private page (personal calendar and team sheets) gets the new version. Like the share
     // link snapshots above, a problem here never stops the publish.
     const addWarning = (msg: string) => {
       logs.push(`⚠ ${msg}`);
@@ -463,7 +477,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         }
       }
       // Every nurse with a link is refreshed, so a nurse taken off this roster loses its old shifts too.
-      const synced = await syncNurseRosters(repo);
+      const synced = await syncNurseRosters(repo, undefined, [newVersion]);
       // Only pages that were written are linked in the emails.
       const written = new Set(synced.syncedIds);
       run.nurseTokens = Object.fromEntries(Object.entries(nurseTokens).filter(([id]) => written.has(id)));
@@ -526,7 +540,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   };
 
   /** Sends to the given nurses; one failed email never stops the others. */
-  const sendTo = async (targetNurses: Nurse[], logs: string[]) => {
+  const sendTo = async (targetNurses: Nurse[], logs: string[], sendingConfig: EmailSettingsConfig) => {
     const run = runRef.current!;
     let done = 0;
     for (const nurse of targetNurses) {
@@ -555,7 +569,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           hoursHistory: hoursHistoryRef.current,
         });
         const result = await RosterPublishService.dispatchEmail(
-          emailConfig,
+          sendingConfig,
           nurse.gmail,
           nurse,
           payload.subject,
@@ -568,7 +582,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         recipientLog = result.recipientLog;
         // A read receipt is only expected from a nurse who was actually emailed. If saving it
         // fails the email still went out, so it stays "sent" (a retry would email them twice).
-        if (recipientLog.status !== 'FAILED') {
+        if (recipientLog.status === 'SENT') {
           try {
             await repo.create('acknowledgments', result.acknowledgment);
           } catch (ackErr: any) {
@@ -620,13 +634,15 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       return;
     }
     const failed = run.recipients.filter((r) => r.status === 'FAILED').length;
+    const sent = run.recipients.filter((r) => r.status === 'SENT').length;
+    const simulated = run.recipients.filter((r) => r.status === 'MOCK_SENT').length;
     await repo
       .create('audit', {
         actor: context.currentUser?.name || context.currentUser?.email || 'Planner',
         action: 'PUBLISH',
         entity: 'Schedule',
         entityId: schedule.id,
-        note: `Published v${run.version.number} (${publishKind}): ${run.recipients.length - failed} emailed, ${failed} failed.`,
+        note: `Published v${run.version.number} (${publishKind}): ${sent} emailed, ${simulated} simulated, ${failed} failed.`,
         timestamp: new Date().toISOString(),
       })
       .catch(() => {});
@@ -634,41 +650,63 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   };
 
   const handlePublishAndSend = async () => {
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setCurrentStep('SENDING');
     setProgressPercent(0);
     const logs: string[] = [];
     try {
+      setEmailIssue('');
+      const sendingConfig = await prepareEmail();
       if (!runRef.current?.logId) await savePublish(logs);
-      await sendTo(nurses.filter((n) => selectedNurseIds.has(n.id)), logs);
+      const sentIds = new Set(runRef.current?.recipients.filter(r => r.status !== 'FAILED').map(r => r.nurseId));
+      await sendTo(nurses.filter((n) => selectedNurseIds.has(n.id) && !sentIds.has(n.id)), logs, sendingConfig);
       await finishSend();
     } catch (err: any) {
       // Nothing is saved or sent twice: publishing again carries on from where it stopped.
       notify(`Publishing stopped: ${err.message}`, 'error');
+      setEmailIssue(err.message);
       if (runRef.current?.logId) {
         setSendResults([...runRef.current.recipients]);
         setCurrentStep('DONE');
       } else {
         setCurrentStep('PREVIEW');
       }
-    }
+    } finally { sendingRef.current = false; }
   };
 
   const handleRetryFailed = async () => {
+    if (sendingRef.current) return;
     const run = runRef.current;
     if (!run) return;
+    sendingRef.current = true;
     const doneIds = new Set(run.recipients.filter((r) => r.status !== 'FAILED').map((r) => r.nurseId));
     const retry = nurses.filter((n) => selectedNurseIds.has(n.id) && !doneIds.has(n.id));
     setCurrentStep('SENDING');
     setProgressPercent(0);
     const logs: string[] = [];
     try {
-      await sendTo(retry, logs);
+      setEmailIssue('');
+      const sendingConfig = await prepareEmail();
+      await sendTo(retry, logs, sendingConfig);
       await finishSend(true);
     } catch (err: any) {
       notify(`Sending stopped: ${err.message}`, 'error');
+      setEmailIssue(err.message);
       setSendResults([...run.recipients]);
       setCurrentStep('DONE');
+    } finally { sendingRef.current = false; }
+  };
+
+  const prepareEmail = async () => {
+    const config = await loadEmailSettings(repo, true);
+    setEmailConfig(config);
+    if (selectedNurseIds.size > 0 && !config.mockMode && config.provider !== 'MOCK') {
+      setSendLogs(['Checking the email connection before publishing…']);
+      const status = await checkEmailReadiness(true);
+      if (!status.ready) throw new Error(status.message);
     }
+    return config;
   };
 
   return (
@@ -746,6 +784,10 @@ export const PublishModal: React.FC<PublishModalProps> = ({
 
         {/* Modal Content */}
         <div className="p-6 overflow-y-auto space-y-4 flex-1">
+          {emailIssue && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
+            <p className="font-semibold">Email needs attention</p><p className="mt-1">{emailIssue}</p>
+            <p className="mt-2 text-xs">Check Settings, Email. Retry after correcting the issue.</p>
+          </div>}
           {/* OWNER CHECK */}
           {!isOwner && (
             <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-900 space-y-2">

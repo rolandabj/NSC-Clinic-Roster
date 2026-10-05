@@ -107,7 +107,7 @@ export default function App() {
   if (ackLink?.kind === 'ack') {
     return <AcknowledgePage token={ackLink.token} clinicName={clinicName} />;
   }
-  // A nurse's private page looks the same signed in or not (it shows only her own shifts).
+  // A nurse's private page looks the same signed in or not (personal shifts and the published team roster).
   if (ackLink?.kind === 'me') {
     return (
       <LoadErrorBoundary><Suspense fallback={<PageLoading />}>

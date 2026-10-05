@@ -512,9 +512,26 @@ export interface NurseRosterShift {
   scheduleName: string;
 }
 
+/** A published team sheet with display fields only, safe for a private roster link. */
+export interface TeamRosterSheet {
+  scheduleId: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  version: number;
+  publishedAt: string;
+  weekendDays?: number[];
+  duties: Pick<DutyWindow, 'id' | 'name' | 'acronym' | 'startTime' | 'endTime' | 'color'>[];
+  nurses: {
+    id: string;
+    name: string;
+    cells: { date: string; dutyId?: string; detail?: string; leave?: boolean }[];
+  }[];
+}
+
 /**
- * nurseRosters/{token}: what a nurse's private link shows. Only that nurse's
- * published shifts and leave days, readable by anyone holding the token.
+ * nurseRosters/{token}: personal calendar data and published team sheets,
+ * readable by anyone holding the token. No staff contact or private leave details.
  */
 export interface NurseRosterDoc {
   id: string; // = token
@@ -528,6 +545,8 @@ export interface NurseRosterDoc {
   shifts: NurseRosterShift[];
   /** Leave as plain days (no leave type). */
   leaveDays: string[];
+  /** Absent on older pages until a planner refreshes or publishes. */
+  teamRosters?: TeamRosterSheet[];
 }
 
 /** presence/{uid}_{tab}: who has which roster open, one record per browser tab (refreshed every minute while visible). */

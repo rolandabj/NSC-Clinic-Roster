@@ -6,48 +6,16 @@
  * Mobile & Desktop Responsive, Block Navigation, Nurse Filters & Personal Link Support.
  */
 
-import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect } from 'react';
-import {
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  Filter,
-  User,
-  Shield,
-  Layers,
-  Clock,
-  Printer,
-  Sparkles,
-  Lock,
-  ArrowLeft,
-  CheckCircle2,
-  AlertTriangle,
-  Info,
-  Share2,
-  Copy,
-  Check,
-} from 'lucide-react';
-import {
-  Schedule,
-  ScheduleVersion,
-  Assignment,
-  Nurse,
-  DutyWindow,
-  LeaveEntry,
-  LeaveType,
-  SeniorityLevel,
-  Doctor,
-  ClinicalRole,
-  Specialty,
-  ShareLink,
-} from '../../types';
+import { Lock, ArrowLeft, AlertTriangle } from 'lucide-react';
+import type { Schedule, ScheduleVersion, Nurse, DutyWindow, Doctor, ClinicalRole, Specialty } from '../../types';
 import { getRepository } from '../../services/repository';
-import { authService, UserProfile } from '../../services/auth/authService';
+import { authService } from '../../services/auth/authService';
 import { loadPublicRoster } from '../../services/publish/publicRosterService';
 import { buildNurseIcs, downloadIcsFile } from '../../services/export/icsExportService';
 import { withoutBackups } from '../../services/history/versionList';
-import { isFloatShift } from '../../services/engine/floatShift';
+import { buildTeamRosterSheet } from '../../services/publish/nurseRosterService';
+import { PublishedRosterSheet } from '../roster/PublishedRosterSheet';
 
 interface PublishedRosterViewProps {
   shareToken?: string;
@@ -55,7 +23,6 @@ interface PublishedRosterViewProps {
   onExitPreview?: () => void;
 }
 
-const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
   shareToken,
@@ -65,21 +32,16 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
   const [loading, setLoading] = useState(true);
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [version, setVersion] = useState<ScheduleVersion | null>(null);
-  const [shareLink, setShareLink] = useState<ShareLink | null>(null);
 
   const [nurses, setNurses] = useState<Nurse[]>([]);
   const [dutyWindows, setDutyWindows] = useState<DutyWindow[]>([]);
-  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
-  const [seniorityLevels, setSeniorityLevels] = useState<SeniorityLevel[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [roles, setClinicalRoles] = useState<ClinicalRole[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
 
   // Navigation & Filtering
-  const [selectedBlockIndex, setSelectedBlockIndex] = useState(0);
-  const [selectedNurseFilter, setSelectedNurseFilter] = useState<string>(nurseIdParam || 'ALL');
   const [accessDeniedMessage, setAccessDeniedMessage] = useState<string | null>(null);
-  const [copiedLink, setCopiedLink] = useState(false);
+  const [linkStatus, setLinkStatus] = useState('');
   const [clinicTimezone, setClinicTimezone] = useState<string>(() => {
     try {
       return localStorage.getItem('clinic_roster_clinic_timezone') || 'Asia/Dubai';
@@ -115,8 +77,6 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
           }
           setNurses(snap.nurses as Nurse[]);
           setDutyWindows(snap.dutyWindows as DutyWindow[]);
-          setLeaveTypes(snap.leaveTypes as LeaveType[]);
-          setSeniorityLevels(snap.seniorityLevels as SeniorityLevel[]);
           setDoctors(snap.doctors as Doctor[]);
           setClinicalRoles(snap.clinicalRoles as ClinicalRole[]);
           setSpecialties(snap.specialties as Specialty[]);
@@ -124,40 +84,26 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
           if (snap.timezone) setClinicTimezone(snap.timezone);
           if (snap.clinicName) setClinicLabel(snap.clinicName);
           setVersion(snap.version as unknown as ScheduleVersion);
-          setShareLink({
-            id: snap.token,
-            scheduleId: snap.scheduleId,
-            token: snap.token,
-            role: 'VIEWER',
-            public: snap.isPublic,
-            allowedEmails: snap.allowedEmails,
-            createdAt: snap.updatedAt,
-            revoked: false,
-            pointsToVersionId: snap.versionId,
-          });
+
         } else if (currentUser) {
           // Signed in preview without a token: latest published version.
           const repo = getRepository();
-          const [schedList, vList, nList, dwList, ltList, sList, dList, rList, spList] = await Promise.all([
+          const [schedList, vList, nList, dwList, dList, rList, spList] = await Promise.all([
             repo.list('schedules'),
             repo.list('versions').then(withoutBackups),
             repo.list('nurses'),
             repo.list('dutyWindows'),
-            repo.list('leaveTypes'),
-            repo.list('seniorityLevels'),
             repo.list('doctors'),
             repo.list('clinicalRoles'),
             repo.list('specialties'),
           ]);
           setNurses(nList.filter((n) => n.active));
           setDutyWindows(dwList);
-          setLeaveTypes(ltList);
-          setSeniorityLevels(sList);
           setDoctors(dList);
           setClinicalRoles(rList);
           setSpecialties(spList);
 
-          const published = vList.filter((v) => v.isPublished).sort((a, b) => b.number - a.number);
+          const published = vList.filter((v) => v.isPublished).sort((a, b) => (b.publishedAt || b.timestamp).localeCompare(a.publishedAt || a.timestamp));
           const targetVersion = published[0] || null;
           const targetSchedule = targetVersion ? schedList.find((s) => s.id === targetVersion.scheduleId) || null : null;
           if (targetSchedule && targetVersion) {
@@ -166,11 +112,9 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
           }
         }
 
-        if (nurseIdParam) {
-          setSelectedNurseFilter(nurseIdParam);
-        }
       } catch (err: any) {
         console.error('Error loading published roster:', err);
+        setAccessDeniedMessage('The published roster could not be loaded. Check your connection and reopen the link.');
       } finally {
         setLoading(false);
       }
@@ -234,388 +178,26 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
     );
   }
 
-  const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
-  const nurseMap = new Map(nurses.map((n) => [n.id, n]));
-  const doctorMap = new Map(doctors.map((d) => [d.id, d]));
-  const roleMap = new Map(roles.map((r) => [r.id, r]));
-  const specialtyMap = new Map(specialties.map((s) => [s.id, s]));
-  const seniorityMap = new Map(seniorityLevels.map((s) => [s.id, s]));
-  const leaveTypeMap = new Map(leaveTypes.map((l) => [l.id, l]));
-
-  const assignments = version.snapshot.assignments || [];
-  const leaveEntries = version.snapshot.leaveEntries || [];
-
-  // Compute block dates
-  const blockWeeks = schedule.blockWeeks || 2;
-  const daysPerBlock = blockWeeks * 7;
-  const start = new Date(schedule.startDate);
-  const end = new Date(schedule.endDate);
-  const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-  const totalBlocks = Math.ceil(totalDays / daysPerBlock);
-
-  const currentBlockStartDay = selectedBlockIndex * daysPerBlock + 1;
-  const currentBlockEndDay = Math.min((selectedBlockIndex + 1) * daysPerBlock, totalDays);
-
-  const blockDates: string[] = [];
-  for (let day = currentBlockStartDay; day <= currentBlockEndDay; day++) {
-    const d = new Date(start);
-    d.setUTCDate(start.getUTCDate() + (day - 1));
-    blockDates.push(d.toISOString().split('T')[0]);
-  }
-
-  // Filter nurses
-  const displayedNurses =
-    selectedNurseFilter === 'ALL'
-      ? nurses
-      : nurses.filter((n) => n.id === selectedNurseFilter);
-
-  // Download the selected nurse's shifts as a calendar file
-  const handleDownloadCalendar = (nurseId: string) => {
-    const nurse = nurseMap.get(nurseId);
-    const ics = buildNurseIcs({
-      calendarName: `${clinicLabel} roster: ${nurse?.fullName || 'My shifts'}`,
-      clinicName: clinicLabel,
-      timezone: clinicTimezone,
-      nurseId,
-      assignments,
-      dutyWindows,
-      doctors,
-      clinicalRoles: roles,
-      specialties,
-    });
-    downloadIcsFile(`${schedule.name} ${nurse?.fullName || nurseId}.ics`, ics);
-  };
-
-  // Copy personal link for selected nurse
-  const handleCopyPersonalNurseLink = (nurseId: string) => {
-    const origin = window.location.origin;
-    const token = shareToken || (shareLink ? shareLink.token : 'preview');
-    const url = `${origin}/#published?token=${token}&nurse=${nurseId}`;
-    navigator.clipboard.writeText(url);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2500);
-  };
-
+  const sheet = buildTeamRosterSheet({ schedule, version, nurses, dutyWindows, doctors, clinicalRoles: roles, specialties });
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans select-none text-slate-800">
-      {/* Top Banner / Navigation Bar */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            {onExitPreview && (
-              <button
-                onClick={onExitPreview}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold transition-colors cursor-pointer"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Exit Preview</span>
-              </button>
-            )}
-
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base font-bold text-slate-900 tracking-tight">
-                  {schedule.name}
-                </h1>
-                <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold font-mono text-[10px]">
-                  PUBLISHED v{version.number}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                Official Roster: {schedule.startDate} to {schedule.endDate} · Published {new Date(version.timestamp).toLocaleDateString()}
-              </p>
-            </div>
-          </div>
-
-          {/* Right Controls: Staff Filter & Block Navigation */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {/* Filter by Nurse */}
-            <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 border border-slate-200 rounded">
-              <User className="w-3.5 h-3.5 text-slate-400" />
-              <select aria-label="Filter by nurse"
-                value={selectedNurseFilter}
-                onChange={(e) => setSelectedNurseFilter(e.target.value)}
-                className="bg-transparent font-medium text-slate-800 focus:outline-none cursor-pointer"
-              >
-                <option value="ALL">All Nursing Staff ({nurses.length})</option>
-                {nurses.map((n) => (
-                  <option key={n.id} value={n.id}>
-                    {n.fullName}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Block switcher */}
-            {totalBlocks > 1 && (
-              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded p-0.5">
-                <button
-                  disabled={selectedBlockIndex === 0}
-                  onClick={() => setSelectedBlockIndex((p) => p - 1)}
-                  className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
-                  aria-label="Previous block"
-                  title="Previous block"
-                >
-                  <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-                </button>
-                <span className="px-2 font-mono font-bold text-[11px] text-slate-700">
-                  Block {selectedBlockIndex + 1}/{totalBlocks}
-                </span>
-                <button
-                  disabled={selectedBlockIndex >= totalBlocks - 1}
-                  onClick={() => setSelectedBlockIndex((p) => p + 1)}
-                  className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
-                  aria-label="Next block"
-                  title="Next block"
-                >
-                  <ChevronRight className="w-4 h-4" aria-hidden="true" />
-                </button>
-              </div>
-            )}
-
-            {/* Personal link copier if nurse is filtered */}
-            {selectedNurseFilter !== 'ALL' && (
-              <button
-                onClick={() => handleCopyPersonalNurseLink(selectedNurseFilter)}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-semibold rounded text-xs transition-colors cursor-pointer"
-                title="Copy direct link to this nurse's personal roster"
-              >
-                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> : <Copy className="w-3.5 h-3.5" aria-hidden="true" />}
-                <span>{copiedLink ? 'Link Copied!' : 'Personal Link'}</span>
-              </button>
-            )}
-
-            {selectedNurseFilter !== 'ALL' && (
-              <button
-                onClick={() => handleDownloadCalendar(selectedNurseFilter)}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded text-xs transition-colors cursor-pointer"
-                title="Download these shifts as a calendar file for Google Calendar, Apple Calendar or Outlook"
-              >
-                <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Add to Calendar (.ics)</span>
-              </button>
-            )}
-
-            <button
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Print</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Grid Workspace */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-4">
-        {/* Personal Filter Alert Header if viewing single nurse */}
-        {selectedNurseFilter !== 'ALL' && (
-          <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center justify-between text-xs text-indigo-900">
-            <div className="flex items-center gap-2">
-              <User className="w-4 h-4 text-indigo-600" />
-              <span>
-                Showing personalized roster view for{' '}
-                <strong>{nurseMap.get(selectedNurseFilter)?.fullName || 'this nurse'}</strong>
-              </span>
-            </div>
-            <button
-              onClick={() => setSelectedNurseFilter('ALL')}
-              className="text-indigo-700 hover:underline font-semibold cursor-pointer"
-            >
-              View Full Team
-            </button>
-          </div>
-        )}
-
-        {/* The Grid Card */}
-        <div className="bg-white border border-slate-200 rounded-lg shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs font-mono">
-              <thead>
-                {/* Dates Header Row */}
-                <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 text-[11px]">
-                  <th className="py-2.5 px-3 sticky left-0 bg-slate-50 z-10 w-48 border-r border-slate-200">
-                    Nursing Staff
-                  </th>
-                  {blockDates.map((dateStr) => {
-                    const dateObj = new Date(dateStr);
-                    const weekday = WEEKDAY_NAMES[dateObj.getUTCDay()];
-                    const dayNum = dateStr.split('-')[2];
-                    const isWeekend = isWeekendDay(dateObj.getUTCDay());
-
-                    return (
-                      <th
-                        key={dateStr}
-                        className={`py-2 px-1 text-center min-w-[70px] border-r border-slate-100 ${
-                          isWeekend ? 'bg-slate-100 text-slate-800' : ''
-                        }`}
-                      >
-                        <div className="text-[10px] text-slate-400 uppercase">{weekday}</div>
-                        <div className="font-bold text-xs">{dayNum}</div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {displayedNurses.map((nurse) => {
-                  const seniority = seniorityMap.get(nurse.seniorityLevelId);
-
-                  return (
-                    <tr key={nurse.id} className="hover:bg-slate-50/80 transition-colors">
-                      {/* Sticky Nurse Column */}
-                      <td className="py-2 px-3 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-xs">
-                        <div className="font-sans font-bold text-slate-900 truncate">
-                          {nurse.fullName}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5">
-                          <span>{seniority?.name || 'Staff'}</span>
-                        </div>
-                      </td>
-
-                      {/* Day Assignment Cells */}
-                      {blockDates.map((dateStr) => {
-                        const asgn = assignments.find(
-                          (a) => a.nurseId === nurse.id && a.date === dateStr
-                        );
-                        const leave = leaveEntries.find(
-                          (le) =>
-                            le.nurseId === nurse.id &&
-                            le.approved &&
-                            dateStr >= le.startDate &&
-                            dateStr <= le.endDate
-                        );
-
-                        if (leave) {
-                          const lt = leaveTypeMap.get(leave.leaveTypeId);
-                          return (
-                            <td
-                              key={dateStr}
-                              className="p-1 text-center border-r border-slate-100 bg-amber-50/80"
-                            >
-                              <div className="font-bold text-amber-800 text-[11px]">
-                                {lt?.acronym || 'L'}
-                              </div>
-                              <div className="text-[9px] text-amber-700 truncate">
-                                {lt?.name || 'Leave'}
-                              </div>
-                            </td>
-                          );
-                        }
-
-                        if (asgn) {
-                          const duty = dutyMap.get(asgn.dutyWindowId);
-                          let targetName = '';
-                          if (isFloatShift(asgn)) {
-                            targetName = 'FLOAT';
-                          } else if (asgn.doctorId) {
-                            targetName = doctorMap.get(asgn.doctorId)?.fullName.replace('Dr. ', '') || 'Doctor';
-                          } else if (asgn.clinicalRoleId) {
-                            targetName = roleMap.get(asgn.clinicalRoleId)?.acronym || 'PHL';
-                          } else if (asgn.specialtyId) {
-                            targetName = specialtyMap.get(asgn.specialtyId)?.code || 'POOL';
-                          }
-
-                          return (
-                            <td
-                              key={dateStr}
-                              className="p-1 text-center border-r border-slate-100"
-                            >
-                              <div
-                                className="inline-block px-1.5 py-0.5 rounded text-white font-bold text-[10px]"
-                                style={{ backgroundColor: duty?.color || '#3b82f6' }}
-                              >
-                                {duty?.acronym || 'D'}
-                              </div>
-                              <div className="text-[9px] text-slate-600 truncate mt-0.5 max-w-[66px] mx-auto font-sans">
-                                {targetName}
-                              </div>
-                            </td>
-                          );
-                        }
-
-                        return (
-                          <td
-                            key={dateStr}
-                            className="p-1 text-center border-r border-slate-100 text-slate-300"
-                          >
-                            —
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Legend Drawer Footer */}
-        <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3 text-xs">
-          <div className="flex items-center gap-2 font-bold text-slate-800">
-            <Layers className="w-4 h-4 text-indigo-600" />
-            <span>Roster Acronyms &amp; Duty Legend</span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {/* Duties */}
-            <div className="space-y-1.5">
-              <span className="font-semibold text-slate-600 text-[11px] block">Duty Windows:</span>
-              <div className="space-y-1 font-mono text-[11px]">
-                {dutyWindows.map((dw) => (
-                  <div key={dw.id} className="flex items-center gap-2">
-                    <span
-                      className="px-1.5 py-0.5 rounded text-white font-bold text-[10px]"
-                      style={{ backgroundColor: dw.color }}
-                    >
-                      {dw.acronym}
-                    </span>
-                    <span className="font-sans font-medium text-slate-800">{dw.name}</span>
-                    <span className="text-slate-400">({dw.startTime}–{dw.endTime})</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Leave Types */}
-            <div className="space-y-1.5">
-              <span className="font-semibold text-slate-600 text-[11px] block">Approved Leave:</span>
-              <div className="space-y-1 font-mono text-[11px]">
-                {leaveTypes.map((lt) => (
-                  <div key={lt.id} className="flex items-center gap-2">
-                    <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-bold text-[10px]">
-                      {lt.acronym}
-                    </span>
-                    <span className="font-sans font-medium text-slate-800">{lt.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Support Roles */}
-            <div className="space-y-1.5">
-              <span className="font-semibold text-slate-600 text-[11px] block">Clinical Roles:</span>
-              <div className="space-y-1 font-mono text-[11px]">
-                {roles.map((r) => (
-                  <div key={r.id} className="flex items-center gap-2">
-                    <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-bold text-[10px]">
-                      {r.acronym}
-                    </span>
-                    <span className="font-sans font-medium text-slate-800">{r.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="bg-white border-t border-slate-200 py-3 text-center text-slate-400 text-[11px] font-mono">
-        <span>ClinicRoster Outpatient Shift Scheduling · Verified Official Snapshot</span>
-      </footer>
-    </div>
+    <main className="min-h-screen bg-slate-100 p-4 sm:p-6">
+      <div className="max-w-[1600px] mx-auto space-y-5">
+        {onExitPreview && <button onClick={onExitPreview} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600"><ArrowLeft size={16} />Return to workspace</button>}
+        <PublishedRosterSheet key={version.id} sheet={sheet} clinicName={clinicLabel} timezone={clinicTimezone} initialNurseId={nurseIdParam} myNurseId={currentUser?.linkedNurseId} nurseActions={nurseId => <>
+          <button type="button" onClick={() => {
+          const nurse = nurses.find(n => n.id === nurseId);
+          downloadIcsFile(`${schedule.name} ${nurse?.fullName || 'shifts'}.ics`, buildNurseIcs({
+            calendarName: `${clinicLabel} roster`, clinicName: clinicLabel, timezone: clinicTimezone,
+            nurseId, assignments: version.snapshot.assignments.filter(a => !version.snapshot.leaveEntries?.some(l => l.nurseId === nurseId && l.approved && a.date >= l.startDate && a.date <= l.endDate)), dutyWindows, doctors, clinicalRoles: roles, specialties,
+          }));
+          }}>Add shifts to calendar</button>
+          {shareToken && <button type="button" onClick={async () => {
+            try { await navigator.clipboard.writeText(`${window.location.origin}/#published?token=${encodeURIComponent(shareToken)}&nurse=${encodeURIComponent(nurseId)}`); setLinkStatus('Personal roster link copied.'); }
+            catch { setLinkStatus('Could not copy. Copy the page address from your browser instead.'); }
+          }}>Copy personal link</button>}
+        </>} />
+        {linkStatus && <p role="status" className="text-sm text-slate-600">{linkStatus}</p>}
+      </div>
+    </main>
   );
 };

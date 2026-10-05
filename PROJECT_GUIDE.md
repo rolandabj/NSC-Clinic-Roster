@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-04, after continuous hours accounting and roster overlap protection (section 16, item 20).
+Last updated: 2026-10-05, after the AI Studio preview email API routing fix (section 16, item 22).
 
 ---
 
@@ -19,9 +19,11 @@ Last updated: 2026-10-04, after continuous hours accounting and roster overlap p
 | Command | What it does |
 |---|---|
 | `npm install --legacy-peer-deps` | Install (the flag is needed for esbuild/vite peer conflicts) |
-| `npm run dev` | Express + Vite dev server on port 3000 |
+| `npm run dev` | Current Express source + Vite on port 3000; ignores stale build output |
+| `npm start` | Built server in production mode, or current source when no build exists |
+| `npm run preview` | Vite preview with the shared protected API mounted before the web app fallback |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 187 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 201 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `dist/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -55,7 +57,7 @@ Last updated: 2026-10-04, after continuous hours accounting and roster overlap p
 - Dashboard with "Your next two weeks" (when their access is linked to a nurse profile) and today at the clinic, from published rosters only.
 - Request leave, a day off, or a preferred shift; see decisions.
 - Managers (viewers with "Can approve leave") approve or decline requests.
-- Private phone friendly page `#me?t=TOKEN` with their own shifts, an `.ics` download and a live calendar feed `/calendar/TOKEN.ics`.
+- Private page `#me?t=TOKEN` with My schedule and Team schedule, a coloured grid matching the PDF style, landscape print, an `.ics` download and a live personal calendar feed `/calendar/TOKEN.ics`. The owner confirmed that the existing private link may show the published team without signing in.
 - Read receipt page `#ack?token=…` with an explicit "I've received my roster" button.
 - Published roster page `#published?token=…&nurse=…`.
 
@@ -64,9 +66,10 @@ Last updated: 2026-10-04, after continuous hours accounting and roster overlap p
 ## 2. Repository layout
 
 ```
-server.ts                         Entry: loads dist/server.js if built, else server/app.ts
+server.ts                         Start entry: loads dist/server.js in production if built, else server/app.ts
 server/
-  app.ts                          Express app: helmet, rate limits, auth, routes, Vite or static
+  app.ts                          Starts the shared API plus Vite middleware or built static assets
+  apiApp.ts                       Shared Express API: helmet, rate limits, auth, routes, JSON errors
   middleware/auth.ts              Bearer token → req.user; requireAuth, requireRole, requirePlanner
   routes/auth.ts                  /api/auth/me, /verify, /logout (+ computePrivileges)
   routes/email.ts                 POST /api/email/test (sends test and roster emails)
@@ -200,7 +203,7 @@ All types are in `src/types/index.ts`. Every document stores its own `id`.
 | shareLinks | `ShareLink`: token `sh_{uuid}`, public, allowedEmails, revoked, pointsToVersionId |
 | publicRosters | `{token}`: a cleaned snapshot readable without signing in (`PublicRosterDoc`, format 2). Not listable. |
 | nurseLinks | `{nurseId}`: private token `nr_{uuid}`. Editors only. |
-| nurseRosters | `{token}`: a nurse's own published shifts and leave days (`NurseRosterDoc`). Readable by token. Not listable. |
+| nurseRosters | `{token}`: personal calendar data and cleaned published team sheets (`NurseRosterDoc`, optional `teamRosters`). Readable by token. Not listable. No emails, private notes, employee codes or reasons for leave. |
 | acknowledgments | Read receipts; doc id = the emailed token `ack-{uuid}`; ackAt set once |
 | emailLog | `PublishLog`: kind PUBLISH/CHANGE/TEST/REMINDER, recipients with status |
 | audit | `AuditEvent`: actor, action (CREATE, UPDATE, DELETE, RESTORE, LOCK, OVERRIDE_LOCK, PUBLISH, SWAP, TEMPLATE_APPLY, REBALANCE), before/after |
@@ -359,13 +362,19 @@ Whole day problems (marked on the date heading in the grid): `cov-gap-`, `h1-sen
 
 `PublishModal.tsx` steps: VALIDATION (blocked while any "must fix") → DETAILS (whole roster or changes only, recipients, note, include link) → PREVIEW → SENDING → DONE.
 
-1. Reloads hours history and validates again, then saves one published version per run (retries reuse it), sets the roster PUBLISHED.
+1. Reloads shared email settings. For Live sends, verifies the SMTP connection before saving a version or attempting emails; failures stay visible in the dialog. Reloads hours history and validates again, then saves one published version per run (retries reuse it), sets the roster PUBLISHED.
 2. Points all share links at the new version and rebuilds their public snapshots (`publicRosterService.syncPublicRoster`).
-3. Makes sure every nurse on the roster has a private link (`nurseRosterService.ensureNurseLink`) and rewrites their private pages (`syncNurseRosters`; covers rosters ending in the last 31 days, published versions only).
-4. Writes an emailLog entry before sending, then emails each nurse (`RosterPublishService.generatePersonalEmailHtml` + `dispatchEmail` → `POST /api/email/test`), creating `acknowledgments/{ackToken}` per email. All user text goes through `escapeHtml`, colours through `safeColor`.
-5. Final status SENT, PARTIAL, MOCK_SENT or FAILED; "Retry failed" re-sends only failures; audit PUBLISH.
+3. Makes sure every nurse on the roster has a private link (`nurseRosterService.ensureNurseLink`) and rewrites their private pages (`syncNurseRosters`; covers rosters ending in the last 31 days, published versions only). The just saved version is supplied explicitly so an older live cache cannot publish stale nurse pages.
+4. Writes an emailLog entry before sending, then emails each nurse (`RosterPublishService.generatePersonalEmailHtml` + `dispatchEmail` → `POST /api/email/test`), creating `acknowledgments/{ackToken}` only after real email acceptance, never for sandbox sends. All user text goes through `escapeHtml`, colours through `safeColor`.
+5. Final status SENT, PARTIAL, MOCK_SENT or FAILED; "Retry failed" re-sends only failures; audit PUBLISH distinguishes sent, simulated and failed counts. Repeated clicks are guarded, and retries reload shared email settings.
 
-**Mock mode** is the default (`systemMetadata/email_settings.emailMockMode`, and `DEFAULT_EMAIL_SETTINGS`); real email needs it switched off in Settings → Email plus the SMTP env vars on the server.
+**Mock mode** is the default (`systemMetadata/email_settings.emailMockMode`, and `DEFAULT_EMAIL_SETTINGS`); real email needs it switched off in Settings → Email plus the SMTP env vars on the server. Shared Live mode overrides an old browser MOCK provider. Failed settings saves do not change the cached mode, and publishing stops if shared settings cannot be read.
+
+**Email checks**: Settings → Email shows missing server configuration and offers Check connection without sending. `GET /api/email/status` returns configuration readiness; `POST /api/email/check` verifies SMTP authentication without sending. Both require a planner. SMTP passwords stay on the server. Google app passwords allow pasted spaces; port 465 uses implicit TLS, while 587 uses STARTTLS. Connection and socket timeouts bound waits. Provider rejection is FAILED, and authentication or connection failures show actionable messages without returning raw SMTP responses. SENT means the provider accepted the email, not guaranteed inbox delivery. All email clients use `readEmailResponse`: an HTML page, including HTTP 200 preview fallbacks, is a routing error and never a successful send.
+
+**Team sheets**: `buildTeamRosterSheet` extracts display data from the latest published version, using its saved dates. `syncNurseRosters` writes those sheets into each active nurse's private page along with her separate personal calendar. Approved leave overrides a shift and appears only as generic Leave; draft records, staff emails and private notes are excluded. Existing links gain the team data after publishing again or choosing Publish → Private links → Update all pages. No Firestore rules change is needed. Revoking the nurse page removes both personal and team access through that token.
+
+**Layout**: `PublishedRosterSheet` is shared by the nurse page and the published share page. It offers My schedule / Team schedule, nurse filters, 7 / 14 / 31 day views, sticky names, shift times and duties, a legend, and shift hours for the shown dates (excluding leave credit). Printing uses A4 landscape, at most 14 days and 12 nurses per sheet, and repeats the clinic heading and legend. Personal calendar downloads and feeds still contain only that nurse's shifts. Older documents retain their personal list until refreshed.
 
 Reminders (PublishView) re-use the original ack token. Private links: `/#me?t=nr_…`, calendar `/calendar/nr_….ics` (also `webcal://`), refreshed every 4 hours by calendar apps. Links can be regenerated or revoked (also revoked when a nurse is made inactive or deleted).
 
@@ -412,6 +421,8 @@ Reminders (PublishView) re-use the original ack token. Private links: `/#me?t=nr
 | GET | /api/health | public | 60/min | health |
 | GET | /api/auth/me, /api/auth/verify | public (reports status) | 60/min | current user and privileges |
 | POST | /api/auth/logout | public | 60/min | no op |
+| GET | /api/email/status | signed in planner | 300/min | configuration readiness, no secrets |
+| POST | /api/email/check | signed in planner | 300/min | verify SMTP connection without sending |
 | POST | /api/email/test | signed in planner | 300/min | send a test or roster email; recipients must be clinic staff (nurse or doctor gmail) or the sender |
 | GET | /calendar/:token.ics | token | 30/min | nurse calendar feed |
 
@@ -419,9 +430,11 @@ The server verifies Firebase ID tokens itself (jose, Google JWKS) and reads `use
 
 **`firestore.rules` summary**: helpers `signedIn` (verified email), `isOwner`, `isApproved`, `isEditor`, `canApprove`, `myNurseId`. userAccess: own record read, self request create (PENDING, VIEWER, no manager), owner manages. acknowledgments: read by token or own nurse, update `ackAt` once. publicRosters and nurseRosters: get by token when not revoked, never list, editors write. nurseLinks: editors. presence: strict shape, own records. leaveEntries and availabilityRequests: approved users read, approvers write, nurses create/delete their own pending requests. locks: approvers write. emailLog: editors. audit: editors read, approvers create. Everything else: approved users read, editors write.
 
-**Env vars** (server): `GOOGLE_SMTP_USER`, `GOOGLE_APP_PASSWORD` (or `SMTP_USER`, `SMTP_PASS`), optional `SMTP_HOST`, `SMTP_PORT`, `EMAIL_PROVIDER`, `EMAIL_SENDER_NAME`, `FIREBASE_PROJECT_ID`, `FIRESTORE_DATABASE_ID`, `PORT`, `NODE_ENV`, `DISABLE_HMR`. AI Studio injects `GEMINI_API_KEY` and `APP_URL` (Gemini is not used). `.env.example` lists only the AI Studio ones.
+**Env vars** (server): `GOOGLE_SMTP_USER`, `GOOGLE_APP_PASSWORD` (or `SMTP_USER`, `SMTP_PASS`), optional `SMTP_HOST`, `SMTP_PORT`, `EMAIL_PROVIDER`, `EMAIL_SENDER_NAME`, `FIREBASE_PROJECT_ID`, `FIRESTORE_DATABASE_ID`, `PORT`, `NODE_ENV`, `DISABLE_HMR`. AI Studio injects `GEMINI_API_KEY` and `APP_URL` (Gemini is not used). `.env.example` includes the required server email variables and setup steps.
 
 **Firebase**: project `gen-lang-client-0671372661`, a **named** Firestore database (`ai-studio-clinicroster-…`), config in `firebase-applet-config.json`.
+
+**Preview routing**: `server/apiApp.ts` builds the single shared API with no listener or frontend fallback. `server/app.ts` mounts it in Express. The `clinic-api` Vite plugin also mounts it before the SPA fallback when AI Studio starts Vite directly or uses Vite preview. It skips middleware mode because Express already owns the API there. Unknown API routes and request parser failures return JSON. The shared middleware blocks downloads of the compiled server bundle in every mode. `npm run dev` runs current source even after a build; `npm start` uses `tsx server.ts` and defaults a built bundle to production mode. After syncing these changes, restart the AI Studio preview so the new server configuration is loaded.
 
 **Deploy**: push to GitHub `main` → AI Studio syncs and redeploys. Rules: publish by hand in the Firebase console. CI (`.github/workflows/ci.yml`, ignored by AI Studio): type check, unit tests, build, rules tests in the emulator.
 
@@ -429,7 +442,7 @@ The server verifies Firebase ID tokens itself (jose, Google JWKS) and reads `use
 
 ## 15. Tests
 
-`tests/unit/` (Node test runner, `node --import tsx --test`): analysisExport, assignmentChecks, backupCheck, changeAlerts, clinicModel (main engine + validator scenarios), continuousHours, csv, dashboard, explainCell, generatorRequests, hoursAccounting, hoursPolicy, hoursRules, liveCollectionCache, liveUpdates, newRosterDates, nurseRoster, preferenceFocus, requestFindings, rosterSaving, ruleChecker, rules, schedulingEngine, yearFairness.
+`tests/unit/` (Node test runner, `node --import tsx --test`): analysisExport, assignmentChecks, backupCheck, changeAlerts, clinicModel (main engine + validator scenarios), continuousHours, csv, dashboard, emailPublishing, explainCell, generatorRequests, hoursAccounting, hoursPolicy, hoursRules, liveCollectionCache, liveUpdates, newRosterDates, nurseRoster, preferenceFocus, requestFindings, rosterSaving, ruleChecker, rules, schedulingEngine, teamRoster, yearFairness.
 
 `fixtures.ts` helpers: `DAY_DUTY` (09:00 to 17:00), `SENIOR`, `makeNurse(id, overrides)`, `makeSchedule(overrides)` (week of 2026-10-05, 40 h), `ANNUAL_LEAVE`, `UNPAID_LEAVE`, `makeLeave`, `makeLock`, `hoursOnlyRules()` (turns off the Nurse Clinic and plus one rules).
 
@@ -448,6 +461,8 @@ const result = await SchedulingEngine.generate(
 `tests/unit/versionCompareModal.test.ts`: renders the comparison dialog with no roster, both closed and asked to open, and verifies that a loaded roster still shows the saved version versus draft changes. The missing roster cases reproduced the History startup crash before the fix.
 
 **Roster transaction tests**: `tests/integration/scheduleTransactions.test.ts` uses the real Firestore repository and a local demo emulator. See `tests/integration/README.md` for the command. It checks simultaneous planners, legacy index bootstrap, date edits, publishing metadata, atomic imports, deletion and stale index restores. No Firestore rules change is needed for these application transactions.
+
+**Email server integration**: after `npm run build`, run `node --import tsx tests/integration/emailServer.test.ts`. This starts dev, production, direct Vite and Vite preview locally. Each must serve the web app, return authenticated JSON API errors, handle malformed JSON without an HTML error page and block the server bundle download. It sends no email and needs no Firebase credentials. CI runs it after the build.
 
 **Browser checks**: there is no Firebase emulator UI setup in the repo. In earlier sessions an in memory test page was built in the session scratchpad (a copy of the app wired to fake data), copied into a temporary `_preview/` folder, run with `npx vite --port 5179`, and driven with Playwright scripts (Chromium is preinstalled; `NODE_PATH=$(npm root -g)`). Delete `_preview/` before committing. A new session needs to rebuild such a page if it wants browser checks.
 
@@ -477,7 +492,13 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 
 18. Version History startup: the closed comparison dialog accessed `schedule.id` before History loaded its roster and caused the whole screen to show "This screen couldn't be opened". The dialog now accepts an absent roster, safely checks its id, and waits for a roster before opening or moving focus. Three regression tests cover the missing roster states and normal comparison. Type check, all 166 unit tests and production build pass. Chromium checks with an in memory repository pass for delayed loading, empty history, version selection, all four studio tabs, comparison and popout dialogs, and the restore confirmation dialog. The owner approved pushing the fix to `main` on 2026-10-04.
 19. Schedule deletion and share links: deleting a schedule failed with "Missing or insufficient permissions" when purging share links. The Firestore rule for `publicRosters` had `|| isEditor()` nested inside `resource.data.revoked != true && (...)`, denying editors access once a snapshot was marked revoked and causing read-after-write to fail during deletion. The rule now evaluates `isEditor() ||` first. In addition, `publicRosterService.removePublicRoster` safely handles read-after-write errors before removal, `FirestoreRepository.update` falls back safely when read-after-write is restricted, and `scheduleDeletionService` ensures public snapshot removal errors do not prevent deleting share link records and completing schedule deletion. Two unit tests and rules tests cover these scenarios. All 168 unit tests pass and rules have been deployed.
-20. Continuous hours and roster dates: implemented in four phases after the owner confirmed that drafts, published and archived records count, tracking begins at the earliest saved roster, gaps accrue target, and both shortages and excess carry into later periods. Added the shared balance, period boundary checks, transactional date reservations, live history refresh, report and export breakdowns, and fresh publishing validation. Includes 19 new unit tests, bringing the total to 187. The real Firestore emulator checks simultaneous saves and imports; Chromium checks the roster workspace, Hours, timesheet, live Reports, overlap blocking, valid adjacent creation and historical exports. Type check and production build pass. Prepared on the working branch for review before any push to main.
+20. Continuous hours and roster dates: implemented in four phases after the owner confirmed that drafts, published and archived records count, tracking begins at the earliest saved roster, gaps accrue target, and both shortages and excess carry into later periods. Added the shared balance, period boundary checks, transactional date reservations, live history refresh, report and export breakdowns, and fresh publishing validation. Includes 19 new unit tests, bringing the total to 187. The real Firestore emulator checks simultaneous saves and imports; Chromium checks the roster workspace, Hours, timesheet, live Reports, overlap blocking, valid adjacent creation and historical exports. Type check and production build pass. The owner approved the push on 2026-10-04; published to main as `6a1ed6b`.
+
+
+21. Email and team roster access: added server configuration and SMTP connection checks, refreshed shared settings before sends and retries, fixed stale MOCK provider overrides, corrected port 465 TLS, normalized Google app passwords, bounded SMTP waits, checked recipient acceptance, and separated simulated sends from actual emails and read receipts. Private nurse pages now include cleaned team snapshots, with My schedule and Team schedule using a shared PDF style grid and landscape print. Latest snapshots are supplied explicitly after publishing to avoid stale cache data. The owner confirmed access through existing private links without sign in. All 199 unit tests, type check, build and 91 Firestore permission checks pass. Browser tests cover preflight failure before saving a version, partial sends and retry without duplicate emails, updated private pages, settings connection checks, personal and team views, mobile layout, and landscape print. No real emails were sent. The later screenshot identified an HTML response in AI Studio preview; see item 22. Server secrets and live inbox delivery have not been verified. Prepared on the working branch for review, not pushed to main.
+
+
+22. AI Studio preview email routing: the owner supplied a screenshot of `Unexpected token '<', "<!doctype ..." is not valid JSON` and confirmed the error occurred inside AI Studio preview. The client had received HTML instead of an email API response. Direct Vite and Vite preview previously had no email API. Extracted the shared Express API and mounted it in both Vite modes before frontend fallback; middleware mode avoids double mounting. Fixed startup selection so dev does not run a stale server bundle and built starts use production mode. All email responses now detect HTML clearly, and server request failures remain JSON. The new integration check passes in four startup modes; all 201 unit tests, type check and build pass. No real emails sent. Prepared as a follow up on the working branch, not pushed to main. The AI Studio preview must restart after syncing the fix; live email acceptance still depends on the configured server sending account.
 
 ---
 
@@ -489,6 +510,6 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 - The hours report counts late shifts at a fixed 21:00, while the engine uses the rule threshold.
 - Version restore in History uses `syncScheduleAssignments` (replaces all shifts, can remove other people's new shifts) and does not restore locks or leave.
 - Shortcuts modal misses Space and undo/redo keys. TopBar acceptance button is dead. `WalkthroughModal` returns null.
-- `.env.example` lacks the SMTP variables; `cors` dependency unused; PLANNER and STAFF roles unused; `metadata.json` mentions Gemini; `firebase-blueprint.json` is out of date; package name is still `react-example`.
+- `cors` dependency unused; PLANNER and STAFF roles unused; `metadata.json` mentions Gemini; `firebase-blueprint.json` is out of date; package name is still `react-example`.
 - Single clinic assumed (`clinics[0]`); `publicRosters` has no TypeScript collection mapping.
 - `Doctors` "Expand pattern" default dates are hard coded to October 2026.

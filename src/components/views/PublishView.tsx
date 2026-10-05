@@ -234,7 +234,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
   };
 
   // The clinic's shared email settings from Settings → Email (SMTP credentials live on the server)
-  const getEmailConfig = (): Promise<EmailSettingsConfig> => loadEmailSettings(repo);
+  const getEmailConfig = (): Promise<EmailSettingsConfig> => loadEmailSettings(repo, true);
 
   const [isSendingReminders, setIsSendingReminders] = useState(false);
 
@@ -873,8 +873,8 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
           </div>
 
           <p className="text-slate-600 leading-relaxed text-[11px]">
-            Each nurse has her own link that shows only her published shifts and leave days, on her phone, without
-            signing in. It is in her roster email after each publish. Pages update when you publish.
+            Each nurse has her own link for My schedule and Team schedule, without signing in.
+            It is in her roster email after each publish. Pages update when you publish. Keep links within the clinic.
           </p>
 
           {!canEditClinicData(authService.getCurrentUser()) ? (

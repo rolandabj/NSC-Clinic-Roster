@@ -21,6 +21,7 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm test
       - run: npm run build
+      - run: node --import tsx tests/integration/emailServer.test.ts
 
   firestore-rules:
     name: Firestore security rules
