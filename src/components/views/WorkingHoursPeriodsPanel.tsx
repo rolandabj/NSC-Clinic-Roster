@@ -152,10 +152,10 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
     const today = localTodayIso();
     const lastEnd = sortedPeriods.reduce((max, p) => (p.endDate > max ? p.endDate : max), '');
     const soon = localTodayIso(90);
-    if (!lastEnd) warnings.push('There are no dedicated periods, so schedules will not accrue an hours target.');
+    if (!lastEnd) warnings.push('There are no dedicated periods, so rosters will use their own hours targets.');
     else if (lastEnd < soon) {
       warnings.push(
-        `${lastEnd < today ? 'The periods ended' : 'The periods end'} on ${lastEnd}. Add the next ones; dates after that will not accrue an hours target.`
+        `${lastEnd < today ? 'The periods ended' : 'The periods end'} on ${lastEnd}. Add the next ones; dates after that will use each roster's own hours target.`
       );
     }
     return warnings;
@@ -402,7 +402,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
 
       {!isLoading && !loadError && coverageWarnings.length > 0 && (
         <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs space-y-1">
-          <p className="font-semibold">Dedicated periods set the hours target. Dates outside them do not accrue target hours.</p>
+          <p className="font-semibold">Dedicated periods set the target for covered dates. Dates outside them use the roster's own target.</p>
           <ul className="list-disc pl-5 space-y-0.5">
             {coverageWarnings.map((w) => (
               <li key={w}>{w}</li>
@@ -870,7 +870,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
               <span id={deleteTitleId}>Delete Dedicated Period?</span>
             </div>
             <p className="text-slate-600 text-xs">
-              Are you sure you want to delete <b>{deletingPeriod.name} ({deletingPeriod.year})</b> with {deletingPeriod.workingHours}h target? Rosters covering dates without another dedicated period will not accrue target hours.
+              Are you sure you want to delete <b>{deletingPeriod.name} ({deletingPeriod.year})</b> with {deletingPeriod.workingHours}h target? Rosters covering dates without another dedicated period will use their own hours targets.
             </p>
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
