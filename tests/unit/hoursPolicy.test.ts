@@ -44,7 +44,7 @@ test('full time target: schedule target is ignored when no period covers the dat
     { id: 'p', year: '2025', name: 'Jan 2025', startDate: '2025-01-01', endDate: '2025-01-31', workingHours: 170 },
   ] as any;
   assert.equal(resolveFullTimeTarget(schedule, periodsElsewhere).hours, 0);
-  assert.equal(resolveFullTimeTarget(schedule, periodsElsewhere).source, 'DEFAULT');
+  assert.equal(resolveFullTimeTarget(schedule, periodsElsewhere).source, 'NONE');
 });
 
 test('full time target: a matching dedicated period wins', () => {
