@@ -162,10 +162,10 @@ test('saved historical leave stays current when exporting an older roster snapsh
   assert.equal(result.targetHours, 114);
 });
 
-test('unconfigured dates use 40 hours per week even in a partly covered roster', () => {
+test('uncovered dates do not accrue target hours in a partly covered roster', () => {
   const partial = makeSchedule({ id: 'partial', startDate: '2026-11-16', endDate: '2026-11-25', hoursTargetFullTime: 999 });
   const result = resolveNurseHoursBalance(nurse, partial, duties, [], [], [periods[0]], { schedules: [partial], assignments: [] });
-  assert.equal(result.targetHours, 62); // 3 of 31 days at 230h, then 7 days at 40h/week
+  assert.equal(result.targetHours, 22); // Only 3 covered days at 230h per 31 day period accrue a target
 });
 
 
