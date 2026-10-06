@@ -10,6 +10,7 @@ import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { PublicHoliday } from '../../../types';
 import { localTodayIso } from '../../../utils/dateUtils';
+import { applyHolidayChangeToLeave } from '../../../services/hours/holidayLeave';
 import { notify, confirmDialog } from '../../common/dialogs';
 import { SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
 
@@ -34,6 +35,16 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
   const visible = showPast ? sorted : sorted.filter((h) => h.date.slice(0, 4) >= thisYear);
   const years = Array.from(new Set(visible.map((h) => h.date.slice(0, 4))));
 
+  /** Leave on the changed dates follows the holidays; the holiday itself is already saved when this fails. */
+  const leaveFollows = async (before: string[], after: string[]): Promise<number> => {
+    try {
+      return await applyHolidayChangeToLeave(repo, before, after);
+    } catch (err: any) {
+      notify(`The holiday is saved, but leave on that day could not be updated (${err?.message || err}). Use "Tidy public holiday leave" in Availability.`, 'warning');
+      return 0;
+    }
+  };
+
   const handleSaveHoliday = withSaveErrors('save the holiday', async (hol: Partial<PublicHoliday>) => {
     const name = (hol.name || '').trim();
     const date = hol.date || '';
@@ -47,10 +58,11 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
       return;
     }
     hol = { ...hol, name, hijriNote: (hol.hijriNote || '').trim() };
+    const before = holidays.map((h) => h.date);
+    const after = [...holidays.filter((h) => h.id !== hol.id).map((h) => h.date), date];
     if (hol.id) {
       const { id, ...fields } = hol;
       await repo.update('holidays', id, fields as any);
-      triggerSaveNotification(`Holiday "${hol.name}" updated.`);
     } else {
       await repo.create('holidays', {
         date,
@@ -58,8 +70,11 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
         country: hol.country || 'AE',
         hijriNote: hol.hijriNote,
       });
-      triggerSaveNotification(`Holiday "${hol.name}" added.`);
     }
+    // Leave counts 0 h on a public holiday (the period hours already leave it out).
+    const leaveChanged = await leaveFollows(before, after);
+    const leaveNote = leaveChanged > 0 ? ` Leave on that day now counts 0 h (${leaveChanged} ${leaveChanged === 1 ? 'entry' : 'entries'}).` : '';
+    triggerSaveNotification(`Holiday "${hol.name}" ${hol.id ? 'updated' : 'added'}.${leaveNote}`);
     setIsHolidayModalOpen(false);
     setEditingHoliday(null);
     loadData();
@@ -75,7 +90,9 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
       })
     ) {
       await repo.remove('holidays', id);
-      triggerSaveNotification(`Holiday "${name}" deleted.`);
+      // Leave on that day counts its usual hours again.
+      const leaveChanged = await leaveFollows(holidays.map((h) => h.date), holidays.filter((h) => h.id !== id).map((h) => h.date));
+      triggerSaveNotification(`Holiday "${name}" deleted.${leaveChanged > 0 ? ` Leave on that day counts its usual hours again (${leaveChanged}).` : ''}`);
       loadData();
     }
   });
@@ -87,7 +104,8 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
           <div>
             <h2 className="text-sm font-semibold text-slate-900">Public holidays</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              On these days only the on call doctor works and one nurse covers the clinic. Check moon sighting dates each year.
+              On these days only the on call doctor works and one nurse covers the clinic, who then takes another day off of their choosing.
+              The period hours already leave these days out, so leave counts 0 h on them. Check moon sighting dates each year.
               Changes apply to a roster when it is generated or checked again.
             </p>
           </div>

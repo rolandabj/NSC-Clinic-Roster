@@ -17,6 +17,7 @@ import {
   Nurse,
 } from '../../types';
 import { getRepository } from '../repository';
+import { withHolidaysAtZero } from '../hours/holidayLeave';
 import { UserProfile } from '../auth/authService';
 import { canApproveRequests } from '../auth/access';
 
@@ -107,10 +108,12 @@ export async function submitLeaveRequest(
   }
 
   const repo = getRepository();
-  const [leaveTypes, nurse, existing] = await Promise.all([
+  const [leaveTypes, nurse, existing, holidays] = await Promise.all([
     repo.list('leaveTypes') as Promise<LeaveType[]>,
     repo.get('nurses', nurseId) as Promise<Nurse | null>,
     repo.list('leaveEntries', { field: 'nurseId', operator: '==', value: nurseId }) as Promise<LeaveEntry[]>,
+    // Public holidays inside the leave count 0 h (the period hours already leave them out).
+    repo.list('holidays').catch(() => []),
   ]);
 
   const leaveType = leaveTypes.find((lt) => lt.id === leaveTypeId);
@@ -153,7 +156,7 @@ export async function submitLeaveRequest(
     submittedByNurseId: nurseId,
     submittedAt: now,
   };
-  return repo.create('leaveEntries', entry);
+  return repo.create('leaveEntries', withHolidaysAtZero(entry, holidays));
 }
 
 /**
@@ -334,6 +337,66 @@ async function syncDayOffLock(request: Pick<AvailabilityRequest, 'nurseId' | 'da
       createdAt: new Date().toISOString(),
     });
   }
+}
+
+/**
+ * Records the day off a nurse takes for working a public holiday (owner's decision of
+ * 2026-10-06): an approved day off request linked to the holiday, with its pinned day
+ * off. A day off already linked to the holiday moves to the new date; a day off request
+ * she already made for that date is linked and approved instead of adding a second one.
+ */
+export async function recordHolidayDayOff(
+  reviewer: UserProfile | null | undefined,
+  input: { nurseId: string; holidayDate: string; holidayName?: string; date: string }
+): Promise<AvailabilityRequest> {
+  if (!canApproveRequests(reviewer)) throw new Error('Only planners and managers can record a day off.');
+  const { nurseId, holidayDate, date } = input;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new Error('Choose the day off.');
+  if (date === holidayDate) throw new Error('The day off must be another day than the public holiday.');
+  const repo = getRepository();
+  const now = new Date().toISOString();
+  const reviewed = { reviewedByUserId: reviewer!.uid, reviewedByUserName: reviewer!.name || reviewer!.email, reviewedAt: now };
+  const note = `Day off for the public holiday${input.holidayName ? ` ${input.holidayName}` : ''} (${holidayDate})`;
+  const hers = (await repo.list('availabilityRequests', { field: 'nurseId', operator: '==', value: nurseId })) as AvailabilityRequest[];
+  const live = hers.filter((r) => !r.available && r.status !== 'REJECTED');
+  const linked = live.find((r) => r.holidayDate === holidayDate);
+  const sameDay = live.find((r) => r.date === date);
+
+  let saved: AvailabilityRequest;
+  if (linked) {
+    // Moving it: the old day loses its pin, the new day gets one.
+    if (linked.status === 'APPROVED' && linked.date !== date) await syncDayOffLock(linked, false);
+    saved = { ...linked, date, status: 'APPROVED', ...reviewed };
+    await repo.update('availabilityRequests', linked.id, { date, status: 'APPROVED', ...reviewed });
+  } else if (sameDay) {
+    saved = { ...sameDay, holidayDate, status: 'APPROVED', note: sameDay.note || note, ...reviewed };
+    await repo.update('availabilityRequests', sameDay.id, { holidayDate, status: 'APPROVED', note: saved.note, ...reviewed });
+  } else {
+    saved = {
+      id: `avail-req-${uuidv4()}`,
+      nurseId,
+      date,
+      available: false,
+      note,
+      holidayDate,
+      status: 'APPROVED',
+      submittedByNurseId: nurseId,
+      submittedAt: now,
+      ...reviewed,
+    };
+    await repo.create('availabilityRequests', saved);
+  }
+  await syncDayOffLock(saved, true);
+  await repo.create('audit', {
+    id: `audit-${uuidv4()}`,
+    actor: reviewed.reviewedByUserName,
+    action: 'UPDATE',
+    entity: 'AvailabilityRequest',
+    entityId: saved.id,
+    note: `Day off on ${date} recorded for nurse ${nurseId} for working the public holiday on ${holidayDate}.`,
+    timestamp: now,
+  });
+  return saved;
 }
 
 /** Every day off and shift request of every nurse, newest date first (for planners and managers). */

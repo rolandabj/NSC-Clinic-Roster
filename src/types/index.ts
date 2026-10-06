@@ -73,6 +73,8 @@ export interface AvailabilityRequest {
   available: boolean; // true = available / preferred duty, false = unavailable / requested day off
   preferredDutyWindowId?: string;
   note?: string;
+  /** A day off taken for working this public holiday (owner's decision of 2026-10-06). */
+  holidayDate?: IsoDateString;
   status: ApprovalStatus; // 'PENDING' | 'APPROVED' | 'REJECTED'
   submittedByNurseId: string;
   submittedAt: string;

@@ -62,6 +62,8 @@ export async function loadClinicSetup(
   const priorAssignments: Assignment[] = lookBackShifts.flat().filter((a) => a.date >= from && a.date < schedule.startDate);
 
   const holidayDates = holidays.map((h) => h.date);
+  const holidayNames = Object.fromEntries(holidays.map((h) => [h.date, h.name]));
+  const inRoster = (date?: string) => !!date && date >= schedule.startDate && date <= schedule.endDate;
   // Extras that only fine tune the generator: if they can't be loaded the roster still loads.
   const [yearToDate, availabilityRequests] = await Promise.all([
     (async (): Promise<YearToDate | undefined> => {
@@ -78,7 +80,8 @@ export async function loadClinicSetup(
     }),
     repo
       .list('availabilityRequests')
-      .then((list: AvailabilityRequest[]) => list.filter((r) => r.date >= schedule.startDate && r.date <= schedule.endDate))
+      // A day off for one of this roster's public holidays counts here wherever it falls.
+      .then((list: AvailabilityRequest[]) => list.filter((r) => inRoster(r.date) || inRoster(r.holidayDate)))
       .catch((err) => {
         console.warn('Could not load the availability requests:', err);
         return undefined;
@@ -90,6 +93,7 @@ export async function loadClinicSetup(
     openTime: profile?.openTime,
     closeTime: profile?.closeTime,
     holidayDates,
+    holidayNames,
     priorAssignments,
     yearToDate,
     availabilityRequests,

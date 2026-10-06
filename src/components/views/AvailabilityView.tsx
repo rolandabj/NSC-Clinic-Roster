@@ -1,4 +1,6 @@
 import { leaveCreditInRange } from '../../services/hours/hoursPolicy';
+import { planHolidayLeaveTidy, saveHolidayLeave, withHolidaysAtZero } from '../../services/hours/holidayLeave';
+import { confirmDialog } from '../common/dialogs';
 import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
@@ -327,6 +329,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       return;
     }
 
+    // A public holiday inside the leave counts 0 h: the period hours already leave it out.
+    const { dayHours } = withHolidaysAtZero({ startDate: start, endDate: end, dayHours: editingLeaveEntry.dayHours }, holidays);
     try {
       if (editingLeaveEntry.id) {
         await repo.update('leaveEntries', editingLeaveEntry.id, {
@@ -337,6 +341,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           note: editingLeaveEntry.note,
           approved: editingLeaveEntry.approved ?? true,
           hoursCredited: totalCredits,
+          ...(dayHours ? { dayHours } : {}),
         });
         triggerToast(`Updated leave entry (${daySpan} day(s), ${totalCredits}h credited).`);
       } else {
@@ -348,6 +353,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           note: editingLeaveEntry.note || '',
           approved: true,
           hoursCredited: totalCredits,
+          ...(dayHours ? { dayHours } : {}),
         });
         triggerToast(`Recorded ${lt?.name} for ${daySpan} day(s) (${totalCredits}h credited).`);
       }
@@ -427,6 +433,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
         const start2 = addDaysToIso(targetDate, 1);
         const days2 = countDaysBetween(start2, entry.endDate);
+        // The second part keeps its days' own hours (a public holiday stays at 0 h).
+        const ownHours = Object.fromEntries(Object.entries(entry.dayHours || {}).filter(([d]) => d >= start2 && d <= entry.endDate));
+        const { dayHours: secondDays } = withHolidaysAtZero({ startDate: start2, endDate: entry.endDate, dayHours: ownHours }, holidays);
         await repo.create('leaveEntries', {
           nurseId: entry.nurseId,
           leaveTypeId: entry.leaveTypeId,
@@ -435,6 +444,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           note: entry.note,
           approved: entry.approved,
           hoursCredited: Math.round(days2 * hoursPerDay),
+          ...(secondDays && Object.keys(secondDays).length > 0 ? { dayHours: secondDays } : {}),
         });
       }
 
@@ -528,47 +538,34 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     }
   };
 
-  // --- PUBLIC HOLIDAY AUTO-LEAVE ---
-  const handleApplyAllPublicHolidaysAsPH = async () => {
+  // --- PUBLIC HOLIDAY LEAVE ---
+  // Public holidays are already left out of the period hours (owner's decision of 2026-10-06),
+  // so nobody gets leave hours for them. "Tidy" removes the public holiday leave the old
+  // "Apply Public Holidays as PH" button gave everyone, and makes other leave count 0 h on
+  // the month's holidays.
+  const monthHolidays = holidays.filter((h) => h.date.startsWith(`${currentYear}-${String(currentMonthIndex + 1).padStart(2, '0')}`));
+  const holidayTidy = useMemo(() => planHolidayLeaveTidy(leaveEntries, leaveTypes, monthHolidays), [leaveEntries, leaveTypes, holidays, currentYear, currentMonthIndex]);
+  const handleTidyHolidayLeave = async () => {
+    const { remove, zero } = holidayTidy;
+    if (remove.length + zero.length === 0) return;
+    const parts = [
+      remove.length > 0 ? `delete ${remove.length} public holiday leave ${remove.length === 1 ? 'entry' : 'entries'} (it counted the holiday twice and kept the nurse from working it)` : '',
+      zero.length > 0 ? `make ${zero.length} other leave ${zero.length === 1 ? 'entry' : 'entries'} count 0 h on the holiday` : '',
+    ].filter(Boolean);
+    const ok = await confirmDialog({
+      title: 'Tidy public holiday leave',
+      message: `Public holidays are already left out of the period hours, so nobody gets leave hours for them. For the holidays of ${monthName} ${currentYear} this will ${parts.join(' and ')}. Hours of rosters with these days are worked out again. This cannot be undone.`,
+      confirmLabel: 'Tidy',
+      danger: remove.length > 0,
+    });
+    if (!ok) return;
     try {
-      const monthPrefix = `${currentYear}-${String(currentMonthIndex + 1).padStart(2, '0')}`;
-      const monthHolidays = holidays.filter((h) => h.date.startsWith(monthPrefix));
-
-      if (monthHolidays.length === 0) {
-        triggerToast(`No public holidays found for ${monthName} ${currentYear}. You can add them in Settings → Public Holidays.`);
-        return;
-      }
-
-      const phLeaveType = leaveTypes.find((l) => l.acronym === 'PH') || leaveTypes[0];
-      let createdCount = 0;
-
-      for (const hol of monthHolidays) {
-        for (const nurse of nurses) {
-          // Check if leave already exists
-          const existing = leaveEntries.find(
-            (le) => le.nurseId === nurse.id && hol.date >= le.startDate && hol.date <= le.endDate
-          );
-          if (!existing) {
-            await repo.create('leaveEntries', {
-              nurseId: nurse.id,
-              leaveTypeId: phLeaveType.id,
-              startDate: hol.date,
-              endDate: hol.date,
-              note: `Public Holiday: ${hol.name}`,
-              approved: true,
-              hoursCredited: 8,
-            });
-            createdCount++;
-          }
-        }
-      }
-
-      triggerToast(
-        `Applied Public Holiday (PH) leave: Created ${createdCount} leave entries for ${monthHolidays.length} holiday(s) across all active nurses.`
-      );
+      await saveHolidayLeave(repo, zero, remove.map((le) => le.id));
+      triggerToast(`Public holiday leave tidied: ${remove.length} deleted, ${zero.length} set to 0 h on the holiday.`);
       loadData();
     } catch (err: any) {
-      triggerToast(`Error applying holiday leave: ${err.message}`);
+      triggerToast(`Could not tidy the public holiday leave: ${err?.message || err}`);
+      loadData();
     }
   };
 
@@ -633,7 +630,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           }
         }
 
-        await repo.create('leaveEntries', {
+        await repo.create('leaveEntries', withHolidaysAtZero({
           nurseId: nurse.id,
           leaveTypeId: lt.id,
           startDate,
@@ -641,7 +638,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           note: 'Imported via CSV',
           approved: true,
           hoursCredited: totalCredits,
-        });
+        }, holidays));
         successCount++;
       }
 
@@ -702,7 +699,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
         <div>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">Availability, Leave &amp; Locks</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Record pre-approved staff leave (Annual, Sick, Birthday, PH) and pinned non-changeable locks. Drag across date ranges to quickly record leave.
+            Record approved staff leave (Annual, Sick, Birthday) and pinned days. Drag across dates to record leave quickly. Leave counts 0 h on public holidays: the period hours already leave them out.
           </p>
         </div>
 
@@ -717,14 +714,16 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             <span>Go to Today</span>
           </button>
 
-          <button
-            onClick={handleApplyAllPublicHolidaysAsPH}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-medium transition-colors cursor-pointer"
-            title="Auto-grant 8h PH leave on holidays to all active staff"
-          >
-            <Flag className="w-3.5 h-3.5 text-cyan-600" aria-hidden="true" />
-            <span>Apply Public Holidays as PH</span>
-          </button>
+          {holidayTidy.remove.length + holidayTidy.zero.length > 0 && (
+            <button
+              onClick={handleTidyHolidayLeave}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded text-xs font-medium transition-colors cursor-pointer"
+              title="Public holidays are already left out of the period hours: leave counts 0 h on them"
+            >
+              <Flag className="w-3.5 h-3.5 text-cyan-600" aria-hidden="true" />
+              <span>Tidy public holiday leave ({holidayTidy.remove.length + holidayTidy.zero.length})</span>
+            </button>
+          )}
 
           <button
             onClick={() => {

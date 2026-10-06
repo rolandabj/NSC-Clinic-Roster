@@ -656,8 +656,8 @@ export type RosterAnalysis = ReturnType<typeof buildRosterAnalysis>;
 
 /** The checker's finding id prefixes, longest first, so 'h7-hours-over-' wins over 'hours-over-'. */
 const PROBLEM_RULES = [
-  'cov-gap', 'dayoff-lock', 'evening-tail', 'exclusive-nc-doctor-conflict', 'h1-senior', 'h2-days', 'h3-rest',
-  'h4-dup', 'h6-phl-capability', 'h7-hours-over', 'h7-period', 'h8-doctor-allocation', 'h8-specialty-allocation', 'h9-week-hours', 'holiday-gap',
+  'cov-gap', 'day-off-for-holiday', 'dayoff-lock', 'evening-tail', 'exclusive-nc-doctor-conflict', 'h1-senior', 'h2-days', 'h3-rest',
+  'h4-dup', 'h6-phl-capability', 'h7-hours-over', 'h7-period', 'h8-doctor-allocation', 'h8-specialty-allocation', 'h9-week-hours', 'holiday-gap', 'holiday-leave',
   'holiday-no-nurse', 'holiday-senior', 'hours-deferred', 'hours-history-unavailable', 'hours-low', 'hours-over',
   'hours-part-short', 'hours-written-off', 'leave-overlap', 'missing-gmail', 'nc-coverage',
   'nc-doctor-conflict', 'nc-not-qualified', 'pending-leave-shift', 'period-gap', 'request-dayoff-shift', 'request-shift',

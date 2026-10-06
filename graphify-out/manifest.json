@@ -258,9 +258,9 @@
     "semantic_hash": "4c2c62984ee0483cd6eae5986a19910b"
   },
   "src/components/views/AvailabilityView.tsx": {
-    "mtime": 1791283082.6584775,
-    "seen": 1791287116.8539164,
-    "ast_hash": "395f1c800cb279618ffb4caf81b32452",
+    "mtime": 1791293877.1459532,
+    "seen": 1791294506.9306176,
+    "ast_hash": "2afc4ce1b3f097f17f858ecdc5809db6",
     "semantic_hash": ""
   },
   "src/components/views/DashboardView.tsx": {
@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791292158.0123353,
-    "seen": 1791292813.2781003,
-    "ast_hash": "988d46bade9b8c6a2c782ed515573fbb",
+    "mtime": 1791294043.3032143,
+    "seen": 1791294506.9306347,
+    "ast_hash": "b4f68a821e059cf0cd4b503a0958c911",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -354,10 +354,10 @@
     "semantic_hash": ""
   },
   "src/components/views/settings/HolidaysTab.tsx": {
-    "mtime": 1791283082.6654398,
-    "seen": 1791287116.853937,
-    "ast_hash": "6c1b55c5f0c5aba69df77fa3e881c585",
-    "semantic_hash": "6c1b55c5f0c5aba69df77fa3e881c585"
+    "mtime": 1791293954.587214,
+    "seen": 1791294506.9306445,
+    "ast_hash": "b24ea06da92d2a4ca521f76960308dbc",
+    "semantic_hash": ""
   },
   "src/components/views/settings/LeaveTab.tsx": {
     "mtime": 1791283082.6654398,
@@ -426,9 +426,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/WorkbookGrid.tsx": {
-    "mtime": 1791283082.6720128,
-    "seen": 1791287116.8539553,
-    "ast_hash": "13296b79a14b56b669162e8061ec20b3",
+    "mtime": 1791293823.0694613,
+    "seen": 1791294506.93069,
+    "ast_hash": "de6f71a9c79a874883e4f9d5356d6a7d",
     "semantic_hash": ""
   },
   "src/main.tsx": {
@@ -462,15 +462,15 @@
     "semantic_hash": ""
   },
   "src/services/engine/clinicModel.ts": {
-    "mtime": 1791283082.6753917,
-    "seen": 1791287116.8539693,
-    "ast_hash": "1d7a40d2382a0a1f588d07ce5e524699",
+    "mtime": 1791293904.2739968,
+    "seen": 1791294506.9307055,
+    "ast_hash": "af11d975aacf93f4360d3b96b624d4c4",
     "semantic_hash": ""
   },
   "src/services/engine/clinicSetupService.ts": {
-    "mtime": 1791283082.6753917,
-    "seen": 1791287116.8539705,
-    "ast_hash": "74b87edc9d0756c41dff5677152d2ec9",
+    "mtime": 1791293904.2744353,
+    "seen": 1791294506.9307075,
+    "ast_hash": "cf7de9d4f55fc0ccb82dec05ba7471d9",
     "semantic_hash": ""
   },
   "src/services/engine/nurseClinicUtils.ts": {
@@ -594,9 +594,9 @@
     "semantic_hash": "0dffc6200bbc63a11dc6ae5d2a04366c"
   },
   "src/services/requests/staffRequestService.ts": {
-    "mtime": 1791283082.6789296,
-    "seen": 1791287116.8540468,
-    "ast_hash": "521c0e387c32cdbc7ddbb576f0ee6cbf",
+    "mtime": 1791293995.4014955,
+    "seen": 1791294506.930763,
+    "ast_hash": "335077311b36b941285c34d74ff14ae5",
     "semantic_hash": ""
   },
   "src/services/rules/ruleSyncService.ts": {
@@ -642,15 +642,15 @@
     "semantic_hash": ""
   },
   "src/services/validation/ScheduleValidator.ts": {
-    "mtime": 1791291865.2384431,
-    "seen": 1791292813.278211,
-    "ast_hash": "35e5f585a98bb4008c12bf731a9a0d1c",
+    "mtime": 1791294300.397186,
+    "seen": 1791294506.9307766,
+    "ast_hash": "1241cc6f29548db617a72843fe298611",
     "semantic_hash": ""
   },
   "src/types/index.ts": {
-    "mtime": 1791291555.941386,
-    "seen": 1791292813.278212,
-    "ast_hash": "76aa243635d663c930681885be0b357e",
+    "mtime": 1791293904.27327,
+    "seen": 1791294506.9307778,
+    "ast_hash": "3cbd09fd2a8eaff6dca3e76d46f09fce",
     "semantic_hash": ""
   },
   "src/types/navigation.ts": {
@@ -816,9 +816,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/ProblemsPanel.tsx": {
-    "mtime": 1791283082.6707234,
-    "seen": 1791287116.853951,
-    "ast_hash": "8e38828a4bca16550c55a7535fb2edd4",
+    "mtime": 1791294015.7607775,
+    "seen": 1791294506.9306858,
+    "ast_hash": "fd6a1b720be427d0850c0f086d784902",
     "semantic_hash": ""
   },
   "src/components/workbook/WhoCanCover.tsx": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791292792.6852512,
-    "seen": 1791292813.278288,
-    "ast_hash": "4a56a62eb52fc270eefe2754b08135a6",
+    "mtime": 1791294501.3652484,
+    "seen": 1791294506.930859,
+    "ast_hash": "af420241f5e0c065527a1703b482b8b3",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1002,9 +1002,9 @@
     "semantic_hash": ""
   },
   "src/services/export/analysisExportService.ts": {
-    "mtime": 1791291649.928263,
-    "seen": 1791292813.2781563,
-    "ast_hash": "263bdadb997e528203d6e06028a9310a",
+    "mtime": 1791293954.5867164,
+    "seen": 1791294506.930721,
+    "ast_hash": "b8d87c205294a8c27cf925a8d692d42f",
     "semantic_hash": ""
   },
   "tests/unit/analysisExport.test.ts": {
@@ -1317,6 +1317,24 @@
     "mtime": 1791291852.102616,
     "seen": 1791292813.2782717,
     "ast_hash": "1976f940c7afec14f969f9b190a1f7ce",
+    "semantic_hash": ""
+  },
+  "src/components/workbook/HolidayDayOffPicker.tsx": {
+    "mtime": 1791294010.5625973,
+    "seen": 1791294506.9306803,
+    "ast_hash": "80ebe7e68f75876dc8e4ece4cd32d378",
+    "semantic_hash": ""
+  },
+  "src/services/hours/holidayLeave.ts": {
+    "mtime": 1791293877.1444633,
+    "seen": 1791294506.9307365,
+    "ast_hash": "f33fa05a65671fbaf9ad89f7d703ea3f",
+    "semantic_hash": ""
+  },
+  "tests/unit/publicHolidays.test.ts": {
+    "mtime": 1791294121.1561098,
+    "seen": 1791294506.93082,
+    "ast_hash": "c2c389e199f78f1f24bb7711b1020e79",
     "semantic_hash": ""
   }
 }

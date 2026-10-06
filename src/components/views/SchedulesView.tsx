@@ -41,6 +41,7 @@ import { usePresence } from '../../services/presence/usePresence';
 import { countChangedCells } from '../../services/dashboard/dashboardSummary';
 import { announceProblems } from '../../services/dashboard/problemCount';
 import { WhoCanCover } from '../workbook/WhoCanCover';
+import { HolidayDayOffPicker } from '../workbook/HolidayDayOffPicker';
 import { nurseClinicRoleOf, canBeFreeNurse } from '../../services/engine/clinicModel';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
@@ -70,7 +71,7 @@ import {
   AvailabilityRequest,
 } from '../../types';
 import { loadClinicSetup } from '../../services/engine/clinicSetupService';
-import { decideRequest } from '../../services/requests/staffRequestService';
+import { decideRequest, recordHolidayDayOff } from '../../services/requests/staffRequestService';
 import { authService } from '../../services/auth/authService';
 import type { ClinicSetup } from '../../services/engine/clinicModel';
 import { SchedulingEngine } from '../../services/engine/SchedulingEngine';
@@ -1553,6 +1554,33 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   }, [activeTab]);
 
   /** "Add" in Who could cover: a Nurse Clinic shift for a nurse free that day (a hand change). */
+  /**
+   * The day off a nurse chose for working a public holiday (owner's decision of 2026-10-06):
+   * saved as an approved day off linked to the holiday, with its pin. A shift she has that
+   * day in this roster is removed (the day off wins; undo brings the shift back).
+   */
+  const handleRecordHolidayDayOff = async (nurseId: string, holidayDate: string, date: string) => {
+    const sched = activeSchedule;
+    if (!sched) return;
+    await recordHolidayDayOff(authService.getCurrentUser(), {
+      nurseId,
+      holidayDate,
+      holidayName: holidays.find((h) => h.date === holidayDate)?.name,
+      date,
+    });
+    const reqList = await repo.list('availabilityRequests');
+    setAvailabilityRequests(reqList);
+    availabilityRequestsRef.current = reqList;
+    const shift = liveRef.current.assignments.find((a) => a.nurseId === nurseId && a.date === date);
+    if (shift && date >= sched.startDate && date <= sched.endDate) {
+      applyEdit({ assignments: liveRef.current.assignments.filter((a) => a.id !== shift.id) });
+      triggerToast(`Day off saved for ${nurseName(nurseId)} on ${formatDate(date)}. The shift that day was removed; fill empty cells to cover it.`);
+    } else {
+      runValidation(sched, liveRef.current.assignments);
+      triggerToast(`Day off saved for ${nurseName(nurseId)} on ${formatDate(date)}.`);
+    }
+  };
+
   const handleAddNurseClinicShift = (nurseId: string, date: string, dutyWindowId: string) => {
     if (!activeSchedule) return;
     const added: Assignment = {
@@ -2186,7 +2214,17 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               setActiveTab('warnings');
             }}
             onClose={() => setIsProblemsOpen(false)}
+            helpLabel={(f) => (f.id.startsWith('day-off-for-holiday-') ? 'Choose the day off' : 'Who could cover?')}
             renderHelp={(f) =>
+              // Whoever works a public holiday chooses another day off.
+              f.date && f.id.startsWith('day-off-for-holiday-') && f.affectedNurseIds[0] ? (
+                <HolidayDayOffPicker
+                  nurseName={nurseName(f.affectedNurseIds[0])}
+                  holidayDate={f.date}
+                  holidayName={holidays.find((h) => h.date === f.date)?.name}
+                  onSave={(date) => handleRecordHolidayDayOff(f.affectedNurseIds[0], f.date!, date)}
+                />
+              ) :
               // Only for a missing free nurse (or nobody on a public holiday), which one added nurse fixes.
               f.date && (f.id.startsWith('cov-gap-') || f.id.startsWith('holiday-gap-') || f.id.startsWith('holiday-no-nurse-')) ? (
                 <WhoCanCover

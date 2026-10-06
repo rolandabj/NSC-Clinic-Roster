@@ -19,6 +19,8 @@ interface ProblemsPanelProps {
   onClose: () => void;
   /** Extra help under a problem, e.g. who could cover a missing free nurse (null for none). */
   renderHelp?: (finding: ValidationFinding) => React.ReactNode | null;
+  /** The button that opens the help (default "Who could cover?"). */
+  helpLabel?: (finding: ValidationFinding) => string;
   /** A nurse row to go to for a problem about a whole day (the day's column is what matters). */
   firstNurseId?: string;
 }
@@ -29,7 +31,7 @@ const SEVERITY: Record<FindingSeverity, { label: string; order: number; icon: Re
   INFO: { label: 'Note', order: 2, icon: <Info className="w-3.5 h-3.5 text-slate-500" />, tone: 'border-slate-200 bg-white' },
 };
 
-export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, nurseName, onShowInGrid, onOpenFullList, onClose, renderHelp, firstNurseId }) => {
+export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, nurseName, onShowInGrid, onOpenFullList, onClose, renderHelp, helpLabel, firstNurseId }) => {
   const [showNotes, setShowNotes] = useState(false);
   const [openHelpId, setOpenHelpId] = useState<string | null>(null);
   const all = [...validationReport.findings].sort(
@@ -112,7 +114,7 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, 
                       onClick={() => setOpenHelpId(openHelpId === f.id ? null : f.id)}
                       className="text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
                     >
-                      {openHelpId === f.id ? 'Hide who could cover' : 'Who could cover?'}
+                      {openHelpId === f.id ? 'Hide' : helpLabel?.(f) || 'Who could cover?'}
                     </button>
                   )}
                 </div>

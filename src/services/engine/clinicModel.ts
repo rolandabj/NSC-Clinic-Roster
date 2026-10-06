@@ -49,11 +49,13 @@ export interface ClinicSetup {
   closeTime?: string;
   /** Public holiday dates (YYYY-MM-DD). */
   holidayDates?: Iterable<string>;
+  /** Public holiday names by date, for messages. */
+  holidayNames?: Record<string, string>;
   /** Shifts from the roster just before this one (read only, for the rules that look back). */
   priorAssignments?: Assignment[];
   /** Weekends, holidays, late shifts and Nurse Clinic so far this year (earlier rosters only). */
   yearToDate?: YearToDate;
-  /** Nurses' availability requests for this roster's dates (any status). */
+  /** Nurses' availability requests for this roster's dates (any status), and days off taken for its public holidays. */
   availabilityRequests?: AvailabilityRequest[];
 }
 

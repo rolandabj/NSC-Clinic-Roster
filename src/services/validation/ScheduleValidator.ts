@@ -43,6 +43,7 @@ import { hoursCeiling, leaveCreditInRange, shiftHoursAllowed } from '../hours/ho
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
 import { resolveRule, LATE_DUTY_RULE_WORDS } from '../engine/SchedulingEngine';
 import { WEEK_HOURS_RULE, weekHoursSetting, weeksOverLimit } from '../engine/weekHours';
+import { leaveCountingOnHoliday } from '../hours/holidayLeave';
 import { pendingLeaveOn, requestOn } from '../engine/explainCell';
 import {
   ClinicSetup,
@@ -242,6 +243,41 @@ export class ScheduleValidator {
             message: `Public holiday ${dayName} ${formatDate(date)}: the nurse on duty is not a senior nurse.`,
             affectedNurseIds: dayAssignments.map((a) => a.nurseId),
             cellRefs: dayAssignments.map((a) => ({ nurseId: a.nurseId, date })),
+            date,
+          });
+        }
+
+        // The owner's decision of 2026-10-06: the period hours already leave public holidays
+        // out, so leave counts 0 h on them, and whoever works the holiday takes another day
+        // off of their choosing (a day off request linked to the holiday).
+        const holidayName = clinicSetup?.holidayNames?.[date];
+        const named = holidayName ? ` ${holidayName}` : '';
+        const counting = leaveCountingOnHoliday(leaveEntries.filter((le) => nurseMap.has(le.nurseId)), leaveTypes, date);
+        if (counting.length > 0) {
+          const ids = [...new Set(counting.map((le) => le.nurseId))];
+          findings.push({
+            id: `holiday-leave-${date}`,
+            category: 'HOURS_IMBALANCE',
+            severity: 'WARN',
+            message: `Public holiday${holidayName ? ` ${holidayName},` : ''} ${dayName} ${formatDate(date)}: leave counts hours for ${ids.map((id) => nurseMap.get(id)?.fullName || 'a nurse').join(', ')}. The period hours already leave public holidays out, so leave counts 0 h on them. Use "Tidy public holiday leave" in Availability.`,
+            affectedNurseIds: ids,
+            cellRefs: ids.map((nurseId) => ({ nurseId, date })),
+            date,
+          });
+        }
+        const requestsSeen = [...availabilityRequests, ...(clinicSetup?.availabilityRequests || [])];
+        for (const nurseId of new Set(dayAssignments.map((a) => a.nurseId))) {
+          const chosen = requestsSeen.some(
+            (r) => r.nurseId === nurseId && r.holidayDate === date && !r.available && r.status !== 'REJECTED'
+          );
+          if (chosen) continue;
+          findings.push({
+            id: `day-off-for-holiday-${nurseId}-${date}`,
+            category: 'DATA_ISSUE',
+            severity: 'WARN',
+            message: `${nurseMap.get(nurseId)?.fullName || 'A nurse'} works the public holiday${named} on ${dayName} ${formatDate(date)} and has no day off chosen for it yet.`,
+            affectedNurseIds: [nurseId],
+            cellRefs: [{ nurseId, date }],
             date,
           });
         }

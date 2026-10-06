@@ -932,7 +932,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
         notify('Hours for this day must be a number from 0 to 24.', 'warning');
         return false;
       }
-      const dayHoursOverride = ownHours !== undefined && ownHours !== defaultHours ? ownHours : undefined;
+      // A public holiday counts 0 h unless hours are typed: the period hours already leave it out.
+      const dayHoursOverride =
+        ownHours !== undefined ? (ownHours !== defaultHours ? ownHours : undefined) : holidayByDate.has(date) ? 0 : undefined;
       const creditedHours = dayHoursOverride ?? defaultHours;
       const withDay = (entry: LeaveEntry): LeaveEntry => {
         const rest = { ...(entry.dayHours || {}) };
@@ -2698,7 +2700,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                   if (lt && lt.countsTowardHoursTarget === false) {
                     return <p className="text-[11px] text-slate-500">This leave doesn't count toward the hours goal.</p>;
                   }
-                  const def = typeof lt?.creditedHours === 'number' ? lt.creditedHours : 8;
+                  const typeHours = typeof lt?.creditedHours === 'number' ? lt.creditedHours : 8;
+                  const holiday = editorTarget ? holidayByDate.get(editorTarget.date) : undefined;
+                  // A public holiday counts 0 h: the period hours already leave it out.
+                  const def = holiday ? 0 : typeHours;
                   return (
                     <div>
                       <label htmlFor="editor-leave-hours" className="block font-semibold text-slate-700 mb-1">
@@ -2718,7 +2723,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                         />
                         <span className="text-[11px] text-slate-500">
                           {editorLeaveHours.trim() === ''
-                            ? `Default: ${def} h (Settings > Leave types)`
+                            ? holiday
+                              ? `Public holiday (${holiday.name}): 0 h, the period hours already leave it out`
+                              : `Default: ${def} h (Settings > Leave types)`
                             : `Only this day, for this nurse. Default is ${def} h.`}
                         </span>
                         {editorLeaveHours.trim() !== '' && (
