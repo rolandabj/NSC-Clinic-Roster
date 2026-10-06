@@ -6,6 +6,7 @@
  * the full time hours goal, and whether to fill the shifts straight away.
  */
 
+import { findRangeConflict } from '../../services/schedule/scheduleRanges';
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import {
   X,
@@ -224,13 +225,8 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
   };
 
   // Check for date range overlap with existing schedules
-  const overlappingSchedule = existingSchedules.find((s) => {
-    return (
-      (startDate >= s.startDate && startDate <= s.endDate) ||
-      (endDate >= s.startDate && endDate <= s.endDate) ||
-      (startDate <= s.startDate && endDate >= s.endDate)
-    );
-  });
+  const candidateRange = { id: '', name: '', startDate, endDate };
+  const overlappingSchedule = startDate && endDate ? (findRangeConflict(candidateRange, existingSchedules) as Schedule | undefined) : undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,7 +263,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
     try {
       const repo = getRepository();
       const latestSchedules = await repo.list('schedules');
-      const conflict = latestSchedules.find(s => s.startDate <= endDate && s.endDate >= startDate);
+      const conflict = findRangeConflict(candidateRange, latestSchedules);
       if (conflict) throw new Error(`These dates overlap "${conflict.name}". Open that roster or choose different dates.`);
       const user = authService.getCurrentUser();
       const author = user?.name || user?.email || 'Planner';

@@ -24,7 +24,7 @@ import {
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import { CollectionName, EntityForCollection, Schedule } from '../../types';
-import { mergeScheduleRanges, ScheduleRange } from '../schedule/scheduleRanges';
+import { mergeScheduleRanges, rangesOverlap, ScheduleRange, toScheduleRange } from '../schedule/scheduleRanges';
 import { IRepository, SubscribeCallback, Unsubscribe } from './IRepository';
 import { quotaTracker } from '../firebase/quotaTracker';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
@@ -67,7 +67,11 @@ export class FirestoreRepository implements IRepository {
   private cache: LiveCollectionCache;
 
   /** One transaction serializes date reservations across all planner sessions. */
-  private async writeSchedules(items: Partial<Schedule>[], removeIds: string[] = [], replace = false): Promise<Schedule[]> {
+  private async writeSchedules(
+    items: Partial<Schedule>[],
+    removeIds: string[] = [],
+    replace = false
+  ): Promise<Schedule[]> {
     const calendarRef = doc(this.db, 'systemMetadata', SCHEDULE_CALENDAR);
     // Bootstrap the index from existing rosters. Once created, every roster
     // mutation updates it in the same transaction as the roster document.
@@ -76,15 +80,35 @@ export class FirestoreRepository implements IRepository {
       .map(s => ({ ...s.data(), id: s.id } as Schedule));
     return runTransaction(this.db, async transaction => {
       const snapshot = await transaction.get(calendarRef);
-      const existing = snapshot.exists() ? snapshot.data().ranges as Record<string, ScheduleRange>
-        : Object.fromEntries(legacy.map(s => [s.id, { id: s.id, name: s.name, startDate: s.startDate, endDate: s.endDate }]));
+      const existing: Record<string, ScheduleRange> = snapshot.exists()
+        ? { ...(snapshot.data().ranges as Record<string, ScheduleRange>) }
+        : Object.fromEntries(legacy.map(s => [s.id, toScheduleRange(s)]));
       const documents = await Promise.all(items.map(item => transaction.get(doc(this.db, 'schedules', item.id!))));
       const next = items.map((item, i) => sanitizePayload({ ...(replace ? {} : documents[i].data()), ...item }) as Schedule);
-      const ranges = mergeScheduleRanges(existing, next.map(s => ({ id: s.id, name: s.name, startDate: s.startDate, endDate: s.endDate })));
+      // A change to a roster that no longer exists would save a half empty record.
+      next.forEach((s, i) => {
+        if (!replace && !documents[i].exists() && !s.startDate) throw new Error('This roster no longer exists. Reload the page.');
+      });
+      // The calendar can be out of date (a roster deleted from an old open tab or the
+      // Firebase console): before refusing dates, check the conflicting roster itself.
+      const changedIds = new Set(next.map(s => s.id));
+      const conflicts = new Set<string>();
+      for (const s of next) {
+        const range = toScheduleRange(s);
+        Object.values(existing).forEach(other => {
+          if (!changedIds.has(other.id) && rangesOverlap(range, other)) conflicts.add(other.id);
+        });
+      }
+      const conflictDocs = await Promise.all([...conflicts].map(id => transaction.get(doc(this.db, 'schedules', id))));
+      conflictDocs.forEach(d => {
+        if (!d.exists()) delete existing[d.id];
+        else existing[d.id] = toScheduleRange({ ...(d.data() as Schedule), id: d.id });
+      });
+      const ranges = mergeScheduleRanges(existing, next.map(toScheduleRange));
       for (const id of removeIds) delete ranges[id];
       for (const item of next) transaction.set(doc(this.db, 'schedules', item.id), item);
       for (const id of removeIds) transaction.delete(doc(this.db, 'schedules', id));
-      transaction.set(calendarRef, { id: SCHEDULE_CALENDAR, ranges });
+      transaction.set(calendarRef, sanitizePayload({ id: SCHEDULE_CALENDAR, ranges }));
       return next;
     });
   }

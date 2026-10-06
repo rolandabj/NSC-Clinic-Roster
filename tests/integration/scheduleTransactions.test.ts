@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { initializeApp, deleteApp } from 'firebase/app';
-import { getFirestore, connectFirestoreEmulator, doc, setDoc, getDocs, collection, getDoc } from 'firebase/firestore';
+import { getFirestore, connectFirestoreEmulator, doc, setDoc, getDocs, collection, getDoc, deleteDoc } from 'firebase/firestore';
 import { FirestoreRepository } from '../../src/services/repository/FirestoreRepository';
 import { makeSchedule } from '../unit/fixtures';
 
@@ -51,6 +51,10 @@ try {
   await b.repo.create('schedules', makeSchedule({ id: 'replacement', ...dates }));
   await a.repo.bulkUpsert('systemMetadata', [{ id: 'scheduleCalendar', ranges: {} } as any]);
   await assert.rejects(b.repo.create('schedules', makeSchedule({ id: 'still-overlap', ...dates })), /overlap/);
+  // A roster deleted outside the app (old tab, console) no longer holds its dates.
+  await b.repo.create('schedules', makeSchedule({ id: 'stale', startDate: '2027-01-01', endDate: '2027-01-31' }));
+  await deleteDoc(doc(b.db, 'schedules', 'stale'));
+  await a.repo.create('schedules', makeSchedule({ id: 'after-stale', startDate: '2027-01-10', endDate: '2027-01-20' }));
   console.log('PASS: simultaneous planners, legacy bootstrap, updates, atomic imports, deletion and protected calendar restore');
 } finally {
   await Promise.all(apps.map(app => deleteApp(app)));

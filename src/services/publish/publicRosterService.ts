@@ -79,7 +79,7 @@ export async function syncPublicRoster(link: ShareLink): Promise<void> {
     return;
   }
 
-  const [version, schedule, nurses, dutyWindows, leaveTypes, seniorityLevels, doctors, clinicalRoles, specialties, clinics] =
+  const [version, current, nurses, dutyWindows, leaveTypes, seniorityLevels, doctors, clinicalRoles, specialties, clinics] =
     await Promise.all([
       repo.get('versions', link.pointsToVersionId),
       repo.get('schedules', link.scheduleId),
@@ -93,9 +93,11 @@ export async function syncPublicRoster(link: ShareLink): Promise<void> {
       repo.list('clinics'),
     ]);
 
-  if (!version || !schedule) {
+  if (!version || !current) {
     throw new Error('The shared version or schedule no longer exists.');
   }
+  // The page shows the roster as it was published (its dates and name), not later draft changes.
+  const schedule = { ...current, ...(version.snapshot?.schedule || {}), id: current.id };
 
   // Only what this roster shows: its shifts, and approved leave clipped to its dates. Leave is
   // shown as a plain "Leave" (whether it is sick, annual or other leave stays private).

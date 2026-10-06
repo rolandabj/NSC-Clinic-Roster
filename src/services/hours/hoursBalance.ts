@@ -65,9 +65,10 @@ export function countHoursInRange(
 
 export function hoursHistoryOverlaps(schedule: HoursSchedule, history?: HoursHistory): ScheduleOverlap[] {
   if (!history) return [];
-  // Later rosters cannot change the accounting of an earlier roster.
+  // Later rosters cannot change the accounting of an earlier roster. Only overlaps with
+  // this roster count: an old overlap between two other rosters must not block every roster.
   const schedules = [...history.schedules.filter(s => s.id !== schedule.id && s.startDate <= schedule.endDate), { ...schedule, name: schedule.name || schedule.id }];
-  return findScheduleOverlaps(schedules);
+  return findScheduleOverlaps(schedules).filter(o => o.first.id === schedule.id || o.second.id === schedule.id);
 }
 
 /** Check at every configured period boundary, including gaps between periods. */
@@ -87,7 +88,16 @@ export function resolveNurseHoursBalance(
   periods: WorkingHoursPeriod[] = [], history?: HoursHistory, through = schedule.endDate
 ): NurseHoursBalance {
   const share = nurseContractShare(nurse);
-  const standalone = Math.round(resolveFullTimeTarget({ ...schedule, endDate: through }, periods).hours * share);
+  // Without a history: the same daily sum as below, rounded once after the contract share,
+  // so a goal never depends on whether the history has loaded yet.
+  const ownRate = periods.some(p => p.startDate <= schedule.endDate && p.endDate >= schedule.startDate)
+    ? 0 : resolveFullTimeTarget(schedule, periods).hours / Math.max(1, inclusiveDays(schedule.startDate, schedule.endDate));
+  let rawStandalone = 0;
+  for (const date of getDatesInRange(schedule.startDate, through)) {
+    const period = periods.find(p => p.startDate <= date && p.endDate >= date);
+    rawStandalone += (period ? getPeriodDailyRate(period) : ownRate) * share;
+  }
+  const standalone = Math.round(rawStandalone + 1e-8);
   if (!history || hoursHistoryOverlaps(schedule, history).length) {
     return { trackingStartDate: schedule.startDate, baseTargetHours: standalone, carriedHours: 0, targetHours: standalone,
       cumulativeTargetHours: standalone, previousCreditedHours: 0, openingBalanceHours: 0 };

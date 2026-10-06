@@ -402,7 +402,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
 
       {!isLoading && !loadError && coverageWarnings.length > 0 && (
         <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs space-y-1">
-          <p className="font-semibold">Dedicated periods set the target for covered dates. Dates outside them use the roster's own target.</p>
+          <p className="font-semibold">Dedicated periods set the target for covered dates. A roster that no period covers uses its own target; in a roster that a period covers only in part, the dates outside the period add no hours.</p>
           <ul className="list-disc pl-5 space-y-0.5">
             {coverageWarnings.map((w) => (
               <li key={w}>{w}</li>

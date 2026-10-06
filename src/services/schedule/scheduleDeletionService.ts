@@ -51,16 +51,21 @@ export async function deleteEntireSchedule(
   // Public snapshots first: they can't be found once their share link is gone.
   await purge('share links', async () => {
     const links = await repo.list('shareLinks', bySchedule);
+    // A link whose snapshot could not be removed is kept, so the snapshot can still be
+    // found and removed later; the roster is then kept too (see purge).
+    const removed: string[] = [];
+    let firstError: unknown;
     for (const l of links) {
-      if (l.token) {
-        try {
-          await removePublicRoster(l.token, repo);
-        } catch (err) {
-          console.warn(`Could not remove public snapshot for token ${l.token}:`, err);
-        }
+      try {
+        if (l.token) await removePublicRoster(l.token, repo);
+        removed.push(l.id);
+      } catch (err) {
+        console.warn(`Could not remove public snapshot for token ${l.token}:`, err);
+        firstError ??= err;
       }
     }
-    if (links.length > 0) await repo.bulkRemove('shareLinks', links.map((l) => l.id));
+    if (removed.length > 0) await repo.bulkRemove('shareLinks', removed);
+    if (firstError) throw firstError;
   });
 
   purgedVersionsCount = await purge('versions', async () => {

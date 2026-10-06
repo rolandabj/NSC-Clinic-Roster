@@ -85,7 +85,7 @@ test('deleteEntireSchedule deletes all cascaded items including share links', as
   assert.equal(col('audit').size, 1);
 });
 
-test('deleteEntireSchedule succeeds even if public snapshot deletion encounters an error', async () => {
+test('a public snapshot that cannot be removed keeps its share link and the roster, so it can be retried', async () => {
   const schedId = 'sched-err';
   const { repo, col } = fakeRepo({
     schedules: [{ id: schedId, name: 'October 2026' }],
@@ -103,9 +103,8 @@ test('deleteEntireSchedule succeeds even if public snapshot deletion encounters 
     return origRemove(name, id);
   };
 
-  const result = await deleteEntireSchedule(repo, schedId, 'Admin');
-
-  assert.equal(result.success, true);
-  assert.equal(col('schedules').has(schedId), false);
-  assert.equal(col('shareLinks').size, 0);
+  await assert.rejects(deleteEntireSchedule(repo, schedId, 'Admin'), /share links/);
+  assert.equal(col('schedules').has(schedId), true, 'the roster is kept');
+  assert.equal(col('shareLinks').has('sl1'), true, 'the link to the live snapshot is kept');
+  assert.equal(col('assignments').size, 0);
 });

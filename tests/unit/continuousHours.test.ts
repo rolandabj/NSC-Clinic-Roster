@@ -179,3 +179,35 @@ test('personal roster emails show the same adjusted goal and carried balance as 
   assert.match(email.html, /Base goal: 126h/);
   assert.match(email.html, /16h ahead/);
 });
+
+test('a goal is the same whether or not the hours history has loaded (rounded once)', () => {
+  const p227: WorkingHoursPeriod[] = [{ id: 'p', year: '2026', name: 'P', startDate: '2026-10-01', endDate: '2026-10-31', workingHours: 227 }];
+  const short = makeSchedule({ id: 'short', startDate: '2026-10-01', endDate: '2026-10-05' });
+  const half = { ...nurse, contractPercent: 50 };
+  const without = resolveNurseHoursBalance(half, short, duties, [], [], p227).targetHours;
+  const withEmpty = resolveNurseHoursBalance(half, short, duties, [], [], p227, { schedules: [short], assignments: [] }).targetHours;
+  assert.equal(without, 18); // 227 / 31 x 5 days x 50% = 18.3
+  assert.equal(withEmpty, without);
+});
+
+test('a roster with its own target is prorated up to a checkpoint, with or without history', () => {
+  const december = makeSchedule({ id: 'dec', startDate: '2026-12-01', endDate: '2026-12-31', hoursTargetFullTime: 160 });
+  const without = resolveNurseHoursBalance(nurse, december, duties, [], [], [], undefined, '2026-12-15').targetHours;
+  const withHistory = resolveNurseHoursBalance(nurse, december, duties, [], [], [], { schedules: [december], assignments: [] }, '2026-12-15').targetHours;
+  assert.equal(without, 77); // 160 / 31 x 15 days
+  assert.equal(withHistory, without);
+  assert.equal(resolveNurseHoursBalance(nurse, december, duties, [], [], []).targetHours, 160);
+});
+
+test('an old overlap between two other rosters does not block this roster', () => {
+  const a = makeSchedule({ id: 'old-a', startDate: '2025-01-01', endDate: '2025-01-31' });
+  const b = makeSchedule({ id: 'old-b', startDate: '2025-01-15', endDate: '2025-02-15' });
+  assert.equal(hoursHistoryOverlaps(second, { ...history, schedules: [a, b, ...history.schedules] }).length, 0);
+  assert.equal(hoursHistoryOverlaps(a, { ...history, schedules: [a, b] }).length, 1);
+});
+
+test('a record without dates is never reported as an overlap and never crashes the check', () => {
+  const broken = { id: 'broken', name: 'Broken' } as Schedule;
+  assert.doesNotThrow(() => hoursHistoryOverlaps(second, { ...history, schedules: [broken, ...history.schedules] }));
+  assert.doesNotThrow(() => assertScheduleRangeAvailable(second, [broken]));
+});
