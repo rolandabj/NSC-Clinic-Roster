@@ -197,7 +197,7 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
         </div>
       </div>
 
-      <p className="px-4 py-2 text-[11px] text-slate-600">Goals include hours carried from saved drafts, published and archived rosters. A positive closing balance means hours ahead; a negative balance means hours owed.</p>
+      <p className="px-4 py-2 text-[11px] text-slate-600">Goals include hours carried from earlier published rosters, with their shifts as saved now (drafts and archived rosters do not count). A positive closing balance means hours ahead; a negative balance means hours owed.</p>
       {/* Main Table */}
       <div className="flex-1 overflow-auto bg-white p-3">
         <div className="border border-slate-200 rounded overflow-hidden shadow-2xs">

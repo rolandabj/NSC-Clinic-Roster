@@ -60,6 +60,7 @@ import {
 import { yearToDateSeeds } from '../fairness/yearSeed';
 import { isPendingLeave } from './leaveStatus';
 import { applyPreferenceFocus } from './preferenceOrder';
+import { fitsWeekHours, WEEK_HOURS_RULE, weekHoursSetting } from './weekHours';
 
 /**
  * Resiliently finds a rule by templateKey, id, or semantic keywords in its name.
@@ -162,7 +163,6 @@ interface NurseDayState {
   consecutiveWorkingDays: number;
   consecutiveLateEnds: number; // shifts ending at or after 21:00
   totalDutyHoursEarned: number;
-  leaveHoursCredited?: number;
   initialLockedHours?: number;
   // Fairness counters. Each starts from this roster's kept shifts plus a small
   // head start from earlier rosters this year (see yearToDateSeeds), so they
@@ -505,6 +505,10 @@ export class SchedulingEngine {
     const minRestHoursRequired =
       minRestEnabled && minRestSeverity === 'HARD' ? (minRestRule?.value ?? 11) : 0;
 
+    // Most hours in any 7 days in a row (Hard Rule H9), across rosters
+    const weekHours = weekHoursSetting(resolveRule(rules, WEEK_HOURS_RULE.key, WEEK_HOURS_RULE.id, WEEK_HOURS_RULE.keywords));
+    const weekHoursEnforced = weekHours.enabled && weekHours.hard;
+
     const nurseClinicRole = roles.find(
       (r) => r.id === 'role-nurse-clinic' || r.acronym === 'NC' || r.name.toLowerCase().includes('nurse clinic')
     ) || {
@@ -645,6 +649,25 @@ export class SchedulingEngine {
 
     const isOnApprovedLeave = (nurseId: string, date: string) =>
       leaveEntries.some((le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate);
+    // Days of approved leave from a week before this roster to a week after it: a leave
+    // day counts no shift hours (as in the hours tally), also for the 7 day hours rule.
+    const leaveDayKeys = new Set<string>();
+    {
+      const from = shiftDate(schedule.startDate, -7);
+      const to = shiftDate(schedule.endDate, 7);
+      leaveEntries
+        .filter((le) => le.approved && le.startDate <= to && le.endDate >= from)
+        .forEach((le) => {
+          const last = le.endDate < to ? le.endDate : to;
+          for (let d = le.startDate > from ? le.startDate : from; d <= last; d = shiftDate(d, 1)) leaveDayKeys.add(`${le.nurseId}_${d}`);
+        });
+    }
+    /** Shift hours she works on a day (this roster or the one before), 0 on a leave day. */
+    const workedHoursOn = (nurseId: string, date: string): number => {
+      if (leaveDayKeys.has(`${nurseId}_${date}`)) return 0;
+      const shift = shiftOn(nurseId, date);
+      return shift ? calculateDutyDurationHours(dutyMapGlobal.get(shift.dutyWindowId)) : 0;
+    };
     // A day off: an OFF pin, or an approved day off request (also after its pin was removed;
     // to let her work that day the request is declined or deleted).
     const hasDayOffLock = (nurseId: string, date: string) =>
@@ -702,9 +725,6 @@ export class SchedulingEngine {
     const yearSeeds = yearToDateSeeds(clinicSetup?.yearToDate, sortedNurses);
     const nurseStates = new Map<string, NurseDayState>();
     sortedNurses.forEach((nurse) => {
-      // Only the leave days inside this schedule count (shared hours rule)
-      const nurseLeaveHours = countHoursInRange(nurse.id, schedule.startDate, schedule.endDate, [], dutyWindows, leaveEntries, leaveTypes).leaveHours;
-
       // Retained (pinned, hand set) shifts are committed up front and not counted again on their day.
       let initialPreservedDutyHours = 0;
       let initialWeekendsWorked = 0;
@@ -729,7 +749,6 @@ export class SchedulingEngine {
         consecutiveWorkingDays: 0,
         consecutiveLateEnds: 0,
         totalDutyHoursEarned: initialPreservedDutyHours,
-        leaveHoursCredited: nurseLeaveHours,
         initialLockedHours: initialPreservedDutyHours,
         weekendsWorked: initialWeekendsWorked + (seed?.weekendDays || 0),
         holidaysWorked: initialHolidaysWorked + (seed?.holidays || 0),
@@ -746,13 +765,16 @@ export class SchedulingEngine {
     sortedNurses.forEach((nurse) => {
       const balance = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup?.hoursHistory);
       const contractTarget = balance.targetHours;
-      paceParts.set(nurse.id, balance.parts.map((part) => {
-        const partLeave = countHoursInRange(nurse.id, part.startDate, part.endDate, [], dutyWindows, leaveEntries, leaveTypes).leaveHours;
-        const duty = Math.max(0, part.targetHours - partLeave);
+      const partLeaves = balance.parts.map((part) =>
+        countHoursInRange(nurse.id, part.startDate, part.endDate, [], dutyWindows, leaveEntries, leaveTypes).leaveHours);
+      paceParts.set(nurse.id, balance.parts.map((part, i) => {
+        const duty = Math.max(0, part.targetHours - partLeaves[i]);
         return { startIdx: datesList.indexOf(part.startDate), endIdx: datesList.indexOf(part.endDate), duty,
           carried: Math.max(-duty, Math.min(duty, part.targetHours - part.baseHours)) };
       }));
-      const leaveHours = nurseStates.get(nurse.id)?.leaveHoursCredited || 0;
+      // Leave on the days that have a goal: leave on days outside every working hours period
+      // (no goal there) must not cut the goal of the period's days.
+      const leaveHours = partLeaves.reduce((sum, h) => sum + h, 0);
       const dutyTarget = Math.max(0, contractTarget - leaveHours);
       // The hours limit (H7), shared with the checker: her goal plus the margin, less her leave.
       const maxAllowed = shiftHoursAllowed(contractTarget, leaveHours, maxHoursToleranceRatio);
@@ -766,16 +788,33 @@ export class SchedulingEngine {
       return { end, max: shiftHoursAllowed(target, leave, maxHoursToleranceRatio) };
     })]));
 
+    // Days she can work (no approved leave, no day off), counted from the first day of the
+    // roster: workableUpTo[i] is how many of days 0..i she can work.
+    const workableUpTo = new Map<string, number[]>();
+    sortedNurses.forEach((nurse) => {
+      let count = 0;
+      workableUpTo.set(nurse.id, datesList.map((date) =>
+        (count += leaveDayKeys.has(`${nurse.id}_${date}`) || hasDayOffLock(nurse.id, date) ? 0 : 1)));
+    });
+    /** How many of the days from index `from` to `to` (both included) she can work. */
+    const workableDays = (nurseId: string, from: number, to: number): number => {
+      const upTo = workableUpTo.get(nurseId);
+      if (!upTo || to < from) return 0;
+      return upTo[to] - (from > 0 ? upTo[from - 1] : 0);
+    };
+
     /**
-     * Pacing: by the end of day N a nurse should have worked about N/total of
-     * her goal, so hours are spread evenly instead of being used up in the
-     * first weeks. Each period part of the roster has its own goal, reached by
-     * the part's last day. Hours carried from earlier rosters (owed or ahead)
-     * are settled over the first half of the part: early, but spread over
-     * several shifts. A part that ends short leaves her behind pace, so the
-     * next part makes the hours up first (within the roster's goal and the
-     * hours limit; the ledger counts them for the period they fall in).
-     * Positive = behind pace (needs hours).
+     * Pacing: by the end of day N a nurse should have worked about her share of
+     * her goal for the days she could work so far, so hours are spread evenly
+     * over the days she can work instead of being used up in the first weeks.
+     * Leave and days off are left out: after a week of leave she is not behind,
+     * and before it she works her hours in the days she has. Each period part of
+     * the roster has its own goal, reached by the part's last day. Hours carried
+     * from earlier rosters (owed or ahead) are settled over the first half of the
+     * part's working days: early, but spread over several shifts. A part that
+     * ends short leaves her behind pace, so the next part makes the hours up
+     * first (within the roster's goal and the hours limit; the ledger counts
+     * them for the period they fall in). Positive = behind pace (needs hours).
      */
     const hoursBehindPace = (nurseId: string, dayIdx: number): number => {
       const parts = paceParts.get(nurseId);
@@ -783,15 +822,16 @@ export class SchedulingEngine {
       if (parts && parts.length && parts.every((p) => p.startIdx >= 0 && p.endIdx >= p.startIdx)) {
         for (const part of parts) {
           if (dayIdx < part.startIdx) continue;
-          if (dayIdx >= part.endIdx) { pace += part.duty; continue; }
-          const days = part.endIdx - part.startIdx + 1;
-          const done = dayIdx - part.startIdx + 1;
+          const days = workableDays(nurseId, part.startIdx, part.endIdx);
+          if (dayIdx >= part.endIdx || days === 0) { pace += part.duty; continue; }
+          const done = workableDays(nurseId, part.startIdx, dayIdx);
           const settleDays = Math.max(1, Math.ceil(days / 2));
           pace += Math.max(0, (part.duty - part.carried) * (done / days) + part.carried * Math.min(1, done / settleDays));
         }
       } else {
         const target = nurseTargetMap.get(nurseId)?.dutyTarget ?? 0;
-        pace = (target * (dayIdx + 1)) / Math.max(1, totalDays);
+        const days = workableDays(nurseId, 0, totalDays - 1);
+        pace = days > 0 ? (target * workableDays(nurseId, 0, dayIdx)) / days : target;
       }
       return pace - (nurseStates.get(nurseId)?.totalDutyHoursEarned ?? 0);
     };
@@ -858,13 +898,14 @@ export class SchedulingEngine {
      * both back (this roster and the previous one) and forward (shifts already
      * fixed later in this roster). `extraHours` is what the change adds to her
      * total (the whole shift, or the difference when a shift is extended).
+     * `hoursLater` leaves the hours rules for a check after other changes.
      */
     const fitsHardRules = (
       nurse: Nurse,
       date: string,
       duty: DutyWindow,
       extraHours: number,
-      opts: { replacingOwnShift?: boolean } = {}
+      opts: { replacingOwnShift?: boolean; hoursLater?: boolean } = {}
     ): boolean => {
       if (!opts.replacingOwnShift && resultAssignmentsMap.has(`${nurse.id}_${date}`)) return false; // H4
       if (isOnApprovedLeave(nurse.id, date) || hasDayOffLock(nurse.id, date)) return false; // H5
@@ -888,12 +929,12 @@ export class SchedulingEngine {
       // H7: hours ceiling
       const limits = nurseTargetMap.get(nurse.id);
       const state = nurseStates.get(nurse.id);
-      if (maxHoursEnabled && maxHoursSeverity === 'HARD' && limits && state && state.totalDutyHoursEarned + extraHours > limits.maxAllowedHours) {
+      if (maxHoursEnabled && maxHoursSeverity === 'HARD' && !opts.hoursLater && limits && state && state.totalDutyHoursEarned + extraHours > limits.maxAllowedHours) {
         return false;
       }
 
       // A later period's budget cannot be spent before its dates begin.
-      if (clinicSetup?.hoursHistory && maxHoursEnabled && maxHoursSeverity === 'HARD') {
+      if (clinicSetup?.hoursHistory && maxHoursEnabled && maxHoursSeverity === 'HARD' && !opts.hoursLater) {
         for (const budget of periodBudgets.get(nurse.id) || []) {
           if (date > budget.end) continue;
           const used = countHoursInRange(nurse.id, schedule.startDate, budget.end,
@@ -906,6 +947,14 @@ export class SchedulingEngine {
       if (consecutiveLateEnabled && consecutiveLateSeverity === 'HARD' && isLate(duty)) {
         const run = getConsecutiveLateDutiesEndingYesterday(nurse.id, date) + 1 + getConsecutiveLateFixedFromTomorrow(nurse.id, date);
         if (run > maxConsecutiveLate) return false;
+      }
+
+      // H9: most hours in any 7 days in a row that include this day (with this shift on it).
+      // A shorter shift in place of hers never makes a week heavier, so it is always allowed.
+      const dayHours = calculateDutyDurationHours(duty);
+      if (weekHoursEnforced && !opts.hoursLater && dayHours > (opts.replacingOwnShift ? workedHoursOn(nurse.id, date) : 0) &&
+        !fitsWeekHours(date, dayHours, (d) => workedHoursOn(nurse.id, d), weekHours.limit)) {
+        return false;
       }
       return true;
     };
@@ -2509,7 +2558,7 @@ export class SchedulingEngine {
         if (!target) continue;
         const need = calculateDutyDurationHours(target) - calculateDutyDurationHours(oldDuty);
         // rest and late runs around the longer shift (the hours are checked once given back)
-        if (!fitsHardRules(nurse, date, target, 0, { replacingOwnShift: true })) continue;
+        if (!fitsHardRules(nurse, date, target, 0, { replacingOwnShift: true, hoursLater: true })) continue;
         // hours she can give back on other days
         const giveBacks: { date: string; apply: () => () => void; hours: number }[] = [];
         for (const other of Array.from(resultAssignmentsMap.values())) {

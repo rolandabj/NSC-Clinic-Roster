@@ -202,6 +202,9 @@ function plainReason(
   if ((m = text.match(/^would have (\d+) late duties in a row \(maximum (\d+)\)/))) {
     return `Would be ${m[1]} late shifts in a row; the limit is ${m[2]}.`;
   }
+  if ((m = text.match(/^would work ([\d.]+)h in 7 days \(maximum ([\d.]+)h\)/))) {
+    return `Would be ${m[1]} hours in 7 days; the limit is ${m[2]} hours.`;
+  }
   if (/^already has a duty/.test(text)) return 'Already has a shift this day.';
   const sentence = text.charAt(0).toUpperCase() + text.slice(1);
   return /[.!?]$/.test(sentence) ? sentence : `${sentence}.`;

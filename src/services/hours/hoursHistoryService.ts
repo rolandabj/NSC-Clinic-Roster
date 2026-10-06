@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Loads the hours history a roster's balances carry from: the earlier rosters
- * of the same dedicated period, each as it was last published. Drafts and
- * archived rosters never count, and later draft edits never change a balance.
+ * that were published, each with its shifts as saved now (a change to a
+ * published roster counts as soon as it is saved; "Send changes" only tells the
+ * nurses). Rosters never published and archived rosters never count.
  */
 
 import { IRepository } from '../repository/IRepository';

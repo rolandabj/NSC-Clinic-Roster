@@ -16,6 +16,7 @@ import { getRepository } from '../../../services/repository';
 import { MAX_CONSECUTIVE_SHIFTS_NAME, RuleSyncService } from '../../../services/rules/ruleSyncService';
 import { Rule, RuleTemplateKey } from '../../../types';
 import { LATE_DUTY_RULE_WORDS, resolveRule } from '../../../services/engine/SchedulingEngine';
+import { WEEK_HOURS_DEFAULT, WEEK_HOURS_RULE } from '../../../services/engine/weekHours';
 import { confirmDialog, notify } from '../../common/dialogs';
 import { SaveNotifier } from './shared';
 
@@ -95,7 +96,7 @@ const GROUPS: RuleGroup[] = [
   },
   {
     title: 'Working hours',
-    description: 'How far a nurse may go past her hours goal for the period.',
+    description: 'How many hours a nurse may work: in the period, and in any 7 days.',
     rules: [
       {
         key: 'MAX_WORKING_HOURS_PER_PERIOD',
@@ -107,6 +108,17 @@ const GROUPS: RuleGroup[] = [
         help: '100% means never over her goal. Above 100%, she may go over by at most one shift (8 hours), and only when a doctor or the free nurse would otherwise have nobody.',
         value: { min: 100, max: 150, step: 5, unit: '%' },
         softMeaning: 'Going over is only reported, not stopped.',
+      },
+      {
+        key: 'MAX_HOURS_IN_7_DAYS',
+        id: WEEK_HOURS_RULE.id,
+        keywords: WEEK_HOURS_RULE.keywords,
+        fallback: WEEK_HOURS_DEFAULT,
+        title: 'Hours in any 7 days',
+        sentence: 'A nurse works at most {value} hours in any 7 days in a row.',
+        help: 'Shift hours only, not leave. The last days of the previous roster count too, so a week across two rosters is checked as one week. This keeps hours she is catching up from piling into one week.',
+        value: { min: 24, max: 96 },
+        softMeaning: 'More hours are only reported, not stopped.',
       },
     ],
   },
@@ -172,13 +184,13 @@ function findRule(rules: Rule[], def: { key: string; id?: string; keywords?: str
   return resolveRule(rules, def.key, def.id, def.keywords, def.excludeKeywords);
 }
 
-const ZERO_MEANS_DEFAULT = new Set<string>(['MAX_WORKING_HOURS_PER_PERIOD', 'MAX_CONSECUTIVE_DAYS', 'MAX_CONSECUTIVE_LATE_DUTIES']);
+const ZERO_MEANS_DEFAULT = new Set<string>(['MAX_WORKING_HOURS_PER_PERIOD', 'MAX_HOURS_IN_7_DAYS', 'MAX_CONSECUTIVE_DAYS', 'MAX_CONSECUTIVE_LATE_DUTIES']);
 
 /** The number the generator actually uses for this rule. */
 function effectiveValue(def: RuleDef, rule: Rule): number {
   const v = Number(rule.value);
   if (rule.value === undefined || rule.value === null || !Number.isFinite(v)) return def.fallback ?? def.value?.min ?? 0;
-  // The generator reads these three as "0 means use the default"; the others use a 0 as it is.
+  // The generator reads these as "0 means use the default"; the others use a 0 as it is.
   if (v === 0 && ZERO_MEANS_DEFAULT.has(def.key)) return def.fallback ?? def.value?.min ?? 0;
   return v;
 }
@@ -450,7 +462,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
                   <div key={def.key} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                     <div>
                       <p className="font-medium text-slate-700">{def.title}</p>
-                      <p className="text-xs text-slate-400">This rule is not set up yet.</p>
+                      <p className="text-xs text-slate-400">Not set up yet: until it is added, the generator and the checker use the usual setting.</p>
                     </div>
                     <button
                       type="button"

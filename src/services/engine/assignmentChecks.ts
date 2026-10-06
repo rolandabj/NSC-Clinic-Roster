@@ -7,13 +7,16 @@
  * rules as the scheduling engine:
  *   one duty per day (H4), approved leave and locks (H5), PHL skill (H6),
  *   clinic nurse for doctor and specialty cells, max consecutive days (H2),
- *   minimum rest (H3) and consecutive late duties (S1).
+ *   minimum rest (H3), consecutive late duties (S1) and the most hours in any
+ *   7 days (H9).
  * Rules switched off or set to SOFT are not enforced here.
  */
 
 import { Assignment, ClinicalRole, DutyWindow, LeaveEntry, LockEntry, Nurse, Rule } from '../../types';
 import { resolveRule, LATE_DUTY_RULE_WORDS } from './SchedulingEngine';
 import { isExclusiveNurseClinic } from './nurseClinicUtils';
+import { heaviestWeekAround, WEEK_HOURS_RULE, weekHoursSetting } from './weekHours';
+import { dutyDurationHours } from '../hours/hoursBalance';
 
 export interface AssignmentCheckContext {
   /** The whole roster as it would be after the change. */
@@ -148,6 +151,21 @@ export function checkAssignment(ctx: AssignmentCheckContext, cell: Assignment): 
     for (let i = 1; i <= 31 && isLate(shiftDate(date, -i)); i++) run++;
     for (let i = 1; i <= 31 && isLate(shiftDate(date, i)); i++) run++;
     if (run > max) reasons.push(`${name} would have ${run} late duties in a row (maximum ${max})`);
+  }
+
+  // H9: most hours in any 7 days in a row that include this day (shift hours, none on leave days)
+  const h9 = weekHoursSetting(resolveRule(ctx.rules, WEEK_HOURS_RULE.key, WEEK_HOURS_RULE.id, WEEK_HOURS_RULE.keywords));
+  if (h9.enabled && h9.hard) {
+    const ownLeave = ctx.leaveEntries.filter((le) => le.nurseId === cell.nurseId && le.approved);
+    const hoursOn = (d: string) => {
+      const shift = d === date ? cell : (byNurseDate.get(d) || [])[0];
+      if (!shift || ownLeave.some((le) => d >= le.startDate && d <= le.endDate)) return 0;
+      return dutyDurationHours(dutyMap.get(shift.dutyWindowId));
+    };
+    const week = heaviestWeekAround(date, hoursOn);
+    if (week.hours > h9.limit + 1e-6) {
+      reasons.push(`${name} would work ${Math.round(week.hours * 10) / 10}h in 7 days (maximum ${h9.limit}h)`);
+    }
   }
 
   return reasons;

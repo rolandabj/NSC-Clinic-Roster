@@ -42,6 +42,7 @@ import { isExclusiveNurseClinic } from '../engine/nurseClinicUtils';
 import { hoursCeiling, leaveCreditInRange, shiftHoursAllowed } from '../hours/hoursPolicy';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
 import { resolveRule, LATE_DUTY_RULE_WORDS } from '../engine/SchedulingEngine';
+import { WEEK_HOURS_RULE, weekHoursSetting, weeksOverLimit } from '../engine/weekHours';
 import { pendingLeaveOn, requestOn } from '../engine/explainCell';
 import {
   ClinicSetup,
@@ -171,6 +172,23 @@ export class ScheduleValidator {
         affectedNurseIds: [],
         cellRefs: [],
       });
+    }
+
+    // Days outside every working hours period have no hours goal, and the ledger never
+    // counts their hours: the period they belong to should be added first.
+    const periodsTouching = (workingHoursPeriods || []).filter((p) => p.startDate <= schedule.endDate && p.endDate >= schedule.startDate);
+    if (periodsTouching.length > 0) {
+      const outside = datesList.filter((d) => !(workingHoursPeriods || []).some((p) => p.startDate <= d && p.endDate >= d));
+      if (outside.length > 0) {
+        findings.push({
+          id: `period-gap-${outside[0]}`,
+          category: 'HOURS_IMBALANCE',
+          severity: 'WARN',
+          message: `${outside.length === 1 ? formatDate(outside[0]) : `${formatDate(outside[0])} to ${formatDate(outside[outside.length - 1])}`} ${outside.length === 1 ? 'is' : `(${outside.length} days) are`} outside every working hours period, so ${outside.length === 1 ? 'it has' : 'they have'} no hours goal and ${outside.length === 1 ? 'its' : 'their'} hours are not carried. Add the period in Settings, Time periods.`,
+          affectedNurseIds: [],
+          cellRefs: [],
+        });
+      }
     }
 
     // 1. CATEGORY 1 & 3: HOURLY COVERAGE & DAILY CLINIC LEVEL RULES
@@ -543,6 +561,9 @@ export class ScheduleValidator {
     const h7Enabled = h7Rule ? h7Rule.enabled !== false : true;
     const h7TolerancePct = (h7Rule?.value ? h7Rule.value : 105) / 100;
 
+    // Most hours in any 7 days in a row (H9), the same setting as the generator's.
+    const h9 = weekHoursSetting(resolveRule(rules, WEEK_HOURS_RULE.key, WEEK_HOURS_RULE.id, WEEK_HOURS_RULE.keywords));
+
     nurses.forEach((nurse) => {
       // Data Issue: Nurse missing Gmail address
       if (!nurse.gmail || !nurse.gmail.includes('@')) {
@@ -860,6 +881,34 @@ export class ScheduleValidator {
         }
       }
 
+      // Rule H9: most hours in any 7 days in a row, with the end of the previous roster. Shift
+      // hours only, one shift a day, none on a day of approved leave (as the generator counts).
+      if (h9.enabled) {
+        const shiftByDate = new Map<string, Assignment>();
+        [...priorByDate.values(), ...nurseAssignments].forEach((a) => {
+          if (!shiftByDate.has(a.date)) shiftByDate.set(a.date, a);
+        });
+        const ownLeave = leaveEntries.filter((le) => le.nurseId === nurse.id && le.approved);
+        const hoursOn = (d: string) => {
+          const shift = shiftByDate.get(d);
+          if (!shift || ownLeave.some((le) => d >= le.startDate && d <= le.endDate)) return 0;
+          return calculateDutyDurationHours(dutyMap.get(shift.dutyWindowId));
+        };
+        for (const week of weeksOverLimit(schedule.startDate, schedule.endDate, hoursOn, h9.limit)) {
+          findings.push({
+            id: `h9-week-hours-${nurse.id}-${week.start}-${week.end}`,
+            category: 'RULE_VIOLATION',
+            severity: h9.hard ? 'ERROR' : 'WARN',
+            message: `${nurse.fullName}: ${Math.round(week.hours * 10) / 10} h in 7 days, ${formatDate(week.start)} to ${formatDate(week.end)} (most allowed: ${h9.limit} h).`,
+            affectedNurseIds: [nurse.id],
+            cellRefs: nurseAssignments
+              .filter((a) => a.date >= week.start && a.date <= week.end)
+              .map((a) => ({ nurseId: nurse.id, date: a.date })),
+            date: week.end,
+          });
+        }
+      }
+
       // Hours by the shared rule: a leave day counts its leave (not also a shift on it),
       // and a day with two shifts counts one, as in the Hours tab and the emails.
       const tally = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, workingHoursPeriods);
@@ -884,7 +933,7 @@ export class ScheduleValidator {
       }
       if (balance.deferredHours > 0) findings.push({
         id: `hours-deferred-${nurse.id}`, category: 'HOURS_IMBALANCE', severity: 'INFO',
-        message: `${nurse.fullName}: ${hrs(balance.deferredHours)} h still owed from earlier periods wait for the next period, so this roster asks at most 10% extra.`,
+        message: `${nurse.fullName}: ${hrs(balance.deferredHours)} h still owed wait for a later roster, so this roster asks at most 10% of its own hours extra.`,
         affectedNurseIds: [nurse.id], cellRefs: [],
       });
       if (Math.abs(balance.writtenOffHours) >= 0.5) findings.push({

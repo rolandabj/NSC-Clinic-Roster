@@ -118,7 +118,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
   // Late means the same as for the generator: ending at or after the late duties rule's time.
   const lateThreshold = useMemo(() => lateDutyThreshold(rules), [rules]);
 
-  // Totals from the earlier rosters this year (as published), loaded when the dialog opens.
+  // Totals from the earlier published rosters this year (as saved now), loaded when the dialog opens.
   const [yearToDate, setYearToDate] = useState<YearToDate | null>(null);
   const [yearStatus, setYearStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   // Reload only when what the totals depend on changes (the role list may be a new array each time).
@@ -460,7 +460,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
               )}
               {showYear && (
                 <p className="text-[11px] text-slate-500">
-                  "This year" adds up the earlier rosters of {schedule.startDate.slice(0, 4)} (as published) and this roster.
+                  "This year" adds up the earlier published rosters of {schedule.startDate.slice(0, 4)} (as saved now) and this roster.
                 </p>
               )}
               <div className="border border-slate-200 rounded-lg overflow-x-auto shadow-xs">

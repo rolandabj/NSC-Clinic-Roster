@@ -73,7 +73,9 @@ export class CollectionSyncer<C extends CollectionName> {
   constructor(
     private readonly repo: IRepository,
     private readonly collection: C,
-    private readonly onChange?: () => void
+    private readonly onChange?: () => void,
+    /** Called after a change of one scope was written (not when there was nothing to write). */
+    private readonly onSaved?: (scope: string) => void
   ) {}
 
   /** True when a save for this scope failed and waits for a retry. */
@@ -210,8 +212,9 @@ export class CollectionSyncer<C extends CollectionName> {
       const [scope, desired] = this.pending.entries().next().value as [string, Desired<EntityForCollection<C>>];
       this.pending.delete(scope);
       this.writingScope = scope;
+      let wrote = false;
       try {
-        await this.write(desired.items, desired.inScope);
+        wrote = await this.write(desired.items, desired.inScope);
       } catch (err) {
         console.error(`[CollectionSyncer] Saving ${this.collection} (${scope}) failed:`, err);
         // Kept for a retry, unless a newer state for this scope is already waiting.
@@ -219,18 +222,28 @@ export class CollectionSyncer<C extends CollectionName> {
       } finally {
         this.writingScope = null;
       }
+      // What follows a save never makes the save itself count as failed.
+      if (wrote) {
+        try {
+          this.onSaved?.(scope);
+        } catch (err) {
+          console.warn(`[CollectionSyncer] After saving ${this.collection} (${scope}):`, err);
+        }
+      }
     }
   }
 
-  private async write(items: EntityForCollection<C>[], inScope: (item: EntityForCollection<C>) => boolean): Promise<void> {
+  /** Writes what changed; true when anything was written. */
+  private async write(items: EntityForCollection<C>[], inScope: (item: EntityForCollection<C>) => boolean): Promise<boolean> {
     const { removeIds, upserts } = planSync(this.known, items, inScope);
-    if (this.repo.bulkWrite && removeIds.length + upserts.length > 0) {
+    if (removeIds.length + upserts.length === 0) return false;
+    if (this.repo.bulkWrite) {
       // One write: new and changed records first, then removals, in as few batches as
       // possible, so a write cut short leaves the old records, never empty cells.
       await this.repo.bulkWrite(this.collection, { upserts, removeIds, replace: true });
       for (const id of removeIds) this.known.delete(id);
       for (const item of upserts) this.known.set(item.id, { item, print: fingerprint(item) });
-      return;
+      return true;
     }
     if (removeIds.length > 0) {
       await this.repo.bulkRemove(this.collection, removeIds);
@@ -241,5 +254,6 @@ export class CollectionSyncer<C extends CollectionName> {
       await this.repo.bulkUpsert(this.collection, upserts, { replace: true });
       for (const item of upserts) this.known.set(item.id, { item, print: fingerprint(item) });
     }
+    return true;
   }
 }

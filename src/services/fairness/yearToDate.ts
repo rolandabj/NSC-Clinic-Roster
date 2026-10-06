@@ -4,8 +4,10 @@
  *
  * Fairness across the year: how many weekend days, public holidays, late
  * shifts and Nurse Clinic shifts each nurse worked in the earlier rosters of
- * this calendar year. Published rosters count as they were published (the
- * latest published version), so later drafts never change the totals.
+ * this calendar year. A roster counts once it was published, with its shifts
+ * as saved now: a change to a published roster counts as soon as it is saved
+ * (the owner's rule; "Send changes" only tells the nurses). Rosters never
+ * published do not count.
  */
 
 import { IRepository } from '../repository/IRepository';
@@ -90,10 +92,11 @@ export function earlierRostersThisYear(schedule: Schedule, schedules: Schedule[]
 type LoadedRoster = { schedule: Schedule; assignments: Assignment[]; contractPercents?: Record<string, number> };
 
 /**
- * Each earlier roster as last published, kept for this browser session and
- * shared by the year to date totals and the hours history. The key holds the
- * roster's updatedAt, version number, status and dates, so publishing it again
- * loads it fresh; other rosters stay cached. One cache per repository.
+ * Each earlier roster, kept for this browser session and shared by the year to
+ * date totals and the hours history. The key holds the roster's updatedAt,
+ * version number, status and dates: saving its shifts stamps updatedAt (see
+ * rosterSaveQueues) and publishing it again changes the version, so both load
+ * it fresh; other rosters stay cached. One cache per repository.
  */
 const rosterCache = new WeakMap<IRepository, Map<string, Promise<LoadedRoster | null>>>();
 let cacheGeneration = 0;
@@ -103,20 +106,30 @@ export function clearYearToDateCache(): void {
   cacheGeneration++;
 }
 
+/** Forgets one roster's cached copy: its shifts were just saved in this browser. */
+export function forgetCachedRoster(repo: IRepository, scheduleId: string): void {
+  const cache = rosterCache.get(repo);
+  if (!cache) return;
+  for (const key of [...cache.keys()]) if (key.includes(`|${scheduleId}:`)) cache.delete(key);
+}
+
 const rosterKey = (s: Schedule) =>
   `${cacheGeneration}|${s.id}:${s.updatedAt || ''}:${s.activeVersionNumber ?? ''}:${s.status}:${s.startDate}:${s.endDate}`;
 
+/**
+ * A roster that was published (a published version, or marked published), with
+ * its shifts as saved now and the contracts it was last published with.
+ */
 async function loadPublishedRoster(repo: IRepository, s: Schedule): Promise<LoadedRoster | null> {
   const bySchedule = { field: 'scheduleId', operator: '==' as const, value: s.id };
   // The repository takes one filter, so backup copies are read but never counted.
   const versions = (await repo.list('versions', bySchedule)).filter((v) => v.kind !== 'BACKUP');
   const published = latestPublishedVersion(versions);
-  if (published) return { schedule: s, assignments: published.snapshot.assignments || [], contractPercents: published.snapshot.contractPercents };
-  if (s.status === 'PUBLISHED') return { schedule: s, assignments: await repo.list('assignments', bySchedule) };
-  return null;
+  if (!published && s.status !== 'PUBLISHED') return null;
+  return { schedule: s, assignments: await repo.list('assignments', bySchedule), contractPercents: published?.snapshot.contractPercents };
 }
 
-/** The earlier rosters as last published (rosters never published are left out). */
+/** The earlier rosters that were published, as saved now (rosters never published are left out). */
 export async function loadEarlierRosters(repo: IRepository, earlier: Schedule[]): Promise<LoadedRoster[]> {
   let cache = rosterCache.get(repo);
   if (!cache) { cache = new Map(); rosterCache.set(repo, cache); }
@@ -139,10 +152,9 @@ export async function loadEarlierRosters(repo: IRepository, earlier: Schedule[])
 
 /**
  * Year to date totals for the nurses before `schedule` starts. Each earlier
- * roster this year counts as last published; a roster marked published without
- * a published version counts with its current shifts; a roster that was never
- * published is left out. The earlier rosters are cached for the session (see
- * clearYearToDateCache).
+ * roster this year that was published counts with its shifts as saved now; a
+ * roster that was never published is left out. The earlier rosters are cached
+ * for the session (see clearYearToDateCache).
  */
 export async function loadYearToDate(
   repo: IRepository,

@@ -4,6 +4,7 @@ import { SchedulingEngine } from '../../src/services/engine/SchedulingEngine';
 import {
   clearYearToDateCache,
   computeYearToDate,
+  forgetCachedRoster,
   earlierRostersThisYear,
   latestPublishedVersion,
   loadYearToDate,
@@ -148,34 +149,44 @@ test('a nurse with more weekends earlier this year gets fewer weekend days this 
   assert.ok(n2Busier.n2 < n2Busier.n1, `n1 ${n2Busier.n1} vs n2 ${n2Busier.n2}`);
 });
 
-test('year to date rosters are cached until an earlier roster is published again', async () => {
+test('year to date rosters are cached until a roster is saved or published again', async () => {
   clearYearToDateCache();
   const old = makeSchedule({ id: 'old', startDate: '2026-01-05', endDate: '2026-01-11', status: 'PUBLISHED' });
   const current = makeSchedule({ id: 'now', startDate: '2026-02-02', endDate: '2026-02-08' });
-  let versions: ScheduleVersion[] = [
+  const versions: ScheduleVersion[] = [
     { id: 'v1', scheduleId: 'old', number: 1, timestamp: '', author: '', note: '', isPublished: true,
       snapshot: { schedule: old, assignments: [shift('n1', '2026-01-10')], leaveEntries: [], locks: [], rulesSnapshot: [] } },
   ];
+  // Saved after publishing: a published roster counts with its shifts as saved now.
+  let saved = [shift('n1', '2026-01-10'), shift('n1', '2026-01-11')];
   let reads = 0;
   const repo = {
     list: async (c: string) => {
-      if (c === 'versions') reads++;
-      return c === 'versions' ? versions : [];
+      if (c === 'assignments') reads++;
+      return c === 'versions' ? versions : c === 'assignments' ? saved : [];
     },
   } as unknown as IRepository;
   const first = await loadYearToDate(repo, current, [DAY_DUTY], [], { schedules: [old, current] });
   const second = await loadYearToDate(repo, current, [DAY_DUTY], [], { schedules: [old, current] });
   assert.equal(reads, 1);
   assert.deepEqual(second, first);
-  assert.equal(first.n1.weekendDays, 1);
+  assert.equal(first.n1.weekendDays, 2, 'both saved weekend shifts (the published version had one)');
 
-  // Published again: a new version number on the roster loads it fresh.
-  versions = [...versions, { ...versions[0], id: 'v2', number: 2,
-    snapshot: { ...versions[0].snapshot, assignments: [shift('n1', '2026-01-10'), shift('n1', '2026-01-11')] } }];
+  // Saved in another browser: the roster's stamp (updatedAt) loads it fresh.
+  saved = [shift('n1', '2026-01-10')];
   const third = await loadYearToDate(repo, current, [DAY_DUTY], [], {
-    schedules: [{ ...old, activeVersionNumber: 2, updatedAt: '2026-01-12T00:00:00Z' }, current],
+    schedules: [{ ...old, updatedAt: '2026-01-12T00:00:00Z' }, current],
   });
   assert.equal(reads, 2);
-  assert.equal(third.n1.weekendDays, 2);
+  assert.equal(third.n1.weekendDays, 1);
+
+  // Saved in this browser: the cached copy is dropped straight away.
+  saved = [];
+  forgetCachedRoster(repo, 'old');
+  const fourth = await loadYearToDate(repo, current, [DAY_DUTY], [], {
+    schedules: [{ ...old, updatedAt: '2026-01-12T00:00:00Z' }, current],
+  });
+  assert.equal(reads, 3);
+  assert.equal(fourth.n1, undefined);
   clearYearToDateCache();
 });

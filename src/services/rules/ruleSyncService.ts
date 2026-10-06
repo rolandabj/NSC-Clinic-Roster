@@ -8,6 +8,7 @@
 import { Rule, RuleTemplateKey } from '../../types';
 import { getRepository } from '../repository';
 import { resolveRule, LATE_DUTY_RULE_WORDS } from '../engine/SchedulingEngine';
+import { WEEK_HOURS_DEFAULT, WEEK_HOURS_RULE } from '../engine/weekHours';
 
 /** Name of the consecutive shifts rule (no number in it: the number is the rule's value). */
 export const MAX_CONSECUTIVE_SHIFTS_NAME = 'Maximum consecutive shifts';
@@ -104,6 +105,19 @@ export const CANONICAL_RULES_SPEC: CanonicalRuleDef[] = [
     severity: 'HARD',
     enabled: true,
     semanticKeywords: ['max working hours', 'maximum working hours', 'period hours', 'no overwork', 'overwork limit'],
+  },
+  {
+    canonicalId: WEEK_HOURS_RULE.id,
+    name: 'Most hours in any 7 days',
+    templateKey: 'MAX_HOURS_IN_7_DAYS',
+    scope: 'PER_NURSE',
+    metric: 'TOTAL_HOURS_IN_WINDOW',
+    operator: 'MAX',
+    value: WEEK_HOURS_DEFAULT,
+    windowDays: 7,
+    severity: 'HARD',
+    enabled: true,
+    semanticKeywords: WEEK_HOURS_RULE.keywords,
   },
   {
     canonicalId: 'rule-h8-strict-allocation',
@@ -208,6 +222,7 @@ export class RuleSyncService {
           severity: spec.severity,
           enabled: spec.enabled,
           params: spec.params,
+          ...(spec.windowDays ? { windowDays: spec.windowDays } : {}),
         };
         await repo.create('rules', newRule);
         existingRules.push(newRule);

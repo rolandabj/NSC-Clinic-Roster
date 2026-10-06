@@ -210,7 +210,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
             Each period on its own: {accounting.parts.map((p) => `${p.name} (${p.startDate} to ${p.endDate}) ${fmtHours(p.workedHours)} of ${fmtHours(p.targetHours)}`).join(' · ')}.
           </span>
         )}
-        {accounting.balance.deferredHours > 0 && <span className="block">{fmtHours(accounting.balance.deferredHours)} still owed wait for the next period (at most 10% extra a period).</span>}
+        {accounting.balance.deferredHours > 0 && <span className="block">{fmtHours(accounting.balance.deferredHours)} still owed wait for a later roster (a roster asks at most 10% of its own hours extra).</span>}
         {Math.abs(accounting.balance.writtenOffHours) >= 0.5 && <span className="block">{fmtHours(Math.abs(accounting.balance.writtenOffHours))} carried twice without being settled were written off.</span>}
       </div>
       {/* Top KPI Cards */}

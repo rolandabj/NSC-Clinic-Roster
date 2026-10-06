@@ -7,9 +7,10 @@ type HoursSchedule = Pick<Schedule, 'id' | 'startDate' | 'endDate' | 'hoursTarge
 
 /**
  * The earlier rosters an hours balance can carry from. `assignments` hold the
- * shifts each counted roster was last published with (see loadHoursHistory),
- * never draft edits. `countedScheduleIds` names those rosters; without it,
- * rosters marked PUBLISHED count.
+ * shifts of each counted roster as saved now (see loadHoursHistory): a roster
+ * counts once it was published, and a change to it counts as soon as it is
+ * saved. `countedScheduleIds` names those rosters; without it, rosters marked
+ * PUBLISHED count.
  */
 export interface HoursHistory {
   schedules: Schedule[];
@@ -102,7 +103,12 @@ export function hoursHistoryOverlaps(schedule: HoursSchedule, history?: HoursHis
 
 /** A leftover may be carried into this many later periods, then it is written off. */
 export const MAX_CARRY_PERIODS = 2;
-/** Catching up never asks a nurse for more than this share of her period hours on top (overwork guard). */
+/**
+ * Catching up never asks a nurse for more than this share of the roster's own hours on
+ * top (overwork guard): owed hours from earlier rosters of the same period and from
+ * earlier periods alike. A two week roster of 104 h asks at most 10 h, a whole month of
+ * 230 h at most 23 h; the rest waits.
+ */
 export const MAX_CATCH_UP_SHARE = 0.1;
 const sortPeriods = (periods: WorkingHoursPeriod[]) => [...periods].sort((a, b) => a.startDate.localeCompare(b.startDate));
 
@@ -134,12 +140,16 @@ export function hoursCheckpoints(schedule: Pick<Schedule, 'startDate' | 'endDate
  */
 interface Leftover { hours: number; carried: number }
 
-/** What a period asks on top of its base: ahead hours in full, owed hours up to the catch up limit. */
-function activeCarry(list: Leftover[], periodShareHours: number): { carry: number; deferred: number } {
-  const owed = list.filter(l => l.hours > 0).reduce((s, l) => s + l.hours, 0);
-  const ahead = list.filter(l => l.hours < 0).reduce((s, l) => s + l.hours, 0);
-  const cap = Math.max(0, periodShareHours * MAX_CATCH_UP_SHARE);
-  return { carry: Math.min(owed, cap) + ahead, deferred: Math.max(0, owed - cap) };
+/**
+ * What a roster part asks on top of its base: hours ahead in full, hours owed (its
+ * period's own shortfall so far plus the leftovers of earlier periods) up to the catch
+ * up limit of its own hours. The rest is held back.
+ */
+function askedCarry(list: Leftover[], owedBefore: number, baseHours: number): { carry: number; deferred: number } {
+  const net = owedBefore + list.reduce((s, l) => s + l.hours, 0);
+  if (net <= 0) return { carry: net, deferred: 0 };
+  const cap = Math.max(0, baseHours * MAX_CATCH_UP_SHARE);
+  return { carry: Math.min(net, cap), deferred: Math.max(0, net - cap) };
 }
 
 /**
@@ -302,8 +312,13 @@ export function resolveNurseHoursBalance(
   const parts: HoursPart[] = [];
   let previousCreditedHours = 0, deferredHours = 0;
   const partPeriods = touchesPeriod ? ordered.filter(p => p.startDate <= end && p.endDate >= schedule.startDate) : [];
+  // A day of approved leave that does not count toward the target (unpaid leave) adds no
+  // goal here either, as on earlier rosters (see earlierPeriodTotals).
+  const ownLeave = leaves.filter(l => l.nurseId === nurse.id && l.approved);
+  const goalDays = (start: string, last: string) => getDatesInRange(start, last).filter(date =>
+    !ownLeave.some(l => l.startDate <= date && l.endDate >= date && typeMap.get(l.leaveTypeId)?.countsTowardHoursTarget === false)).length;
   if (!touchesPeriod) {
-    const raw = getDatesInRange(schedule.startDate, end).length * ownRate * share;
+    const raw = goalDays(schedule.startDate, end) * ownRate * share;
     parts.push({ name: schedule.name || 'This roster', startDate: schedule.startDate, endDate: end,
       baseHours: Math.round(raw + 1e-8), carriedHours: 0, targetHours: Math.round(raw + 1e-8) });
   }
@@ -311,15 +326,14 @@ export function resolveNurseHoursBalance(
   partPeriods.forEach((period, index) => {
     const partStart = period.startDate > schedule.startDate ? period.startDate : schedule.startDate;
     const partEnd = period.endDate < end ? period.endDate : end;
-    const rawPart = getDatesInRange(partStart, partEnd).length * getPeriodDailyRate(period) * share;
+    const rawPart = goalDays(partStart, partEnd) * getPeriodDailyRate(period) * share;
     const prior = (index === 0 && earlierByPeriod.get(period.id)) || { base: 0, worked: 0 };
-    const periodShare = period.workingHours * share;
-    const { carry, deferred } = activeCarry(leftovers, periodShare);
     // Rounded on the period's running total: earlier rosters of the period took round(prior.base).
     const priorBase = Math.round(prior.base + 1e-8);
     const baseHours = Math.round(prior.base + rawPart + 1e-8) - priorBase;
     const owedBefore = priorBase - prior.worked; // this period's own leftover from its earlier rosters
-    const carriedHours = round1(owedBefore + carry);
+    const { carry, deferred } = askedCarry(leftovers, owedBefore, baseHours);
+    const carriedHours = round1(carry);
     const targetHours = Math.max(0, round1(baseHours + carriedHours));
     parts.push({ periodId: period.id, name: period.name, startDate: partStart, endDate: partEnd, baseHours, carriedHours, targetHours });
     if (index === 0) {

@@ -249,7 +249,7 @@ test('a contract change applies from its own roster: earlier days keep the contr
   assert.equal(resolveNurseHoursBalance(half, second, duties, [], [], periods, history).targetHours, 0);
 });
 
-test('the hours history loads every earlier published roster (any period) as published, never drafts', async () => {
+test('the hours history loads every earlier published roster (any period) as saved now, never drafts', async () => {
   const lists: Record<string, any[]> = {
     schedules: [
       first,
@@ -265,7 +265,9 @@ test('the hours history loads every earlier published roster (any period) as pub
       { id: 'vs', scheduleId: 'earlier-period', number: 1, isPublished: true, timestamp: '0', snapshot: { assignments: [] } },
       { id: 'vd', scheduleId: 'draft', number: 1, isPublished: false, timestamp: '0', snapshot: { assignments: previousShifts } },
     ],
-    assignments: previousShifts, // live draft edits: never read for a published roster with a version
+    // Saved after publishing: a change to a published roster counts as soon as it is saved
+    // (the owner's rule of 2026-10-06; "Send changes" only tells the nurses).
+    assignments: previousShifts,
   };
   const read: string[] = [];
   const repo = {
@@ -276,14 +278,16 @@ test('the hours history loads every earlier published roster (any period) as pub
   } as any;
   const loaded = await loadHoursHistory(repo, second);
   assert.deepEqual([...loaded.countedScheduleIds!].sort(), ['earlier-period', 'first']);
-  assert.equal(loaded.assignments.length, 5, 'the latest published version, not the live shifts or the draft');
+  assert.equal(loaded.assignments.length, 10, 'the shifts as saved now (the latest published version had 5)');
   // Loaded again: every roster comes from the session cache.
-  const reads = read.length;
+  const rosterReads = () => read.filter((r) => r.startsWith('versions') || r.startsWith('assignments')).length;
+  const reads = rosterReads();
   await loadHoursHistory(repo, second);
-  assert.equal(read.filter(r => r.startsWith('versions')).length, read.slice(0, reads).filter(r => r.startsWith('versions')).length, 'no second read of versions');
+  assert.equal(rosterReads(), reads, 'no second read of a roster');
+  // The contracts stay those of the latest publish; a draft's shifts are never read.
   assert.deepEqual(loaded.contractPercents, { first: { n1: 100 } });
-  assert.ok(!read.some((r) => r.startsWith('assignments')), 'no live shifts are read');
-  assert.equal(resolveNurseHoursBalance(nurse, second, duties, [], [], periods, loaded).previousCreditedHours, 60);
+  assert.deepEqual(read.filter((r) => r.startsWith('assignments')).sort(), ['assignments:earlier-period', 'assignments:first']);
+  assert.equal(resolveNurseHoursBalance(nurse, second, duties, [], [], periods, loaded).previousCreditedHours, 120);
 });
 
 // Four back to back periods of 8 h a day, with 8 h shifts, so the numbers stay simple.
@@ -370,11 +374,14 @@ test('the engine fills each period part of a crossing roster, catching up early,
     [], [], [], [], [], hoursOnlyRules(), undefined, periods, [], [], { hoursHistory: input });
   const worked = (s: string, e: string) => summarizeNurseHours(team[0], crossing, generated.assignments, all, [], [], periods, { start: s, end: e }, input).totalHours;
   const goal = resolveNurseHoursBalance(team[0], crossing, all, [], [], periods, input);
-  assert.deepEqual(goal.parts.map(p => p.targetHours), [158, 91]);
-  assert.ok(worked('2026-11-02', '2026-11-18') >= 158 - 12, `October part: ${worked('2026-11-02', '2026-11-18')} of 158`);
-  assert.ok(worked('2026-11-02', '2026-11-10') >= 66 + 16, `first week catches up: ${worked('2026-11-02', '2026-11-10')}`);
+  // Catching up asks at most 10% of each part's own hours (owner's decision of 2026-10-06):
+  // 12.6 h of the 32 h in October's part (126 h), the rest moves on and November's part
+  // (91 h) asks 9.1 h of it.
+  assert.deepEqual(goal.parts.map(p => [p.targetHours, p.carriedHours]), [[138.6, 12.6], [100.1, 9.1]]);
+  assert.ok(worked('2026-11-02', '2026-11-18') >= 138.6 - 12, `October part: ${worked('2026-11-02', '2026-11-18')} of 138.6`);
+  assert.ok(worked('2026-11-02', '2026-11-10') >= 66 + 6, `first week catches up: ${worked('2026-11-02', '2026-11-10')}`);
   // The whole roster stays within her goal plus the usual margin (October's shortfall may be made up straight after).
-  assert.ok(worked('2026-11-02', '2026-12-01') <= 249 + 8, `whole roster: ${worked('2026-11-02', '2026-12-01')} of 249`);
+  assert.ok(worked('2026-11-02', '2026-12-01') <= 238.7 + 8, `whole roster: ${worked('2026-11-02', '2026-12-01')} of 238.7`);
 });
 
 test('a period part of one day at the end of a roster is still staffed', async () => {
@@ -439,7 +446,8 @@ test('a roster whose first day falls in a gap before its period still carries', 
     const r = makeSchedule({ id: 'rr', startDate: start, endDate: '2026-10-31' });
     return resolveNurseHoursBalance(nurse, r, [DAY_DUTY], [], [], pA, { schedules: [ra, r], assignments: short80 });
   });
-  assert.deepEqual(goals.map(g => [g.carriedHours, g.deferredHours]), [[24, 56], [24, 56]]);
+  // 80 h owed; this roster's own hours are 216 h, so it asks 10% of them (21.6 h) and 58.4 h wait.
+  assert.deepEqual(goals.map(g => [g.carriedHours, g.deferredHours]), [[21.6, 58.4], [21.6, 58.4]]);
 });
 
 test('leave alone (a bulk public holiday) does not put a nurse on an earlier roster', () => {

@@ -845,8 +845,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     };
   };
 
-  // Balances carry from published rosters only: reload them when a roster is published,
-  // added or removed, or leave changes. Draft edits elsewhere never change them.
+  // Balances carry from published rosters only, with their shifts as saved now: reload them
+  // when a roster is published, added or removed, its shifts are saved (saving stamps a
+  // published roster's record, see rosterSaveQueues), or leave changes.
   useEffect(() => {
     if (!activeSchedule) return;
     let cancelled = false;

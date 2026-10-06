@@ -2,7 +2,8 @@ import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { CollectionSyncer } from '../../src/services/repository/collectionSyncer';
 import { createLiveReconciler } from '../../src/services/repository/liveReconcile';
-import { RETRY_EVERY_MS, rosterSaveQueues } from '../../src/services/repository/rosterSaveQueues';
+import { RETRY_EVERY_MS, STAMP_EVERY_MS, rosterSaveQueues } from '../../src/services/repository/rosterSaveQueues';
+import { clearYearToDateCache, loadEarlierRosters } from '../../src/services/fairness/yearToDate';
 import { rebaseEdit } from '../../src/services/schedule/rebaseEdit';
 import type { Assignment } from '../../src/types';
 
@@ -20,6 +21,9 @@ function memoryRepo(items: Assignment[], withBulkWrite = false) {
   const repo: any = {
     async list() {
       return [...data.values()];
+    },
+    async get() {
+      return null;
     },
     async bulkRemove(_c: string, ids: string[]) {
       check();
@@ -224,4 +228,57 @@ test('signing out drops unsaved changes so the next account never saves them', a
   syncer.reset();
   assert.equal(syncer.hasUnsaved(), false);
   assert.equal(syncer.retry(), null);
+});
+
+test("saving a published roster's shifts counts at once: this browser's copy is dropped, and the roster is stamped for other browsers at most once a minute", async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'], now: Date.parse('2026-10-06T08:00:00Z') });
+  clearYearToDateCache();
+  try {
+    const a1 = shift('a1', '2026-10-05');
+    const { repo } = memoryRepo([a1], true);
+    let status = 'PUBLISHED';
+    const stamps: string[] = [];
+    let rosterReads = 0;
+    const list = repo.list;
+    repo.list = async (c: string) => {
+      if (c === 'assignments') rosterReads++;
+      return c === 'versions' ? [] : list();
+    };
+    repo.get = async (c: string, id: string) => (c === 'schedules' ? { id, status } : null);
+    repo.update = async (c: string, id: string, data: any) => {
+      stamps.push(`${c}/${id} ${data.updatedAt}`);
+      return { id, ...data };
+    };
+    const roster = { id: 'R', startDate: '2026-10-05', endDate: '2026-10-11', status: 'PUBLISHED' } as any;
+    await loadEarlierRosters(repo, [roster]); // a later roster read it (cached)
+    assert.equal(rosterReads, 1);
+
+    const queues = rosterSaveQueues(repo);
+    queues.assignments.replaceKnown([a1], inRoster);
+    await queues.assignments.save([{ ...a1, dutyWindowId: 'L' }], inRoster, 'R');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(stamps, ['schedules/R 2026-10-06T08:00:00.000Z'], 'stamped straight away');
+    await loadEarlierRosters(repo, [roster]);
+    assert.equal(rosterReads, 2, 'the cached copy was dropped, so the change counts here at once');
+
+    // Saved again within the minute: one more stamp at the end of the minute, not one per save.
+    mock.timers.tick(10000);
+    await queues.assignments.save([{ ...a1, dutyWindowId: 'E' }], inRoster, 'R');
+    await queues.assignments.save([{ ...a1, dutyWindowId: 'D' }], inRoster, 'R');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(stamps.length, 1);
+    mock.timers.tick(STAMP_EVERY_MS - 10000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(stamps.slice(1), ['schedules/R 2026-10-06T08:01:00.000Z']);
+
+    // A draft never counts for later rosters: no stamp.
+    status = 'DRAFT';
+    mock.timers.tick(STAMP_EVERY_MS);
+    await queues.assignments.save([{ ...a1, dutyWindowId: 'L' }], inRoster, 'R');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(stamps.length, 2);
+  } finally {
+    mock.timers.reset();
+    clearYearToDateCache();
+  }
 });

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getFirestore, connectFirestoreEmulator, doc, setDoc, getDocs, collection, getDoc, deleteDoc } from 'firebase/firestore';
 import { FirestoreRepository } from '../../src/services/repository/FirestoreRepository';
+import { rosterSaveQueues } from '../../src/services/repository/rosterSaveQueues';
 import { makeSchedule } from '../unit/fixtures';
 
 // Install the existing emulator test dependencies in tests/firestore-rules first.
@@ -72,7 +73,19 @@ try {
   await a.repo.bulkWrite!('assignments', { upserts: many, removeIds: [], replace: true });
   await a.repo.bulkWrite!('assignments', { upserts: [shiftOf('new-1')], removeIds: many.map((x) => x.id), replace: true });
   assert.deepEqual((await getDocs(collection(a.db, 'assignments'))).docs.map((d) => d.id), ['new-1']);
-  console.log('PASS: simultaneous planners, legacy bootstrap, updates, atomic imports, deletion, protected calendar restore and combined shift writes');
+  // Saving a published roster's shifts stamps the roster, so other browsers count the change at once.
+  (a.repo as any).cache = { getDoc: () => undefined };
+  const before = '2026-01-01T00:00:00.000Z';
+  await a.repo.update('schedules', 'replacement', { status: 'PUBLISHED', updatedAt: before });
+  const inReplacement = (x: any) => x.scheduleId === 'replacement';
+  const queues = rosterSaveQueues(a.repo);
+  queues.assignments.replaceKnown([shiftOf('new-1')], inReplacement);
+  assert.equal(await queues.assignments.save([{ ...shiftOf('new-1'), dutyWindowId: 'L' }], inReplacement, 'replacement'), true);
+  const stampOf = async () => (await getDoc(doc(a.db, 'schedules', 'replacement'))).data()!.updatedAt;
+  for (let i = 0; i < 50 && (await stampOf()) === before; i++) await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.notEqual(await stampOf(), before);
+  assert.equal((await getDoc(doc(a.db, 'schedules', 'replacement'))).data()!.status, 'PUBLISHED');
+  console.log('PASS: simultaneous planners, legacy bootstrap, updates, atomic imports, deletion, protected calendar restore, combined shift writes and the stamp after saving a published roster');
 } finally {
   await Promise.all(apps.map(app => deleteApp(app)));
   await env.cleanup();

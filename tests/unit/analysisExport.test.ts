@@ -162,6 +162,9 @@ test('problemRule picks the longest matching check name', () => {
   assert.equal(problemRule('hours-written-off-n1'), 'hours-written-off');
   assert.equal(problemRule('h7-period-n1-2026-11-18'), 'h7-period');
   assert.equal(problemRule('schedule-overlap-a-b'), 'schedule-overlap');
+  // The 7 day hours rule and days outside every period
+  assert.equal(problemRule('h9-week-hours-n1-2026-10-25'), 'h9-week-hours');
+  assert.equal(problemRule('period-gap-2026-12-19'), 'period-gap');
 });
 
 test('file name', () => {
