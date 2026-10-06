@@ -249,7 +249,7 @@ test('a contract change applies from its own roster: earlier days keep the contr
   assert.equal(resolveNurseHoursBalance(half, second, duties, [], [], periods, history).targetHours, 0);
 });
 
-test('the hours history loads only published rosters of the same period, as published', async () => {
+test('the hours history loads every earlier published roster (any period) as published, never drafts', async () => {
   const lists: Record<string, any[]> = {
     schedules: [
       first,
@@ -262,6 +262,8 @@ test('the hours history loads only published rosters of the same period, as publ
     versions: [
       { id: 'v1', scheduleId: 'first', number: 2, isPublished: true, timestamp: '1', snapshot: { assignments: previousShifts.slice(0, 5), contractPercents: { n1: 100 } } },
       { id: 'v0', scheduleId: 'first', number: 1, isPublished: true, timestamp: '0', snapshot: { assignments: previousShifts } },
+      { id: 'vs', scheduleId: 'earlier-period', number: 1, isPublished: true, timestamp: '0', snapshot: { assignments: [] } },
+      { id: 'vd', scheduleId: 'draft', number: 1, isPublished: false, timestamp: '0', snapshot: { assignments: previousShifts } },
     ],
     assignments: previousShifts, // live draft edits: never read for a published roster with a version
   };
@@ -273,8 +275,12 @@ test('the hours history loads only published rosters of the same period, as publ
     },
   } as any;
   const loaded = await loadHoursHistory(repo, second);
-  assert.deepEqual(loaded.countedScheduleIds, ['first']);
-  assert.equal(loaded.assignments.length, 5, 'the latest published version, not the live shifts');
+  assert.deepEqual([...loaded.countedScheduleIds!].sort(), ['earlier-period', 'first']);
+  assert.equal(loaded.assignments.length, 5, 'the latest published version, not the live shifts or the draft');
+  // Loaded again: every roster comes from the session cache.
+  const reads = read.length;
+  await loadHoursHistory(repo, second);
+  assert.equal(read.filter(r => r.startsWith('versions')).length, read.slice(0, reads).filter(r => r.startsWith('versions')).length, 'no second read of versions');
   assert.deepEqual(loaded.contractPercents, { first: { n1: 100 } });
   assert.ok(!read.some((r) => r.startsWith('assignments')), 'no live shifts are read');
   assert.equal(resolveNurseHoursBalance(nurse, second, duties, [], [], periods, loaded).previousCreditedHours, 60);
@@ -351,7 +357,7 @@ test('a roster that crosses a period end has one part per period, each with its 
   assert.equal(result.targetHours, 201);
 });
 
-test('the engine fills each period part of a crossing roster, catching up early and never piling the rest into the next part', async () => {
+test('the engine fills each period part of a crossing roster, catching up early, within the roster goal', async () => {
   const late = { ...DAY_DUTY, id: 'late', startTime: '13:00', endTime: '21:00' };
   const team = ['n1', 'n2', 'n3', 'n4'].map(id => makeNurse(id));
   // n1 worked only 72 h (owes 32 h of October); the others 108 h.
@@ -367,7 +373,22 @@ test('the engine fills each period part of a crossing roster, catching up early 
   assert.deepEqual(goal.parts.map(p => p.targetHours), [158, 91]);
   assert.ok(worked('2026-11-02', '2026-11-18') >= 158 - 12, `October part: ${worked('2026-11-02', '2026-11-18')} of 158`);
   assert.ok(worked('2026-11-02', '2026-11-10') >= 66 + 16, `first week catches up: ${worked('2026-11-02', '2026-11-10')}`);
-  assert.ok(worked('2026-11-19', '2026-12-01') <= 91 + 8, `November part: ${worked('2026-11-19', '2026-12-01')} of 91`);
+  // The whole roster stays within her goal plus the usual margin (October's shortfall may be made up straight after).
+  assert.ok(worked('2026-11-02', '2026-12-01') <= 249 + 8, `whole roster: ${worked('2026-11-02', '2026-12-01')} of 249`);
+});
+
+test('a period part of one day at the end of a roster is still staffed', async () => {
+  const P = { id: 'sp-p', name: 'Pediatrics', code: 'PEDS' };
+  const team = ['a', 'b', 'c', 'd', 'e'].map(id => makeNurse(id, { preferences: [{ kind: 'SPECIALTY', refId: P.id, rank: 1 }] }));
+  const doctors = ['d1', 'd2'].map(id => ({ id, fullName: id, specialtyIds: [P.id], weeklyPattern: [], active: true }));
+  const roster = makeSchedule({ id: 'r', startDate: '2026-11-05', endDate: '2026-11-19' }); // November 19 starts the next period
+  const sessions = [];
+  for (let d = 5; d <= 19; d++) for (const doc of doctors) sessions.push({ id: `${doc.id}-${d}`, doctorId: doc.id,
+    date: `2026-11-${String(d).padStart(2, '0')}`, startTime: '09:00', endTime: '17:00', specialtyId: P.id, source: 'PATTERN', cancelled: false });
+  const generated = await SchedulingEngine.generate(roster, 'GENERATE_ALL', [], team, [SENIOR], duties, [], [P], sessions as any,
+    [], [], hoursOnlyRules(), undefined, periods, doctors as any, [], { hoursHistory: { schedules: [roster], assignments: [] } });
+  const lastDay = generated.assignments.filter(a => a.date === '2026-11-19');
+  assert.equal(lastDay.filter(a => a.doctorId).length, 2, 'both doctors have a nurse on the one day of the new period');
 });
 
 test('the checker reports a period part that ends short, and hours held back or written off', () => {
@@ -383,4 +404,61 @@ test('the checker reports a period part that ends short, and hours held back or 
   const sepVeryShort = { schedules: [roster8(p8[0])], assignments: everyDay(p8[0], 5) };
   const octReport = ScheduleValidator.validate(roster8(p8[1], 'DRAFT'), [], [nurse], [SENIOR], [DAY8], [], [], [], [], hoursOnlyRules(), p8, [], [], [], { hoursHistory: sepVeryShort });
   assert.ok(octReport.findings.some(f => f.id === 'hours-deferred-n1' && f.severity === 'INFO'));
+});
+
+test('the ledger reads the whole published history: an old shortfall made up later is not mistaken for hours ahead', () => {
+  // Seven 30 day periods of 240 h (8 h a day). P0 40 h short, P1 makes them up, P3 10 h short, P4 makes them up.
+  const P: WorkingHoursPeriod[] = Array.from({ length: 7 }, (_, k) => ({ id: `p${k}`, year: '2026', name: `P${k}`,
+    startDate: new Date(Date.UTC(2026, 0, 1 + 30 * k)).toISOString().slice(0, 10),
+    endDate: new Date(Date.UTC(2026, 0, 30 + 30 * k)).toISOString().slice(0, 10), workingHours: 240 }));
+  const twelve = { ...DAY_DUTY, id: 'twelve', endTime: '21:00' };
+  const rosterOf = (k: number, status: Schedule['status'] = 'PUBLISHED') => makeSchedule({ id: `r${k}`, startDate: P[k].startDate, endDate: P[k].endDate, status });
+  const shiftsIn = (k: number, plus: number) => {
+    const out: Assignment[] = [];
+    let extra = plus;
+    for (let i = 0; i < 30; i++) {
+      const date = new Date(Date.UTC(2026, 0, 1 + 30 * k + i)).toISOString().slice(0, 10);
+      let duty = DAY_DUTY.id;
+      if (extra >= 4) { duty = twelve.id; extra -= 4; } else if (extra <= -8) { extra += 8; continue; }
+      out.push({ ...previousShifts[0], id: `s${k}-${i}`, scheduleId: `r${k}`, date, dutyWindowId: duty });
+    }
+    return out;
+  };
+  const history = { schedules: [0, 1, 2, 3, 4].map(k => rosterOf(k)), assignments: [-40, 40, 0, -10, 10].flatMap((d, k) => shiftsIn(k, d)) };
+  const p5 = resolveNurseHoursBalance(nurse, rosterOf(5, 'DRAFT'), [DAY_DUTY, twelve], [], [], P, history);
+  assert.equal(p5.carriedHours, 0);
+  assert.equal(p5.targetHours, 240);
+});
+
+test('a roster whose first day falls in a gap before its period still carries', () => {
+  const pA: WorkingHoursPeriod[] = [{ id: 'A', year: '2026', name: 'A', startDate: '2026-09-01', endDate: '2026-09-30', workingHours: 240 },
+    { id: 'B', year: '2026', name: 'B', startDate: '2026-10-05', endDate: '2026-11-03', workingHours: 240 }];
+  const ra = makeSchedule({ id: 'ra', startDate: '2026-09-01', endDate: '2026-09-30', status: 'PUBLISHED' });
+  const short80 = Array.from({ length: 20 }, (_, i) => ({ ...previousShifts[0], id: `x${i}`, scheduleId: 'ra', date: `2026-09-${String(i + 1).padStart(2, '0')}`, dutyWindowId: DAY_DUTY.id }));
+  const goals = ['2026-10-05', '2026-10-01'].map(start => {
+    const r = makeSchedule({ id: 'rr', startDate: start, endDate: '2026-10-31' });
+    return resolveNurseHoursBalance(nurse, r, [DAY_DUTY], [], [], pA, { schedules: [ra, r], assignments: short80 });
+  });
+  assert.deepEqual(goals.map(g => [g.carriedHours, g.deferredHours]), [[24, 56], [24, 56]]);
+});
+
+test('leave alone (a bulk public holiday) does not put a nurse on an earlier roster', () => {
+  const holiday = makeLeave({ startDate: '2026-10-25', endDate: '2026-10-25' });
+  const result = resolveNurseHoursBalance(nurse, second, duties, [holiday], [ANNUAL_LEAVE], periods,
+    { schedules: [first, second], assignments: [], leaveEntries: [holiday] });
+  assert.equal(result.carriedHours, 0);
+  assert.equal(result.targetHours, 126);
+});
+
+test('a nurse who joined during an earlier roster counts from her first shift on it', () => {
+  // September roster: only the existing team. October roster: Amy joins on November 12 and works every day after.
+  const amy = makeNurse('amy');
+  const sepRoster = roster8(p8[0]);
+  const octRoster = roster8(p8[1]);
+  const teamShift = { ...everyDay(p8[0])[0], nurseId: 'someone-else' };
+  const amyShifts = everyDay(p8[1]).filter(a => a.date >= '2026-11-12').map(a => ({ ...a, nurseId: 'amy' }));
+  const november = resolveNurseHoursBalance(amy, roster8(p8[2], 'DRAFT'), [DAY8], [], [], p8,
+    { schedules: [sepRoster, octRoster], assignments: [teamShift, ...amyShifts] });
+  assert.equal(november.carriedHours, 0, 'she worked her share since she joined');
+  assert.equal(november.targetHours, 240);
 });

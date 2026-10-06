@@ -42,13 +42,9 @@ export async function deleteEntireSchedule(
     }
   };
 
-  purgedAssignmentsCount = await purge('shifts', async () => {
-    const list = await repo.list('assignments', bySchedule);
-    if (list.length > 0) await repo.bulkRemove('assignments', list.map((a) => a.id));
-    return list.length;
-  });
-
-  // Public snapshots first: they can't be found once their share link is gone.
+  // Public snapshots first: they can't be found once their share link is gone. If one
+  // can't be removed, nothing else is deleted, so the roster stays whole and the delete
+  // can simply be tried again.
   await purge('share links', async () => {
     const links = await repo.list('shareLinks', bySchedule);
     // A link whose snapshot could not be removed is kept, so the snapshot can still be
@@ -66,6 +62,15 @@ export async function deleteEntireSchedule(
     }
     if (removed.length > 0) await repo.bulkRemove('shareLinks', removed);
     if (firstError) throw firstError;
+  });
+  if (failed.length > 0) {
+    throw new Error('A public share page of this roster could not be removed, so the roster, its shifts and its versions were kept. Try again.');
+  }
+
+  purgedAssignmentsCount = await purge('shifts', async () => {
+    const list = await repo.list('assignments', bySchedule);
+    if (list.length > 0) await repo.bulkRemove('assignments', list.map((a) => a.id));
+    return list.length;
   });
 
   purgedVersionsCount = await purge('versions', async () => {

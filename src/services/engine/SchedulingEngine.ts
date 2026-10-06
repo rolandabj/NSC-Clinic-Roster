@@ -773,7 +773,10 @@ export class SchedulingEngine {
      * first weeks. Each period part of the roster has its own goal, reached by
      * the part's last day. Hours carried from earlier rosters (owed or ahead)
      * are settled over the first half of the part: early, but spread over
-     * several shifts. Positive = behind pace (needs hours).
+     * several shifts. A part that ends short leaves her behind pace, so the
+     * next part makes the hours up first (within the roster's goal and the
+     * hours limit; the ledger counts them for the period they fall in).
+     * Positive = behind pace (needs hours).
      */
     const hoursBehindPace = (nurseId: string, dayIdx: number): number => {
       const parts = paceParts.get(nurseId);
@@ -897,18 +900,6 @@ export class SchedulingEngine {
           const used = countHoursInRange(nurse.id, schedule.startDate, budget.end,
             [...resultAssignmentsMap.values()], dutyMapGlobal, leaveEntries, leaveTypes).dutyHours;
           if (used + extraHours > budget.max + 1e-8) return false;
-        }
-        // Each period part has its own ceiling: hours missing in one period are carried to the
-        // next roster, never piled into a later period of the same roster.
-        const parts = paceParts.get(nurse.id) || [];
-        if (parts.length > 1) {
-          const part = parts.find((p) => p.startIdx >= 0 && date >= datesList[p.startIdx] && date <= datesList[p.endIdx]);
-          if (part) {
-            const used = countHoursInRange(nurse.id, datesList[part.startIdx], datesList[part.endIdx],
-              [...resultAssignmentsMap.values()], dutyMapGlobal, leaveEntries, leaveTypes).dutyHours;
-            const max = Math.max(part.duty, Math.min(part.duty + 8, Math.round(part.duty * maxHoursToleranceRatio)));
-            if (used + extraHours > max + 1e-8) return false;
-          }
         }
       }
 

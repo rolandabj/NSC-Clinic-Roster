@@ -657,10 +657,11 @@ export type RosterAnalysis = ReturnType<typeof buildRosterAnalysis>;
 /** The checker's finding id prefixes, longest first, so 'h7-hours-over-' wins over 'hours-over-'. */
 const PROBLEM_RULES = [
   'cov-gap', 'dayoff-lock', 'evening-tail', 'exclusive-nc-doctor-conflict', 'h1-senior', 'h2-days', 'h3-rest',
-  'h4-dup', 'h6-phl-capability', 'h7-hours-over', 'h8-doctor-allocation', 'h8-specialty-allocation', 'holiday-gap',
-  'holiday-no-nurse', 'holiday-senior', 'hours-low', 'hours-over', 'leave-overlap', 'missing-gmail', 'nc-coverage',
+  'h4-dup', 'h6-phl-capability', 'h7-hours-over', 'h7-period', 'h8-doctor-allocation', 'h8-specialty-allocation', 'holiday-gap',
+  'holiday-no-nurse', 'holiday-senior', 'hours-deferred', 'hours-history-unavailable', 'hours-low', 'hours-over',
+  'hours-part-short', 'hours-written-off', 'leave-overlap', 'missing-gmail', 'nc-coverage',
   'nc-doctor-conflict', 'nc-not-qualified', 'pending-leave-shift', 'request-dayoff-shift', 'request-shift',
-  'role-quota', 's1-late', 'scale-ratio-warning', 'session-no-overlap', 'session-partial', 'unassigned-session',
+  'role-quota', 's1-late', 'scale-ratio-warning', 'schedule-overlap', 'session-no-overlap', 'session-partial', 'unassigned-session',
 ].sort((a, b) => b.length - a.length);
 
 /** Which check a finding came from, e.g. 'cov-gap-2026-10-05-09:00' gives 'cov-gap'. */

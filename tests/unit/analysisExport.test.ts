@@ -156,6 +156,12 @@ test('problemRule picks the longest matching check name', () => {
   assert.equal(problemRule('cov-gap-2026-10-05-09:00'), 'cov-gap');
   assert.equal(problemRule('scale-ratio-warning'), 'scale-ratio-warning');
   assert.equal(problemRule('something-new'), 'something-new');
+  // Hours checks of rosters that cross a period end, and roster overlaps
+  assert.equal(problemRule('hours-part-short-n1-2026-11-18'), 'hours-part-short');
+  assert.equal(problemRule('hours-deferred-n1'), 'hours-deferred');
+  assert.equal(problemRule('hours-written-off-n1'), 'hours-written-off');
+  assert.equal(problemRule('h7-period-n1-2026-11-18'), 'h7-period');
+  assert.equal(problemRule('schedule-overlap-a-b'), 'schedule-overlap');
 });
 
 test('file name', () => {

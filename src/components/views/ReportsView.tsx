@@ -120,7 +120,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
     try {
       const [
         schedList,
-        asgnList,
         nList,
         dwList,
         leList,
@@ -133,7 +132,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
         whpList,
       ] = await Promise.all([
         repo.list('schedules'),
-        repo.list('assignments'),
         repo.list('nurses'),
         repo.list('dutyWindows'),
         repo.list('leaveEntries'),
@@ -164,11 +162,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
 
       const current =
         schedList.find((s) => s.id === context.activeScheduleId) || schedList[0];
-      if (current) {
-        setActiveSchedule(current);
-        const schedAsgns = asgnList.filter((a) => a.scheduleId === current.id);
-        setAssignments(schedAsgns);
-      }
+      if (current) setActiveSchedule(current); // its shifts arrive through the subscription below
     } catch (err) {
       console.error('Error loading reports data:', err);
       setLoadError('The hours history could not be loaded. Reload before relying on these balances.');
@@ -204,13 +198,15 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
 
   const handleScheduleChange = (schedId: string) => {
     const found = schedules.find((s) => s.id === schedId);
-    if (found) {
-      setActiveSchedule(found);
-      repo.list('assignments').then((allAsgns) => {
-        setAssignments(allAsgns.filter((a) => a.scheduleId === found.id));
-      });
-    }
+    if (found) setActiveSchedule(found);
   };
+
+  // The open roster's shifts, kept live (edits in another tab or by another planner show at once).
+  useEffect(() => {
+    if (!activeSchedule?.id) return;
+    setAssignments([]);
+    return repo.subscribe('assignments', setAssignments, { field: 'scheduleId', operator: '==', value: activeSchedule.id });
+  }, [activeSchedule?.id]);
 
   // Compute Nurse Hours Accounting for all nurses
   const nurseAccountingRows: NurseHoursAccounting[] = useMemo(() => {

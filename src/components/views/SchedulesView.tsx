@@ -155,6 +155,21 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [holidays, setHolidays] = useState<PublicHoliday[]>([]);
   // Opening hours, public holidays and the end of the previous roster, for the engine and the checker
   const [hoursHistory, setHoursHistory] = useState<HoursHistory | undefined>();
+  // Every hours history load gets a number and only the newest is used: a load that started
+  // earlier but finishes later (after a roster was published meanwhile) never replaces it.
+  const historySeqRef = useRef(0);
+  const hoursHistoryRef = useRef<HoursHistory | undefined>(undefined);
+  const startHistoryLoad = () => ++historySeqRef.current;
+  const applyHistory = (seq: number, history: HoursHistory | undefined) => {
+    if (seq !== historySeqRef.current) return;
+    hoursHistoryRef.current = history;
+    setHoursHistory(history);
+  };
+  /** Clinic details from a load: its hours history only if it is the newest load. */
+  const adoptSetup = (seq: number, setup: ClinicSetup | undefined) => {
+    applyHistory(seq, setup?.hoursHistory);
+    clinicSetupRef.current = setup && { ...setup, hoursHistory: hoursHistoryRef.current };
+  };
   const clinicSetupRef = useRef<ClinicSetup | undefined>(undefined);
   const [quotas, setQuotas] = useState<NurseHoursQuota[]>([]);
   // Nurses' day off and shift wishes (shown on the grid; the checker notes when they aren't followed).
@@ -516,6 +531,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     let list: Assignment[];
     let vList: ScheduleVersion[];
     let setup: ClinicSetup | undefined;
+    const historySeq = startHistoryLoad();
     try {
       [list, vList, setup] = await Promise.all([
         repo.list('assignments', { field: 'scheduleId', operator: '==', value: sched.id }),
@@ -536,8 +552,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     // What is saved for this roster is exactly what was just loaded.
     syncers.assignments.replaceKnown(list, (a) => a.scheduleId === sched.id);
     loadingRef.current = false;
-    clinicSetupRef.current = setup;
-    setHoursHistory(setup?.hoursHistory);
+    adoptSetup(historySeq, setup);
     setClinicSetupError(
       setup ? null : 'Public holidays, opening hours and the previous roster could not be loaded. Reload the page before generating.'
     );
@@ -841,12 +856,17 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     const reload = () => {
       const current = activeScheduleRef.current;
       if (!current || !schedulesSeen) return;
+      const seq = startHistoryLoad();
       loadHoursHistory(repo, current, { schedules: schedulesSeen })
-        .then((history) => { if (!cancelled && activeScheduleRef.current?.id === current.id) setHoursHistory(history); })
+        .then((history) => { if (!cancelled && activeScheduleRef.current?.id === current.id) applyHistory(seq, history); })
         .catch((err) => console.warn('Could not refresh the hours history:', err));
     };
     const stopSchedules = repo.subscribe('schedules', (list) => { schedulesSeen = list; reload(); });
-    const stopLeaves = repo.subscribe('leaveEntries', (list) => setHoursHistory((old) => (old ? { ...old, leaveEntries: list } : old)));
+    const stopLeaves = repo.subscribe('leaveEntries', (list) => {
+      if (!hoursHistoryRef.current) return;
+      hoursHistoryRef.current = { ...hoursHistoryRef.current, leaveEntries: list };
+      setHoursHistory(hoursHistoryRef.current);
+    });
     return () => { cancelled = true; stopSchedules(); stopLeaves(); };
   }, [repo, activeSchedule?.id]);
 
@@ -860,11 +880,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   useEffect(() => {
     if (!activeSchedule) return;
     let cancelled = false;
+    const seq = startHistoryLoad();
     loadClinicSetup(repo, activeSchedule)
       .then((setup) => {
         if (cancelled) return;
-        clinicSetupRef.current = setup;
-        setHoursHistory(setup?.hoursHistory);
+        adoptSetup(seq, setup);
         setClinicSetupError(null);
       })
       .catch((err) => {
@@ -980,6 +1000,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       // Fresh clinic details for this roster (holidays or the previous roster may have changed).
       // Without them the generator would ignore public holidays and the previous roster.
       let generationClinicSetup: ClinicSetup;
+      const historySeqForFill = startHistoryLoad();
       try {
         generationClinicSetup = await loadClinicSetup(repo, activeSchedule);
       } catch (err: any) {
@@ -988,8 +1009,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         setIsGenerating(false);
         return;
       }
+      // The fill itself uses exactly what it just loaded.
+      applyHistory(historySeqForFill, generationClinicSetup.hoursHistory);
       clinicSetupRef.current = generationClinicSetup;
-      setHoursHistory(generationClinicSetup.hoursHistory);
       setClinicSetupError(null);
 
       // A backup copy of the roster as it is now, so a fill or clear can be undone

@@ -104,31 +104,20 @@ export function hoursHistoryOverlaps(schedule: HoursSchedule, history?: HoursHis
 export const MAX_CARRY_PERIODS = 2;
 /** Catching up never asks a nurse for more than this share of her period hours on top (overwork guard). */
 export const MAX_CATCH_UP_SHARE = 0.1;
-/** Periods looked back over: leftovers older than this can no longer reach the roster. */
-const LEDGER_PERIODS = 2 * MAX_CARRY_PERIODS;
-
 const sortPeriods = (periods: WorkingHoursPeriod[]) => [...periods].sort((a, b) => a.startDate.localeCompare(b.startDate));
 
-/** The dedicated period a roster's balance runs in: the one holding its first day. */
-export function trackingPeriod(schedule: Pick<Schedule, 'startDate'>, periods: WorkingHoursPeriod[] = []): WorkingHoursPeriod | undefined {
-  return periods.find(p => p.startDate <= schedule.startDate && p.endDate >= schedule.startDate);
-}
-
-/** First day the ledger reads: the start of the period LEDGER_PERIODS before the roster's own period. */
-export function ledgerStartDate(schedule: Pick<Schedule, 'startDate'>, periods: WorkingHoursPeriod[] = []): string | undefined {
-  const own = trackingPeriod(schedule, periods);
-  if (!own) return undefined;
-  const before = sortPeriods(periods).filter(p => p.endDate < own.startDate);
-  return (before.slice(-LEDGER_PERIODS)[0] || own).startDate;
-}
-
-/** The earlier rosters that count toward this roster's balance (published, in the ledger's periods, before it). */
+/**
+ * The earlier rosters that count toward a roster's balance: every roster that
+ * starts before it, is not archived and was published (with countedIds: the
+ * rosters a loaded history read as published). The whole published history is
+ * read, not a window: how an old leftover was settled changes what is left
+ * later. Without dedicated periods nothing is carried.
+ */
 export function countedEarlierRosters(schedule: Pick<Schedule, 'id' | 'startDate'>, periods: WorkingHoursPeriod[], schedules: Schedule[], countedIds?: string[]): Schedule[] {
-  const from = ledgerStartDate(schedule, periods);
-  if (!from) return [];
+  if (!periods.length) return [];
   const ids = countedIds ? new Set(countedIds) : undefined;
   return schedules.filter(s => s.id !== schedule.id && s.status !== 'ARCHIVED' && (ids ? ids.has(s.id) : s.status === 'PUBLISHED')
-    && !!s.startDate && !!s.endDate && s.startDate < schedule.startDate && s.endDate >= from);
+    && !!s.startDate && !!s.endDate && s.startDate < schedule.startDate);
 }
 
 /** Check at every configured period boundary, including gaps between periods. */
@@ -137,22 +126,13 @@ export function hoursCheckpoints(schedule: Pick<Schedule, 'startDate' | 'endDate
     .filter(d => d >= schedule.startDate && d <= schedule.endDate).sort();
 }
 
-/** A leftover on its way through later periods: positive = hours owed, negative = hours ahead. */
+/**
+ * A leftover on its way through later periods: positive = hours owed, negative
+ * = hours ahead. The leftovers of a nurse always share one sign: owed hours are
+ * only settled by extra work, and a new leftover of the other sign appears only
+ * once all of them are settled (see closePeriod).
+ */
 interface Leftover { hours: number; carried: number }
-
-/** Owed and ahead leftovers cancel out, the oldest first. */
-function netLeftovers(list: Leftover[]): Leftover[] {
-  const out = list.map(l => ({ ...l }));
-  for (let i = 0; i < out.length; i++) {
-    for (let j = i + 1; j < out.length && Math.abs(out[i].hours) > 1e-9; j++) {
-      if (Math.sign(out[i].hours) === Math.sign(out[j].hours) || Math.abs(out[j].hours) < 1e-9) continue;
-      const m = Math.min(Math.abs(out[i].hours), Math.abs(out[j].hours));
-      out[i].hours -= Math.sign(out[i].hours) * m;
-      out[j].hours -= Math.sign(out[j].hours) * m;
-    }
-  }
-  return out.filter(l => Math.abs(l.hours) > 1e-9);
-}
 
 /** What a period asks on top of its base: ahead hours in full, owed hours up to the catch up limit. */
 function activeCarry(list: Leftover[], periodShareHours: number): { carry: number; deferred: number } {
@@ -178,10 +158,91 @@ function closePeriod(list: Leftover[], base: number, worked: number): { next: Le
   if (Math.abs(extra) > 1e-9) moved.push({ hours: -extra, carried: 1 });
   const kept = moved.filter(l => l.carried <= MAX_CARRY_PERIODS);
   const writtenOff = moved.filter(l => l.carried > MAX_CARRY_PERIODS).reduce((s, l) => s + l.hours, 0);
-  return { next: netLeftovers(kept), writtenOff };
+  return { next: kept, writtenOff };
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
+
+interface PeriodTotals { base: number; worked: number; firstDate: string }
+
+/** Earlier totals per history (memo): the screens ask for the same nurse many times while it is loaded. */
+const totalsMemo = new WeakMap<HoursHistory, Map<string, { inputs: unknown[]; totals: Map<string, PeriodTotals> }>>();
+
+/**
+ * One nurse's earlier days, per dedicated period: the base she accrued (her
+ * share of each day she was rostered) and the hours credited (one shift or
+ * one approved leave a day), from the rosters as they were published.
+ * - The latest starting roster speaks for a day (old rosters may still overlap).
+ * - She counts on a roster only with at least one shift on it: approved leave
+ *   alone (a bulk public holiday, for instance) does not put her on it.
+ * - On her first roster after the earliest one in the history she counts from
+ *   her first shift, so days before she joined add nothing.
+ * - Days outside every period, and approved leave that does not count toward
+ *   the target, add neither a goal nor hours.
+ */
+function earlierPeriodTotals(
+  nurseId: string, share: number, schedule: HoursSchedule, earlier: Schedule[], history: HoursHistory,
+  leaves: LeaveEntry[], typeMap: Map<string, LeaveType>, dutyMap: Map<string, DutyWindow>, ordered: WorkingHoursPeriod[]
+): Map<string, PeriodTotals> {
+  const leaveList = history.leaveEntries || leaves;
+  const inputs: unknown[] = [leaveList, typeMap.size, dutyMap.size, ordered.map(p => `${p.id}:${p.startDate}:${p.endDate}:${p.workingHours}`).join('|'),
+    [...dutyMap.values()].map(d => `${d.id}:${d.startTime}:${d.endTime}`).join('|'),
+    [...typeMap.values()].map(t => `${t.id}:${t.creditedHours}:${t.countsTowardHoursTarget}`).join('|')];
+  const key = `${nurseId}|${share}|${schedule.id}|${schedule.startDate}`;
+  let memo = totalsMemo.get(history);
+  if (!memo) { memo = new Map(); totalsMemo.set(history, memo); }
+  const hit = memo.get(key);
+  if (hit && hit.inputs.length === inputs.length && hit.inputs.every((v, i) => v === inputs[i])) return hit.totals;
+
+  const before = shiftIsoDate(schedule.startDate, -1);
+  const approved = leaveList.filter(l => l.nurseId === nurseId && l.approved);
+  const leaveOn = (date: string) => approved.find(l => l.startDate <= date && l.endDate >= date);
+  const ids = new Set(earlier.map(s => s.id));
+  const shifts = new Map<string, Assignment>(); // roster id + date
+  const firstShift = new Map<string, string>(); // roster id -> her first shift date on it
+  for (const a of history.assignments) {
+    if (a.nurseId !== nurseId || !ids.has(a.scheduleId)) continue;
+    const roster = earlier.find(r => r.id === a.scheduleId)!;
+    if (a.date < roster.startDate || a.date > roster.endDate || a.date > before) continue;
+    const k = `${a.scheduleId}_${a.date}`;
+    if (!shifts.has(k)) shifts.set(k, a);
+    if (!firstShift.has(a.scheduleId) || a.date < firstShift.get(a.scheduleId)!) firstShift.set(a.scheduleId, a.date);
+  }
+  const byStart = [...earlier].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id));
+  const earliestStart = byStart[0]?.startDate;
+  const herFirst = byStart.find(r => firstShift.has(r.id));
+  // From which day each roster counts for her (undefined: not on it).
+  const countsFrom = (r: Schedule): string | undefined => {
+    const first = firstShift.get(r.id);
+    if (!first) return undefined;
+    return r.id === herFirst?.id && r.startDate > earliestStart! ? first : r.startDate;
+  };
+  const totals = new Map<string, PeriodTotals>();
+  const claimed = new Set<string>();
+  for (const roster of [...byStart].reverse()) { // latest start first
+    const from = countsFrom(roster);
+    const last = roster.endDate < before ? roster.endDate : before;
+    for (const date of getDatesInRange(roster.startDate, last)) {
+      if (claimed.has(date)) continue;
+      claimed.add(date);
+      if (!from || date < from) continue;
+      const period = ordered.find(p => p.startDate <= date && p.endDate >= date);
+      if (!period) continue;
+      const leave = leaveOn(date);
+      if (leave && typeMap.get(leave.leaveTypeId)?.countsTowardHoursTarget === false) continue;
+      const recorded = history.contractPercents?.[roster.id]?.[nurseId];
+      const dayShare = typeof recorded === 'number' && Number.isFinite(recorded) && recorded >= 0 ? recorded / 100 : share;
+      const entry = totals.get(period.id) || { base: 0, worked: 0, firstDate: date };
+      entry.base += getPeriodDailyRate(period) * dayShare;
+      entry.worked += leave ? leaveCreditOnDate(leave, typeMap.get(leave.leaveTypeId), date)
+        : shifts.has(`${roster.id}_${date}`) ? dutyDurationHours(dutyMap.get(shifts.get(`${roster.id}_${date}`)!.dutyWindowId)) : 0;
+      if (date < entry.firstDate) entry.firstDate = date;
+      totals.set(period.id, entry);
+    }
+  }
+  memo.set(key, { inputs, totals });
+  return totals;
+}
 
 /**
  * A nurse's goal for this roster, period by period.
@@ -196,8 +257,8 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
  *   hours never ask more than MAX_CATCH_UP_SHARE of the period on top; the
  *   rest waits for the next period (it still counts as carried).
  * - Earlier days count only when a roster was published for them and the
- *   nurse was on it (a shift or leave there), so a nurse who joined later, or
- *   dates without a published roster, carry nothing. A period with no such
+ *   nurse was on it (see earlierPeriodTotals), so a nurse who joined later,
+ *   or dates without a published roster, carry nothing. A period with no such
  *   days for her neither settles nor ages her leftovers.
  * - A day of approved leave that does not count toward the target adds
  *   neither a goal nor hours. Earlier days use the contract saved with that
@@ -215,45 +276,15 @@ export function resolveNurseHoursBalance(
   const typeMap = types instanceof Map ? types : new Map(types.map(t => [t.id, t]));
   const dutyMap = duties instanceof Map ? duties : new Map(duties.map(d => [d.id, d]));
   const ordered = sortPeriods(periods);
-  const periodOf = (date: string) => ordered.find(p => p.startDate <= date && p.endDate >= date);
   const touchesPeriod = ordered.some(p => p.startDate <= schedule.endDate && p.endDate >= schedule.startDate);
   const ownRate = touchesPeriod ? 0 : resolveFullTimeTarget(schedule, periods).hours / Math.max(1, inclusiveDays(schedule.startDate, schedule.endDate));
-  const before = shiftIsoDate(schedule.startDate, -1);
 
   // Earlier days, per period: the base she accrued and the hours credited.
-  const earlierByPeriod = new Map<string, { base: number; worked: number }>();
-  let trackingStartDate = schedule.startDate;
   const earlier = history && !hoursHistoryOverlaps(schedule, history).length
     ? countedEarlierRosters(schedule, periods, history.schedules, history.countedScheduleIds) : [];
-  const from = ledgerStartDate(schedule, periods);
-  if (earlier.length && from) {
-    const approved = (history!.leaveEntries || leaves).filter(l => l.nurseId === nurse.id && l.approved);
-    const leaveOn = (date: string) => approved.find(l => l.startDate <= date && l.endDate >= date);
-    const ids = new Set(earlier.map(s => s.id));
-    const shifts = new Map<string, Assignment>(); // roster id + date
-    for (const a of history!.assignments) {
-      if (a.nurseId === nurse.id && ids.has(a.scheduleId) && !shifts.has(`${a.scheduleId}_${a.date}`)) shifts.set(`${a.scheduleId}_${a.date}`, a);
-    }
-    // The latest starting roster speaks for a day (old rosters may still overlap).
-    const rosters = [...earlier].sort((a, b) => b.startDate.localeCompare(a.startDate) || a.id.localeCompare(b.id));
-    const onRoster = new Set(rosters.filter(r => getDatesInRange(r.startDate > from ? r.startDate : from, r.endDate < before ? r.endDate : before)
-      .some(d => shifts.has(`${r.id}_${d}`) || leaveOn(d))).map(r => r.id));
-    for (const date of getDatesInRange(from, before)) {
-      const period = periodOf(date);
-      const roster = rosters.find(r => r.startDate <= date && r.endDate >= date);
-      if (!period || !roster || !onRoster.has(roster.id)) continue;
-      const leave = leaveOn(date);
-      if (leave && typeMap.get(leave.leaveTypeId)?.countsTowardHoursTarget === false) continue;
-      const recorded = history!.contractPercents?.[roster.id]?.[nurse.id];
-      const dayShare = typeof recorded === 'number' && Number.isFinite(recorded) && recorded >= 0 ? recorded / 100 : share;
-      const entry = earlierByPeriod.get(period.id) || { base: 0, worked: 0 };
-      entry.base += getPeriodDailyRate(period) * dayShare;
-      entry.worked += leave ? leaveCreditOnDate(leave, typeMap.get(leave.leaveTypeId), date)
-        : shifts.has(`${roster.id}_${date}`) ? dutyDurationHours(dutyMap.get(shifts.get(`${roster.id}_${date}`)!.dutyWindowId)) : 0;
-      earlierByPeriod.set(period.id, entry);
-      if (period.startDate <= schedule.startDate && period.endDate >= schedule.startDate && trackingStartDate > date) trackingStartDate = date;
-    }
-  }
+  const earlierByPeriod = earlier.length
+    ? earlierPeriodTotals(nurse.id, share, schedule, earlier, history!, leaves, typeMap, dutyMap, ordered)
+    : new Map<string, PeriodTotals>();
 
   // Close the periods that ended before this roster, oldest first.
   let leftovers: Leftover[] = [];
@@ -276,11 +307,12 @@ export function resolveNurseHoursBalance(
     parts.push({ name: schedule.name || 'This roster', startDate: schedule.startDate, endDate: end,
       baseHours: Math.round(raw + 1e-8), carriedHours: 0, targetHours: Math.round(raw + 1e-8) });
   }
+  let trackingStartDate = schedule.startDate;
   partPeriods.forEach((period, index) => {
     const partStart = period.startDate > schedule.startDate ? period.startDate : schedule.startDate;
     const partEnd = period.endDate < end ? period.endDate : end;
     const rawPart = getDatesInRange(partStart, partEnd).length * getPeriodDailyRate(period) * share;
-    const prior = index === 0 ? earlierByPeriod.get(period.id) || { base: 0, worked: 0 } : { base: 0, worked: 0 };
+    const prior = (index === 0 && earlierByPeriod.get(period.id)) || { base: 0, worked: 0 };
     const periodShare = period.workingHours * share;
     const { carry, deferred } = activeCarry(leftovers, periodShare);
     // Rounded on the period's running total: earlier rosters of the period took round(prior.base).
@@ -290,7 +322,11 @@ export function resolveNurseHoursBalance(
     const carriedHours = round1(owedBefore + carry);
     const targetHours = Math.max(0, round1(baseHours + carriedHours));
     parts.push({ periodId: period.id, name: period.name, startDate: partStart, endDate: partEnd, baseHours, carriedHours, targetHours });
-    if (index === 0) previousCreditedHours = round1(prior.worked);
+    if (index === 0) {
+      previousCreditedHours = round1(prior.worked);
+      const first = earlierByPeriod.get(period.id)?.firstDate;
+      if (first && first < trackingStartDate) trackingStartDate = first;
+    }
     if (index === partPeriods.length - 1) deferredHours = round1(deferred);
     // The next part assumes this one reaches its goal: what stays open is only what was held back.
     if (index < partPeriods.length - 1) {

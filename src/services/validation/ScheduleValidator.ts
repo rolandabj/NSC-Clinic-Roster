@@ -868,11 +868,13 @@ export class ScheduleValidator {
       const balance = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup?.hoursHistory);
       const target = balance.targetHours;
       const hrs = (n: number) => Math.round(n * 10) / 10;
-      // A roster that crosses a period end: each period part is checked on its own.
+      // A roster that crosses a period end: each period part is checked on its own. Short by
+      // less than one long shift is as close as whole shifts allow, so it is not reported.
       if (balance.parts.length > 1) {
+        const longestShift = Math.max(4, ...dutyWindows.filter((d) => d.active !== false).map((d) => calculateDutyDurationHours(d)));
         for (const part of balance.parts) {
           const credited = countHoursInRange(nurse.id, part.startDate, part.endDate, assignments, dutyWindows, leaveEntries, leaveTypes).totalHours;
-          if (credited < part.targetHours - 4) findings.push({
+          if (credited < part.targetHours - longestShift) findings.push({
             id: `hours-part-short-${nurse.id}-${part.endDate}`, category: 'HOURS_IMBALANCE', severity: 'WARN',
             message: `${nurse.fullName}: ${hrs(credited)} of ${part.targetHours} h for the ${part.name} period (${part.startDate} to ${part.endDate}), ${hrs(part.targetHours - credited)} h short. What is not made up moves to the next period (at most twice).`,
             affectedNurseIds: [nurse.id], cellRefs: [],

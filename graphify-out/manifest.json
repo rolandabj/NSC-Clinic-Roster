@@ -306,15 +306,15 @@
     "semantic_hash": ""
   },
   "src/components/views/ReportsView.tsx": {
-    "mtime": 1791249424.4396503,
-    "seen": 1791249556.5902257,
-    "ast_hash": "3739f0f5fd0120f86600094fdc337f72",
+    "mtime": 1791251638.427538,
+    "seen": 1791251869.6742084,
+    "ast_hash": "6a522f55e49b3f2d28ff81b7632e04a4",
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791247146.7886195,
-    "seen": 1791247317.7902477,
-    "ast_hash": "9e3fe362805571d0174ae72ff8205c62",
+    "mtime": 1791251679.4335618,
+    "seen": 1791251869.6742103,
+    "ast_hash": "2fa0be97b4d9fffdbd84d9e4b7f34e8d",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -450,9 +450,9 @@
     "semantic_hash": "7f14f9df033240b364eb865b54a94258"
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1791249355.0745132,
-    "seen": 1791249556.590286,
-    "ast_hash": "108d610e180e49cb2389889743860298",
+    "mtime": 1791251446.9740593,
+    "seen": 1791251869.6742578,
+    "ast_hash": "3abf69357372a09e8234affe34154204",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
@@ -618,9 +618,9 @@
     "semantic_hash": ""
   },
   "src/services/schedule/scheduleDeletionService.ts": {
-    "mtime": 1791247146.7926197,
-    "seen": 1791247317.7903824,
-    "ast_hash": "efc67e5033221d38946eff6a6a384f96",
+    "mtime": 1791251758.4704683,
+    "seen": 1791251869.6743286,
+    "ast_hash": "ec1561d07adbc9bcd10653bebf33dd1c",
     "semantic_hash": ""
   },
   "src/services/seed/seedData.ts": {
@@ -642,9 +642,9 @@
     "semantic_hash": ""
   },
   "src/services/validation/ScheduleValidator.ts": {
-    "mtime": 1791249388.1808262,
-    "seen": 1791249556.590369,
-    "ast_hash": "2213c486c386bbd11262455782b117d2",
+    "mtime": 1791251695.001563,
+    "seen": 1791251869.6743357,
+    "ast_hash": "746830b46216239f7ca74d10d61c32a6",
     "semantic_hash": ""
   },
   "src/types/index.ts": {
@@ -870,9 +870,9 @@
     "semantic_hash": ""
   },
   "src/services/fairness/yearToDate.ts": {
-    "mtime": 1791247196.865588,
-    "seen": 1791247317.7903364,
-    "ast_hash": "08a121a4816b9f718b480bec595c952a",
+    "mtime": 1791251552.3855603,
+    "seen": 1791251869.6742828,
+    "ast_hash": "f23590e97b8ecb931e03ce91a99f3273",
     "semantic_hash": ""
   },
   "src/services/history/versionList.ts": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791249548.9073632,
-    "seen": 1791249556.5904684,
-    "ast_hash": "0ce98d66b8badaec63b0cc59ae1e857f",
+    "mtime": 1791251759.3112416,
+    "seen": 1791251869.6744218,
+    "ast_hash": "79bec7d476b18756f77e7fc7b1b70c9b",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1002,15 +1002,15 @@
     "semantic_hash": ""
   },
   "src/services/export/analysisExportService.ts": {
-    "mtime": 1791249457.261892,
-    "seen": 1791249556.590307,
-    "ast_hash": "f3b15e037b8f4b353c1348e0cb285f06",
+    "mtime": 1791251695.0004478,
+    "seen": 1791251869.6742756,
+    "ast_hash": "9dba7a71492c581f5835156aa4d25aba",
     "semantic_hash": ""
   },
   "tests/unit/analysisExport.test.ts": {
-    "mtime": 1791249507.6591864,
-    "seen": 1791249556.5903895,
-    "ast_hash": "bbea99642bb41224bbd6679acde779f5",
+    "mtime": 1791251705.9121552,
+    "seen": 1791251869.6743555,
+    "ast_hash": "f083b2322c647a79b3be3661fc50ce7c",
     "semantic_hash": ""
   },
   ".claude/skills/graphify/SKILL.md": {
@@ -1134,9 +1134,9 @@
     "semantic_hash": ""
   },
   "src/services/hours/hoursBalance.ts": {
-    "mtime": 1791249222.7665746,
-    "seen": 1791249556.590324,
-    "ast_hash": "cfafe78c4905081baf0f4a89472320e6",
+    "mtime": 1791251828.9596212,
+    "seen": 1791251869.6742904,
+    "ast_hash": "2773568dc7cb2b1785defced761f1c03",
     "semantic_hash": ""
   },
   "src/services/schedule/scheduleRanges.ts": {
@@ -1152,15 +1152,15 @@
     "semantic_hash": ""
   },
   "tests/unit/continuousHours.test.ts": {
-    "mtime": 1791249446.367527,
-    "seen": 1791249556.5903983,
-    "ast_hash": "1fcd4370a57a0fb7b87993ccdcc0de28",
+    "mtime": 1791251599.855538,
+    "seen": 1791251869.674365,
+    "ast_hash": "bfe8732b21f83e0f1615cad4328d066e",
     "semantic_hash": ""
   },
   "tests/unit/scheduleDeletion.test.ts": {
-    "mtime": 1791247146.7926197,
-    "seen": 1791247317.7904665,
-    "ast_hash": "5f22ac8ba3d9a2dc0f7818a2832b3d2b",
+    "mtime": 1791251627.0654387,
+    "seen": 1791251869.6743963,
+    "ast_hash": "6fe191211057a81c36d8a9351faccea0",
     "semantic_hash": ""
   },
   "tests/integration/README.md": {

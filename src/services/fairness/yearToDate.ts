@@ -90,34 +90,48 @@ export function earlierRostersThisYear(schedule: Schedule, schedules: Schedule[]
 type LoadedRoster = { schedule: Schedule; assignments: Assignment[]; contractPercents?: Record<string, number> };
 
 /**
- * The earlier rosters' shifts, kept for this browser session. The key holds each
- * earlier roster's updatedAt and version number, so publishing one again (or
- * adding or removing a roster) loads them fresh.
+ * Each earlier roster as last published, kept for this browser session and
+ * shared by the year to date totals and the hours history. The key holds the
+ * roster's updatedAt, version number, status and dates, so publishing it again
+ * loads it fresh; other rosters stay cached. One cache per repository.
  */
-const loadedRostersCache = new Map<string, Promise<LoadedRoster[]>>();
+const rosterCache = new WeakMap<IRepository, Map<string, Promise<LoadedRoster | null>>>();
+let cacheGeneration = 0;
 
-/** Forgets the cached year to date rosters (the next load reads them again). */
+/** Forgets the cached rosters (the next load reads them again). */
 export function clearYearToDateCache(): void {
-  loadedRostersCache.clear();
+  cacheGeneration++;
 }
 
-function cacheKey(schedule: Schedule, earlier: Schedule[]): string {
-  const parts = earlier
-    .map((s) => `${s.id}:${s.updatedAt || ''}:${s.activeVersionNumber ?? ''}:${s.status}:${s.startDate}:${s.endDate}`)
-    .sort();
-  return `${schedule.id}|${parts.join('|')}`;
+const rosterKey = (s: Schedule) =>
+  `${cacheGeneration}|${s.id}:${s.updatedAt || ''}:${s.activeVersionNumber ?? ''}:${s.status}:${s.startDate}:${s.endDate}`;
+
+async function loadPublishedRoster(repo: IRepository, s: Schedule): Promise<LoadedRoster | null> {
+  const bySchedule = { field: 'scheduleId', operator: '==' as const, value: s.id };
+  // The repository takes one filter, so backup copies are read but never counted.
+  const versions = (await repo.list('versions', bySchedule)).filter((v) => v.kind !== 'BACKUP');
+  const published = latestPublishedVersion(versions);
+  if (published) return { schedule: s, assignments: published.snapshot.assignments || [], contractPercents: published.snapshot.contractPercents };
+  if (s.status === 'PUBLISHED') return { schedule: s, assignments: await repo.list('assignments', bySchedule) };
+  return null;
 }
 
+/** The earlier rosters as last published (rosters never published are left out). */
 export async function loadEarlierRosters(repo: IRepository, earlier: Schedule[]): Promise<LoadedRoster[]> {
+  let cache = rosterCache.get(repo);
+  if (!cache) { cache = new Map(); rosterCache.set(repo, cache); }
+  const store = cache;
   const rosters = await Promise.all(
-    earlier.map(async (s) => {
-      const bySchedule = { field: 'scheduleId', operator: '==' as const, value: s.id };
-      // The repository takes one filter, so backup copies are read but never counted.
-      const versions = (await repo.list('versions', bySchedule)).filter((v) => v.kind !== 'BACKUP');
-      const published = latestPublishedVersion(versions);
-      if (published) return { schedule: s, assignments: published.snapshot.assignments || [], contractPercents: published.snapshot.contractPercents };
-      if (s.status === 'PUBLISHED') return { schedule: s, assignments: await repo.list('assignments', bySchedule) };
-      return null;
+    earlier.map((s) => {
+      const key = rosterKey(s);
+      let pending = store.get(key);
+      if (!pending) {
+        pending = loadPublishedRoster(repo, s);
+        store.set(key, pending);
+        // A failed load is not kept, so the next open tries again.
+        pending.catch(() => { if (store.get(key) === pending) store.delete(key); });
+      }
+      return pending;
     })
   );
   return rosters.filter((r): r is LoadedRoster => !!r);
@@ -143,17 +157,7 @@ export async function loadYearToDate(
   } = {}
 ): Promise<YearToDate> {
   const earlier = earlierRostersThisYear(schedule, options.schedules || (await repo.list('schedules')));
-  const key = cacheKey(schedule, earlier);
-  let pending = loadedRostersCache.get(key);
-  if (!pending) {
-    pending = loadEarlierRosters(repo, earlier);
-    loadedRostersCache.set(key, pending);
-    // A failed load is not kept, so the next open tries again.
-    pending.catch(() => {
-      if (loadedRostersCache.get(key) === pending) loadedRostersCache.delete(key);
-    });
-  }
-  const rosters = await pending;
+  const rosters = await loadEarlierRosters(repo, earlier);
   return computeYearToDate({
     rosters,
     dutyWindows,

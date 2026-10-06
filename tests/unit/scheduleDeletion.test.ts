@@ -103,8 +103,8 @@ test('a public snapshot that cannot be removed keeps its share link and the rost
     return origRemove(name, id);
   };
 
-  await assert.rejects(deleteEntireSchedule(repo, schedId, 'Admin'), /share links/);
+  await assert.rejects(deleteEntireSchedule(repo, schedId, 'Admin'), /share page/);
   assert.equal(col('schedules').has(schedId), true, 'the roster is kept');
   assert.equal(col('shareLinks').has('sl1'), true, 'the link to the live snapshot is kept');
-  assert.equal(col('assignments').size, 0);
+  assert.equal(col('assignments').size, 1, 'nothing else was deleted: the shifts are kept');
 });
