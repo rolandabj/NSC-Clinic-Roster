@@ -58,6 +58,24 @@ export function resolveFullTimeTarget(
   return { hours: 0, source: 'NONE', periodName: schedule.periodName };
 }
 
+/**
+ * The hours limit (rule H7): the most hours a nurse may be credited is her goal
+ * plus the rule's margin (105% by default), and never more than one shift
+ * (8 h) over it. The engine, the checker and "Who could cover?" all use this.
+ */
+export function hoursCeiling(goal: number, tolerance: number): number {
+  return Math.max(goal, Math.min(goal + 8, Math.round(goal * tolerance)));
+}
+
+/**
+ * Shift hours allowed under the hours limit: the limit less her leave hours,
+ * never below 0. Leave counts toward the limit, but leave alone never breaks
+ * it (a part time nurse's long leave can be more than her goal).
+ */
+export function shiftHoursAllowed(goal: number, leaveHours: number, tolerance: number): number {
+  return Math.max(0, hoursCeiling(goal, tolerance) - leaveHours);
+}
+
 type CreditEntry = Pick<LeaveEntry, 'startDate' | 'endDate' | 'hoursCredited'> & { dayHours?: Record<string, number> };
 type CreditType = Pick<LeaveType, 'creditedHours' | 'countsTowardHoursTarget'>;
 

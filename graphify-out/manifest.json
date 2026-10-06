@@ -450,9 +450,9 @@
     "semantic_hash": "7f14f9df033240b364eb865b54a94258"
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1791286429.1639636,
-    "seen": 1791287116.853967,
-    "ast_hash": "6979ec83b39fb4f3e89e70076b235302",
+    "mtime": 1791287966.6349165,
+    "seen": 1791288033.6296175,
+    "ast_hash": "74dcac9d3843a897b66df3bf860c711e",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
@@ -522,9 +522,9 @@
     "semantic_hash": ""
   },
   "src/services/hours/hoursPolicy.ts": {
-    "mtime": 1791283082.6777194,
-    "seen": 1791287116.8539953,
-    "ast_hash": "c1a9a344b20a48800b827526a84d4310",
+    "mtime": 1791287697.292039,
+    "seen": 1791288033.6296563,
+    "ast_hash": "cb0a70b818c3a9ede716cbbfafe06f5a",
     "semantic_hash": ""
   },
   "src/services/i18n/index.ts": {
@@ -642,9 +642,9 @@
     "semantic_hash": ""
   },
   "src/services/validation/ScheduleValidator.ts": {
-    "mtime": 1791283082.6797504,
-    "seen": 1791287116.854067,
-    "ast_hash": "746830b46216239f7ca74d10d61c32a6",
+    "mtime": 1791287724.5384119,
+    "seen": 1791288033.6296942,
+    "ast_hash": "cf21b9eb08eaabb6e0086cffc923e644",
     "semantic_hash": ""
   },
   "src/types/index.ts": {
@@ -846,9 +846,9 @@
     "semantic_hash": ""
   },
   "src/services/engine/explainCell.ts": {
-    "mtime": 1791283082.6753917,
-    "seen": 1791287116.8539715,
-    "ast_hash": "562df505cc5f2174bd5640aee4b12151",
+    "mtime": 1791287724.5389493,
+    "seen": 1791288033.6296244,
+    "ast_hash": "8c3833593b927727eaecaef19de2d911",
     "semantic_hash": ""
   },
   "src/services/engine/leaveStatus.ts": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791287469.4511611,
-    "seen": 1791287482.288023,
-    "ast_hash": "18f816ede8ecdfd4ee6b87fad7422763",
+    "mtime": 1791288024.7605498,
+    "seen": 1791288033.6297667,
+    "ast_hash": "3f6fa47071e7dd2082a5f76262c150a4",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1293,6 +1293,12 @@
     "mtime": 1791286360.3159595,
     "seen": 1791287116.8541417,
     "ast_hash": "23bea6096cbb014cd7568a8f13cac5d6",
+    "semantic_hash": ""
+  },
+  "tests/unit/engineRules.test.ts": {
+    "mtime": 1791287689.7440383,
+    "seen": 1791288033.6297228,
+    "ast_hash": "6f944177826c2c06129a033643c56a39",
     "semantic_hash": ""
   }
 }

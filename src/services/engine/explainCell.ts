@@ -32,6 +32,7 @@ import { checkAssignment, AssignmentCheckContext } from './assignmentChecks';
 import { resolveRule } from './SchedulingEngine';
 import { isPendingLeave } from './leaveStatus';
 import { calculateDutyDurationHours, summarizeNurseHours } from '../reports/hoursAccounting';
+import { hoursCeiling, shiftHoursAllowed } from '../hours/hoursPolicy';
 
 export interface ExplainDayInput {
   schedule: Pick<Schedule, 'id' | 'startDate' | 'endDate' | 'hoursTargetFullTime' | 'periodName'>;
@@ -281,7 +282,7 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
   ]);
   const h7Blocks = (h7Rule ? h7Rule.enabled !== false : true) && h7Rule?.severity !== 'SOFT';
   const tolerance = (h7Rule?.value ? h7Rule.value : 105) / 100;
-  const maxAllowed = h7Blocks ? Math.max(goal, Math.min(goal + 8, Math.round(goal * tolerance))) : null;
+  const maxAllowed = h7Blocks ? hoursCeiling(goal, tolerance) : null;
 
   const possible: PossibleShift[] = [];
   const blocked: BlockedShift[] = [];
@@ -328,9 +329,8 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
       const overBoundary = hoursCheckpoints(schedule, input.workingHoursPeriods || []).find(end => {
         if (date > end || end === schedule.endDate) return false;
         const budget = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, input.workingHoursPeriods, input.hoursHistory, end).targetHours;
-        const used = countHoursInRange(nurseId, schedule.startDate, end, assignments, dutyWindows, leaveEntries, leaveTypes).totalHours;
-        const ceiling = Math.max(budget, Math.min(budget + 8, Math.round(budget * tolerance)));
-        return used + calculateDutyDurationHours(duty) > ceiling;
+        const used = countHoursInRange(nurseId, schedule.startDate, end, assignments, dutyWindows, leaveEntries, leaveTypes);
+        return used.dutyHours + calculateDutyDurationHours(duty) > shiftHoursAllowed(budget, used.leaveHours, tolerance);
       });
       if (overBoundary) {
         blocked.push({ dutyWindowId: duty.id, label: duty.acronym, reasons: [`Would exceed the hours available through ${overBoundary}.`] });

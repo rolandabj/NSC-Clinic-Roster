@@ -39,7 +39,7 @@ import {
 } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../engine/nurseClinicUtils';
-import { leaveCreditInRange } from '../hours/hoursPolicy';
+import { hoursCeiling, leaveCreditInRange, shiftHoursAllowed } from '../hours/hoursPolicy';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
 import { resolveRule, LATE_DUTY_RULE_WORDS } from '../engine/SchedulingEngine';
 import { pendingLeaveOn, requestOn } from '../engine/explainCell';
@@ -862,7 +862,8 @@ export class ScheduleValidator {
 
       // Hours by the shared rule: a leave day counts its leave (not also a shift on it),
       // and a day with two shifts counts one, as in the Hours tab and the emails.
-      totalHours = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, workingHoursPeriods).totalHours;
+      const tally = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, workingHoursPeriods);
+      totalHours = tally.totalHours;
 
       // CATEGORY 4: HOURS IMBALANCE CHECKS & RULE H7 (Maximum Working Hours Limit)
       const balance = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup?.hoursHistory);
@@ -894,16 +895,20 @@ export class ScheduleValidator {
       if (clinicSetup?.hoursHistory && rosterOverlaps.length === 0 && h7Enabled) {
         for (const end of hoursCheckpoints(schedule, workingHoursPeriods).filter(d => d < schedule.endDate)) {
           const budget = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup.hoursHistory, end).targetHours;
-          const credited = countHoursInRange(nurse.id, schedule.startDate, end, assignments, dutyWindows, leaveEntries, leaveTypes).totalHours;
-          const ceiling = Math.max(budget, Math.min(budget + 8, Math.round(budget * h7TolerancePct)));
-          if (credited > ceiling) findings.push({
+          const upToEnd = countHoursInRange(nurse.id, schedule.startDate, end, assignments, dutyWindows, leaveEntries, leaveTypes);
+          const credited = upToEnd.totalHours;
+          const ceiling = hoursCeiling(budget, h7TolerancePct);
+          // Shift hours against the limit less leave, as the engine does (leave alone never breaks it).
+          if (upToEnd.dutyHours > shiftHoursAllowed(budget, upToEnd.leaveHours, h7TolerancePct)) findings.push({
             id: `h7-period-${nurse.id}-${end}`, category: 'RULE_VIOLATION', severity: h7Severity,
             message: `${nurse.fullName}: ${Math.round(credited * 10) / 10} h by ${end}, above the ${ceiling} h limit after carried hours.`,
             affectedNurseIds: [nurse.id], cellRefs: [],
           });
         }
       }
-      const maxAllowed = Math.max(target, Math.min(target + 8, Math.round(target * h7TolerancePct)));
+      const maxAllowed = hoursCeiling(target, h7TolerancePct);
+      // The hours limit counts leave, but leave alone never breaks it (shared with the engine).
+      const overLimit = tally.dutyHours > shiftHoursAllowed(target, tally.leaveHours, h7TolerancePct);
       const paceRatio = target > 0 ? totalHours / target : 1;
       const h = (n: number) => Math.round(n * 10) / 10;
 
@@ -917,7 +922,7 @@ export class ScheduleValidator {
           affectedNurseIds: [nurse.id],
           cellRefs: [],
         });
-      } else if (h7Enabled && totalHours > maxAllowed) {
+      } else if (h7Enabled && overLimit) {
         const delta = totalHours - target;
         findings.push({
           id: `h7-hours-over-${nurse.id}`,
