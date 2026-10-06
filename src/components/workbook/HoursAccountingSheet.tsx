@@ -251,6 +251,11 @@ export const HoursAccountingSheet: React.FC<HoursAccountingSheetProps> = ({
                       <span className="block text-[10px] font-normal text-slate-500">
                         Base {Math.round(r.balance.baseTargetHours * 10) / 10}h · {Math.round(Math.abs(r.balance.carriedHours) * 10) / 10}h {r.balance.carriedHours >= 0 ? 'owed from before' : 'ahead from before'}
                       </span>
+                      {r.parts.length > 1 && r.parts.map((p) => (
+                        <span key={p.startDate} className={`block text-[10px] font-normal ${p.workedHours < p.targetHours - 4 ? 'text-amber-700' : 'text-slate-500'}`}>
+                          {p.name} part: {Math.round(p.workedHours * 10) / 10} of {p.targetHours}h
+                        </span>
+                      ))}
                     </td>
 
                     <td className="py-2 px-3 text-indigo-700 font-semibold">

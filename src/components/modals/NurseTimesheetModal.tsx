@@ -205,6 +205,13 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
         {' '}Carried into this roster: {fmtHours(Math.abs(accounting.balance.carriedHours))} {accounting.balance.carriedHours >= 0 ? 'owed' : 'ahead'}.
         {' '}Earlier credited hours: {fmtHours(accounting.balance.previousCreditedHours)}.
         {' '}Total target through {schedule.endDate}: {fmtHours(accounting.balance.cumulativeTargetHours)}.
+        {accounting.parts.length > 1 && (
+          <span className="block mt-1">
+            Each period on its own: {accounting.parts.map((p) => `${p.name} (${p.startDate} to ${p.endDate}) ${fmtHours(p.workedHours)} of ${fmtHours(p.targetHours)}`).join(' · ')}.
+          </span>
+        )}
+        {accounting.balance.deferredHours > 0 && <span className="block">{fmtHours(accounting.balance.deferredHours)} still owed wait for the next period (at most 10% extra a period).</span>}
+        {Math.abs(accounting.balance.writtenOffHours) >= 0.5 && <span className="block">{fmtHours(Math.abs(accounting.balance.writtenOffHours))} carried twice without being settled were written off.</span>}
       </div>
       {/* Top KPI Cards */}
         <div className="p-6 bg-slate-50/50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-6 gap-3">

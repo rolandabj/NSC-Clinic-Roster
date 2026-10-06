@@ -741,8 +741,17 @@ export class SchedulingEngine {
 
     // Each nurse's goal (contract share of the full time target, minus leave) and hard ceiling.
     const nurseTargetMap = new Map<string, { contractTarget: number; dutyTarget: number; maxAllowedHours: number }>();
+    // Pacing per period part (a roster crossing a period end has two or more), see hoursBehindPace.
+    const paceParts = new Map<string, { startIdx: number; endIdx: number; duty: number; carried: number }[]>();
     sortedNurses.forEach((nurse) => {
-      const contractTarget = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup?.hoursHistory).targetHours;
+      const balance = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup?.hoursHistory);
+      const contractTarget = balance.targetHours;
+      paceParts.set(nurse.id, balance.parts.map((part) => {
+        const partLeave = countHoursInRange(nurse.id, part.startDate, part.endDate, [], dutyWindows, leaveEntries, leaveTypes).leaveHours;
+        const duty = Math.max(0, part.targetHours - partLeave);
+        return { startIdx: datesList.indexOf(part.startDate), endIdx: datesList.indexOf(part.endDate), duty,
+          carried: Math.max(-duty, Math.min(duty, part.targetHours - part.baseHours)) };
+      }));
       const leaveHours = nurseStates.get(nurse.id)?.leaveHoursCredited || 0;
       const dutyTarget = Math.max(0, contractTarget - leaveHours);
       // The ceiling allows one shift's worth over the goal at most (8h, or the H7 tolerance if smaller)
@@ -760,12 +769,28 @@ export class SchedulingEngine {
 
     /**
      * Pacing: by the end of day N a nurse should have worked about N/total of
-     * her goal, so hours are spread evenly over the period instead of being
-     * used up in the first weeks. Positive = behind pace (needs hours).
+     * her goal, so hours are spread evenly instead of being used up in the
+     * first weeks. Each period part of the roster has its own goal, reached by
+     * the part's last day. Hours carried from earlier rosters (owed or ahead)
+     * are settled over the first half of the part: early, but spread over
+     * several shifts. Positive = behind pace (needs hours).
      */
     const hoursBehindPace = (nurseId: string, dayIdx: number): number => {
-      const target = nurseTargetMap.get(nurseId)?.dutyTarget ?? 0;
-      const pace = (target * (dayIdx + 1)) / Math.max(1, totalDays);
+      const parts = paceParts.get(nurseId);
+      let pace = 0;
+      if (parts && parts.length && parts.every((p) => p.startIdx >= 0 && p.endIdx >= p.startIdx)) {
+        for (const part of parts) {
+          if (dayIdx < part.startIdx) continue;
+          if (dayIdx >= part.endIdx) { pace += part.duty; continue; }
+          const days = part.endIdx - part.startIdx + 1;
+          const done = dayIdx - part.startIdx + 1;
+          const settleDays = Math.max(1, Math.ceil(days / 2));
+          pace += Math.max(0, (part.duty - part.carried) * (done / days) + part.carried * Math.min(1, done / settleDays));
+        }
+      } else {
+        const target = nurseTargetMap.get(nurseId)?.dutyTarget ?? 0;
+        pace = (target * (dayIdx + 1)) / Math.max(1, totalDays);
+      }
       return pace - (nurseStates.get(nurseId)?.totalDutyHoursEarned ?? 0);
     };
 
@@ -872,6 +897,18 @@ export class SchedulingEngine {
           const used = countHoursInRange(nurse.id, schedule.startDate, budget.end,
             [...resultAssignmentsMap.values()], dutyMapGlobal, leaveEntries, leaveTypes).dutyHours;
           if (used + extraHours > budget.max + 1e-8) return false;
+        }
+        // Each period part has its own ceiling: hours missing in one period are carried to the
+        // next roster, never piled into a later period of the same roster.
+        const parts = paceParts.get(nurse.id) || [];
+        if (parts.length > 1) {
+          const part = parts.find((p) => p.startIdx >= 0 && date >= datesList[p.startIdx] && date <= datesList[p.endIdx]);
+          if (part) {
+            const used = countHoursInRange(nurse.id, datesList[part.startIdx], datesList[part.endIdx],
+              [...resultAssignmentsMap.values()], dutyMapGlobal, leaveEntries, leaveTypes).dutyHours;
+            const max = Math.max(part.duty, Math.min(part.duty + 8, Math.round(part.duty * maxHoursToleranceRatio)));
+            if (used + extraHours > max + 1e-8) return false;
+          }
         }
       }
 

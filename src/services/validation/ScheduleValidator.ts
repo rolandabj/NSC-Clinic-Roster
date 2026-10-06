@@ -865,7 +865,30 @@ export class ScheduleValidator {
       totalHours = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, leaveTypes, workingHoursPeriods).totalHours;
 
       // CATEGORY 4: HOURS IMBALANCE CHECKS & RULE H7 (Maximum Working Hours Limit)
-      const target = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup?.hoursHistory).targetHours;
+      const balance = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup?.hoursHistory);
+      const target = balance.targetHours;
+      const hrs = (n: number) => Math.round(n * 10) / 10;
+      // A roster that crosses a period end: each period part is checked on its own.
+      if (balance.parts.length > 1) {
+        for (const part of balance.parts) {
+          const credited = countHoursInRange(nurse.id, part.startDate, part.endDate, assignments, dutyWindows, leaveEntries, leaveTypes).totalHours;
+          if (credited < part.targetHours - 4) findings.push({
+            id: `hours-part-short-${nurse.id}-${part.endDate}`, category: 'HOURS_IMBALANCE', severity: 'WARN',
+            message: `${nurse.fullName}: ${hrs(credited)} of ${part.targetHours} h for the ${part.name} period (${part.startDate} to ${part.endDate}), ${hrs(part.targetHours - credited)} h short. What is not made up moves to the next period (at most twice).`,
+            affectedNurseIds: [nurse.id], cellRefs: [],
+          });
+        }
+      }
+      if (balance.deferredHours > 0) findings.push({
+        id: `hours-deferred-${nurse.id}`, category: 'HOURS_IMBALANCE', severity: 'INFO',
+        message: `${nurse.fullName}: ${hrs(balance.deferredHours)} h still owed from earlier periods wait for the next period, so this roster asks at most 10% extra.`,
+        affectedNurseIds: [nurse.id], cellRefs: [],
+      });
+      if (Math.abs(balance.writtenOffHours) >= 0.5) findings.push({
+        id: `hours-written-off-${nurse.id}`, category: 'HOURS_IMBALANCE', severity: 'INFO',
+        message: `${nurse.fullName}: ${hrs(Math.abs(balance.writtenOffHours))} h ${balance.writtenOffHours > 0 ? 'short' : 'ahead'} were carried twice without being settled and are written off.`,
+        affectedNurseIds: [nurse.id], cellRefs: [],
+      });
       if (clinicSetup?.hoursHistory && rosterOverlaps.length === 0 && h7Enabled) {
         for (const end of hoursCheckpoints(schedule, workingHoursPeriods).filter(d => d < schedule.endDate)) {
           const budget = resolveNurseHoursBalance(nurse, schedule, dutyWindows, leaveEntries, leaveTypes, workingHoursPeriods, clinicSetup.hoursHistory, end).targetHours;

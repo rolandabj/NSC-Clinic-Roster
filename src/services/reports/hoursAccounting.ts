@@ -5,7 +5,7 @@
  * Hours Accounting, Contract Proportions & Payroll Ledger Service (Phase 9)
  */
 
-import { HoursHistory, NurseHoursBalance, countHoursInRange, dutyDurationHours, nurseContractShare, resolveNurseHoursBalance } from '../hours/hoursBalance';
+import { HoursHistory, HoursPart, NurseHoursBalance, countHoursInRange, dutyDurationHours, nurseContractShare, resolveNurseHoursBalance } from '../hours/hoursBalance';
 
 import { isWeekendDay } from '../../utils/weekend';
 import {
@@ -53,6 +53,8 @@ export interface NurseDayTimelineEntry {
 
 export interface NurseHoursAccounting {
   balance: NurseHoursBalance;
+  /** Each period part of the roster with the hours credited in it (two or more when the roster crosses a period end). */
+  parts: (HoursPart & { workedHours: number })[];
   closingBalanceHours: number;
   nurse: Nurse;
   seniority?: SeniorityLevel;
@@ -423,6 +425,7 @@ export function calculateNurseHoursAccounting(
   return {
     nurse,
     balance,
+    parts: balance.parts.map((part) => ({ ...part, workedHours: Math.round(countHoursInRange(nurse.id, part.startDate, part.endDate, assignments, dutyWindows, leaveEntries, leaveTypes).totalHours * 10) / 10 })),
     closingBalanceHours: varianceHours,
     seniority,
     contractPercent: nurse.contractPercent,

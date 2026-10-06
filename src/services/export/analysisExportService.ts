@@ -16,6 +16,7 @@
  * nurse profiles (not needed to study the roster).
  */
 
+import { countHoursInRange } from '../hours/hoursBalance';
 import {
   Assignment,
   AvailabilityRequest,
@@ -460,6 +461,12 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
           previousCreditedHours: hours.balance.previousCreditedHours,
           cumulativeTarget: hours.balance.cumulativeTargetHours,
           trackingStartDate: hours.balance.trackingStartDate,
+          heldBackToNextPeriod: hours.balance.deferredHours,
+          writtenOff: hours.balance.writtenOffHours,
+          periodParts: hours.balance.parts.map((p) => ({
+            period: p.name, start: p.startDate, end: p.endDate, base: p.baseHours, carried: p.carriedHours, target: p.targetHours,
+            worked: Math.round(countHoursInRange(n.id, p.startDate, p.endDate, assignments, dutyWindows, leaveEntries, leaveTypes).totalHours * 10) / 10,
+          })),
           percentOfTarget: hours.percent,
         },
         counts: {
