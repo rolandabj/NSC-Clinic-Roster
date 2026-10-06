@@ -5,11 +5,19 @@ import { findScheduleOverlaps, ScheduleOverlap } from '../schedule/scheduleRange
 
 type HoursSchedule = Pick<Schedule, 'id' | 'startDate' | 'endDate' | 'hoursTargetFullTime' | 'periodName'> & Partial<Pick<Schedule, 'name'>>;
 
-/** Current saved records only: versions and backups never add a second set of hours. */
+/**
+ * The earlier rosters an hours balance can carry from. `assignments` hold the
+ * shifts each counted roster was last published with (see loadHoursHistory),
+ * never draft edits. `countedScheduleIds` names those rosters; without it,
+ * rosters marked PUBLISHED count.
+ */
 export interface HoursHistory {
   schedules: Schedule[];
   assignments: Assignment[];
   leaveEntries?: LeaveEntry[];
+  countedScheduleIds?: string[];
+  /** Per roster: each nurse's contract percent when it was published (older versions have none). */
+  contractPercents?: Record<string, Record<string, number>>;
 }
 
 export interface NurseHoursBalance {
@@ -63,12 +71,26 @@ export function countHoursInRange(
   return { dutyHours, leaveHours, totalHours: dutyHours + leaveHours };
 }
 
+/** Rosters (not archived) whose dates overlap this one: until resolved, no balance is carried. */
 export function hoursHistoryOverlaps(schedule: HoursSchedule, history?: HoursHistory): ScheduleOverlap[] {
   if (!history) return [];
-  // Later rosters cannot change the accounting of an earlier roster. Only overlaps with
-  // this roster count: an old overlap between two other rosters must not block every roster.
-  const schedules = [...history.schedules.filter(s => s.id !== schedule.id && s.startDate <= schedule.endDate), { ...schedule, name: schedule.name || schedule.id }];
-  return findScheduleOverlaps(schedules).filter(o => o.first.id === schedule.id || o.second.id === schedule.id);
+  const self = { ...schedule, name: schedule.name || schedule.id };
+  return findScheduleOverlaps([...history.schedules.filter(s => s.id !== schedule.id), self])
+    .filter(o => o.first.id === schedule.id || o.second.id === schedule.id);
+}
+
+/** The dedicated period a roster's balance runs in: the one holding its first day. */
+export function trackingPeriod(schedule: Pick<Schedule, 'startDate'>, periods: WorkingHoursPeriod[] = []): WorkingHoursPeriod | undefined {
+  return periods.find(p => p.startDate <= schedule.startDate && p.endDate >= schedule.startDate);
+}
+
+/** The earlier rosters that count toward this roster's balance (published, same period, before it). */
+export function countedEarlierRosters(schedule: Pick<Schedule, 'id' | 'startDate'>, periods: WorkingHoursPeriod[], schedules: Schedule[], countedIds?: string[]): Schedule[] {
+  const period = trackingPeriod(schedule, periods);
+  if (!period) return [];
+  const ids = countedIds ? new Set(countedIds) : undefined;
+  return schedules.filter(s => s.id !== schedule.id && s.status !== 'ARCHIVED' && (ids ? ids.has(s.id) : s.status === 'PUBLISHED')
+    && !!s.startDate && !!s.endDate && s.startDate < schedule.startDate && s.endDate >= period.startDate);
 }
 
 /** Check at every configured period boundary, including gaps between periods. */
@@ -78,9 +100,19 @@ export function hoursCheckpoints(schedule: Pick<Schedule, 'startDate' | 'endDate
 }
 
 /**
- * Accrue exact daily targets from the earliest retained roster through this one.
- * Round cumulative endpoints, never separate roster pieces, so splitting dates
- * cannot lose hours. Gaps accrue target and approved leave still credits them.
+ * A nurse's goal for this roster, with what earlier rosters of the same
+ * dedicated period left over.
+ * - The base goal is each day's period rate (or, for a roster no period covers,
+ *   its own target spread over its days) times her contract, summed and rounded
+ *   once, so splitting a period into rosters loses no hours.
+ * - Earlier days count only when an earlier roster of the same period was
+ *   published for them and she was on it (a shift or leave there), so a nurse
+ *   who joined later, or dates without a published roster, carry nothing.
+ * - A day of approved leave that does not count toward the target adds neither
+ *   a goal nor hours.
+ * - Earlier days use the contract the nurse had when that roster was published
+ *   (today's contract for versions published before this was recorded).
+ * Nothing is carried from before the period, or while this roster overlaps another.
  */
 export function resolveNurseHoursBalance(
   nurse: Pick<Nurse, 'id' | 'contractPercent'>, schedule: HoursSchedule,
@@ -88,45 +120,55 @@ export function resolveNurseHoursBalance(
   periods: WorkingHoursPeriod[] = [], history?: HoursHistory, through = schedule.endDate
 ): NurseHoursBalance {
   const share = nurseContractShare(nurse);
-  // Without a history: the same daily sum as below, rounded once after the contract share,
-  // so a goal never depends on whether the history has loaded yet.
-  const ownRate = periods.some(p => p.startDate <= schedule.endDate && p.endDate >= schedule.startDate)
-    ? 0 : resolveFullTimeTarget(schedule, periods).hours / Math.max(1, inclusiveDays(schedule.startDate, schedule.endDate));
-  let rawStandalone = 0;
-  for (const date of getDatesInRange(schedule.startDate, through)) {
+  const typeMap = types instanceof Map ? types : new Map(types.map(t => [t.id, t]));
+  const touchesPeriod = periods.some(p => p.startDate <= schedule.endDate && p.endDate >= schedule.startDate);
+  const ownRate = touchesPeriod ? 0 : resolveFullTimeTarget(schedule, periods).hours / Math.max(1, inclusiveDays(schedule.startDate, schedule.endDate));
+  const rateOn = (date: string) => {
     const period = periods.find(p => p.startDate <= date && p.endDate >= date);
-    rawStandalone += (period ? getPeriodDailyRate(period) : ownRate) * share;
+    return period ? getPeriodDailyRate(period) : ownRate;
+  };
+  let rawCurrent = 0;
+  for (const date of getDatesInRange(schedule.startDate, through)) rawCurrent += rateOn(date) * share;
+
+  let rawBefore = 0, previousCreditedHours = 0;
+  let trackingStartDate = schedule.startDate;
+  const earlier = history && !hoursHistoryOverlaps(schedule, history).length
+    ? countedEarlierRosters(schedule, periods, history.schedules, history.countedScheduleIds) : [];
+  if (earlier.length) {
+    const period = trackingPeriod(schedule, periods)!;
+    const before = shiftIsoDate(schedule.startDate, -1);
+    const dutyMap = duties instanceof Map ? duties : new Map(duties.map(d => [d.id, d]));
+    const approved = (history!.leaveEntries || leaves).filter(l => l.nurseId === nurse.id && l.approved);
+    const leaveOn = (date: string) => approved.find(l => l.startDate <= date && l.endDate >= date);
+    const ids = new Set(earlier.map(s => s.id));
+    const shifts = new Map<string, Assignment>(); // roster id + date
+    for (const a of history!.assignments) {
+      if (a.nurseId === nurse.id && ids.has(a.scheduleId) && !shifts.has(`${a.scheduleId}_${a.date}`)) shifts.set(`${a.scheduleId}_${a.date}`, a);
+    }
+    // The latest starting roster speaks for a day (old rosters may still overlap).
+    const ordered = [...earlier].sort((a, b) => b.startDate.localeCompare(a.startDate) || a.id.localeCompare(b.id));
+    const onRoster = new Set(ordered.filter(r => getDatesInRange(r.startDate > period.startDate ? r.startDate : period.startDate, r.endDate < before ? r.endDate : before)
+      .some(d => shifts.has(`${r.id}_${d}`) || leaveOn(d))).map(r => r.id));
+    for (const date of getDatesInRange(period.startDate, before)) {
+      const roster = ordered.find(r => r.startDate <= date && r.endDate >= date);
+      if (!roster || !onRoster.has(roster.id)) continue;
+      if (trackingStartDate > date) trackingStartDate = date;
+      const leave = leaveOn(date);
+      if (leave && typeMap.get(leave.leaveTypeId)?.countsTowardHoursTarget === false) continue;
+      // Each earlier day keeps the contract the nurse had when that roster was published.
+      const recorded = history!.contractPercents?.[roster.id]?.[nurse.id];
+      const dayShare = typeof recorded === 'number' && Number.isFinite(recorded) && recorded >= 0 ? recorded / 100 : share;
+      rawBefore += getPeriodDailyRate(period) * dayShare;
+      previousCreditedHours += leave ? leaveCreditOnDate(leave, typeMap.get(leave.leaveTypeId), date)
+        : shifts.has(`${roster.id}_${date}`) ? dutyDurationHours(dutyMap.get(shifts.get(`${roster.id}_${date}`)!.dutyWindowId)) : 0;
+    }
   }
-  const standalone = Math.round(rawStandalone + 1e-8);
-  if (!history || hoursHistoryOverlaps(schedule, history).length) {
-    return { trackingStartDate: schedule.startDate, baseTargetHours: standalone, carriedHours: 0, targetHours: standalone,
-      cumulativeTargetHours: standalone, previousCreditedHours: 0, openingBalanceHours: 0 };
-  }
-  const schedules = [...history.schedules.filter(s => s.id !== schedule.id && s.startDate <= through), schedule]
-    .sort((a, b) => a.startDate.localeCompare(b.startDate));
-  const trackingStartDate = schedules[0].startDate;
-  const scheduleMap = new Map(schedules.map(s => [s.id, s]));
-  const previousAssignments = history.assignments.filter(a => {
-    const owner = scheduleMap.get(a.scheduleId);
-    return owner && owner.id !== schedule.id && a.date >= owner.startDate && a.date <= owner.endDate && a.date < schedule.startDate;
-  });
-  const before = shiftIsoDate(schedule.startDate, -1);
-  const previousCreditedHours = countHoursInRange(nurse.id, trackingStartDate, before, previousAssignments, duties, history.leaveEntries || leaves, types).totalHours;
-  const rates = new Map(schedules.map(s => [s.id, periods.some(p => p.startDate <= s.endDate && p.endDate >= s.startDate)
-    ? 0 : resolveFullTimeTarget(s, periods).hours / Math.max(1, inclusiveDays(s.startDate, s.endDate))]));
-  let rawBefore = 0, rawCurrent = 0;
-  for (const date of getDatesInRange(trackingStartDate, through)) {
-    const period = periods.find(p => p.startDate <= date && p.endDate >= date);
-    const roster = schedules.find(s => s.startDate <= date && s.endDate >= date);
-    const rate = period ? getPeriodDailyRate(period) : roster ? rates.get(roster.id)! : 0;
-    if (date < schedule.startDate) rawBefore += rate * share;
-    else rawCurrent += rate * share;
-  }
+  previousCreditedHours = Math.round(previousCreditedHours * 10) / 10;
   const beforeTarget = Math.round(rawBefore + 1e-8);
   const cumulativeTargetHours = Math.round(rawBefore + rawCurrent + 1e-8);
   const baseTargetHours = cumulativeTargetHours - beforeTarget;
-  const carriedHours = beforeTarget - previousCreditedHours;
+  const carriedHours = Math.round((beforeTarget - previousCreditedHours) * 10) / 10;
   return { trackingStartDate, baseTargetHours, carriedHours,
-    targetHours: Math.max(0, cumulativeTargetHours - previousCreditedHours), cumulativeTargetHours,
+    targetHours: Math.max(0, Math.round((cumulativeTargetHours - previousCreditedHours) * 10) / 10), cumulativeTargetHours,
     previousCreditedHours, openingBalanceHours: -carriedHours };
 }

@@ -530,6 +530,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         leaveEntries: leaveEntries.filter((l) => inRoster(l.startDate, l.endDate)),
         locks: locks.filter((l) => inRoster(l.date, l.date)),
         rulesSnapshot: rules,
+        contractPercents: Object.fromEntries(nurses.map((n) => [n.id, n.contractPercent ?? 100])),
       },
       isPublished: true,
       publishedAt: nowIso,

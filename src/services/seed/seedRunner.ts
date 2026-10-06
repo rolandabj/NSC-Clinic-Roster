@@ -6,7 +6,7 @@
  * and full backup export and import.
  */
 
-import { mergeScheduleRanges } from '../schedule/scheduleRanges';
+import { mergeScheduleRanges, toScheduleRange } from '../schedule/scheduleRanges';
 
 import { IRepository } from '../repository/IRepository';
 import { SEED_WORKING_HOURS_PERIODS } from './seedData';
@@ -342,8 +342,9 @@ export function checkBackup(jsonString: string): BackupCheck {
     total += records.length;
   }
   if (Array.isArray(collections.schedules)) {
-    try { mergeScheduleRanges({}, collections.schedules); }
-    catch (err: any) { return fail(`The backup contains invalid or overlapping rosters: ${err.message}`); }
+    // Rosters may overlap as they did when the backup was made; only their dates must be valid.
+    try { mergeScheduleRanges({}, collections.schedules.map(toScheduleRange), { acceptOverlaps: true }); }
+    catch (err: any) { return fail(`The backup contains a roster with invalid dates: ${err.message}`); }
     if (collections.schedules.length >= 450) return fail('Restore fewer than 450 rosters at a time.');
   }
   if (total === 0) return fail('The backup is empty, so restoring it would only delete data.');
@@ -380,7 +381,7 @@ export async function importFullDatabaseBackup(
     if (!Array.isArray(records) || records.length === 0) continue;
     try {
       const keep = col === 'systemMetadata' ? records.filter((r) => r.id !== 'initialization_state' && r.id !== 'scheduleCalendar') : records;
-      await repo.bulkUpsert(col, keep as any);
+      await repo.bulkUpsert(col, keep as any, { restore: true });
       counts[col] = keep.length;
     } catch (e) {
       console.warn(`[ClinicRoster] Could not restore ${col}:`, e);

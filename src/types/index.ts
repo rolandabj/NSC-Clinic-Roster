@@ -358,6 +358,8 @@ export interface ScheduleVersion {
     leaveEntries: LeaveEntry[];
     locks: LockEntry[];
     rulesSnapshot: Rule[];
+    /** Each nurse's contract percent when this version was published (hours carried later use it). */
+    contractPercents?: Record<string, number>;
   };
   isPublished: boolean;
   publishedAt?: string;

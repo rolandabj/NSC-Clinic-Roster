@@ -13,6 +13,7 @@ import { Assignment, AvailabilityRequest, Schedule } from '../../types';
 import { ClinicSetup, YearToDate } from './clinicModel';
 import { lateDutyThreshold } from './SchedulingEngine';
 import { loadYearToDate } from '../fairness/yearToDate';
+import { loadHoursHistory } from '../hours/hoursHistoryService';
 
 /** How far back into the previous roster the look back rules need to see. */
 const PRIOR_DAYS = 31;
@@ -40,21 +41,25 @@ export async function loadClinicSetup(
   /** withYearToDate: false skips the year's fairness totals (only the generator uses them). */
   options: { withYearToDate?: boolean } = {}
 ): Promise<ClinicSetup> {
-  const [clinics, holidays, schedules, allAssignments, allLeaves] = await Promise.all([
+  const [clinics, holidays, schedules] = await Promise.all([
     repo.list('clinics'),
     repo.list('holidays'),
     repo.list('schedules'),
-    repo.list('assignments'),
-    repo.list('leaveEntries'),
   ]);
   const profile = clinics[0];
 
+  // The look back rules see the last weeks before this roster, from every earlier roster
+  // (not archived) that covers them, as saved now.
   const from = daysBefore(schedule.startDate, PRIOR_DAYS);
-  const earlier = new Map(schedules.filter(s => s.id !== schedule.id).map(s => [s.id, s]));
-  const priorAssignments = allAssignments.filter(a => {
-    const owner = earlier.get(a.scheduleId);
-    return owner && a.date >= owner.startDate && a.date <= owner.endDate && a.date >= from && a.date < schedule.startDate;
-  });
+  const lookBack = schedules.filter(
+    (s) => s.id !== schedule.id && s.status !== 'ARCHIVED' && s.startDate < schedule.startDate && s.endDate >= from
+  );
+  const [lookBackShifts, hoursHistory] = await Promise.all([
+    Promise.all(lookBack.map((s) => repo.list('assignments', { field: 'scheduleId', operator: '==', value: s.id })
+      .then((list) => list.filter((a) => a.date >= s.startDate && a.date <= s.endDate)))),
+    loadHoursHistory(repo, schedule, { schedules }),
+  ]);
+  const priorAssignments: Assignment[] = lookBackShifts.flat().filter((a) => a.date >= from && a.date < schedule.startDate);
 
   const holidayDates = holidays.map((h) => h.date);
   // Extras that only fine tune the generator: if they can't be loaded the roster still loads.
@@ -81,7 +86,7 @@ export async function loadClinicSetup(
   ]);
 
   return {
-    hoursHistory: { schedules, assignments: allAssignments, leaveEntries: allLeaves },
+    hoursHistory,
     openTime: profile?.openTime,
     closeTime: profile?.closeTime,
     holidayDates,

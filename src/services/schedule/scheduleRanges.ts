@@ -1,20 +1,20 @@
 import { Schedule } from '../../types';
 
-export type ScheduleRange = Pick<Schedule, 'id' | 'name' | 'startDate' | 'endDate'>;
+export type ScheduleRange = Pick<Schedule, 'id' | 'name' | 'startDate' | 'endDate'> & Partial<Pick<Schedule, 'status'>>;
 
 export interface ScheduleOverlap {
   first: ScheduleRange;
   second: ScheduleRange;
 }
 
-/** Every roster holds its dates, whatever its status; a record without dates holds none. */
+/** Archived rosters, and records without dates, never hold dates. */
 export function holdsDates(s: Partial<ScheduleRange> | undefined): s is ScheduleRange {
-  return !!s && typeof s.startDate === 'string' && typeof s.endDate === 'string' && !!s.startDate && !!s.endDate;
+  return !!s && s.status !== 'ARCHIVED' && typeof s.startDate === 'string' && typeof s.endDate === 'string' && !!s.startDate && !!s.endDate;
 }
 
 /** The parts of a roster the date calendar keeps (no undefined values, which Firestore refuses). */
 export function toScheduleRange(s: Partial<Schedule> & { id: string }): ScheduleRange {
-  return { id: s.id, name: s.name || s.id, startDate: s.startDate || '', endDate: s.endDate || '' };
+  return { id: s.id, name: s.name || s.id, startDate: s.startDate || '', endDate: s.endDate || '', status: s.status || 'DRAFT' };
 }
 
 export function rangesOverlap(a: ScheduleRange, b: ScheduleRange): boolean {
@@ -43,26 +43,39 @@ function assertValidDates(candidate: ScheduleRange): void {
   }
 }
 
-/** The first roster whose dates overlap the candidate's. */
+/** The first roster (not archived) whose dates overlap the candidate's. */
 export function findRangeConflict(candidate: ScheduleRange, schedules: ScheduleRange[]): ScheduleRange | undefined {
   return schedules.find(s => rangesOverlap(candidate, s));
 }
 
 export function assertScheduleRangeAvailable(candidate: ScheduleRange, schedules: ScheduleRange[]): void {
   assertValidDates(candidate);
+  if (!holdsDates(candidate)) return; // an archived roster does not hold its dates
   const other = findRangeConflict(candidate, schedules);
   if (other) throw new Error(`These dates overlap "${other.name}" (${other.startDate} to ${other.endDate}). Open that roster or choose different dates.`);
 }
 
-/** Shared by every transactional roster write, including imports. */
-export function mergeScheduleRanges(existing: Record<string, ScheduleRange>, changes: ScheduleRange[]): Record<string, ScheduleRange> {
+/**
+ * Shared by every transactional roster write, including imports.
+ * acceptOverlaps (restoring a backup only): records may overlap each other as they
+ * did when the backup was made; their dates must still be valid.
+ */
+export function mergeScheduleRanges(
+  existing: Record<string, ScheduleRange>,
+  changes: ScheduleRange[],
+  options: { acceptOverlaps?: boolean } = {}
+): Record<string, ScheduleRange> {
   const merged = { ...existing };
   for (const change of changes) merged[change.id] = change;
   for (const change of changes) {
+    if (options.acceptOverlaps) {
+      assertValidDates(change);
+      continue;
+    }
     const old = existing[change.id];
     // Publishing or renaming old overlapping records must remain possible to save.
-    // Date changes and newly created records always require free dates.
-    if (!old || old.startDate !== change.startDate || old.endDate !== change.endDate) {
+    // Date changes, newly created records and records taken out of the archive always require free dates.
+    if (!old || old.startDate !== change.startDate || old.endDate !== change.endDate || (!holdsDates(old) && holdsDates(change))) {
       assertScheduleRangeAvailable(change, Object.values(merged));
     }
   }

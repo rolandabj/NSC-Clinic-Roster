@@ -144,8 +144,8 @@
     "semantic_hash": "b1ea7595509e8bad5d7804ba377dd07f"
   },
   "src/components/modals/CreateScheduleModal.tsx": {
-    "mtime": 1791245724.1512332,
-    "seen": 1791246261.4945912,
+    "mtime": 1791247146.7886195,
+    "seen": 1791247317.7901883,
     "ast_hash": "d5508e77d19a29803ec3c0e646411113",
     "semantic_hash": ""
   },
@@ -186,9 +186,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/PublishModal.tsx": {
-    "mtime": 1791245242.0792308,
-    "seen": 1791246261.4946039,
-    "ast_hash": "2d571a2937284600dd2d7aa4247ef7be",
+    "mtime": 1791247196.8644125,
+    "seen": 1791247317.790202,
+    "ast_hash": "91b8b384588680383f9f091c2d27d9af",
     "semantic_hash": ""
   },
   "src/components/modals/ShareModal.tsx": {
@@ -306,15 +306,15 @@
     "semantic_hash": ""
   },
   "src/components/views/ReportsView.tsx": {
-    "mtime": 1791246115.4072351,
-    "seen": 1791246261.4946496,
-    "ast_hash": "539676db6794bf94d421623ddc3db8d6",
+    "mtime": 1791247146.7886195,
+    "seen": 1791247317.7902462,
+    "ast_hash": "94312b55b1176d014dc5a15e6b3932d1",
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791246115.411235,
-    "seen": 1791246261.4946513,
-    "ast_hash": "ae2701f176e9565c6728e300e4725a15",
+    "mtime": 1791247146.7886195,
+    "seen": 1791247317.7902477,
+    "ast_hash": "9e3fe362805571d0174ae72ff8205c62",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -324,8 +324,8 @@
     "semantic_hash": ""
   },
   "src/components/views/WorkingHoursPeriodsPanel.tsx": {
-    "mtime": 1791245934.2509766,
-    "seen": 1791246261.4946544,
+    "mtime": 1791247146.7886195,
+    "seen": 1791247317.790251,
     "ast_hash": "6818d1a279ca50e34e430cac40136fde",
     "semantic_hash": ""
   },
@@ -468,9 +468,9 @@
     "semantic_hash": ""
   },
   "src/services/engine/clinicSetupService.ts": {
-    "mtime": 1791246115.411235,
-    "seen": 1791246261.4947095,
-    "ast_hash": "4b886acc4286e7dad62c745889400e5d",
+    "mtime": 1791247146.7886195,
+    "seen": 1791247317.7903123,
+    "ast_hash": "74b87edc9d0756c41dff5677152d2ec9",
     "semantic_hash": ""
   },
   "src/services/engine/nurseClinicUtils.ts": {
@@ -540,8 +540,8 @@
     "semantic_hash": ""
   },
   "src/services/publish/publicRosterService.ts": {
-    "mtime": 1791245894.2982836,
-    "seen": 1791246261.494753,
+    "mtime": 1791247146.7926197,
+    "seen": 1791247317.7903593,
     "ast_hash": "204917c7e46c0b04420c58fd7368ae8a",
     "semantic_hash": ""
   },
@@ -558,15 +558,15 @@
     "semantic_hash": ""
   },
   "src/services/repository/FirestoreRepository.ts": {
-    "mtime": 1791246128.911068,
-    "seen": 1791246261.4947567,
-    "ast_hash": "d50f5f62e7c532f3282642abc9042ab4",
+    "mtime": 1791247152.0825324,
+    "seen": 1791247317.7903643,
+    "ast_hash": "071f3d39a0d86096e38363cb04058cc2",
     "semantic_hash": ""
   },
   "src/services/repository/IRepository.ts": {
-    "mtime": 1791246115.415235,
-    "seen": 1791246261.4947577,
-    "ast_hash": "42104b5fdb278cb4a55af0c3e722f463",
+    "mtime": 1791247146.7926197,
+    "seen": 1791247317.7903657,
+    "ast_hash": "b35516b2cd9b5fa1d680448a0907a4f3",
     "semantic_hash": ""
   },
   "src/services/repository/assignmentSync.ts": {
@@ -618,8 +618,8 @@
     "semantic_hash": ""
   },
   "src/services/schedule/scheduleDeletionService.ts": {
-    "mtime": 1791245640.673428,
-    "seen": 1791246261.4947724,
+    "mtime": 1791247146.7926197,
+    "seen": 1791247317.7903824,
     "ast_hash": "efc67e5033221d38946eff6a6a384f96",
     "semantic_hash": ""
   },
@@ -630,9 +630,9 @@
     "semantic_hash": "18e3133587b9930afd7e4919b8ae4e2b"
   },
   "src/services/seed/seedRunner.ts": {
-    "mtime": 1791246115.415235,
-    "seen": 1791246261.4947772,
-    "ast_hash": "746e385338fd59c04d4d20466ca9d265",
+    "mtime": 1791247146.7926197,
+    "seen": 1791247317.7903876,
+    "ast_hash": "b7311ceae8a46239b938c6766a08cb0e",
     "semantic_hash": ""
   },
   "src/services/settings/emailSettingsStore.ts": {
@@ -648,9 +648,9 @@
     "semantic_hash": ""
   },
   "src/types/index.ts": {
-    "mtime": 1791245242.1037784,
-    "seen": 1791246261.4947803,
-    "ast_hash": "64051a749ddab5eb50b99fd5483a5964",
+    "mtime": 1791247196.8634498,
+    "seen": 1791247317.7903926,
+    "ast_hash": "26188e667317c546cefe7dcd5b995143",
     "semantic_hash": ""
   },
   "src/types/navigation.ts": {
@@ -714,9 +714,9 @@
     "semantic_hash": "342e7fe2d77e9c7540c5b4a3cf80efd5"
   },
   "tests/unit/backupCheck.test.ts": {
-    "mtime": 1791246115.415235,
-    "seen": 1791246261.4948,
-    "ast_hash": "9f6b66cb5738d7a6ea6f2e3c6e4a1387",
+    "mtime": 1791247146.7926197,
+    "seen": 1791247317.790418,
+    "ast_hash": "37a33ea3b4d2c48263927fd76d76b4c7",
     "semantic_hash": ""
   },
   "tests/unit/clinicModel.test.ts": {
@@ -870,9 +870,9 @@
     "semantic_hash": ""
   },
   "src/services/fairness/yearToDate.ts": {
-    "mtime": 1791246115.411235,
-    "seen": 1791246261.4947336,
-    "ast_hash": "1617d27b3db507c8ccc8409aac902441",
+    "mtime": 1791247196.865588,
+    "seen": 1791247317.7903364,
+    "ast_hash": "08a121a4816b9f718b480bec595c952a",
     "semantic_hash": ""
   },
   "src/services/history/versionList.ts": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791246250.53116,
-    "seen": 1791246261.494872,
-    "ast_hash": "ed8b8b5f782a8b83f42cc8800baa8956",
+    "mtime": 1791247310.6624188,
+    "seen": 1791247317.7904997,
+    "ast_hash": "5466afaeac8293cc472544da74a76aa8",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1134,32 +1134,32 @@
     "semantic_hash": ""
   },
   "src/services/hours/hoursBalance.ts": {
-    "mtime": 1791246179.659803,
-    "seen": 1791246261.494741,
-    "ast_hash": "ecfd5d8a492b6a6e4f0460291d91ad68",
+    "mtime": 1791247201.8993902,
+    "seen": 1791247317.7903454,
+    "ast_hash": "9e578cc77226dc882b02867c963c2ec0",
     "semantic_hash": ""
   },
   "src/services/schedule/scheduleRanges.ts": {
-    "mtime": 1791246128.9104106,
-    "seen": 1791246261.4947743,
-    "ast_hash": "128294488e01b7d7b1deba0623d25150",
+    "mtime": 1791247152.0926197,
+    "seen": 1791247317.7903843,
+    "ast_hash": "ce983f374986c6998905a4c557ec2d2f",
     "semantic_hash": ""
   },
   "tests/integration/scheduleTransactions.test.ts": {
-    "mtime": 1791246128.9116197,
-    "seen": 1791246261.4947946,
-    "ast_hash": "37d797262e4fc2815333f0cef243c01f",
+    "mtime": 1791247239.6552825,
+    "seen": 1791247317.7904115,
+    "ast_hash": "47da52a51eb0256c978204d5130388fe",
     "semantic_hash": ""
   },
   "tests/unit/continuousHours.test.ts": {
-    "mtime": 1791246172.3832355,
-    "seen": 1791246261.4948041,
-    "ast_hash": "0c79d68543a71700eb91b2227e0d0ede",
+    "mtime": 1791247230.571849,
+    "seen": 1791247317.7904234,
+    "ast_hash": "6f0d58fd2cdfced3b3b3b6eaba96abee",
     "semantic_hash": ""
   },
   "tests/unit/scheduleDeletion.test.ts": {
-    "mtime": 1791245647.0312328,
-    "seen": 1791246261.494833,
+    "mtime": 1791247146.7926197,
+    "seen": 1791247317.7904665,
     "ast_hash": "5f22ac8ba3d9a2dc0f7818a2832b3d2b",
     "semantic_hash": ""
   },
@@ -1227,6 +1227,12 @@
     "mtime": 1791245242.0735736,
     "seen": 1791246261.494879,
     "ast_hash": "0a17fbba67b7efefcb10db350e592ec0",
+    "semantic_hash": ""
+  },
+  "src/services/hours/hoursHistoryService.ts": {
+    "mtime": 1791247196.866065,
+    "seen": 1791247317.790347,
+    "ast_hash": "2ec4b167d3e07922fbe960b9dafaa301",
     "semantic_hash": ""
   }
 }

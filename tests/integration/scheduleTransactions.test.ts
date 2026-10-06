@@ -55,6 +55,16 @@ try {
   await b.repo.create('schedules', makeSchedule({ id: 'stale', startDate: '2027-01-01', endDate: '2027-01-31' }));
   await deleteDoc(doc(b.db, 'schedules', 'stale'));
   await a.repo.create('schedules', makeSchedule({ id: 'after-stale', startDate: '2027-01-10', endDate: '2027-01-20' }));
+  // An archived roster does not hold its dates either.
+  await a.repo.create('schedules', makeSchedule({ id: 'archived', startDate: '2027-03-01', endDate: '2027-03-31', status: 'ARCHIVED' }));
+  await a.repo.create('schedules', makeSchedule({ id: 'over-archived', startDate: '2027-03-05', endDate: '2027-03-25' }));
+  // A backup restore keeps old overlaps as they were in the backup.
+  await a.repo.bulkUpsert('schedules', [
+    makeSchedule({ id: 'backup-a', startDate: '2027-05-01', endDate: '2027-05-31' }),
+    makeSchedule({ id: 'backup-b', startDate: '2027-05-20', endDate: '2027-06-10' }),
+  ], { restore: true });
+  // Outside a restore, those dates are still refused.
+  await assert.rejects(a.repo.create('schedules', makeSchedule({ id: 'new-may', startDate: '2027-05-05', endDate: '2027-05-06' })), /overlap/);
   console.log('PASS: simultaneous planners, legacy bootstrap, updates, atomic imports, deletion and protected calendar restore');
 } finally {
   await Promise.all(apps.map(app => deleteApp(app)));

@@ -6,6 +6,7 @@
  */
 
 import { HoursHistory, hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
+import { loadHoursHistory } from '../../services/hours/hoursHistoryService';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import {
@@ -147,7 +148,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
 
       const uniqueSchedules = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
       setSchedules(uniqueSchedules);
-      setHoursHistory({ schedules: uniqueSchedules, assignments: asgnList, leaveEntries: leList });
       setLoadError(null);
       setDutyWindows(dwList);
       setLeaveEntries(leList);
@@ -177,13 +177,25 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
 
   useEffect(() => {
     loadData();
-    const stopSchedules = repo.subscribe('schedules', list => setHoursHistory(old => old ? { ...old, schedules: list } : old));
-    const stopAssignments = repo.subscribe('assignments', list => setHoursHistory(old => old ? { ...old, assignments: list } : old));
+    const stopSchedules = repo.subscribe('schedules', setSchedules);
     const stopLeaves = repo.subscribe('leaveEntries', list => { setLeaveEntries(list); setHoursHistory(old => old ? { ...old, leaveEntries: list } : old); });
     const stopPeriods = repo.subscribe('workingHoursPeriods', setWorkingHoursPeriods);
     const stopDuties = repo.subscribe('dutyWindows', setDutyWindows);
-    return () => { stopSchedules(); stopAssignments(); stopLeaves(); stopPeriods(); stopDuties(); };
+    return () => { stopSchedules(); stopLeaves(); stopPeriods(); stopDuties(); };
   }, []);
+
+  // Balances carry from the published rosters of the same period (reloaded when a roster changes).
+  useEffect(() => {
+    if (!activeSchedule || schedules.length === 0) return;
+    let cancelled = false;
+    loadHoursHistory(repo, activeSchedule, { schedules, periods: workingHoursPeriods })
+      .then(history => { if (!cancelled) { setHoursHistory(history); setLoadError(null); } })
+      .catch(err => {
+        console.error('Could not load the hours history:', err);
+        if (!cancelled) setLoadError('The hours history could not be loaded. Reload before relying on these balances.');
+      });
+    return () => { cancelled = true; };
+  }, [activeSchedule?.id, schedules, workingHoursPeriods]);
 
   const triggerToast = (msg: string) => {
     setNotification(msg);
@@ -207,7 +219,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
       calculateNurseHoursAccounting(
         nurse,
         activeSchedule,
-        hoursHistory.assignments.filter(a => a.scheduleId === activeSchedule.id),
+        assignments,
         dutyWindows,
         leaveEntries,
         leaveTypes,

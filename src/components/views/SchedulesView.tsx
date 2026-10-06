@@ -1,4 +1,5 @@
 import { HoursHistory, hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
+import { loadHoursHistory } from '../../services/hours/hoursHistoryService';
 import React, { useState, useEffect, useRef, useId } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog } from '../common/dialogs';
@@ -831,12 +832,23 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     };
   };
 
+  // Balances carry from published rosters only: reload them when a roster is published,
+  // added or removed, or leave changes. Draft edits elsewhere never change them.
   useEffect(() => {
-    const stopSchedules = repo.subscribe('schedules', list => setHoursHistory(old => old ? { ...old, schedules: list } : old));
-    const stopAssignments = repo.subscribe('assignments', list => setHoursHistory(old => old ? { ...old, assignments: list } : old));
-    const stopLeaves = repo.subscribe('leaveEntries', list => setHoursHistory(old => old ? { ...old, leaveEntries: list } : old));
-    return () => { stopSchedules(); stopAssignments(); stopLeaves(); };
-  }, [repo]);
+    if (!activeSchedule) return;
+    let cancelled = false;
+    let schedulesSeen: Schedule[] | undefined;
+    const reload = () => {
+      const current = activeScheduleRef.current;
+      if (!current || !schedulesSeen) return;
+      loadHoursHistory(repo, current, { schedules: schedulesSeen })
+        .then((history) => { if (!cancelled && activeScheduleRef.current?.id === current.id) setHoursHistory(history); })
+        .catch((err) => console.warn('Could not refresh the hours history:', err));
+    };
+    const stopSchedules = repo.subscribe('schedules', (list) => { schedulesSeen = list; reload(); });
+    const stopLeaves = repo.subscribe('leaveEntries', (list) => setHoursHistory((old) => (old ? { ...old, leaveEntries: list } : old)));
+    return () => { cancelled = true; stopSchedules(); stopLeaves(); };
+  }, [repo, activeSchedule?.id]);
 
   useEffect(() => {
     if (!hoursHistory || !clinicSetupRef.current || !activeSchedule) return;

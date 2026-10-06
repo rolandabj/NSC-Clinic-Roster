@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { HoursHistory, hoursHistoryOverlaps, resolveNurseHoursBalance } from '../../src/services/hours/hoursBalance';
+import { loadHoursHistory } from '../../src/services/hours/hoursHistoryService';
 import { calculateNurseHoursAccounting, summarizeNurseHours } from '../../src/services/reports/hoursAccounting';
 import { RosterPublishService } from '../../src/services/publish/rosterPublishService';
 import { SchedulingEngine } from '../../src/services/engine/SchedulingEngine';
@@ -13,7 +14,7 @@ const periods: WorkingHoursPeriod[] = [
   { id: 'oct', year: '2026', name: 'October', startDate: '2026-10-19', endDate: '2026-11-18', workingHours: 230 },
   { id: 'nov', year: '2026', name: 'November', startDate: '2026-11-19', endDate: '2026-12-18', workingHours: 210 },
 ];
-const first = makeSchedule({ id: 'first', startDate: '2026-10-19', endDate: '2026-11-01' });
+const first = makeSchedule({ id: 'first', startDate: '2026-10-19', endDate: '2026-11-01', status: 'PUBLISHED' });
 const second = makeSchedule({ id: 'second', startDate: '2026-11-02', endDate: '2026-11-18' });
 const third = makeSchedule({ id: 'third', startDate: '2026-11-19', endDate: '2026-12-18' });
 const nurse = makeNurse('n1');
@@ -35,28 +36,44 @@ test('partial roster starts at 104 hours and 120 earlier hours leave 110 in the 
   assert.equal(result.previousCreditedHours, 120);
 });
 
-test('dates without a roster still accrue target into the following period', () => {
-  const result = balance(third, { schedules: [first, third], assignments: previousShifts });
+test('a new period starts fresh, and days without a published roster carry nothing', () => {
+  const result = balance(third);
   assert.equal(result.baseTargetHours, 210);
-  assert.equal(result.carriedHours, 110);
-  assert.equal(result.targetHours, 320);
+  assert.equal(result.carriedHours, 0);
+  assert.equal(result.targetHours, 210);
+  const draftFirst = balance(second, { schedules: [{ ...first, status: 'DRAFT' }, second], assignments: previousShifts });
+  assert.equal(draftFirst.carriedHours, 0);
+  assert.equal(draftFirst.targetHours, 126);
 });
 
-test('draft, published and archived rosters contribute once, and later rosters do not change earlier balances', () => {
-  for (const status of ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const) {
+test('only published rosters count: drafts and archived rosters carry nothing', () => {
+  for (const [status, target] of [['DRAFT', 126], ['ARCHIVED', 126], ['PUBLISHED', 110]] as const) {
     const input = { schedules: [{ ...first, status }, second, third], assignments: previousShifts };
-    assert.equal(balance(second, input).targetHours, 110);
+    assert.equal(balance(second, input).targetHours, target, status);
     assert.equal(balance(first, input).targetHours, 104);
   }
+  // A loaded history names the rosters it read as published, whatever their status says now.
+  assert.equal(balance(second, { ...history, schedules: [{ ...first, status: 'DRAFT' }, second], countedScheduleIds: ['first'] }).targetHours, 110);
 });
 
-test('approved leave in a date gap credits the balance once and replaces a shift on the same day', () => {
-  const leaves = [makeLeave({ startDate: '2026-10-19', endDate: '2026-10-19' }),
-    makeLeave({ id: 'gap', startDate: '2026-11-02', endDate: '2026-11-03' })];
-  const result = resolveNurseHoursBalance(nurse, third, duties, leaves, [ANNUAL_LEAVE], periods,
-    { schedules: [first, third], assignments: previousShifts });
-  assert.equal(result.previousCreditedHours, 132); // 120 minus 12 plus 8 plus 16
-  assert.equal(result.targetHours, 308);
+test('a nurse who was not on the earlier roster (joined later) carries nothing', () => {
+  const newcomer = makeNurse('new');
+  const result = resolveNurseHoursBalance(newcomer, second, duties, [], [], periods, history);
+  assert.equal(result.carriedHours, 0);
+  assert.equal(result.targetHours, 126);
+});
+
+test('approved leave replaces a shift on the same day; leave that does not count adds no goal', () => {
+  const leaves = [makeLeave({ startDate: '2026-10-19', endDate: '2026-10-19' })];
+  const result = resolveNurseHoursBalance(nurse, second, duties, leaves, [ANNUAL_LEAVE], periods, history);
+  assert.equal(result.previousCreditedHours, 116); // 120 minus 12 plus 8
+  assert.equal(result.targetHours, 114);
+  const unpaid = { ...ANNUAL_LEAVE, id: 'unpaid', countsTowardHoursTarget: false };
+  const off = [makeLeave({ id: 'u', leaveTypeId: 'unpaid', startDate: '2026-10-29', endDate: '2026-11-01' })];
+  const withUnpaid = resolveNurseHoursBalance(nurse, second, duties, off, [unpaid], periods, history);
+  assert.equal(withUnpaid.previousCreditedHours, 120);
+  assert.equal(withUnpaid.cumulativeTargetHours, 200); // 10 counted days before plus the 17 days of this roster
+  assert.equal(withUnpaid.targetHours, 80);
 });
 
 test('excess credit can cover a whole later roster and the remaining surplus is retained', () => {
@@ -69,10 +86,11 @@ test('excess credit can cover a whole later roster and the remaining surplus is 
 });
 
 test('splitting a period into three rosters preserves its full target after rounding', () => {
-  const pieces = [makeSchedule({ id: 'a', startDate: '2026-10-19', endDate: '2026-10-21' }),
-    makeSchedule({ id: 'b', startDate: '2026-10-22', endDate: '2026-10-24' }),
+  const pieces = [makeSchedule({ id: 'a', startDate: '2026-10-19', endDate: '2026-10-21', status: 'PUBLISHED' }),
+    makeSchedule({ id: 'b', startDate: '2026-10-22', endDate: '2026-10-24', status: 'PUBLISHED' }),
     makeSchedule({ id: 'c', startDate: '2026-10-25', endDate: '2026-11-18' })];
-  const targets = pieces.map(s => balance(s, { schedules: pieces, assignments: [] }).baseTargetHours);
+  const onEach = pieces.map(p => ({ ...previousShifts[0], id: `on-${p.id}`, scheduleId: p.id, date: p.startDate }));
+  const targets = pieces.map(s => balance(s, { schedules: pieces, assignments: onEach }).baseTargetHours);
   assert.deepEqual(targets, [22, 23, 185]);
   assert.equal(targets.reduce((a, b) => a + b), 230);
 });
@@ -84,7 +102,7 @@ test('part time cumulative targets are rounded after the contract share is appli
   assert.equal(result.carriedHours, -68);
 });
 
-test('changing earlier assignments immediately changes later goals; orphan and out of range shifts do not count', () => {
+test('only the published shifts in the history count; orphan and out of range shifts do not', () => {
   assert.equal(balance(second, { ...history, assignments: previousShifts.slice(0, 9) }).targetHours, 122);
   const extras = [{ ...previousShifts[0], id: 'orphan', scheduleId: 'gone' },
     { ...previousShifts[0], id: 'outside', date: '2026-10-18' }, { ...previousShifts[0], id: 'duplicate' }];
@@ -108,13 +126,19 @@ test('reports and the grid use the same carried target and closing balance', () 
   assert.equal(summary.closingBalanceHours, report.closingBalanceHours);
 });
 
-test('overlap protection includes shared boundary dates, archived records and repeated reservations', () => {
+test('overlap protection includes shared boundary dates and repeated reservations; archived rosters hold no dates', () => {
   assert.doesNotThrow(() => assertScheduleRangeAvailable(second, [first]));
   assert.throws(() => assertScheduleRangeAvailable({ ...second, startDate: '2026-11-01' }, [first]), /overlap/);
-  assert.throws(() => assertScheduleRangeAvailable({ ...first, id: 'copy' }, [{ ...first, status: 'ARCHIVED' } as Schedule]), /overlap/);
+  assert.doesNotThrow(() => assertScheduleRangeAvailable({ ...first, id: 'copy' }, [{ ...first, status: 'ARCHIVED' } as Schedule]));
   const reserved = mergeScheduleRanges({}, [first]);
   assert.throws(() => mergeScheduleRanges(reserved, [{ ...first, id: 'other-planner' }]), /overlap/);
   assert.throws(() => mergeScheduleRanges({}, [first, { ...first, id: 'imported-copy' }]), /overlap/);
+  // Taking a roster out of the archive needs its dates free again.
+  const withArchived = mergeScheduleRanges(reserved, [{ ...first, id: 'old', status: 'ARCHIVED' }]);
+  assert.throws(() => mergeScheduleRanges(withArchived, [{ ...first, id: 'old', status: 'DRAFT' }]), /overlap/);
+  // A backup restore keeps old overlaps as they were, but never invalid dates.
+  assert.doesNotThrow(() => mergeScheduleRanges({}, [first, { ...first, id: 'old-copy' }], { acceptOverlaps: true }));
+  assert.throws(() => mergeScheduleRanges({}, [{ ...first, endDate: '2026-10-01' }], { acceptOverlaps: true }), /valid roster dates/);
 });
 
 test('existing overlaps block generation and produce a publishing error without deleting records', async () => {
@@ -154,7 +178,7 @@ test('generation and validation reserve the later period budget until its dates 
   assert.ok(report.findings.some(f => f.id === 'h7-period-n1-2026-11-18'));
 });
 
-test('saved historical leave stays current when exporting an older roster snapshot', () => {
+test('leave saved in the history is the leave that counts on earlier days', () => {
   const historicalLeave = makeLeave({ startDate: '2026-10-19', endDate: '2026-10-19' });
   const result = resolveNurseHoursBalance(nurse, second, duties, [], [ANNUAL_LEAVE], periods,
     { ...history, leaveEntries: [historicalLeave] });
@@ -210,4 +234,47 @@ test('a record without dates is never reported as an overlap and never crashes t
   const broken = { id: 'broken', name: 'Broken' } as Schedule;
   assert.doesNotThrow(() => hoursHistoryOverlaps(second, { ...history, schedules: [broken, ...history.schedules] }));
   assert.doesNotThrow(() => assertScheduleRangeAvailable(second, [broken]));
+});
+
+test('a contract change applies from its own roster: earlier days keep the contract they were published with', () => {
+  const half = { ...nurse, contractPercent: 50 };
+  const recorded = { ...history, contractPercents: { first: { [nurse.id]: 100 } } };
+  const result = resolveNurseHoursBalance(half, second, duties, [], [], periods, recorded);
+  // Full time for October 19 to November 1 (104h, she worked 120h), then half time for this roster (63h)
+  assert.equal(result.cumulativeTargetHours, 167);
+  assert.equal(result.baseTargetHours, 63);
+  assert.equal(result.targetHours, 47);
+  // Without the record (older published versions), today's contract is used
+  assert.equal(resolveNurseHoursBalance(half, second, duties, [], [], periods, history).targetHours, 0);
+});
+
+test('the hours history loads only published rosters of the same period, as published', async () => {
+  const lists: Record<string, any[]> = {
+    schedules: [
+      first,
+      makeSchedule({ id: 'draft', startDate: '2026-10-10', endDate: '2026-10-18', status: 'DRAFT' }),
+      makeSchedule({ id: 'earlier-period', startDate: '2026-09-19', endDate: '2026-10-18', status: 'PUBLISHED' }),
+      second,
+    ],
+    workingHoursPeriods: periods,
+    leaveEntries: [],
+    versions: [
+      { id: 'v1', scheduleId: 'first', number: 2, isPublished: true, timestamp: '1', snapshot: { assignments: previousShifts.slice(0, 5), contractPercents: { n1: 100 } } },
+      { id: 'v0', scheduleId: 'first', number: 1, isPublished: true, timestamp: '0', snapshot: { assignments: previousShifts } },
+    ],
+    assignments: previousShifts, // live draft edits: never read for a published roster with a version
+  };
+  const read: string[] = [];
+  const repo = {
+    list: async (name: string, filter?: { field: string; value: any }) => {
+      read.push(filter ? `${name}:${filter.value}` : name);
+      return (lists[name] || []).filter((x) => !filter || x[filter.field] === filter.value);
+    },
+  } as any;
+  const loaded = await loadHoursHistory(repo, second);
+  assert.deepEqual(loaded.countedScheduleIds, ['first']);
+  assert.equal(loaded.assignments.length, 5, 'the latest published version, not the live shifts');
+  assert.deepEqual(loaded.contractPercents, { first: { n1: 100 } });
+  assert.ok(!read.some((r) => r.startsWith('assignments')), 'no live shifts are read');
+  assert.equal(resolveNurseHoursBalance(nurse, second, duties, [], [], periods, loaded).previousCreditedHours, 60);
 });

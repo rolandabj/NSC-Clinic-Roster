@@ -62,7 +62,8 @@ export interface IRepository {
   bulkUpsert<T extends CollectionName>(
     collection: T,
     items: EntityForCollection<T>[],
-    options?: { replace?: boolean }
+    /** restore: rosters from a backup may overlap each other as they did when it was made. */
+    options?: { replace?: boolean; restore?: boolean }
   ): Promise<void>;
 
   /**

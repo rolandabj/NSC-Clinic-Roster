@@ -87,7 +87,7 @@ export function earlierRostersThisYear(schedule: Schedule, schedules: Schedule[]
   );
 }
 
-type LoadedRoster = { schedule: Schedule; assignments: Assignment[] };
+type LoadedRoster = { schedule: Schedule; assignments: Assignment[]; contractPercents?: Record<string, number> };
 
 /**
  * The earlier rosters' shifts, kept for this browser session. The key holds each
@@ -108,14 +108,14 @@ function cacheKey(schedule: Schedule, earlier: Schedule[]): string {
   return `${schedule.id}|${parts.join('|')}`;
 }
 
-async function loadEarlierRosters(repo: IRepository, earlier: Schedule[]): Promise<LoadedRoster[]> {
+export async function loadEarlierRosters(repo: IRepository, earlier: Schedule[]): Promise<LoadedRoster[]> {
   const rosters = await Promise.all(
     earlier.map(async (s) => {
       const bySchedule = { field: 'scheduleId', operator: '==' as const, value: s.id };
       // The repository takes one filter, so backup copies are read but never counted.
       const versions = (await repo.list('versions', bySchedule)).filter((v) => v.kind !== 'BACKUP');
       const published = latestPublishedVersion(versions);
-      if (published) return { schedule: s, assignments: published.snapshot.assignments };
+      if (published) return { schedule: s, assignments: published.snapshot.assignments || [], contractPercents: published.snapshot.contractPercents };
       if (s.status === 'PUBLISHED') return { schedule: s, assignments: await repo.list('assignments', bySchedule) };
       return null;
     })

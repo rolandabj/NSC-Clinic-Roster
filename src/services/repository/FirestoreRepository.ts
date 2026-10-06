@@ -70,7 +70,8 @@ export class FirestoreRepository implements IRepository {
   private async writeSchedules(
     items: Partial<Schedule>[],
     removeIds: string[] = [],
-    replace = false
+    replace = false,
+    options: { acceptOverlaps?: boolean } = {}
   ): Promise<Schedule[]> {
     const calendarRef = doc(this.db, 'systemMetadata', SCHEDULE_CALENDAR);
     // Bootstrap the index from existing rosters. Once created, every roster
@@ -104,7 +105,7 @@ export class FirestoreRepository implements IRepository {
         if (!d.exists()) delete existing[d.id];
         else existing[d.id] = toScheduleRange({ ...(d.data() as Schedule), id: d.id });
       });
-      const ranges = mergeScheduleRanges(existing, next.map(toScheduleRange));
+      const ranges = mergeScheduleRanges(existing, next.map(toScheduleRange), options);
       for (const id of removeIds) delete ranges[id];
       for (const item of next) transaction.set(doc(this.db, 'schedules', item.id), item);
       for (const id of removeIds) transaction.delete(doc(this.db, 'schedules', id));
@@ -247,7 +248,7 @@ export class FirestoreRepository implements IRepository {
   async bulkUpsert<T extends CollectionName>(
     colName: T,
     items: EntityForCollection<T>[],
-    options?: { replace?: boolean }
+    options?: { replace?: boolean; restore?: boolean }
   ): Promise<void> {
     if (!items || items.length === 0) return;
     // Fail loudly instead of skipping, so the caller can tell the user nothing was saved.
@@ -256,7 +257,7 @@ export class FirestoreRepository implements IRepository {
       if (colName === 'schedules') {
         // A roster import is all or nothing, including its date reservations.
         if (items.length >= BATCH_LIMIT) throw new Error('Import fewer than 450 rosters at a time.');
-        await this.writeSchedules(items as Schedule[], [], options?.replace === true);
+        await this.writeSchedules(items as Schedule[], [], options?.replace === true, { acceptOverlaps: options?.restore === true });
         return;
       }
       if (colName === 'systemMetadata') items = items.filter(item => item.id !== SCHEDULE_CALENDAR);
