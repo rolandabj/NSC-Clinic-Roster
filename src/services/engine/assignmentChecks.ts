@@ -5,16 +5,21 @@
  * Hard rule checks for a single cell, shared by every screen that moves
  * shifts by hand (fairness rebalancing, shift swaps), so they follow the same
  * rules as the scheduling engine:
- *   one duty per day (H4), approved leave and locks (H5), PHL skill (H6),
- *   clinic nurse for doctor and specialty cells, max consecutive days (H2),
- *   minimum rest (H3), consecutive late duties (S1) and the most hours in any
- *   7 days (H9).
+ *   one duty per day (H4), approved leave, locks and approved days off (H5), PHL
+ *   skill (H6), the Nurse Clinic option and blood collection for a Nurse Clinic
+ *   cell, clinic nurse for doctor and specialty cells, max consecutive days (H2),
+ *   minimum rest (H3, 0 = off), consecutive late duties (S1) and the most hours in
+ *   any 7 days (H9). Put the end of the previous roster in `assignments` too, so
+ *   the rules that look back see it. The nurse's list (H8) is checked apart, by
+ *   listProblem, because a planner may agree to an exception.
  * Rules switched off or set to SOFT are not enforced here.
  */
 
-import { Assignment, ClinicalRole, DutyWindow, LeaveEntry, LockEntry, Nurse, Rule } from '../../types';
+import { Assignment, AvailabilityRequest, ClinicalRole, Doctor, DoctorSession, DutyWindow, LeaveEntry, LockEntry, Nurse, Rule, Specialty } from '../../types';
 import { resolveRule, LATE_DUTY_RULE_WORDS } from './SchedulingEngine';
 import { isExclusiveNurseClinic } from './nurseClinicUtils';
+import { bloodCollectionRole, canBeFreeNurse, nurseClinicRoleOf } from './clinicModel';
+import { outsideNurseList } from './nurseList';
 import { heaviestWeekAround, WEEK_HOURS_RULE, weekHoursSetting } from './weekHours';
 import { dutyDurationHours } from '../hours/hoursBalance';
 
@@ -27,6 +32,12 @@ export interface AssignmentCheckContext {
   locks: LockEntry[];
   roles: ClinicalRole[];
   rules: Rule[];
+  /** The nurses' requests: an approved day off is a day off even without its pin (as for the generator). */
+  availabilityRequests?: AvailabilityRequest[];
+  /** For the nurse's list (listProblem). */
+  doctors?: Doctor[];
+  specialties?: Specialty[];
+  sessions?: DoctorSession[];
 }
 
 function shiftDate(isoDate: string, days: number): string {
@@ -86,6 +97,13 @@ export function checkAssignment(ctx: AssignmentCheckContext, cell: Assignment): 
   } else if (lock && !(cell.locked || cell.source === 'LOCK')) {
     reasons.push(`${name} has a pinned shift on ${date}`);
   }
+  // An approved day off request is a day off even without its pin, as for the generator.
+  if (
+    lock?.mode !== 'OFF' &&
+    (ctx.availabilityRequests || []).some((r) => r.nurseId === cell.nurseId && r.date === date && !r.available && r.status === 'APPROVED')
+  ) {
+    reasons.push(`${name} has an approved day off on ${date}`);
+  }
 
   if (nurse) {
     // H6: phlebotomy cells need the PHL skill
@@ -98,6 +116,18 @@ export function checkAssignment(ctx: AssignmentCheckContext, cell: Assignment): 
     // Doctor and specialty cells need a clinic nurse who is not exclusive to the Nurse Clinic
     if ((cell.kind === 'DOCTOR' || cell.kind === 'SPECIALTY') && (!nurse.isClinicNurse || isExclusiveNurseClinic(nurse, ctx.roles))) {
       reasons.push(`${name} cannot be paired with doctor or specialty sessions`);
+    }
+    // A Nurse Clinic cell (as the roster check counts them) needs the Nurse Clinic option and blood collection
+    const nc = nurseClinicRoleOf(ctx.roles);
+    const phl = bloodCollectionRole(ctx.roles);
+    const isNurseClinicCell =
+      cell.kind === 'CLINICAL_ROLE' &&
+      (cell.clinicalRoleId === nc?.id ||
+        cell.clinicalRoleId === 'role-nurse-clinic' ||
+        (!!phl && cell.clinicalRoleId === phl.id) ||
+        !!cell.note?.toLowerCase().includes('nurse clinic'));
+    if (isNurseClinicCell && !canBeFreeNurse(nurse, ctx.roles)) {
+      reasons.push(`${name} cannot run Nurse Clinic (it needs the Nurse Clinic option and blood collection in the profile)`);
     }
   }
 
@@ -117,10 +147,10 @@ export function checkAssignment(ctx: AssignmentCheckContext, cell: Assignment): 
     if (run > max) reasons.push(`${name} would work ${run} days in a row (maximum ${max})`);
   }
 
-  // H3: minimum rest before and after this duty
+  // H3: minimum rest before and after this duty (0 means no minimum, as for the generator)
   const h3 = hardRule(ctx.rules, 'MIN_REST_HOURS', 'rule-h3', ['rest between duties', 'minimum rest']);
-  if (h3.enforced && duty) {
-    const minRest = h3.rule?.value || 11;
+  const minRest = h3.rule?.value ?? 11;
+  if (h3.enforced && duty && minRest > 0) {
     const prevDuty = (byNurseDate.get(shiftDate(date, -1)) || [])
       .map((a) => dutyMap.get(a.dutyWindowId))
       .find(Boolean);
@@ -169,4 +199,19 @@ export function checkAssignment(ctx: AssignmentCheckContext, cell: Assignment): 
   }
 
   return reasons;
+}
+
+/**
+ * The nurse's list (H8) for a doctor or specialty cell: the reason when the cell is
+ * outside it (null when it fits, or the doctors and specialties are not given).
+ * Kept apart from checkAssignment: a planner may swap it in as an agreed exception.
+ */
+export function listProblem(ctx: AssignmentCheckContext, cell: Assignment): string | null {
+  const nurse = ctx.nurses.find((n) => n.id === cell.nurseId);
+  if (!nurse || !ctx.doctors || !ctx.specialties) return null;
+  const outside = outsideNurseList(nurse, cell, { doctors: ctx.doctors, specialties: ctx.specialties, sessions: ctx.sessions || [] });
+  if (!outside) return null;
+  return outside.kind === 'DOCTOR'
+    ? `${outside.name} isn't in ${nurse.fullName}'s list`
+    : `${outside.name} isn't one of ${nurse.fullName}'s specialties`;
 }

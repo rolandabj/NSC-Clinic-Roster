@@ -41,7 +41,7 @@ import { FLOAT_ROLE_ID, isFloatShift } from './floatShift';
 import { LAST_RESORT_NOTE } from './lastResort';
 import { resolveFullTimeTarget, leaveDaysInRange, shiftHoursAllowed } from '../hours/hoursPolicy';
 import { calculateWorkingHoursForDateRange } from '../periods/workingHoursPeriodService';
-import { generateDoctorSessionsForDateRange } from '../schedule/doctorScheduleService';
+import { generateDoctorSessionsForDateRange, missingPatternSessions } from '../schedule/doctorScheduleService';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
 import {
   ClinicSetup,
@@ -242,18 +242,10 @@ export class SchedulingEngine {
         schedule.endDate,
         doctors
       );
-      // Include cancelled sessions here, so a cancelled session is not added back as demand.
-      const existingKeySet = new Set(
-        sessions
-          .filter((s) => s.date >= schedule.startDate && s.date <= schedule.endDate)
-          .map((s) => `${s.doctorId}_${s.date}_${s.startTime}`)
-      );
-      // A doctor day changed or cancelled by hand for that date gets nothing from the pattern.
-      const handChangedDays = new Set(
-        sessions.filter((s) => s.source === 'MANUAL' || s.cancelled).map((s) => `${s.doctorId}_${s.date}`)
-      );
-      const missingRecurring = recurringSessions.filter(
-        (s) => !existingKeySet.has(`${s.doctorId}_${s.date}_${s.startTime}`) && !handChangedDays.has(`${s.doctorId}_${s.date}`)
+      // What filling the roster would add from the weekly pattern (the same rule).
+      const missingRecurring = missingPatternSessions(
+        recurringSessions,
+        sessions.filter((s) => s.date >= schedule.startDate && s.date <= schedule.endDate)
       );
       if (missingRecurring.length > 0) {
         scheduleSessions = [...scheduleSessions, ...missingRecurring];

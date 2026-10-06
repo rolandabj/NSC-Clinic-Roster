@@ -250,6 +250,13 @@ export interface Doctor {
   weeklyPattern: WeeklyPatternSlot[];
   notes?: string;
   active: boolean;
+  /**
+   * The first day of the current week (weeklyPattern) and on/off state; days before
+   * it follow previousWeeklyPattern. Set when a change is applied "from a date".
+   */
+  patternFrom?: IsoDateString;
+  /** The week that applied before patternFrom (empty: no clinics then). */
+  previousWeeklyPattern?: WeeklyPatternSlot[];
 }
 
 // 9. DoctorSession (entered concrete session, never engine-generated)

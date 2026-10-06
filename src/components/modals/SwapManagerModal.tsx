@@ -2,9 +2,12 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Swap dialog: two nurses exchange shifts. Both moved shifts are checked
- * against the clinic rules (rest, leave, pinned days, senior nurse each day)
- * before the swap is saved, and the swap is recorded under the signed in user.
+ * Swap dialog: two nurses exchange shifts. The swap is checked as the roster
+ * check would see it (handMoveChecks): the rules for each moved shift, each
+ * nurse's list of doctors, and the rules about the whole roster, so a swap never
+ * leaves a new or bigger "Must fix". A swap outside a nurse's list is refused unless the
+ * planner agrees to it as an exception (it then shows as "Check"). The swap is
+ * recorded under the signed in user.
  */
 
 import React, { useState, useMemo, useId } from 'react';
@@ -24,38 +27,48 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   Schedule,
   Assignment,
+  AvailabilityRequest,
   Nurse,
   DutyWindow,
-  SeniorityLevel,
   Rule,
   LeaveEntry,
   LockEntry,
   ClinicalRole,
   Doctor,
+  DoctorSession,
   Specialty,
   SwapRequest,
 } from '../../types';
 import { getRepository } from '../../services/repository';
-import { checkAssignment } from '../../services/engine/assignmentChecks';
+import { checkSwap, RosterCheck, SwapCheck, swapNotes } from '../../services/engine/handMoveChecks';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify } from '../common/dialogs';
 import { authService } from '../../services/auth/authService';
-import { resolveRule } from '../../services/engine/SchedulingEngine';
 import { formatDate } from '../../utils/dateUtils';
 import { swapShifts } from '../../services/schedule/shiftMoves';
+
+/** One empty list for absent props, so the checks below aren't redone on every render. */
+const NONE: never[] = [];
 
 interface SwapManagerModalProps {
   schedule: Schedule;
   assignments: Assignment[];
   nurses: Nurse[];
   dutyWindows: DutyWindow[];
-  seniorityLevels: SeniorityLevel[];
   roles: ClinicalRole[];
   doctors: Doctor[];
   specialties: Specialty[];
   leaveEntries: LeaveEntry[];
   locks: LockEntry[];
   rules?: Rule[];
+  /** Doctors' clinics (a doctor without a profile counts the clinic's specialty for the nurse's list). */
+  sessions?: DoctorSession[];
+  /** The nurses' requests: an approved day off is a day off. */
+  availabilityRequests?: AvailabilityRequest[];
+  /** Shifts from the roster just before this one, for rest and days in a row at its start. */
+  priorAssignments?: Assignment[];
+  /** The roster check on a changed list of shifts, with everything else as now. */
+  checkRoster: RosterCheck;
   isOpen: boolean;
   onClose: () => void;
   onApplySwap: (updated: Assignment[], note: string) => void;
@@ -66,13 +79,16 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
   assignments,
   nurses,
   dutyWindows,
-  seniorityLevels,
   roles,
   doctors,
   specialties,
   leaveEntries,
   locks,
-  rules = [],
+  rules = NONE,
+  sessions = NONE,
+  availabilityRequests = NONE,
+  priorAssignments = NONE,
+  checkRoster,
   isOpen,
   onClose,
   onApplySwap,
@@ -96,7 +112,6 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
   const dutyMap = useMemo(() => new Map(dutyWindows.map((d) => [d.id, d])), [dutyWindows]);
   const docMap = useMemo(() => new Map(doctors.map((d) => [d.id, d])), [doctors]);
   const roleMap = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
-  const seniorityMap = useMemo(() => new Map(seniorityLevels.map((s) => [s.id, s])), [seniorityLevels]);
 
   const nurseAAsgns = useMemo(
     () => assignments.filter((a) => a.nurseId === nurseAId).sort((a, b) => a.date.localeCompare(b.date)),
@@ -124,83 +139,68 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
   const selectedAsgnA = useMemo(() => assignments.find((a) => a.id === assignmentAId), [assignments, assignmentAId]);
   const selectedAsgnB = useMemo(() => assignments.find((a) => a.id === assignmentBId), [assignments, assignmentBId]);
 
-  // Validation: Both directions
-  const validation = useMemo(() => {
-    const issuesA: string[] = [];
-    const issuesB: string[] = [];
-    // Shown but not blocking (rules set to "followed when possible").
-    const notes: string[] = [];
+  // The roster check on the roster as it is now, to compare the swap with.
+  const before = useMemo(() => checkRoster(assignments), [checkRoster, assignments]);
 
-    if (!selectedAsgnA || !selectedAsgnB) {
-      return { isValid: false, issuesA: ['Choose a shift for both nurses'], issuesB: [], notes: [] };
+  // Both moved shifts, each nurse's list and the whole roster after the swap.
+  const validation = useMemo<SwapCheck>(() => {
+    const refused = (reason: string): SwapCheck => ({
+      issuesA: [reason],
+      issuesB: [],
+      rosterIssues: [],
+      listA: null,
+      listB: null,
+      checks: [],
+      ok: false,
+      exceptionOnly: false,
+    });
+    if (!selectedAsgnA || !selectedAsgnB || selectedAsgnA.nurseId !== nurseAId || selectedAsgnB.nurseId !== nurseBId) {
+      return refused('Choose a shift for both nurses');
     }
-
-    if (nurseAId === nurseBId) {
-      return { isValid: false, issuesA: ['Choose two different nurses'], issuesB: [], notes: [] };
-    }
-
-    const nurseA = nurseMap.get(nurseAId);
-    const nurseB = nurseMap.get(nurseBId);
-    if (!nurseA || !nurseB) return { isValid: false, issuesA: ['One of these nurses could not be found'], issuesB: [], notes: [] };
-
-    // Pinned shifts cannot be given away
-    const isPinned = (asgn: Assignment) =>
-      asgn.locked ||
-      asgn.source === 'LOCK' ||
-      locks.some((l) => l.nurseId === asgn.nurseId && l.date === asgn.date && l.mode === 'ASSIGNMENT');
-    if (isPinned(selectedAsgnA)) issuesA.push(`${nurseA.fullName}'s shift on ${formatDate(selectedAsgnA.date)} is a pinned day and can't be swapped`);
-    if (isPinned(selectedAsgnB)) issuesB.push(`${nurseB.fullName}'s shift on ${formatDate(selectedAsgnB.date)} is a pinned day and can't be swapped`);
-
-    // Check both moved cells against the roster as it would be after the swap
-    // (same hard rules as the scheduling engine).
-    const movedToA: Assignment = { ...selectedAsgnB, nurseId: nurseAId };
-    const movedToB: Assignment = { ...selectedAsgnA, nurseId: nurseBId };
-    const afterSwap = assignments.map((a) =>
-      a.id === selectedAsgnA.id ? movedToB : a.id === selectedAsgnB.id ? movedToA : a
-    );
-    const ctx = { assignments: afterSwap, nurses, dutyWindows, leaveEntries, locks, roles, rules };
-    issuesA.push(...checkAssignment(ctx, movedToA));
-    issuesB.push(...checkAssignment(ctx, movedToB));
-
-    // One senior nurse on duty each day (the same rule the roster check uses):
-    // the swap may not take away the only senior nurse on either day.
-    const seniorRule = resolveRule(rules, 'SENIOR_ON_DUTY', 'rule-h1', ['senior nurse', 'senior on duty']);
-    if (!seniorRule || seniorRule.enabled !== false) {
-      const isSenior = (nurseId: string) => {
-        const level = seniorityMap.get(nurseMap.get(nurseId)?.seniorityLevelId || '');
-        return !!level?.isSenior;
-      };
-      const hasSenior = (list: Assignment[], date: string) => list.some((a) => a.date === date && isSenior(a.nurseId));
-      const lostSenior = (date: string) => hasSenior(assignments, date) && !hasSenior(afterSwap, date);
-      // A rule set to "followed when possible" only warns, as in the roster check.
-      const blocking = seniorRule?.severity !== 'SOFT';
-      if (lostSenior(selectedAsgnA.date)) {
-        (blocking ? issuesA : notes).push(
-          `After the swap there would be no senior nurse on duty on ${formatDate(selectedAsgnA.date)}. Each day needs one senior nurse.`
-        );
-      }
-      if (selectedAsgnB.date !== selectedAsgnA.date && lostSenior(selectedAsgnB.date)) {
-        (blocking ? issuesB : notes).push(
-          `After the swap there would be no senior nurse on duty on ${formatDate(selectedAsgnB.date)}. Each day needs one senior nurse.`
-        );
-      }
-    }
-
-    return {
-      isValid: issuesA.length === 0 && issuesB.length === 0,
-      issuesA,
-      issuesB,
-      notes,
-    };
-  }, [selectedAsgnA, selectedAsgnB, nurseAId, nurseBId, nurseMap, seniorityMap, locks, leaveEntries, assignments, nurses, dutyWindows, roles, rules]);
+    if (nurseAId === nurseBId) return refused('Choose two different nurses');
+    if (!nurseMap.get(nurseAId) || !nurseMap.get(nurseBId)) return refused('One of these nurses could not be found');
+    return checkSwap({
+      assignments,
+      prior: priorAssignments,
+      shiftA: selectedAsgnA,
+      shiftB: selectedAsgnB,
+      ctx: { nurses, dutyWindows, leaveEntries, locks, roles, rules, availabilityRequests, doctors, specialties, sessions },
+      checkRoster,
+      before,
+    });
+  }, [
+    selectedAsgnA,
+    selectedAsgnB,
+    nurseAId,
+    nurseBId,
+    nurseMap,
+    assignments,
+    priorAssignments,
+    nurses,
+    dutyWindows,
+    leaveEntries,
+    locks,
+    roles,
+    rules,
+    availabilityRequests,
+    doctors,
+    specialties,
+    sessions,
+    checkRoster,
+    before,
+  ]);
+  /** What the swap would break in each nurse's list (for the exception). */
+  const listReasons = [validation.listA, validation.listB].filter((r): r is string => !!r);
 
   const titleId = useId();
   const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
 
   if (!isOpen) return null;
 
-  const handleExecuteSwap = async () => {
-    if (!selectedAsgnA || !selectedAsgnB || !validation.isValid) return;
+  /** Saves the swap; `asException` when the planner agreed to it outside a nurse's list. */
+  const handleExecuteSwap = async (asException = false) => {
+    if (!selectedAsgnA || !selectedAsgnB) return;
+    if (!(validation.ok || (asException && validation.exceptionOnly))) return;
     setIsExecuting(true);
 
     try {
@@ -210,12 +210,17 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
       const user = authService.getCurrentUser();
       const recordedBy = user?.name || user?.email || 'Planner';
       const reasonText = swapReason.trim() || 'agreed between the nurses';
+      // A shift taken outside the nurse's list is marked, so the roster check shows it as Check.
+      const exception = { toA: asException && !!validation.listA, toB: asException && !!validation.listB };
+      const exceptionText = asException ? ` as an agreed exception (${listReasons.join('; ')})` : '';
 
       // Both shifts change nurse, so both get new ids (see shiftMoves).
-      const updatedAssignments = swapShifts(assignments, selectedAsgnA, selectedAsgnB, {
-        a: `Swapped with ${nurseA?.fullName}. Reason: ${reasonText}`,
-        b: `Swapped with ${nurseB?.fullName}. Reason: ${reasonText}`,
-      });
+      const updatedAssignments = swapShifts(
+        assignments,
+        selectedAsgnA,
+        selectedAsgnB,
+        swapNotes(nurseA?.fullName || 'the first nurse', nurseB?.fullName || 'the second nurse', reasonText, exception)
+      );
 
       // Record SwapRequest and AuditEvent
       const repo = getRepository();
@@ -248,13 +253,15 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
         entityId: `${selectedAsgnA.id}<->${selectedAsgnB.id}`,
         before: { nurseA: nurseAId, nurseB: nurseBId },
         after: { nurseA: nurseBId, nurseB: nurseAId },
-        note: `Shift swap between ${nurseA?.fullName} and ${nurseB?.fullName}, recorded by ${recordedBy}: ${reasonText}`,
+        note: `Shift swap between ${nurseA?.fullName} and ${nurseB?.fullName}${exceptionText}, recorded by ${recordedBy}: ${reasonText}`,
         timestamp: nowIso,
       });
 
       onApplySwap(
         updatedAssignments,
-        `Swapped shifts between ${nurseA?.fullName} (${formatDate(selectedAsgnA.date)}) and ${nurseB?.fullName} (${formatDate(selectedAsgnB.date)})`
+        `Swapped shifts between ${nurseA?.fullName} (${formatDate(selectedAsgnA.date)}) and ${nurseB?.fullName} (${formatDate(selectedAsgnB.date)})${
+          asException ? ' as an agreed exception' : ''
+        }`
       );
       onClose();
     } catch (err: any) {
@@ -382,6 +389,14 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
                     <div key={i}>• {msg}</div>
                   ))}
                 </div>
+              ) : validation.listA ? (
+                <div className="p-2.5 bg-amber-50 border border-amber-300 rounded text-amber-900 text-[11px] space-y-1">
+                  <div className="font-bold flex items-center gap-1">
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
+                    <span>Outside the list:</span>
+                  </div>
+                  <div>• {validation.listA}</div>
+                </div>
               ) : (
                 <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-emerald-800 text-[11px] flex items-center gap-1.5 font-medium">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
@@ -445,6 +460,14 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
                     <div key={i}>• {msg}</div>
                   ))}
                 </div>
+              ) : validation.listB ? (
+                <div className="p-2.5 bg-amber-50 border border-amber-300 rounded text-amber-900 text-[11px] space-y-1">
+                  <div className="font-bold flex items-center gap-1">
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
+                    <span>Outside the list:</span>
+                  </div>
+                  <div>• {validation.listB}</div>
+                </div>
               ) : (
                 <div className="p-2 bg-emerald-50 border border-emerald-200 rounded text-emerald-800 text-[11px] flex items-center gap-1.5 font-medium">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" />
@@ -470,11 +493,33 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
           </div>
         </div>
 
-        {validation.notes.length > 0 && (
-          <div role="status" className="mx-4 mb-3 p-2.5 rounded border border-amber-200 bg-amber-50 text-amber-900 text-xs space-y-1">
-            {validation.notes.map((msg, i) => (
-              <p key={i}>{msg} You can still swap, because this rule is followed when possible.</p>
+        {validation.rosterIssues.length > 0 && (
+          <div className="mx-4 mb-3 p-2.5 rounded border border-rose-200 bg-rose-50 text-rose-800 text-xs space-y-1">
+            <p className="font-bold">Can't swap: the roster check would show a new Must fix, or make one bigger.</p>
+            {validation.rosterIssues.slice(0, 4).map((msg, i) => (
+              <p key={i}>• {msg}</p>
             ))}
+            {validation.rosterIssues.length > 4 && <p>And {validation.rosterIssues.length - 4} more.</p>}
+          </div>
+        )}
+
+        {validation.exceptionOnly && (
+          <div className="mx-4 mb-3 p-2.5 rounded border border-amber-300 bg-amber-50 text-amber-900 text-xs space-y-1">
+            <p className="font-bold">{listReasons.join('. ')}.</p>
+            <p>
+              Nurses work only with the doctors and specialties in their list, so this swap is refused unless you agree to it as an
+              exception. The shift is then marked as an agreed exception, and the roster check shows it as Check, not Must fix.
+            </p>
+          </div>
+        )}
+
+        {validation.checks.length > 0 && (
+          <div role="status" className="mx-4 mb-3 p-2.5 rounded border border-amber-200 bg-amber-50 text-amber-900 text-xs space-y-1">
+            <p className="font-semibold">After the swap the roster check will show (Check, not Must fix):</p>
+            {validation.checks.slice(0, 4).map((msg, i) => (
+              <p key={i}>• {msg}</p>
+            ))}
+            {validation.checks.length > 4 && <p>And {validation.checks.length - 4} more.</p>}
           </div>
         )}
 
@@ -488,15 +533,27 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             Cancel
           </button>
 
-          <button
-            type="button"
-            disabled={!validation.isValid || isExecuting}
-            onClick={handleExecuteSwap}
-            className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40 transition-colors"
-          >
-            <ArrowLeftRight className="w-4 h-4" aria-hidden="true" />
-            <span>Swap shifts</span>
-          </button>
+          {validation.exceptionOnly ? (
+            <button
+              type="button"
+              disabled={isExecuting}
+              onClick={() => handleExecuteSwap(true)}
+              className="inline-flex items-center gap-1.5 px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40 transition-colors"
+            >
+              <ArrowLeftRight className="w-4 h-4" aria-hidden="true" />
+              <span>Swap anyway as an exception</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={!validation.ok || isExecuting}
+              onClick={() => handleExecuteSwap()}
+              className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40 transition-colors"
+            >
+              <ArrowLeftRight className="w-4 h-4" aria-hidden="true" />
+              <span>Swap shifts</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

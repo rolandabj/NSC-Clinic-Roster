@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  * 
  * Fairness dialog: how hours, weekends, holidays and late shifts are shared
- * between nurses, and suggested shift moves that even them out.
+ * between nurses, and suggested shift moves that even them out. The moves are
+ * checked as the roster check would see them (handMoveChecks): never outside a
+ * nurse's list, and never leaving a new or bigger "Must fix".
  */
 
 import type { HoursHistory } from '../../services/hours/hoursBalance';
@@ -29,7 +31,10 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   Schedule,
   Assignment,
+  AvailabilityRequest,
   Nurse,
+  Doctor,
+  DoctorSession,
   DutyWindow,
   PublicHoliday,
   SeniorityLevel,
@@ -39,10 +44,11 @@ import {
   LeaveEntry,
   LockEntry,
   ClinicalRole,
+  Specialty,
 } from '../../types';
 import { getRepository } from '../../services/repository';
 import { formatDate } from '../../utils/dateUtils';
-import { checkAssignment } from '../../services/engine/assignmentChecks';
+import { MoveSuggestion, newFindings, rebalancedFields, RosterCheck, suggestMoves } from '../../services/engine/handMoveChecks';
 import { isLateDuty, lateDutyThreshold } from '../../services/engine/SchedulingEngine';
 import { loadYearToDate, YearToDate } from '../../services/fairness/yearToDate';
 import { useDialogA11y } from '../common/useDialogA11y';
@@ -64,6 +70,16 @@ interface FairnessModalProps {
   leaveTypes?: LeaveType[];
   workingHoursPeriods?: WorkingHoursPeriod[];
   hoursHistory?: HoursHistory;
+  /** For the nurses' lists: a move never gives a nurse a doctor outside it. */
+  doctors?: Doctor[];
+  specialties?: Specialty[];
+  sessions?: DoctorSession[];
+  /** The nurses' requests: an approved day off is a day off. */
+  availabilityRequests?: AvailabilityRequest[];
+  /** Shifts from the roster just before this one, for rest and days in a row at its start. */
+  priorAssignments?: Assignment[];
+  /** The roster check on a changed list of shifts, with everything else as now. */
+  checkRoster: RosterCheck;
   isOpen: boolean;
   onClose: () => void;
   onApplyAssignments: (updated: Assignment[], note: string) => void;
@@ -80,16 +96,10 @@ export interface NurseFairnessMetrics {
   lateEndsCount: number;
 }
 
-export interface ProposedSwap {
-  id: string;
-  date: string;
-  dutyName: string;
-  overloadedNurse: Nurse;
-  underloadedNurse: Nurse;
-  assignmentA: Assignment;
-  assignmentB?: Assignment;
-  reason: string;
-}
+export type ProposedSwap = MoveSuggestion;
+
+/** One empty list for absent props, so the suggestions aren't worked out again on every render. */
+const NONE: never[] = [];
 
 export const FairnessModal: React.FC<FairnessModalProps> = ({
   schedule,
@@ -100,14 +110,20 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
   seniorityLevels,
   leaveEntries,
   locks,
-  roles = [],
-  rules = [],
+  roles = NONE,
+  rules = NONE,
   isOpen,
   onClose,
   onApplyAssignments,
-  leaveTypes = [],
-  workingHoursPeriods = [],
+  leaveTypes = NONE,
+  workingHoursPeriods = NONE,
   hoursHistory,
+  doctors = NONE,
+  specialties = NONE,
+  sessions = NONE,
+  availabilityRequests = NONE,
+  priorAssignments = NONE,
+  checkRoster,
 }) => {
   const [activeTab, setActiveTab] = useState<'METRICS' | 'REBALANCE'>('METRICS');
   const [selectedSwaps, setSelectedSwaps] = useState<Set<string>>(new Set());
@@ -247,63 +263,50 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
     return Math.max(10, Math.min(100, Math.round(score)));
   }, [metrics]);
 
-  // Generate safe parity swaps for Rebalance mode
-  const proposedSwaps = useMemo<ProposedSwap[]>(() => {
-    if (metrics.length < 2) return [];
-
-    // Sort by hoursDelta descending
-    const sorted = [...metrics].sort((a, b) => b.hoursDelta - a.hoursDelta);
-    const overloaded = sorted.filter((m) => m.hoursDelta > 4 || m.lateEndsCount >= 4);
-    const underloaded = sorted.filter((m) => m.hoursDelta < -4 || m.lateEndsCount <= 1);
-
-    const swaps: ProposedSwap[] = [];
-    // Each proposal is checked against the roster as it would be after the
-    // proposals before it, so two proposals never double book a nurse.
-    let working = [...assignments];
-    const usedAssignmentIds = new Set<string>();
-
-    for (const over of overloaded) {
-      for (const under of underloaded) {
-        if (over.nurse.id === under.nurse.id) continue;
-
-        const candidates = working.filter(
-          (a) => a.nurseId === over.nurse.id && a.source !== 'LOCK' && !a.locked && !usedAssignmentIds.has(a.id)
-        );
-
-        for (const asgn of candidates) {
-          const moved: Assignment = { ...asgn, nurseId: under.nurse.id };
-          const next = working.map((a) => (a.id === asgn.id ? moved : a));
-          const problems = checkAssignment(
-            { assignments: next, nurses, dutyWindows, leaveEntries, locks, roles, rules },
-            moved
-          );
-          if (problems.length > 0) continue;
-
-          working = next;
-          usedAssignmentIds.add(asgn.id);
-          const dw = dutyMap.get(asgn.dutyWindowId);
-          swaps.push({
-            id: `swap-${asgn.id}-${under.nurse.id}`,
-            date: asgn.date,
-            dutyName: dw ? `${dw.name} (${dw.startTime}–${dw.endTime})` : 'Shift',
-            overloadedNurse: over.nurse,
-            underloadedNurse: under.nurse,
-            assignmentA: asgn,
-            reason:
-              over.hoursDelta > 0
-                ? `${over.nurse.fullName} is ${over.hoursDelta}h over their goal`
-                : `${over.nurse.fullName} has many late shifts`,
-          });
-
-          if (swaps.length >= 6) break;
-        }
-        if (swaps.length >= 6) break;
-      }
-      if (swaps.length >= 6) break;
-    }
-
-    return swaps;
-  }, [metrics, assignments, dutyMap, locks, leaveEntries, nurses, dutyWindows, roles, rules]);
+  // Suggested moves, worked out once their tab is first opened (and again when the roster
+  // changes): each one runs the roster check, which takes a moment on a big roster.
+  // Null while that runs.
+  const [proposedSwaps, setProposedSwaps] = useState<ProposedSwap[] | null>(null);
+  const [suggestionsOpened, setSuggestionsOpened] = useState(false);
+  useEffect(() => {
+    if (!isOpen || !suggestionsOpened) return;
+    setProposedSwaps(null);
+    // A moment first, so "Checking…" shows before the work starts.
+    const timer = setTimeout(() => {
+      const sorted = [...metrics].sort((a, b) => b.hoursDelta - a.hoursDelta);
+      const list =
+        metrics.length < 2
+          ? []
+          : suggestMoves({
+              overloaded: sorted.filter((m) => m.hoursDelta > 4 || m.lateEndsCount >= 4),
+              underloaded: sorted.filter((m) => m.hoursDelta < -4 || m.lateEndsCount <= 1),
+              assignments,
+              prior: priorAssignments,
+              ctx: { nurses, dutyWindows, leaveEntries, locks, roles, rules, availabilityRequests, doctors, specialties, sessions },
+              checkRoster,
+            });
+      setProposedSwaps(list);
+      setSelectedSwaps(new Set(list.map((s) => s.id)));
+    }, 30);
+    return () => clearTimeout(timer);
+  }, [
+    isOpen,
+    suggestionsOpened,
+    metrics,
+    assignments,
+    priorAssignments,
+    nurses,
+    dutyWindows,
+    leaveEntries,
+    locks,
+    roles,
+    rules,
+    availabilityRequests,
+    doctors,
+    specialties,
+    sessions,
+    checkRoster,
+  ]);
 
   const titleId = useId();
   const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
@@ -311,10 +314,21 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
   if (!isOpen) return null;
 
   const handleApplyRebalance = async () => {
-    const swapsToApply = proposedSwaps.filter((s) => selectedSwaps.has(s.id));
+    const swapsToApply = (proposedSwaps || []).filter((s) => selectedSwaps.has(s.id));
     if (swapsToApply.length === 0) return;
     const n = swapsToApply.length;
     const nurseCount = new Set(swapsToApply.flatMap((s) => [s.overloadedNurse.id, s.underloadedNurse.id])).size;
+    const updated = assignments.map((a) => {
+      const swap = swapsToApply.find((s) => s.assignmentA.id === a.id);
+      // A moved shift gets a new id (see shiftMoves).
+      return swap ? moveShift(a, swap.underloadedNurse.id, rebalancedFields(swap.overloadedNurse)) : a;
+    });
+    // The moves were checked one after the other; the ones chosen are checked again together.
+    const added = newFindings(checkRoster(assignments), checkRoster(updated), 'ERROR');
+    if (added.length > 0) {
+      notify(`These moves together would add a Must fix, or make one bigger: ${added[0].message} Untick a move and try again.`, 'error');
+      return;
+    }
     const ok = await confirmDialog({
       title: 'Move these shifts?',
       message: `${n} shift${n === 1 ? '' : 's'} will move to another nurse (${nurseCount} nurses affected). You can undo this afterwards.`,
@@ -323,19 +337,6 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
     if (!ok) return;
     setIsApplying(true);
     try {
-
-      const updated = assignments.map((a) => {
-        const swap = swapsToApply.find((s) => s.assignmentA.id === a.id);
-        // A moved shift gets a new id (see shiftMoves).
-        if (swap) {
-          return moveShift(a, swap.underloadedNurse.id, {
-            source: 'GENERATED',
-            note: `Rebalanced from ${swap.overloadedNurse.fullName}`,
-          });
-        }
-        return a;
-      });
-
       // Audit entry
       const repo = getRepository();
       await repo.create('audit', {
@@ -435,7 +436,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
               type="button"
               onClick={() => {
                 setActiveTab('REBALANCE');
-                setSelectedSwaps(new Set(proposedSwaps.map((s) => s.id)));
+                setSuggestionsOpened(true);
               }}
               className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1 ${
                 activeTab === 'REBALANCE'
@@ -444,7 +445,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
               }`}
             >
               <Sparkles className="w-3 h-3" aria-hidden="true" />
-              <span>Suggested changes ({proposedSwaps.length})</span>
+              <span>Suggested changes{proposedSwaps ? ` (${proposedSwaps.length})` : ''}</span>
             </button>
           </div>
         </div>
@@ -542,11 +543,15 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
                   <span>Suggested shift moves</span>
                 </div>
                 <p className="text-indigo-900 text-[11px] leading-relaxed">
-                  These move a shift from a nurse with too many hours or many late shifts to a nurse with fewer. Each move is checked against the rules that are never broken, and the nurse must be able to do the shift. Pinned shifts are never moved.
+                  These move a shift from a nurse with too many hours or many late shifts to a nurse with fewer. Each move is checked as the roster check would see it: the nurse must be able to do the shift, the doctor must be in their list, and the move never leaves a new or bigger Must fix. Pinned shifts are never moved.
                 </p>
               </div>
 
-              {proposedSwaps.length > 0 ? (
+              {proposedSwaps === null ? (
+                <p className="p-8 border border-slate-200 rounded text-center text-slate-500 text-xs" role="status">
+                  Checking the suggestions against the roster…
+                </p>
+              ) : proposedSwaps.length > 0 ? (
                 <div className="space-y-2">
                   <span className="font-bold text-slate-800 block text-xs">
                     Suggested moves ({proposedSwaps.length}):
@@ -620,7 +625,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
             Close
           </button>
 
-          {activeTab === 'REBALANCE' && proposedSwaps.length > 0 && (
+          {activeTab === 'REBALANCE' && !!proposedSwaps && proposedSwaps.length > 0 && (
             <button
               type="button"
               disabled={selectedSwaps.size === 0 || isApplying}

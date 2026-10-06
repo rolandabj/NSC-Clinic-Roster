@@ -1,6 +1,6 @@
 import { HoursHistory, hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
 import { loadHoursHistory } from '../../services/hours/hoursHistoryService';
-import React, { useState, useEffect, useRef, useId } from 'react';
+import React, { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog } from '../common/dialogs';
 import {
@@ -499,6 +499,37 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       )
     );
   };
+
+  /**
+   * The roster check on another list of shifts, with everything else as now: the swap
+   * and fairness dialogs compare it with the roster as it is, so a move they allow
+   * never leaves a new Must fix. A new function only when what the check reads changes
+   * (the clinic setup changes with the hours history).
+   */
+  const checkRoster = useCallback(
+    (list: Assignment[]) =>
+      activeSchedule
+        ? ScheduleValidator.validate(
+            activeSchedule,
+            list,
+            nurses,
+            seniorityLevels,
+            dutyWindows,
+            sessions,
+            leaveEntries,
+            locks,
+            roles,
+            rules,
+            workingHoursPeriods,
+            specialties,
+            doctors,
+            leaveTypes,
+            clinicSetupRef.current,
+            availabilityRequests
+          ).findings
+        : [],
+    [activeSchedule, nurses, seniorityLevels, dutyWindows, sessions, leaveEntries, locks, roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes, availabilityRequests, hoursHistory]
+  );
 
   /**
    * Opens one roster: loads its shifts and versions, resets undo and the
@@ -2917,6 +2948,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rules={rules}
           leaveTypes={leaveTypes}
           workingHoursPeriods={workingHoursPeriods}
+          doctors={doctors}
+          specialties={specialties}
+          sessions={sessions}
+          availabilityRequests={availabilityRequests}
+          priorAssignments={clinicSetupRef.current?.priorAssignments}
+          checkRoster={checkRoster}
           isOpen={isFairnessModalOpen}
           onClose={() => setIsFairnessModalOpen(false)}
           onApplyAssignments={(updated, note) => {
@@ -2954,13 +2991,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           assignments={assignments}
           nurses={nurses}
           dutyWindows={dutyWindows}
-          seniorityLevels={seniorityLevels}
           roles={roles}
           doctors={doctors}
           specialties={specialties}
           leaveEntries={leaveEntries}
           locks={locks}
           rules={rules}
+          sessions={sessions}
+          availabilityRequests={availabilityRequests}
+          priorAssignments={clinicSetupRef.current?.priorAssignments}
+          checkRoster={checkRoster}
           isOpen={isSwapModalOpen}
           onClose={() => setIsSwapModalOpen(false)}
           onApplySwap={(updated, note) => {

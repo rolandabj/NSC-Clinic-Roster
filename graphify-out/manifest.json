@@ -174,9 +174,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/FairnessModal.tsx": {
-    "mtime": 1791292166.6046767,
-    "seen": 1791292813.2780604,
-    "ast_hash": "fa209145b6966ae3d58f6437bbb279d5",
+    "mtime": 1791298047.5538988,
+    "seen": 1791298307.8204737,
+    "ast_hash": "46f01b4bec6e6536d9927b28d4c9bd43",
     "semantic_hash": ""
   },
   "src/components/modals/NurseTimesheetModal.tsx": {
@@ -204,9 +204,9 @@
     "semantic_hash": "15469add51776221188fd0442b9fcf68"
   },
   "src/components/modals/SwapManagerModal.tsx": {
-    "mtime": 1791286444.0640364,
-    "seen": 1791287116.8539014,
-    "ast_hash": "e6555ca534ef6c6c0aeca5559ee9c56c",
+    "mtime": 1791298047.553218,
+    "seen": 1791298307.8204808,
+    "ast_hash": "0eeb67fd04cbb9f0ac142b0ff144a9b4",
     "semantic_hash": ""
   },
   "src/components/modals/TemplateModal.tsx": {
@@ -258,9 +258,9 @@
     "semantic_hash": "4c2c62984ee0483cd6eae5986a19910b"
   },
   "src/components/views/AvailabilityView.tsx": {
-    "mtime": 1791293877.1459532,
-    "seen": 1791294506.9306176,
-    "ast_hash": "2afc4ce1b3f097f17f858ecdc5809db6",
+    "mtime": 1791296345.0384727,
+    "seen": 1791298307.8204968,
+    "ast_hash": "651538d56279778195a1e7b034da0cbf",
     "semantic_hash": ""
   },
   "src/components/views/DashboardView.tsx": {
@@ -270,10 +270,10 @@
     "semantic_hash": ""
   },
   "src/components/views/DoctorsView.tsx": {
-    "mtime": 1791283082.6584775,
-    "seen": 1791287116.8539188,
-    "ast_hash": "a763257c4e18e4cfc42f672a27230cf4",
-    "semantic_hash": "a763257c4e18e4cfc42f672a27230cf4"
+    "mtime": 1791298214.6164846,
+    "seen": 1791298307.8204987,
+    "ast_hash": "595c02824028c20beff7a6dc8315cb61",
+    "semantic_hash": ""
   },
   "src/components/views/HistoryView.tsx": {
     "mtime": 1791286326.9799573,
@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791294043.3032143,
-    "seen": 1791294506.9306347,
-    "ast_hash": "b4f68a821e059cf0cd4b503a0958c911",
+    "mtime": 1791297556.9256926,
+    "seen": 1791298307.820509,
+    "ast_hash": "2b7cef6e5cf188f8e9b15a4527032b2f",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -450,15 +450,15 @@
     "semantic_hash": "7f14f9df033240b364eb865b54a94258"
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1791292679.383228,
-    "seen": 1791292813.2781389,
-    "ast_hash": "508fd8eec03ed7eed917f7f18675d5d7",
+    "mtime": 1791296773.0499864,
+    "seen": 1791298307.820549,
+    "ast_hash": "692ea9c61848d408279f7563b957b464",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
-    "mtime": 1791291666.6222098,
-    "seen": 1791292813.27814,
-    "ast_hash": "2f47a83260deb0a22ac629f16be94e6b",
+    "mtime": 1791296940.6336997,
+    "seen": 1791298307.8205507,
+    "ast_hash": "3b61e9bb5a145e0dacc6e6314c830611",
     "semantic_hash": ""
   },
   "src/services/engine/clinicModel.ts": {
@@ -606,10 +606,10 @@
     "semantic_hash": ""
   },
   "src/services/schedule/doctorScheduleService.ts": {
-    "mtime": 1791283082.6789296,
-    "seen": 1791287116.8540504,
-    "ast_hash": "596635e3c554e423aa9e7a350b5b3112",
-    "semantic_hash": "596635e3c554e423aa9e7a350b5b3112"
+    "mtime": 1791296773.0483997,
+    "seen": 1791298307.8206036,
+    "ast_hash": "693f66e09efd9314dae7ecf828cba347",
+    "semantic_hash": ""
   },
   "src/services/schedule/openSchedule.ts": {
     "mtime": 1791283082.6795652,
@@ -642,15 +642,15 @@
     "semantic_hash": ""
   },
   "src/services/validation/ScheduleValidator.ts": {
-    "mtime": 1791294300.397186,
-    "seen": 1791294506.9307766,
-    "ast_hash": "1241cc6f29548db617a72843fe298611",
+    "mtime": 1791298033.5826464,
+    "seen": 1791298307.820614,
+    "ast_hash": "e18eaaaf800c1c30b3240e81d4015c7f",
     "semantic_hash": ""
   },
   "src/types/index.ts": {
-    "mtime": 1791293904.27327,
-    "seen": 1791294506.9307778,
-    "ast_hash": "3cbd09fd2a8eaff6dca3e76d46f09fce",
+    "mtime": 1791296509.460669,
+    "seen": 1791298307.820615,
+    "ast_hash": "58d80c552e9f8f6c79bae876890b55d9",
     "semantic_hash": ""
   },
   "src/types/navigation.ts": {
@@ -822,9 +822,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/WhoCanCover.tsx": {
-    "mtime": 1791283082.6707234,
-    "seen": 1791287116.853954,
-    "ast_hash": "c3938ea6bbb23aa8061dd8a88692c8ca",
+    "mtime": 1791297583.296143,
+    "seen": 1791298307.8205361,
+    "ast_hash": "f48bd7a2ab8a488b5c81218b54bc6c28",
     "semantic_hash": ""
   },
   "src/components/workbook/grid/QuickCellPopup.tsx": {
@@ -846,15 +846,15 @@
     "semantic_hash": ""
   },
   "src/services/engine/explainCell.ts": {
-    "mtime": 1791291666.6228795,
-    "seen": 1791292813.2781444,
-    "ast_hash": "7e6c73c20f62926d589bc2f09ab2d1bd",
+    "mtime": 1791297573.0082834,
+    "seen": 1791298307.8205538,
+    "ast_hash": "4e9d8db3b6a09133a59dbd999dfa7b34",
     "semantic_hash": ""
   },
   "src/services/engine/leaveStatus.ts": {
-    "mtime": 1791283082.6753917,
-    "seen": 1791287116.8539758,
-    "ast_hash": "078cc3958ef851d4ac6cfc82fff6162f",
+    "mtime": 1791296344.9586723,
+    "seen": 1791298307.820559,
+    "ast_hash": "4620cc9c83bc93a7b4c67450437c9ff9",
     "semantic_hash": ""
   },
   "src/services/engine/preferenceOrder.ts": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791294703.5198557,
-    "seen": 1791294708.9733224,
-    "ast_hash": "6d7e3f6278ceccdf4ac1a74836722b91",
+    "mtime": 1791298298.7612755,
+    "seen": 1791298307.8206913,
+    "ast_hash": "0bb170245026cd50531ef6895c487b10",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1002,9 +1002,9 @@
     "semantic_hash": ""
   },
   "src/services/export/analysisExportService.ts": {
-    "mtime": 1791293954.5867164,
-    "seen": 1791294506.930721,
-    "ast_hash": "b8d87c205294a8c27cf925a8d692d42f",
+    "mtime": 1791296624.3573399,
+    "seen": 1791298307.8205664,
+    "ast_hash": "6c52995e5a7dcb67edf24fe4ec329b88",
     "semantic_hash": ""
   },
   "tests/unit/analysisExport.test.ts": {
@@ -1086,9 +1086,9 @@
     "semantic_hash": ""
   },
   "src/services/engine/lastResort.ts": {
-    "mtime": 1791283082.6753917,
-    "seen": 1791287116.8539748,
-    "ast_hash": "9cbec70830069dd12fbed933023f84be",
+    "mtime": 1791297593.028865,
+    "seen": 1791298307.820558,
+    "ast_hash": "9fe27509d76584911a8ec0cfa5ca3424",
     "semantic_hash": ""
   },
   "tests/unit/lastResort.test.ts": {
@@ -1335,6 +1335,36 @@
     "mtime": 1791294121.1561098,
     "seen": 1791294506.93082,
     "ast_hash": "c2c389e199f78f1f24bb7711b1020e79",
+    "semantic_hash": ""
+  },
+  "src/components/modals/DoctorWeekChangeDialog.tsx": {
+    "mtime": 1791296661.222691,
+    "seen": 1791298307.8204665,
+    "ast_hash": "55faae3e496868645db851f102136fca",
+    "semantic_hash": ""
+  },
+  "src/services/engine/handMoveChecks.ts": {
+    "mtime": 1791298372.0956059,
+    "seen": 1791298391.5703127,
+    "ast_hash": "54241b97e7a8fc90175855c4bcc881fa",
+    "semantic_hash": ""
+  },
+  "src/services/engine/nurseList.ts": {
+    "mtime": 1791297593.0283916,
+    "seen": 1791298307.8205612,
+    "ast_hash": "13195296142b3dab3e953c08e144454e",
+    "semantic_hash": ""
+  },
+  "tests/unit/doctorWeekChange.test.ts": {
+    "mtime": 1791297604.1000304,
+    "seen": 1791298307.820644,
+    "ast_hash": "dae695143939fb77420edd1c85e9ea00",
+    "semantic_hash": ""
+  },
+  "tests/unit/handMoves.test.ts": {
+    "mtime": 1791298081.0348773,
+    "seen": 1791298307.8206508,
+    "ast_hash": "70770093fbc1f5bb70fdb7ab6c65ea18",
     "semantic_hash": ""
   }
 }

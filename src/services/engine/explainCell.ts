@@ -52,7 +52,10 @@ export interface ExplainDayInput {
   doctors?: Doctor[];
   /** Shifts from the roster just before this one, for rest and days in a row at its start. */
   priorAssignments?: Assignment[];
-  /** The nurses' requests for this roster (a day off or a shift). Wishes only: they never block a shift. */
+  /**
+   * The nurses' requests for this roster (a day off or a shift). An approved day off
+   * is a day off, as for the generator; the others are wishes and never block a shift.
+   */
   availabilityRequests?: AvailabilityRequest[];
 }
 
@@ -181,6 +184,7 @@ function plainReason(
   if (/^has a day off lock/.test(text)) {
     return ctx.lockNote ? `Has a pinned day off (${ctx.lockNote}).` : 'Has a pinned day off.';
   }
+  if (/^has an approved day off/.test(text)) return 'Has an approved day off.';
   if (/^has a pinned shift/.test(text)) {
     return ctx.lockedDuty ? `This day is pinned to the ${ctx.lockedDuty.name} shift.` : 'This day is pinned to another shift.';
   }
@@ -241,7 +245,8 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
     isSenior,
   };
 
-  // Requests and leave waiting for approval are wishes: noted, never blocking.
+  // Requests and leave waiting for approval are wishes: noted, never blocking (an approved
+  // day off is the exception: the shared check below treats it as a day off).
   const request = requestOn(input.availabilityRequests, nurseId, date);
   const wantedDuty = request?.available && request.preferredDutyWindowId ? dutyMap.get(request.preferredDutyWindowId) : undefined;
   const waitingLeave = pendingLeaveOn(leaveEntries, nurseId, date);
@@ -312,6 +317,7 @@ export function explainNurseDay(input: ExplainNurseDayInput): NurseDayExplanatio
       locks,
       roles,
       rules,
+      availabilityRequests: input.availabilityRequests,
     };
     const hard = checkAssignment(ctx, cell);
     if (hard.length > 0) {

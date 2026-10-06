@@ -33,9 +33,19 @@ import {
   IsoDateString,
   SeniorityLevel,
   ClinicalRole,
+  Schedule,
+  PublicHoliday,
 } from '../../types';
 import { BulkImportModal } from '../modals/BulkImportModal';
-import { populateRecurringDoctorSessionsForSchedule } from '../../services/schedule/doctorScheduleService';
+import { DoctorWeekChangeDialog, WeekChangePreview } from '../modals/DoctorWeekChangeDialog';
+import {
+  doctorFromDate,
+  planPatternSessions,
+  populateRecurringDoctorSessionsForSchedule,
+  saveDoctorSessions,
+  weekChanged,
+} from '../../services/schedule/doctorScheduleService';
+import { formatDate, localTodayIso } from '../../utils/dateUtils';
 
 interface DoctorsViewProps {
   context: ClinicContextState;
@@ -57,6 +67,11 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
   const [sessions, setSessions] = useState<DoctorSession[]>([]);
   const [seniorityLevels, setSeniorityLevels] = useState<SeniorityLevel[]>([]);
   const [clinicalRoles, setClinicalRoles] = useState<ClinicalRole[]>([]);
+  // Rosters and public holidays: a week change reaches the days already set up (see weekChange).
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [holidays, setHolidays] = useState<PublicHoliday[]>([]);
+  /** A saved doctor whose week changed while rosters are set up: asks "from which date?". */
+  const [weekChange, setWeekChange] = useState<{ before?: Doctor; after: Doctor } | null>(null);
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
@@ -122,18 +137,22 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
 
   const loadData = async () => {
     try {
-      const [dList, spList, sessList, slList, crList] = await Promise.all([
+      const [dList, spList, sessList, slList, crList, schedList, holList] = await Promise.all([
         repo.list('doctors'),
         repo.list('specialties'),
         repo.list('doctorSessions'),
         repo.list('seniorityLevels'),
         repo.list('clinicalRoles'),
+        repo.list('schedules'),
+        repo.list('holidays'),
       ]);
       setDoctors(dList);
       setSpecialties(spList);
       setSessions(sessList);
       setSeniorityLevels(slList);
       setClinicalRoles(crList);
+      setSchedules(schedList);
+      setHolidays(holList);
 
       if (dList.length > 0 && !selectedDoctorId) {
         setSelectedDoctorId(dList[0].id);
@@ -243,6 +262,32 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       }
     }
 
+    const before = formData.id ? doctors.find((d) => d.id === formData.id) : undefined;
+    const after: Doctor = {
+      ...(before || {}),
+      id: formData.id || '',
+      fullName: trimmedName,
+      gmail: formData.gmail.trim() || '',
+      specialtyIds: finalSpecialtyIds,
+      weeklyPattern: formData.weeklyPattern,
+      notes: formData.notes.trim() || '',
+      active: formData.active,
+    };
+    // A changed week (or a doctor added, or switched on or off) while days are already
+    // set up: ask from which date they follow it. Otherwise it starts today.
+    if (weekChanged(before, after)) {
+      if (planWeek(before, after, today).changedDays.length > 0) {
+        setWeekChange({ before, after });
+        return;
+      }
+      try {
+        await saveDoctorWeek(before, after, today);
+      } catch (err: any) {
+        setInlineError(`Error saving doctor: ${err?.message || 'Please check your connection and try again.'}`);
+      }
+      return;
+    }
+
     setIsSaving(true);
     try {
       if (formData.id) {
@@ -272,6 +317,61 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
     } catch (err: any) {
       console.error('[DoctorsView] Error saving doctor:', err);
       setInlineError(`Error saving doctor: ${err.message || 'Please check your connection and try again.'}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // --- A doctor's week changed: the days already set up follow it from a chosen date ---
+  const today = localTodayIso();
+  const setUpRanges = (from: string) =>
+    schedules.filter((s) => s.status !== 'ARCHIVED' && s.endDate >= from).map((s) => ({ startDate: s.startDate, endDate: s.endDate }));
+  const planWeek = (before: Doctor | undefined, after: Doctor, from: string, sessionList = sessions) =>
+    planPatternSessions({
+      doctor: doctorFromDate(before, { ...after, id: after.id || '__new__' }, from),
+      sessions: sessionList,
+      from,
+      setUpRanges: setUpRanges(from),
+      holidayDates: holidays.map((h) => h.date),
+    });
+  const describeWeek = (d?: Pick<Doctor, 'weeklyPattern' | 'active'>): string => {
+    if (!d) return 'not in the clinic yet';
+    if (d.active === false) return 'switched off (no clinics)';
+    const slots = [...(d.weeklyPattern || [])].sort((a, b) => a.weekday - b.weekday || a.startTime.localeCompare(b.startTime));
+    return slots.length === 0 ? 'no clinics' : slots.map((p) => `${WEEKDAY_NAMES[p.weekday]}s ${p.startTime} to ${p.endTime}`).join(', ');
+  };
+  const weekPreview = (before: Doctor | undefined, after: Doctor, from: string): WeekChangePreview => {
+    const plan = planWeek(before, after, from);
+    const rosterNames = schedules
+      .filter((s) => s.status !== 'ARCHIVED' && plan.changedDays.some((d) => d >= s.startDate && d <= s.endDate))
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))
+      .map((s) => s.name);
+    return { changedDays: plan.changedDays.length, handChangedDays: plan.handChangedDays.length, rosterNames };
+  };
+  /** Saves the doctor with the week starting on `from`, then puts the days already set up on it. */
+  const saveDoctorWeek = async (before: Doctor | undefined, after: Doctor, from: string) => {
+    setIsSaving(true);
+    try {
+      const withDate = doctorFromDate(before, after, from);
+      const { id, ...fields } = withDate;
+      const saved = before ? await repo.update('doctors', before.id, fields) : await repo.create('doctors', fields as Omit<Doctor, 'id'>);
+      const doctor = { ...withDate, id: saved.id };
+      const plan = planPatternSessions({
+        doctor,
+        sessions: await repo.list('doctorSessions'),
+        from,
+        setUpRanges: setUpRanges(from),
+        holidayDates: holidays.map((h) => h.date),
+      });
+      await saveDoctorSessions(repo, plan.upsert, plan.remove.map((x) => x.id));
+      triggerNotification(
+        `${before ? `${after.fullName} updated` : `Added ${after.fullName}`}` +
+          (plan.changedDays.length > 0 ? `: ${plan.changedDays.length} day${plan.changedDays.length === 1 ? '' : 's'} already set up follow the new week from ${formatDate(from)}.` : '.')
+      );
+      if (!before) setSelectedDoctorId(saved.id);
+      setWeekChange(null);
+      setIsDoctorModalOpen(false);
+      await loadData();
     } finally {
       setIsSaving(false);
     }
@@ -1090,6 +1190,19 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       )}
 
       {/* EXPAND PATTERN MODAL */}
+      {weekChange && (
+        <DoctorWeekChangeDialog
+          doctorName={weekChange.after.fullName}
+          beforeText={describeWeek(weekChange.before)}
+          afterText={describeWeek(weekChange.after)}
+          minDate={today}
+          lastSetUpDate={setUpRanges(today).reduce<string | undefined>((last, r) => (!last || r.endDate > last ? r.endDate : last), undefined)}
+          preview={(date) => weekPreview(weekChange.before, weekChange.after, date)}
+          onConfirm={(date) => saveDoctorWeek(weekChange.before, weekChange.after, date)}
+          onCancel={() => setWeekChange(null)}
+        />
+      )}
+
       {isExpandModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
           <div
@@ -1103,7 +1216,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
               Expand Weekly Patterns to Concrete Sessions
             </h3>
             <p className="text-[11px] text-slate-500">
-              Generates concrete doctor session records across a designated date range based on weekly recurring patterns.
+              Puts each doctor's usual week on every day of this range. Days changed or cancelled by hand for one date stay as they are; other days follow the week, and clinics the week no longer has are removed.
             </p>
 
             <div className="space-y-3">

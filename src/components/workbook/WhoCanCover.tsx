@@ -64,6 +64,8 @@ export const WhoCanCover: React.FC<WhoCanCoverProps> = ({ date, hour, onPick, ma
     data.workingHoursPeriods,
     data.hoursHistory,
     data.leaveTypes,
+    data.priorAssignments,
+    data.availabilityRequests,
   ]);
 
   const shownOff = showAllBlocked ? off : off.slice(0, maxBlocked);

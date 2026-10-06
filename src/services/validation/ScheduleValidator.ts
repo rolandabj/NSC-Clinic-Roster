@@ -18,7 +18,8 @@
 
 import { countHoursInRange, hoursCheckpoints, hoursHistoryOverlaps, resolveNurseHoursBalance } from '../hours/hoursBalance';
 
-import { isLastResortShift } from '../engine/lastResort';
+import { isAgreedException, isLastResortShift } from '../engine/lastResort';
+import { outsideNurseList } from '../engine/nurseList';
 import { summarizeNurseHours } from '../reports/hoursAccounting';
 import {
   Schedule,
@@ -75,6 +76,12 @@ export interface ValidationFinding {
   cellRefs: { nurseId: string; date: string }[];
   date?: string;
   hour?: string;
+  /**
+   * How big the problem is, for problems that can grow under the same id (hours over
+   * the limit, hours without a free nurse): the swap and fairness dialogs refuse a
+   * move that makes one bigger, as well as a new one.
+   */
+  amount?: number;
 }
 
 export interface HourCoverage {
@@ -287,6 +294,23 @@ export class ScheduleValidator {
       // Each doctor works one session a day (a duplicate entry is ignored)
       const daySessions = doctorSessionsOn(sessions, date);
 
+      // A nurse still with a doctor who has no clinic that day (the doctor's week changed, or the
+      // day was cancelled): the nurse counts as a free nurse, but the cell names the doctor.
+      for (const a of dayAssignments) {
+        if (a.kind !== 'DOCTOR' || !a.doctorId || daySessions.some((x) => x.doctorId === a.doctorId)) continue;
+        const nurse = nurseMap.get(a.nurseId);
+        const doctorName = doctors.find((d) => d.id === a.doctorId)?.fullName || 'the doctor';
+        findings.push({
+          id: `doctor-not-in-clinic-${a.nurseId}-${date}`,
+          category: 'DATA_ISSUE',
+          severity: 'WARN',
+          message: `${nurse?.fullName || 'A nurse'} is with ${doctorName} on ${dayName} ${formatDate(date)}, but ${doctorName} has no clinic that day. Give the shift another job, or fill the roster again.`,
+          affectedNurseIds: [a.nurseId],
+          cellRefs: [{ nurseId: a.nurseId, date }],
+          date,
+        });
+      }
+
       // Rule: At least +1 Additional Nurse Above Doctors During Operating Hours
       const plusOneRule = resolveRule(rules, 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS', 'rule-nurse-plus-one', [
         'additional nurse',
@@ -321,6 +345,10 @@ export class ScheduleValidator {
           else gapRuns.push({ start: h.start, end: h.end });
         }
       });
+      const minutesOf = (t: string) => {
+        const [hh, mm] = t.split(':').map(Number);
+        return hh * 60 + (mm || 0);
+      };
       gapRuns.forEach((run) => {
         findings.push({
           id: `cov-gap-${date}-${run.start}`,
@@ -331,6 +359,7 @@ export class ScheduleValidator {
           cellRefs: dayAssignments.map((a) => ({ nurseId: a.nurseId, date })),
           date,
           hour: run.start,
+          amount: (minutesOf(run.end) - minutesOf(run.start)) / 60,
         });
       });
 
@@ -760,89 +789,37 @@ export class ScheduleValidator {
           }
 
           // Rule H8: Strict Nurse Profile Allocation (Only pair with doctors or specialties in nurse profile)
-          const hasSpecificAllocations = nurse.preferences?.some(
-            (p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY'
-          );
-
-          if (hasSpecificAllocations) {
-            if (currentAsgn.kind === 'DOCTOR' && currentAsgn.doctorId) {
-              const docObj = doctors.find((d) => d.id === currentAsgn.doctorId);
-              const docSession = sessions.find((s) => s.doctorId === currentAsgn.doctorId && s.date === date && !s.cancelled);
-              const docSpecId = docSession?.specialtyId || docObj?.specialtyIds?.[0];
-              const docSpecIds = docObj?.specialtyIds || (docSpecId ? [docSpecId] : []);
-
-              const matchesDoctor = nurse.preferences?.some(
-                (p) => p.kind === 'DOCTOR' && p.refId === currentAsgn.doctorId
-              );
-              const matchesSpec = nurse.preferences?.some((p) => {
-                if (p.kind !== 'SPECIALTY') return false;
-                if (docSpecIds.includes(p.refId)) return true;
-                const pRefLower = p.refId.toLowerCase();
-                for (const sid of docSpecIds) {
-                  const sObj = specialties.find((s) => s.id === sid);
-                  if (sObj) {
-                    if (
-                      pRefLower === sObj.code.toLowerCase() ||
-                      pRefLower === sObj.name.toLowerCase() ||
-                      (sObj.code.toLowerCase() === 'pcc' && pRefLower.includes('pcc')) ||
-                      (sObj.code.toLowerCase() === 'ped' && (pRefLower.includes('ped') || pRefLower.includes('pedia')))
-                    ) {
-                      return true;
-                    }
-                  }
-                }
-                return false;
-              });
-
-              if (!matchesDoctor && !matchesSpec) {
-                const docName = docObj ? docObj.fullName : 'Doctor';
-                const docSpecName = specialties.find((s) => docSpecIds.includes(s.id))?.name || 'Department';
-                // The generator's last resort (no nurse who lists this doctor was free) is only a Check
-                const lastResort = isLastResortShift(currentAsgn);
-                findings.push({
-                  id: `h8-doctor-allocation-${nurse.id}-${date}`,
-                  category: 'RULE_VIOLATION',
-                  severity: lastResort ? 'WARN' : 'ERROR',
-                  message: lastResort
-                    ? `${nurse.fullName} is with ${docName} (${docSpecName}) on ${formatDate(date)} as a last resort: none of the nurses who list this doctor was free.`
-                    : `${nurse.fullName} is with ${docName} (${docSpecName}) on ${formatDate(date)}, who isn't one of their doctors.`,
-                  affectedNurseIds: [nurse.id],
-                  cellRefs: [{ nurseId: nurse.id, date }],
-                  date,
-                });
-              }
-            } else if (currentAsgn.kind === 'SPECIALTY' && currentAsgn.specialtyId) {
-              const specObj = specialties.find((s) => s.id === currentAsgn.specialtyId);
-              const matchesSpec = nurse.preferences?.some((p) => {
-                if (p.kind !== 'SPECIALTY') return false;
-                if (p.refId === currentAsgn.specialtyId) return true;
-                if (specObj) {
-                  const pRefLower = p.refId.toLowerCase();
-                  if (
-                    pRefLower === specObj.code.toLowerCase() ||
-                    pRefLower === specObj.name.toLowerCase() ||
-                    (specObj.code.toLowerCase() === 'pcc' && pRefLower.includes('pcc')) ||
-                    (specObj.code.toLowerCase() === 'ped' && (pRefLower.includes('ped') || pRefLower.includes('pedia')))
-                  ) {
-                    return true;
-                  }
-                }
-                return false;
-              });
-
-              if (!matchesSpec) {
-                const specName = specObj ? `${specObj.name} (${specObj.code})` : 'Specialty';
-                findings.push({
-                  id: `h8-specialty-allocation-${nurse.id}-${date}`,
-                  category: 'RULE_VIOLATION',
-                  severity: 'ERROR',
-                  message: `${nurse.fullName} works in ${specName} on ${formatDate(date)}, which isn't one of their specialties.`,
-                  affectedNurseIds: [nurse.id],
-                  cellRefs: [{ nurseId: nurse.id, date }],
-                  date,
-                });
-              }
-            }
+          const outside = outsideNurseList(nurse, currentAsgn, { doctors, specialties, sessions });
+          // The generator's last resort (no nurse who lists this doctor was free) and an exception
+          // agreed by hand (a swap confirmed as one) are only a Check.
+          const lastResort = isLastResortShift(currentAsgn);
+          const agreed = isAgreedException(currentAsgn);
+          if (outside?.kind === 'DOCTOR') {
+            findings.push({
+              id: `h8-doctor-allocation-${nurse.id}-${date}`,
+              category: 'RULE_VIOLATION',
+              severity: lastResort || agreed ? 'WARN' : 'ERROR',
+              message: lastResort
+                ? `${nurse.fullName} is with ${outside.name} (${outside.specialtyName}) on ${formatDate(date)} as a last resort: none of the nurses who list this doctor was free.`
+                : agreed
+                ? `${nurse.fullName} is with ${outside.name} (${outside.specialtyName}) on ${formatDate(date)} as an agreed exception: this doctor isn't in their list.`
+                : `${nurse.fullName} is with ${outside.name} (${outside.specialtyName}) on ${formatDate(date)}, who isn't one of their doctors.`,
+              affectedNurseIds: [nurse.id],
+              cellRefs: [{ nurseId: nurse.id, date }],
+              date,
+            });
+          } else if (outside?.kind === 'SPECIALTY') {
+            findings.push({
+              id: `h8-specialty-allocation-${nurse.id}-${date}`,
+              category: 'RULE_VIOLATION',
+              severity: agreed ? 'WARN' : 'ERROR',
+              message: agreed
+                ? `${nurse.fullName} works in ${outside.name} on ${formatDate(date)} as an agreed exception: it isn't one of their specialties.`
+                : `${nurse.fullName} works in ${outside.name} on ${formatDate(date)}, which isn't one of their specialties.`,
+              affectedNurseIds: [nurse.id],
+              cellRefs: [{ nurseId: nurse.id, date }],
+              date,
+            });
           }
 
           // Rule S1: Consecutive late duties ending at or after the rule's threshold time
@@ -984,16 +961,18 @@ export class ScheduleValidator {
           const credited = upToEnd.totalHours;
           const ceiling = hoursCeiling(budget, h7TolerancePct);
           // Shift hours against the limit less leave, as the engine does (leave alone never breaks it).
-          if (upToEnd.dutyHours > shiftHoursAllowed(budget, upToEnd.leaveHours, h7TolerancePct)) findings.push({
+          const allowedByEnd = shiftHoursAllowed(budget, upToEnd.leaveHours, h7TolerancePct);
+          if (upToEnd.dutyHours > allowedByEnd) findings.push({
             id: `h7-period-${nurse.id}-${end}`, category: 'RULE_VIOLATION', severity: h7Severity,
             message: `${nurse.fullName}: ${Math.round(credited * 10) / 10} h by ${end}, above the ${ceiling} h limit after carried hours.`,
-            affectedNurseIds: [nurse.id], cellRefs: [],
+            affectedNurseIds: [nurse.id], cellRefs: [], amount: upToEnd.dutyHours - allowedByEnd,
           });
         }
       }
       const maxAllowed = hoursCeiling(target, h7TolerancePct);
       // The hours limit counts leave, but leave alone never breaks it (shared with the engine).
-      const overLimit = tally.dutyHours > shiftHoursAllowed(target, tally.leaveHours, h7TolerancePct);
+      const shiftHoursOver = tally.dutyHours - shiftHoursAllowed(target, tally.leaveHours, h7TolerancePct);
+      const overLimit = shiftHoursOver > 0;
       const paceRatio = target > 0 ? totalHours / target : 1;
       const h = (n: number) => Math.round(n * 10) / 10;
 
@@ -1016,6 +995,7 @@ export class ScheduleValidator {
           message: `${nurse.fullName}: ${h(totalHours)} / ${target} h, ${h(delta)} h over (most allowed: ${maxAllowed} h).`,
           affectedNurseIds: [nurse.id],
           cellRefs: nurseAssignments.slice(0, 1).map((a) => ({ nurseId: a.nurseId, date: a.date })),
+          amount: shiftHoursOver,
         });
       } else if (paceRatio > h7TolerancePct) {
         const delta = totalHours - target;

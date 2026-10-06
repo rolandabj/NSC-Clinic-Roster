@@ -1,5 +1,6 @@
 import { leaveCreditInRange } from '../../services/hours/hoursPolicy';
 import { planHolidayLeaveTidy, saveHolidayLeave, withHolidaysAtZero } from '../../services/hours/holidayLeave';
+import { leaveApprovalFields } from '../../services/engine/leaveStatus';
 import { confirmDialog } from '../common/dialogs';
 import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo, useId } from 'react';
@@ -331,6 +332,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
     // A public holiday inside the leave counts 0 h: the period hours already leave it out.
     const { dayHours } = withHolidaysAtZero({ startDate: start, endDate: end, dayHours: editingLeaveEntry.dayHours }, holidays);
+    // The Approved / Pending switch sets both approval marks (roster and approval pages).
+    const saved = editingLeaveEntry.id ? leaveEntries.find((l) => l.id === editingLeaveEntry.id) : undefined;
+    const approval = leaveApprovalFields(editingLeaveEntry.approved ?? true, saved, currentUser);
     try {
       if (editingLeaveEntry.id) {
         await repo.update('leaveEntries', editingLeaveEntry.id, {
@@ -339,7 +343,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           startDate: start,
           endDate: end,
           note: editingLeaveEntry.note,
-          approved: editingLeaveEntry.approved ?? true,
+          ...approval,
           hoursCredited: totalCredits,
           ...(dayHours ? { dayHours } : {}),
         });
@@ -351,7 +355,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           startDate: start,
           endDate: end,
           note: editingLeaveEntry.note || '',
-          approved: true,
+          ...approval,
           hoursCredited: totalCredits,
           ...(dayHours ? { dayHours } : {}),
         });
@@ -364,13 +368,6 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     } catch (err: any) {
       triggerToast(`Error saving leave: ${err.message}`);
     }
-  };
-
-  const handleToggleApproveLeave = async (entry: LeaveEntry) => {
-    const nextApproved = !entry.approved;
-    await repo.update('leaveEntries', entry.id, { approved: nextApproved });
-    triggerToast(nextApproved ? 'Leave approved.' : 'Leave marked unapproved.');
-    loadData();
   };
 
   const handleDeleteLeave = async (entry: LeaveEntry) => {

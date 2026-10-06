@@ -281,7 +281,22 @@ export async function deleteDoctorShift(
 }
 
 /**
- * Generates doctor sessions based on active doctors' weekly patterns for a date range (inclusive).
+ * The week a doctor works on a date: from patternFrom on, the current week (none
+ * while switched off); before it, the week that applied then. A change made "from a
+ * date" (Doctors screen) so never reaches back: filling a roster again later still
+ * gives the days before that date the old week.
+ */
+export function weekOn(
+  doctor: Pick<Doctor, 'weeklyPattern' | 'active' | 'patternFrom' | 'previousWeeklyPattern'>,
+  date: string
+): WeeklyPatternSlot[] {
+  if (doctor.patternFrom && date < doctor.patternFrom) return doctor.previousWeeklyPattern || [];
+  return doctor.active === false ? [] : doctor.weeklyPattern || [];
+}
+
+/**
+ * Generates doctor sessions from the doctors' weekly patterns for a date range (inclusive),
+ * each date from the week that applies on it (see weekOn).
  */
 export function generateDoctorSessionsForDateRange(
   startDate: string,
@@ -292,7 +307,6 @@ export function generateDoctorSessionsForDateRange(
 
   const startObj = new Date(startDate + 'T00:00:00Z');
   const endObj = new Date(endDate + 'T00:00:00Z');
-  const activeDoctors = doctors.filter((d) => d.active !== false && Array.isArray(d.weeklyPattern));
   const generatedSessions: DoctorSession[] = [];
 
   for (
@@ -303,8 +317,8 @@ export function generateDoctorSessionsForDateRange(
     const curIsoDate = cur.toISOString().split('T')[0];
     const weekday = cur.getUTCDay();
 
-    activeDoctors.forEach((doc) => {
-      doc.weeklyPattern.forEach((pat) => {
+    doctors.forEach((doc) => {
+      weekOn(doc, curIsoDate).forEach((pat) => {
         if (pat.weekday === weekday) {
           const sessId = `sess-${doc.id}-${curIsoDate}-${pat.startTime.replace(':', '')}`;
           generatedSessions.push({
@@ -345,18 +359,51 @@ export interface PopulateRecurringDoctorSessionsResult {
 }
 
 /**
- * Adds the weekly pattern sessions that are missing in a date range.
- *
- * A doctor's day that was changed, added or cancelled by hand for that date is
- * left alone, so one-date changes are never undone. Pattern slots already
- * there (same start time) aren't added twice.
+ * The week's sessions a fill adds: on a day the doctor has no session, every slot
+ * the week has that day; on a day that already follows the week (each session there
+ * is one of the week's slots), the slots still missing. A day changed or cancelled by
+ * hand for that date, or one that follows another week (a session the week does not
+ * have, say 9 to 5 kept from before a change to 1 to 9), gets nothing, so a doctor
+ * never gets a second clinic from an old and a new week on one day.
+ */
+export function missingPatternSessions(candidates: DoctorSession[], existing: DoctorSession[]): DoctorSession[] {
+  const dayKey = (x: Pick<DoctorSession, 'doctorId' | 'date'>) => `${x.doctorId}_${x.date}`;
+  const byDay = new Map<string, DoctorSession[]>();
+  for (const x of existing) byDay.set(dayKey(x), [...(byDay.get(dayKey(x)) || []), x]);
+  const weekStarts = new Map<string, Set<string>>();
+  for (const c of candidates) weekStarts.set(dayKey(c), (weekStarts.get(dayKey(c)) || new Set<string>()).add(c.startTime));
+  return candidates.filter((c) => {
+    const day = byDay.get(dayKey(c)) || [];
+    if (day.some((x) => x.source === 'MANUAL' || x.cancelled)) return false;
+    if (day.some((x) => !weekStarts.get(dayKey(c))!.has(x.startTime))) return false;
+    return !day.some((x) => x.startTime === c.startTime);
+  });
+}
+
+/**
+ * Adds the weekly pattern sessions that are missing in a date range (see
+ * missingPatternSessions): one-date changes are never undone, and a day kept from
+ * an older week gets no second clinic.
  * Public holidays are skipped: only the on call doctor works then.
+ * overwriteExisting (Expand pattern) puts the week on every day of the range
+ * that was not changed by hand, see planPatternSessions.
  */
 export async function populateRecurringDoctorSessionsForSchedule(
   params: PopulateRecurringDoctorSessionsParams
 ): Promise<PopulateRecurringDoctorSessionsResult> {
   const { repo, startDate, endDate, overwriteExisting = false, dryRun = false } = params;
   const doctors = params.doctors || (await repo.list('doctors'));
+  if (overwriteExisting) {
+    const [all, holidayList] = await Promise.all([repo.list('doctorSessions'), repo.list('holidays')]);
+    const plans = doctors.map((doctor) => planPatternSessions({
+      doctor, sessions: all, from: startDate, to: endDate,
+      setUpRanges: [{ startDate, endDate }], holidayDates: holidayList.map((h) => h.date),
+    }));
+    const upserts = plans.flatMap((p) => p.upsert);
+    const removeIds = plans.flatMap((p) => p.remove.map((x) => x.id));
+    if (!dryRun) await saveDoctorSessions(repo, upserts, removeIds);
+    return { createdCount: upserts.length, existingCount: 0, totalSessions: upserts.length, newSessions: upserts };
+  }
 
   const candidateSessions = generateDoctorSessionsForDateRange(startDate, endDate, doctors);
   if (candidateSessions.length === 0) {
@@ -365,32 +412,9 @@ export async function populateRecurringDoctorSessionsForSchedule(
 
   const [allExistingSessions, holidays] = await Promise.all([repo.list('doctorSessions'), repo.list('holidays')]);
   const holidayDates = new Set(holidays.map((h) => h.date));
-  const byDoctorDay = new Map<string, DoctorSession[]>();
-  for (const s of allExistingSessions) {
-    const key = `${s.doctorId}_${s.date}`;
-    byDoctorDay.set(key, [...(byDoctorDay.get(key) || []), s]);
-  }
-
-  const sessionsToUpsert: DoctorSession[] = [];
-  let existingCount = 0;
-
-  for (const cand of candidateSessions) {
-    if (holidayDates.has(cand.date)) continue;
-    const sameDay = byDoctorDay.get(`${cand.doctorId}_${cand.date}`) || [];
-    // A doctor day changed or cancelled by hand for that date is left as it is.
-    if (sameDay.some((x) => x.source === 'MANUAL' || x.cancelled)) {
-      existingCount++;
-      continue;
-    }
-    const sameStart = sameDay.find((x) => x.startTime === cand.startTime);
-    if (!sameStart) {
-      sessionsToUpsert.push(cand);
-      continue;
-    }
-    existingCount++;
-    // Re-applying the pattern refreshes the sessions it made before.
-    if (overwriteExisting) sessionsToUpsert.push({ ...cand, id: sameStart.id });
-  }
+  const workingDays = candidateSessions.filter((cand) => !holidayDates.has(cand.date));
+  const sessionsToUpsert = missingPatternSessions(workingDays, allExistingSessions);
+  const existingCount = workingDays.length - sessionsToUpsert.length;
 
   if (!dryRun && sessionsToUpsert.length > 0) {
     await repo.bulkUpsert('doctorSessions', sessionsToUpsert);
@@ -401,5 +425,139 @@ export async function populateRecurringDoctorSessionsForSchedule(
     existingCount,
     totalSessions: candidateSessions.length,
     newSessions: sessionsToUpsert,
+  };
+}
+
+const nextDay = (isoDate: string, days = 1): string => {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().split('T')[0];
+};
+
+export interface PatternSessionPlan {
+  /** Pattern sessions to delete: the week no longer has them that day. */
+  remove: DoctorSession[];
+  /** Sessions to add, or to save with new times (whole records). */
+  upsert: DoctorSession[];
+  /** Days that change, in date order. */
+  changedDays: string[];
+  /** Days left as they are because they were changed or cancelled by hand for that date. */
+  handChangedDays: string[];
+}
+
+/**
+ * The doctor's days from `from` (to `to`, if given) put on the week that applies on
+ * each date (see weekOn). Days already set up are every day of `setUpRanges` (the
+ * rosters) and every day the doctor already has a session on; later days get theirs
+ * when their roster is set up.
+ *   - A day changed or cancelled by hand for that date stays as it is.
+ *   - On any other day the pattern sessions are replaced by the week's: a session the
+ *     week still has at that start time is kept (new end time or room saved), the
+ *     others are removed, and missing ones are added.
+ *   - A public holiday gets no clinic (only the on call doctor works), and a doctor
+ *     switched off gets none.
+ */
+export function planPatternSessions(input: {
+  doctor: Doctor;
+  sessions: DoctorSession[];
+  from: string;
+  to?: string;
+  setUpRanges: { startDate: string; endDate: string }[];
+  holidayDates: Iterable<string>;
+}): PatternSessionPlan {
+  const { doctor, from, to } = input;
+  const holidays = new Set(input.holidayDates);
+  const inRange = (d: string) => d >= from && (!to || d <= to);
+  const byDate = new Map<string, DoctorSession[]>();
+  for (const s of input.sessions) {
+    if (s.doctorId !== doctor.id || !inRange(s.date)) continue;
+    byDate.set(s.date, [...(byDate.get(s.date) || []), s]);
+  }
+  const days = new Set<string>(byDate.keys());
+  for (const r of input.setUpRanges) {
+    const last = to && r.endDate > to ? to : r.endDate;
+    for (let d = r.startDate > from ? r.startDate : from; d <= last; d = nextDay(d)) days.add(d);
+  }
+
+  const plan: PatternSessionPlan = { remove: [], upsert: [], changedDays: [], handChangedDays: [] };
+  for (const date of [...days].sort()) {
+    const day = byDate.get(date) || [];
+    if (day.some((s) => s.source === 'MANUAL' || s.cancelled)) {
+      plan.handChangedDays.push(date);
+      continue;
+    }
+    const weekday = getWeekdayFromIsoDate(date);
+    const wanted = holidays.has(date) ? [] : weekOn(doctor, date).filter((p) => p.weekday === weekday);
+    const used = new Set<WeeklyPatternSlot>();
+    let changed = false;
+    for (const s of day) {
+      const slot = wanted.find((p) => p.startTime === s.startTime && !used.has(p));
+      if (!slot) {
+        plan.remove.push(s);
+        changed = true;
+        continue;
+      }
+      used.add(slot);
+      const room = slot.room || 'Suite 101';
+      if (s.endTime !== slot.endTime || (s.room || '') !== room) {
+        plan.upsert.push({ ...s, endTime: slot.endTime, room, source: 'PATTERN', cancelled: false });
+        changed = true;
+      }
+    }
+    for (const slot of wanted.filter((p) => !used.has(p))) {
+      plan.upsert.push({
+        id: `sess-${doctor.id}-${date}-${slot.startTime.replace(':', '')}`,
+        doctorId: doctor.id,
+        date,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        specialtyId: doctor.specialtyIds?.[0] || 'spec-gp',
+        room: slot.room || 'Suite 101',
+        source: 'PATTERN',
+        cancelled: false,
+      });
+      changed = true;
+    }
+    if (changed) plan.changedDays.push(date);
+  }
+  return plan;
+}
+
+/** Saves doctor sessions as whole records and deletes the given ones, in one write when the repository can. */
+export async function saveDoctorSessions(repo: IRepository, upserts: DoctorSession[], removeIds: string[]): Promise<void> {
+  if (upserts.length + removeIds.length === 0) return;
+  if (repo.bulkWrite) {
+    await repo.bulkWrite('doctorSessions', { upserts, removeIds, replace: true });
+    return;
+  }
+  if (upserts.length > 0) await repo.bulkUpsert('doctorSessions', upserts, { replace: true });
+  if (removeIds.length > 0) await repo.bulkRemove('doctorSessions', removeIds);
+}
+
+/** True when a doctor's week or on/off state differs (what the Doctors screen asks about). */
+export function weekChanged(
+  before: Pick<Doctor, 'weeklyPattern' | 'active'> | undefined,
+  after: Pick<Doctor, 'weeklyPattern' | 'active'>
+): boolean {
+  const key = (d?: Pick<Doctor, 'weeklyPattern' | 'active'>) =>
+    !d || d.active === false
+      ? 'off'
+      : JSON.stringify(
+          [...(d.weeklyPattern || [])]
+            .map((p) => [p.weekday, p.startTime, p.endTime, p.room || ''])
+            .sort((a, b) => String(a).localeCompare(String(b)))
+        );
+  return key(before) !== key(after);
+}
+
+/**
+ * A doctor with a changed week (or switched on or off) from `from` on: the week that
+ * applied the day before is kept for the days before `from` (previousWeeklyPattern),
+ * and the days already set up from `from` follow the new week (see planPatternSessions).
+ */
+export function doctorFromDate(before: Doctor | undefined, after: Doctor, from: string): Doctor {
+  return {
+    ...after,
+    patternFrom: from,
+    previousWeeklyPattern: before ? weekOn(before, nextDay(from, -1)) : [],
   };
 }
