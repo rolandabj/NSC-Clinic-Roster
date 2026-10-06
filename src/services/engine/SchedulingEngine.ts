@@ -911,8 +911,22 @@ export class SchedulingEngine {
       return true;
     };
 
+    /**
+     * The id, or the id with a number added when a kept shift already has it: a hand
+     * changed shift can carry a generated id that names another nurse (moved before
+     * moves got new ids), and two records with one id would save as one.
+     */
+    const freeId = (id: string): string => {
+      const used = new Set(Array.from(resultAssignmentsMap.values(), (a) => a.id));
+      if (!used.has(id)) return id;
+      let n = 2;
+      while (used.has(`${id}-${n}`)) n++;
+      return `${id}-${n}`;
+    };
+
     /** Records a new shift for a nurse and updates her counters. */
-    const placeShift = (asgn: Assignment, isWeekend: boolean, isHoliday: boolean, isNurseClinic: boolean) => {
+    const placeShift = (shift: Assignment, isWeekend: boolean, isHoliday: boolean, isNurseClinic: boolean) => {
+      const asgn = { ...shift, id: freeId(shift.id) };
       resultAssignmentsMap.set(`${asgn.nurseId}_${asgn.date}`, asgn);
       createdCount++;
       const state = nurseStates.get(asgn.nurseId);

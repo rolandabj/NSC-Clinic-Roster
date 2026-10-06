@@ -44,7 +44,9 @@ import { WhoCanCover } from '../workbook/WhoCanCover';
 import { nurseClinicRoleOf, canBeFreeNurse } from '../../services/engine/clinicModel';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
-import { CollectionSyncer } from '../../services/repository/collectionSyncer';
+import { rosterSaveQueues } from '../../services/repository/rosterSaveQueues';
+import { createLiveReconciler } from '../../services/repository/liveReconcile';
+import { rebaseEdit } from '../../services/schedule/rebaseEdit';
 import { chooseScheduleToOpen } from '../../services/schedule/openSchedule';
 import { quotaTracker, QuotaExceededError } from '../../services/firebase/quotaTracker';
 import {
@@ -96,6 +98,7 @@ import { CreateScheduleModal } from '../modals/CreateScheduleModal';
 import { DeleteScheduleModal } from '../modals/DeleteScheduleModal';
 import { deleteEntireSchedule } from '../../services/schedule/scheduleDeletionService';
 import { populateRecurringDoctorSessionsForSchedule } from '../../services/schedule/doctorScheduleService';
+import { BACKUPS_KEPT, saveRosterBackup } from '../../services/history/rosterBackup';
 import { formatDate } from '../../utils/dateUtils';
 
 /** One undo step: the roster's shifts, pinned days and leave at that moment. */
@@ -322,24 +325,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const repo = getRepository();
 
   // Saving: only what changed since it was loaded or last saved is written, one
-  // save at a time, and records this browser never saw are never deleted.
+  // save at a time, and records this browser never saw are never deleted. The
+  // queues outlive this screen, so a save that failed is kept and retried after
+  // the planner opens another screen (see rosterSaveQueues).
   const [, setSyncTick] = useState(0);
-  const syncersRef = useRef<{
-    assignments: CollectionSyncer<'assignments'>;
-    locks: CollectionSyncer<'locks'>;
-    leaveEntries: CollectionSyncer<'leaveEntries'>;
-  } | null>(null);
-  if (!syncersRef.current) {
-    const onChange = () => setSyncTick((t) => t + 1);
-    syncersRef.current = {
-      assignments: new CollectionSyncer(repo, 'assignments', onChange),
-      locks: new CollectionSyncer(repo, 'locks', onChange),
-      leaveEntries: new CollectionSyncer(repo, 'leaveEntries', onChange),
-    };
-  }
-  const syncers = syncersRef.current;
-  const hasUnsavedChanges = () =>
-    syncers.assignments.hasUnsaved() || syncers.locks.hasUnsaved() || syncers.leaveEntries.hasUnsaved();
+  const syncers = rosterSaveQueues(repo);
+  const hasUnsavedChanges = () => syncers.hasUnsaved();
 
   const loadData = async () => {
     try {
@@ -406,10 +397,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setNurses(nList.filter((n) => n.active));
       setDoctors(dList.filter((d) => d.active));
       setSessions(sessList);
-      setLocks(lkList);
-      setLeaveEntries(activeLeaveList);
-      syncers.locks.replaceKnown(lkList);
-      syncers.leaveEntries.replaceKnown(activeLeaveList);
+      // Pinned days or leave changed here but not saved yet stay on screen (see adoptLoaded).
+      const shownLocks = syncers.locks.adoptLoaded(lkList, 'all');
+      const shownLeave = syncers.leaveEntries.adoptLoaded(activeLeaveList, 'all');
+      setLocks(shownLocks);
+      setLeaveEntries(shownLeave);
       setLeaveTypes(ltList);
       setClinicalRoles(crList);
       setSpecialties(spList);
@@ -426,8 +418,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           seniorityLevels: sList,
           dutyWindows: dwList,
           sessions: sessList,
-          leaveEntries: leList,
-          locks: lkList,
+          leaveEntries: shownLeave,
+          locks: shownLocks,
           roles: crList,
           rules: rList,
           workingHoursPeriods: sortedWhp,
@@ -549,32 +541,39 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       throw err;
     }
     if (request !== openRequestRef.current) return; // a newer roster was opened meanwhile
-    // What is saved for this roster is exactly what was just loaded.
-    syncers.assignments.replaceKnown(list, (a) => a.scheduleId === sched.id);
+    // What is saved for this roster is exactly what was just loaded, unless a change made
+    // here is not saved yet (a save that failed): then the screen keeps showing it (see
+    // adoptLoaded).
+    const shown = syncers.assignments.adoptLoaded(list, sched.id, (a) => a.scheduleId === sched.id);
     loadingRef.current = false;
     adoptSetup(historySeq, setup);
     setClinicSetupError(
       setup ? null : 'Public holidays, opening hours and the previous roster could not be loaded. Reload the page before generating.'
     );
-    setAssignments(list);
+    setAssignments(shown);
     setVersions(withoutBackups(vList).sort((a, b) => b.number - a.number));
     setBackupVersions(vList.filter((v) => v.kind === 'BACKUP'));
-    runValidation(sched, list, inputs);
+    runValidation(sched, shown, inputs);
+  };
+
+  /** Why a save failed, as the toolbar says it (null when nothing failed). */
+  const failedSaveMessage = (what: string): string | null => {
+    const failed = [syncers.assignments, syncers.locks, syncers.leaveEntries].find((x) => x.lastError !== null);
+    if (!failed) return null;
+    const err: any = failed.lastError;
+    return err instanceof QuotaExceededError
+      ? err.message
+      : `${what} not saved: ${err?.message || 'the database could not be reached'}. Retrying automatically.`;
   };
 
   /** Runs a save and shows its outcome in the toolbar. */
   const trackSave = async (save: Promise<boolean>, what: string): Promise<boolean> => {
     setIsSaving(true);
     const ok = await save;
-    const failed = [syncers.assignments, syncers.locks, syncers.leaveEntries].find((x) => x.lastError !== null);
-    setIsSaving(hasUnsavedChanges() && !failed);
-    if (failed) {
-      const err: any = failed.lastError;
-      setSaveError(
-        err instanceof QuotaExceededError
-          ? err.message
-          : `${what} not saved: ${err?.message || 'the database could not be reached'}. Retrying automatically.`
-      );
+    const failedMessage = failedSaveMessage(what);
+    setIsSaving(hasUnsavedChanges() && !failedMessage);
+    if (failedMessage) {
+      setSaveError(failedMessage);
     } else if (ok) {
       setSaveError(null);
       setLastAutosavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
@@ -611,7 +610,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   };
 
   useEffect(() => {
+    // A save that failed before this screen opened is still waiting: say so.
+    const kept = failedSaveMessage('Changes');
+    if (kept) setSaveError(kept);
+    const stopListening = syncers.listen(() => setSyncTick((t) => t + 1));
     loadData();
+    return stopListening;
   }, []);
 
   // Every edit is saved straight away. This timer only retries a save that
@@ -631,17 +635,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     return () => clearInterval(retryTimer);
   }, []);
 
-  // Warn before closing the tab while a change is still being saved (or failed).
-  useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (!hasUnsavedChanges()) return;
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, []);
-
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -650,8 +643,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // Debounce timer ref for live validation
   const validationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const snapshotNow = (): RosterSnapshot | null =>
-    activeSchedule ? { scheduleId: activeSchedule.id, assignments, locks, leaveEntries } : null;
+  // The latest lists, not this render's: an edit can come from a dialog that waited for a
+  // confirmation (or a fill that waited for the database) while a change arrived.
+  const snapshotNow = (): RosterSnapshot | null => {
+    const now = liveRef.current;
+    return activeSchedule ? { scheduleId: activeSchedule.id, assignments: now.assignments, locks: now.locks, leaveEntries: now.leaveEntries } : null;
+  };
 
   /**
    * Applies one edit (shifts, pinned days and leave together): one undo step,
@@ -672,9 +669,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       if (before) setUndoStack((prev) => [before, ...prev].slice(0, 50));
       setRedoStack([]);
     }
-    const nextAssignments = edit.assignments ?? assignments;
-    const nextLocks = edit.locks ?? locks;
-    const nextLeave = edit.leaveEntries ?? leaveEntries;
+    const now = liveRef.current;
+    const nextAssignments = edit.assignments ?? now.assignments;
+    const nextLocks = edit.locks ?? now.locks;
+    const nextLeave = edit.leaveEntries ?? now.leaveEntries;
     if (edit.assignments) {
       setAssignments(nextAssignments);
       void persistAssignments(sched.id, nextAssignments);
@@ -1243,36 +1241,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   };
 
   // --- BACKUP COPIES ---
-  const BACKUPS_KEPT = 5;
   /** Keeps a copy of the roster as it is now; only the last few backups are kept. */
   const saveBackup = async (sched: Schedule, note: string) => {
-    const saved = await repo.list('versions', { field: 'scheduleId', operator: '==', value: sched.id });
-    // Backups take no version number, so saved and published versions keep theirs.
-    const number = 0;
-    const inRange = (start: string, end: string) => end >= sched.startDate && start <= sched.endDate;
-    const created = await repo.create('versions', {
-      scheduleId: sched.id,
-      number,
-      timestamp: new Date().toISOString(),
-      author: context.currentUser?.name || context.currentUser?.email || 'Planner',
-      note,
-      kind: 'BACKUP',
-      snapshot: {
-        schedule: sched,
-        assignments,
-        leaveEntries: leaveEntries.filter((l) => inRange(l.startDate, l.endDate)),
-        locks: locks.filter((l) => inRange(l.date, l.date)),
-        rulesSnapshot: rules,
-      },
-      isPublished: false,
-    });
-    const older = saved
-      .filter((v) => v.kind === 'BACKUP')
-      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-      .slice(BACKUPS_KEPT - 1);
-    // Removing old backups is tidying up; a failure here doesn't matter.
-    await Promise.all(older.map((v) => repo.remove('versions', v.id).catch(() => {})));
-    const gone = new Set(older.map((v) => v.id));
+    const { created, removedIds } = await saveRosterBackup(
+      repo,
+      sched,
+      { assignments, leaveEntries, locks, rules },
+      context.currentUser?.name || context.currentUser?.email || 'Planner',
+      note
+    );
+    const gone = new Set(removedIds);
     setBackupVersions((prev) => [created, ...prev.filter((v) => !gone.has(v.id))]);
   };
 
@@ -1294,12 +1272,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     });
     if (!ok) return;
     // Pinned days and leave stay as they are now: their shifts are kept from now,
-    // and the backup's shifts on today's pinned or leave days are left out.
+    // and the backup's shifts on today's pinned or leave days are left out. "Now" is
+    // after the confirmation (a change may have arrived while it was open).
+    const now = liveRef.current;
     const pinned = (a: Assignment) => a.locked || a.source === 'LOCK';
-    const lockedCell = new Set(locks.map((l) => `${l.nurseId}|${l.date}`));
+    const lockedCell = new Set(now.locks.map((l) => `${l.nurseId}|${l.date}`));
     const onLeave = (a: Assignment) =>
-      leaveEntries.some((le) => le.nurseId === a.nurseId && le.approved && a.date >= le.startDate && a.date <= le.endDate);
-    const keepNow = assignments.filter((a) => pinned(a) && lockedCell.has(`${a.nurseId}|${a.date}`));
+      now.leaveEntries.some((le) => le.nurseId === a.nurseId && le.approved && a.date >= le.startDate && a.date <= le.endDate);
+    const keepNow = now.assignments.filter((a) => pinned(a) && lockedCell.has(`${a.nurseId}|${a.date}`));
     const fromBackup = backup.snapshot.assignments
       .filter((a) => !lockedCell.has(`${a.nurseId}|${a.date}`) && !onLeave(a))
       .map((a) => (pinned(a) ? { ...a, locked: false, source: 'MANUAL' as const } : a))
@@ -1399,62 +1379,98 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   };
 
   // --- LIVE UPDATES ---
-  // Other planners' changes to this roster's shifts arrive as they are saved,
-  // and are shown once this browser's own changes are saved. Only when a save
-  // here failed does a notice ask to reload.
+  // Other planners' changes to this roster's shifts, and anyone's changes to leave and
+  // pinned days (a manager approving leave, another planner pinning a day), arrive as
+  // they are saved and are shown once this browser's own changes are saved, so filling,
+  // the checks and publishing never use an old copy. Only when a save here failed does
+  // a notice ask to reload.
   const [remoteChange, setRemoteChange] = useState(false);
   const othersHere = usePresence(activeSchedule?.id ?? null);
-  const liveRef = useRef({ isGenerating, runValidation, triggerToast });
-  liveRef.current = { isGenerating, runValidation, triggerToast };
+  const liveRef = useRef({ isGenerating, runValidation, triggerToast, assignments, locks, leaveEntries });
+  liveRef.current = { isGenerating, runValidation, triggerToast, assignments, locks, leaveEntries };
   useEffect(() => {
     const sched = activeSchedule;
     if (!sched) return;
     setRemoteChange(false);
-    const inScope = (a: Assignment) => a.scheduleId === sched.id;
-    let latest: Assignment[] | null = null;
-    let retry: number | undefined;
-    // Compares the latest copy from the database with what this browser saved,
-    // once nothing is being saved here (so this browser's own save isn't
-    // mistaken for someone else's change, and theirs isn't lost meanwhile).
-    const reconcile = () => {
-      window.clearTimeout(retry);
-      const list = latest;
-      if (!list || activeScheduleRef.current?.id !== sched.id) return;
-      if (syncers.assignments.hasFailed(sched.id)) {
-        // This browser's change isn't saved: ask before showing theirs.
-        if (syncers.assignments.differsFromKnown(list, inScope)) setRemoteChange(true);
-        return;
-      }
-      if (loadingRef.current || liveRef.current.isGenerating || syncers.assignments.hasUnsaved(sched.id)) {
-        retry = window.setTimeout(reconcile, 1000);
-        return;
-      }
-      if (!syncers.assignments.differsFromKnown(list, inScope)) return; // what this browser saved
-      syncers.assignments.replaceKnown(list, inScope);
-      setAssignments(list);
-      setRemoteChange(false);
-      // Undo steps hold the whole list from before; using one now would undo their change.
-      setUndoStack([]);
-      setRedoStack([]);
-      liveRef.current.runValidation(activeScheduleRef.current || sched, list);
-      liveRef.current.triggerToast('Updated with a change made by someone else.');
-    };
+    const live = createLiveReconciler<Assignment>({
+      syncer: syncers.assignments,
+      scope: sched.id,
+      inScope: (a) => a.scheduleId === sched.id,
+      isBusy: () => loadingRef.current || liveRef.current.isGenerating,
+      isCurrent: () => activeScheduleRef.current?.id === sched.id,
+      onConflict: () => setRemoteChange(true),
+      onApply: (list) => {
+        setAssignments(list);
+        setRemoteChange(false);
+        // Undo steps hold the whole list from before; using one now would undo their change.
+        setUndoStack([]);
+        setRedoStack([]);
+        liveRef.current.runValidation(activeScheduleRef.current || sched, list);
+        liveRef.current.triggerToast('Updated with a change made by someone else.');
+      },
+    });
     const stop = repo.subscribe(
       'assignments',
       (items, info) => {
         // Wait for the server's copy (this browser's own pending edit is already on screen).
         if (info?.fromThisDevice) return;
-        latest = items as Assignment[];
-        reconcile();
+        live.push(items as Assignment[]);
       },
       { field: 'scheduleId', operator: '==', value: sched.id },
       { includeMetadataChanges: true }
     );
     return () => {
-      window.clearTimeout(retry);
+      live.stop();
       stop();
     };
   }, [activeSchedule?.id]);
+
+  useEffect(() => {
+    const isBusy = () => loadingRef.current || liveRef.current.isGenerating;
+    // Until the workspace has loaded there is nothing to compare with (loading reads fresh lists).
+    const isCurrent = () => workspaceLoadedRef.current;
+    const afterChange = (change: { locks?: LockEntry[]; leaveEntries?: LeaveEntry[] }) => {
+      // Undo steps hold whole lists of pinned days and leave; using one now would undo their change.
+      setUndoStack([]);
+      setRedoStack([]);
+      const sched = activeScheduleRef.current;
+      if (sched) liveRef.current.runValidation(sched, liveRef.current.assignments, change);
+      liveRef.current.triggerToast(change.locks ? 'Pinned days were updated by someone else.' : 'Leave was updated.');
+    };
+    const liveLocks = createLiveReconciler<LockEntry>({
+      syncer: syncers.locks,
+      scope: 'all',
+      isBusy,
+      isCurrent,
+      onConflict: () => setRemoteChange(true),
+      onApply: (list) => {
+        setLocks(list);
+        afterChange({ locks: list });
+      },
+    });
+    const liveLeave = createLiveReconciler<LeaveEntry>({
+      syncer: syncers.leaveEntries,
+      scope: 'all',
+      isBusy,
+      isCurrent,
+      onConflict: () => setRemoteChange(true),
+      onApply: (list) => {
+        setLeaveEntries(list);
+        afterChange({ leaveEntries: list });
+      },
+    });
+    const watch = (push: (items: any[]) => void) => (items: any[], info?: { fromThisDevice: boolean }) => {
+      if (!info?.fromThisDevice) push(items);
+    };
+    const stopLocks = repo.subscribe('locks', watch((items) => liveLocks.push(items)), undefined, { includeMetadataChanges: true });
+    const stopLeave = repo.subscribe('leaveEntries', watch((items) => liveLeave.push(items)), undefined, { includeMetadataChanges: true });
+    return () => {
+      liveLocks.stop();
+      liveLeave.stop();
+      stopLocks();
+      stopLeave();
+    };
+  }, []);
 
   // Undo / Redo: a step restores shifts, pinned days and leave together, and
   // only ever on the roster it was recorded for.
@@ -1564,6 +1580,17 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     .sort((a, b) => b.number - a.number)[0];
   const changedSincePublish = lastPublished ? countChangedCells(lastPublished.snapshot.assignments, assignments) : 0;
   const openPublish = (mode: 'PUBLISH' | 'CHANGE') => {
+    // Publishing sends what is on screen: it waits until all of it is saved, so the
+    // published roster and the saved one are the same.
+    if (hasUnsavedChanges()) {
+      notify(
+        saveError
+          ? 'Some changes are not saved yet, so the roster cannot be published. Use Retry now at the top, then publish.'
+          : 'Changes are still being saved. Publish again in a moment.',
+        'warning'
+      );
+      return;
+    }
     setPublishWizardMode(mode);
     setIsPublishModalOpen(true);
   };
@@ -1917,7 +1944,26 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           <span>Someone else changed this roster, and your last change isn't saved yet. Use Retry now at the top to save it, then Reload to see their change.</span>
           <button
             type="button"
-            onClick={() => {
+            onClick={async () => {
+              // Reloading over a change that isn't saved drops it (otherwise a later retry
+              // would write it over theirs without showing it).
+              const sched = activeScheduleRef.current;
+              const queues = [
+                [syncers.assignments, sched?.id],
+                [syncers.locks, 'all'],
+                [syncers.leaveEntries, 'all'],
+              ] as const;
+              if (queues.some(([syncer, scope]) => scope && syncer.hasFailed(scope))) {
+                const ok = await confirmDialog({
+                  title: 'Reload without your unsaved change?',
+                  message: 'Your last change is not saved yet. Reloading drops it and shows the roster as it is saved now. To keep it, use Retry now at the top first.',
+                  confirmLabel: 'Reload and drop it',
+                  danger: true,
+                });
+                if (!ok) return;
+                for (const [syncer, scope] of queues) if (scope) syncer.discard(scope);
+                setSaveError(null);
+              }
               setRemoteChange(false);
               void loadData();
             }}
@@ -2835,7 +2881,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           isOpen={isFairnessModalOpen}
           onClose={() => setIsFairnessModalOpen(false)}
           onApplyAssignments={(updated, note) => {
-            handleAssignmentsChange(updated);
+            // The dialog worked on this render's list; a change that arrived meanwhile is kept.
+            handleAssignmentsChange(rebaseEdit(assignments, updated, liveRef.current.assignments));
             setToastMessage(note);
           }}
         />
@@ -2854,7 +2901,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           isOpen={isTemplateModalOpen}
           onClose={() => setIsTemplateModalOpen(false)}
           onApplyAssignments={(updated, note) => {
-            handleAssignmentsChange(updated);
+            // The dialog worked on this render's list; a change that arrived meanwhile is kept.
+            handleAssignmentsChange(rebaseEdit(assignments, updated, liveRef.current.assignments));
             setToastMessage(note);
           }}
         />
@@ -2877,7 +2925,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           isOpen={isSwapModalOpen}
           onClose={() => setIsSwapModalOpen(false)}
           onApplySwap={(updated, note) => {
-            handleAssignmentsChange(updated);
+            // The dialog worked on this render's list; a change that arrived meanwhile is kept.
+            handleAssignmentsChange(rebaseEdit(assignments, updated, liveRef.current.assignments));
             setToastMessage(note);
           }}
         />

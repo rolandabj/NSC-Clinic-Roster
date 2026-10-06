@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-06, after the review of the period ledger (section 16, item 27).
+Last updated: 2026-10-06, after batch 1 of the engine review (saving safety, section 16, items 28 and 29).
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-06, after the review of the period ledger (section 16, ite
 | `npm start` | Built server in production mode, or current source when no build exists |
 | `npm run preview` | Vite preview with the shared protected API mounted before the web app fallback |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 224 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 239 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `build/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -81,7 +81,7 @@ src/
   main.tsx, App.tsx, index.css
   components/
     auth/LoginPage.tsx
-    common/  dialogs.tsx (notify, confirmDialog), useDialogA11y.ts, MenuButton.tsx,
+    common/  dialogs.tsx (notify, confirmDialog), useDialogA11y.ts, MenuButton.tsx, signOut.ts,
              LoadErrorBoundary.tsx, PageLoading.tsx, EmailHtmlPreview.tsx
     layout/  AppShell.tsx, Sidebar.tsx, TopBar.tsx, LocalModeBanner.tsx
     views/   DashboardView, SchedulesView, AvailabilityView, NursesView, DoctorsView,
@@ -104,15 +104,16 @@ src/
     hours/       hoursPolicy.ts, hoursBalance.ts         reports/ hoursAccounting.ts
     periods/     workingHoursPeriodService.ts
     fairness/    yearToDate.ts, yearSeed.ts
-    schedule/    doctorScheduleService.ts, newRosterDates.ts, openSchedule.ts, scheduleDeletionService.ts
+    schedule/    doctorScheduleService.ts, newRosterDates.ts, openSchedule.ts, scheduleDeletionService.ts,
+                 shiftMoves.ts, rebaseEdit.ts
     rules/       ruleSyncService.ts
-    repository/  IRepository.ts, FirestoreRepository.ts, liveCollectionCache.ts,
+    repository/  IRepository.ts, FirestoreRepository.ts, liveCollectionCache.ts, rosterSaveQueues.ts, liveReconcile.ts,
                  collectionSyncer.ts, assignmentSync.ts, index.ts
     firebase/    firebaseConfig.ts, quotaTracker.ts
     auth/        authService.ts, access.ts
     publish/     rosterPublishService.ts, publicRosterService.ts, nurseRosterService.ts
     requests/    staffRequestService.ts
-    history/     diffEngine.ts, versionList.ts
+    history/     diffEngine.ts, versionList.ts, rosterBackup.ts, versionRestore.ts
     dashboard/   dashboardSummary.ts, problemCount.ts
     export/      icsExportService.ts, rosterExportService.ts, rosterPdfService.ts, analysisExportService.ts
     presence/    usePresence.ts, presenceRules.ts
@@ -346,14 +347,17 @@ Whole day problems (marked on the date heading in the grid): `cov-gap-`, `h1-sen
 
 ## 11. Saving, live updates, versions
 
-- **Repository**: `getRepository()` → `FirestoreRepository` (only mode). Methods: list (with `==`/`!=` filter), get, create, update (merge), remove, bulkUpsert (chunks of 450, `replace` option), bulkRemove, clearCollection, subscribe. Writes check `quotaTracker` first (Firestore daily quota; resets midnight Pacific; a banner shows when exceeded). A failed read throws instead of returning `[]`.
+- **Repository**: `getRepository()` → `FirestoreRepository` (only mode). Methods: list (with `==`/`!=` filter), get, create, update (merge), remove, bulkUpsert (chunks of 450, `replace` option), bulkRemove, bulkWrite (upserts then removals in shared batches of 450: one atomic batch for every hand edit and most fills), clearCollection, subscribe. Writes check `quotaTracker` first (Firestore daily quota; resets midnight Pacific; a banner shows when exceeded). A failed read throws instead of returning `[]`.
 - **Roster date reservations**: `FirestoreRepository.writeSchedules` serializes every roster create, update, import and delete with `systemMetadata/scheduleCalendar` in a Firestore transaction. The index is bootstrapped from existing rosters on the first write. Every roster except an archived one reserves its dates; taking a roster out of the archive needs its dates free. Inclusive date overlaps are refused, including simultaneous planner saves. A date change checks the new range; metadata updates can preserve an existing record while old overlaps are resolved. Imports of fewer than 450 rosters are atomic; invalid backup dates are rejected before clearing existing data, while rosters that already overlapped in the backup are restored as they were (`bulkUpsert` with `restore`); new overlaps are still refused. The derived calendar index is skipped during metadata restores and cannot be edited through the repository. Before refusing dates, the transaction reads the conflicting roster itself: a roster deleted outside the app (an old open tab or the Firebase console) no longer holds its dates, and a changed one is checked with its saved dates. A save to a roster that no longer exists is refused ("This roster no longer exists") instead of writing a half empty record. Records without a name or dates are stored safely in the index and never crash the overlap checks. These are application transaction guards; direct console writes or older clients bypassing this repository must not be used to change roster dates after rollout.
 - **Live cache** (`liveCollectionCache.ts`): the first unfiltered list starts an `onSnapshot` listener; later reads come from memory. audit and emailLog are never cached. Idle listeners stop after 5 minutes.
-- **Save queue** (`collectionSyncer.ts` `CollectionSyncer`): the roster editor saves only what changed (assignments, locks, leave), one save at a time, retries every 30 s, never deletes records it did not know about. There is no Save button; the toolbar shows "Saving…", "All changes saved ✓" or an error with "Retry now".
+- **Save queue** (`collectionSyncer.ts` `CollectionSyncer`): the roster editor saves only what changed (assignments, locks, leave), one save at a time, retries every 30 s, never deletes records it did not know about. A save writes new and changed records first, then removals, in one `bulkWrite`, so a write cut short leaves old records next to new ones (the retry removes them), never empty cells. There is no Save button; the toolbar shows "Saving…", "All changes saved ✓" or an error with "Retry now".
+- **Saves that failed** (for example while the daily quota is used up): the three queues live in `rosterSaveQueues.ts`, one set per repository for as long as the app is open, so a failed save survives opening another screen; it is retried every 30 s in the background (the open roster screen retries itself and shows the outcome), the roster screen shows the failure again when it opens, and closing the tab asks first. A reload of a roster with a change that is not saved yet keeps showing that change (`adoptLoaded`): the retry saves exactly what is shown, and what this browser knew stays the base, so a record someone else added meanwhile is never deleted by the retry. "Reload" on the "Someone else changed this roster" notice asks before dropping the unsaved change (`discard`). Publishing waits until everything is saved (it publishes what is on screen). Signing out with unsaved changes asks, then drops them (`signOutSafely`), so they are never saved under the next account.
 - **Edits** all go through `applyEdit` in `SchedulesView.tsx`: one undo step (up to 50; Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z), persist, validate after 300 ms.
-- **Live updates**: assignments of the open roster are subscribed; other people's changes are merged once local saves are idle ("Updated with a change made by someone else"). Presence shows "X is also here".
-- **Backups**: before every fill or clear a `BACKUP` version is saved (newest 5 kept). Restore brings back shifts only and can be undone.
-- **Named copies** ("Keep a copy…"): versions with the next number. History can restore a version (uses the older `syncScheduleAssignments`, which replaces all shifts of the roster).
+- **Live updates** (`liveReconcile.ts` `createLiveReconciler`, one rule for all three lists): the open roster's assignments, and all leave and pinned days (a manager approving leave, another planner pinning a day), are subscribed; other people's changes are shown once local saves are idle and only when they differ from what this browser saved; while a save here failed they are held back and the notice asks to reload. So filling, the checks and publishing never use an old copy of leave or pins. Presence shows "X is also here".
+- **Dialogs that wait for a confirmation** (templates, fairness moves, swaps, backup restore) apply only their own change to the list as it is after the confirmation (`rebaseEdit`), so a change that arrived meanwhile is kept.
+- **Moving a shift to another nurse** (a swap, a fairness move) gives it a new id (`shiftMoves.ts`): generated ids name the nurse and day, and a moved shift that kept its id could meet a new shift the next fill made for the first nurse with the same id (only one of the two was saved). The engine also never reuses an id a kept shift holds (`freeId` in `placeShift`).
+- **Backups** (`history/rosterBackup.ts`): before every fill, clear or History restore a `BACKUP` version is saved (newest 5 kept). Restore brings back shifts only and can be undone.
+- **Named copies** ("Keep a copy…"): versions with the next number. History restores a version only into its own roster (`history/versionRestore.ts`; History lists every roster's versions, and the restore once used whichever roster was selected on screen, deleting that roster's shifts): it keeps a backup of the shifts first, replaces the roster's shifts with the version's (`syncScheduleAssignments`), and records a new version. Pinned days and leave are not restored.
 - **History startup**: `VersionCompareModal` stays mounted while History loads its data. Its roster can be absent during loading or in an empty clinic, so it waits for a roster before opening or moving focus. Hook dependencies use `schedule?.id` to keep the screen from crashing before the first Firestore read finishes.
 - **Diff** (`history/diffEngine.ts` `computeScheduleDiff`): ADDED/REMOVED/MODIFIED by `nurseId|date`. Pin only changes are not emailed.
 
@@ -443,7 +447,7 @@ The server verifies Firebase ID tokens itself (jose, Google JWKS) and reads `use
 
 ## 15. Tests
 
-`tests/unit/` (Node test runner, `node --import tsx --test`, 224 tests): analysisExport, assignmentChecks, backupCheck, changeAlerts, clinicModel (main engine + validator scenarios), continuousHours, csv, dashboard, emailPublishing, explainCell, generatorRequests, hoursAccounting, hoursPolicy, hoursRules, liveCollectionCache, liveUpdates, newRosterDates, nurseRoster, preferenceFocus, requestFindings, rosterSaving, ruleChecker, rules, schedulingEngine, teamRoster, yearFairness.
+`tests/unit/` (Node test runner, `node --import tsx --test`, 239 tests): analysisExport, assignmentChecks, backupCheck, changeAlerts, clinicModel (main engine + validator scenarios), continuousHours, csv, dashboard, emailPublishing, explainCell, generatorRequests, hoursAccounting, hoursPolicy, hoursRules, liveCollectionCache, liveUpdates, newRosterDates, nurseRoster, preferenceFocus, requestFindings, rosterSaving, ruleChecker, rules, savingSafety, schedulingEngine, shiftIds, teamRoster, versionRestore, yearFairness.
 
 `fixtures.ts` helpers: `DAY_DUTY` (09:00 to 17:00), `SENIOR`, `makeNurse(id, overrides)`, `makeSchedule(overrides)` (week of 2026-10-05, 40 h), `ANNUAL_LEAVE`, `UNPAID_LEAVE`, `makeLeave`, `makeLock`, `hoursOnlyRules()` (turns off the Nurse Clinic and plus one rules).
 
@@ -461,7 +465,7 @@ const result = await SchedulingEngine.generate(
 
 `tests/unit/versionCompareModal.test.ts`: renders the comparison dialog with no roster, both closed and asked to open, and verifies that a loaded roster still shows the saved version versus draft changes. The missing roster cases reproduced the History startup crash before the fix.
 
-**Roster transaction tests**: `tests/integration/scheduleTransactions.test.ts` uses the real Firestore repository and a local demo emulator. See `tests/integration/README.md` for the command. It checks simultaneous planners, legacy index bootstrap, date edits, publishing metadata, atomic imports, deletion and stale index restores. No Firestore rules change is needed for these application transactions.
+**Roster transaction tests**: `tests/integration/scheduleTransactions.test.ts` uses the real Firestore repository and a local demo emulator. See `tests/integration/README.md` for the command. It checks simultaneous planners, legacy index bootstrap, date edits, publishing metadata, atomic imports, deletion, stale index restores and combined shift writes (`bulkWrite` over more than one batch). No Firestore rules change is needed for these application transactions.
 
 **Email server integration**: after `npm run build`, run `node --import tsx tests/integration/emailServer.test.ts`. This starts dev, production, direct Vite and Vite preview locally. Each must serve the web app, return authenticated JSON API errors, handle malformed JSON without an HTML error page and block plain, encoded, source map, build folder and Vite filesystem URLs for the backend bundle. The integration test also checks that the backend exists in `build` and is absent from `dist`. It sends no email and needs no Firebase credentials. CI runs it after the build.
 
@@ -529,6 +533,17 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
     - The analysis file grouped the new hours checks per nurse; they are now grouped by check. A part short warning needs more than one long shift short (less is as close as whole shifts allow). Unused netting code removed. The guide's test count is current.
     Replaying the November roster gives the same 2756 hours, filled in 0.2 seconds (0.4 with the hours history loaded). Six new or changed unit tests fail on the old code and pass now; 224 tests in total.
 
+28. Review of the engine, the hours and saving (2026-10-06): the whole engine was read and every finding was reproduced with a small test roster or script before it was reported. On ordinary data the engine is fast (a 12 nurse month in 0.25 s, twice that size in 0.4 s) and gives no "must fix" problems; the faults were in saving, in a few repair steps, and in how leave counts against the goal. The owner's decisions:
+    - Leave stays 8 h a day for everyone (option 1a). The hours limit will count shift hours only, so a part time nurse's leave never shows as overwork (it blocked publishing: a 50% nurse with 16 leave days had 128 h for a 115 h goal).
+    - Unpaid leave drops out of the goal while drafting too, as the published ledger already does.
+    - No unpaid breaks: a shift counts its full length.
+    - Catching up owed hours asks at most 10% of each roster's own hours (not of the whole period), also for a shortfall from an earlier roster of the same period, plus a new rule "most hours in any 7 days" (60 h, must; changeable in Settings, Rules).
+    - Changes to a published roster count for hours as soon as they are saved; Send changes only tells the nurses (emails, private pages, calendars). Later rosters show which goals changed.
+    - Public holidays: one nurse works the holiday and takes another day off of her choosing. Open question: are a period's hours already lowered for its public holidays? Recommended: yes, so nobody gets holiday hours, the engine picks the holiday nurse (sharing holidays over the year) and she gets "1 holiday day off to take"; otherwise the app adds the 8 h holiday leave by itself after the fill.
+    The fixes come in four batches: 1 saving (item 29); 2 engine (the senior step keeps the free nurse, the repair step checks every rule, one hours limit for the engine, checker and Who could cover, strict allocation from the doctor's profile, Fill empty cells respects approved days off, step 5.3 tries later hours, a final check of every hard rule); 3 hours (the decisions above, leave on days outside every period, pacing over the days she can work); 4 inputs (doctor pattern changes reach days already set up, the leave editor sets the request status, hand checks use the engine's rules, holidays).
+
+29. Batch 1, saving safety: History restores a version only into its own roster, with a backup first (it used the roster selected on screen and could delete another roster's shifts). Moved shifts (swaps, fairness moves) get new ids and the engine never reuses a kept shift's id (a swap then a fill could save only one of two shifts). Leave and pinned days refresh live on the roster screen. Saves that failed survive other screens and are retried in the background, a reload shows the unsaved change instead of replaying it later over newer data, Reload asks before dropping it, publishing waits until everything is saved, and signing out asks first. One combined write puts new records before removals. Dialogs that wait for a confirmation apply only their own change to the latest list. Fifteen new unit tests (239 in total); the id collision and the reload replay tests fail on the old code. Type check, build, the four email server modes and the emulator roster save test (now with combined writes over two batches) pass. Chromium checks with an in memory test page pass: live leave and pins, a failed save kept after leaving the screen and saved by Retry now, publishing blocked meanwhile, the conflict notice asking before dropping a change, and a History restore going into its own roster with a backup. No Firestore rules change. Not pushed to main.
+
 ---
 
 ## 17. Known quirks and ideas for later
@@ -537,7 +552,7 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 - SOFT rules in the engine: H2 SOFT is only a −60 score; H3 SOFT is not checked; S1 SOFT gives −150/−50; H7 SOFT removes the ceiling (over goal penalties still apply). The validator reports SOFT breaks as "Check".
 - `dayNeedHours` and the first choice reservation use the raw sessions list, not `doctorSessionsOn`.
 - The hours report counts late shifts at a fixed 21:00, while the engine uses the rule threshold.
-- Version restore in History uses `syncScheduleAssignments` (replaces all shifts, can remove other people's new shifts) and does not restore locks or leave.
+- Version restore in History replaces all shifts of the version's roster (a backup is kept first) and does not restore locks or leave.
 - Shortcuts modal misses Space and undo/redo keys. TopBar acceptance button is dead. `WalkthroughModal` returns null.
 - `cors` dependency unused; PLANNER and STAFF roles unused; `metadata.json` mentions Gemini; `firebase-blueprint.json` is out of date; package name is still `react-example`.
 - Single clinic assumed (`clinics[0]`); `publicRosters` has no TypeScript collection mapping.

@@ -120,6 +120,48 @@ export class CollectionSyncer<C extends CollectionName> {
     this.onChange?.();
   }
 
+  /**
+   * The newest state of a scope that is not saved yet (waiting or failed), if
+   * any. A screen that loads the scope again shows this instead of the
+   * database copy, so what it shows is what the retry will save.
+   */
+  unsaved(scope: string): EntityForCollection<C>[] | undefined {
+    return (this.pending.get(scope) || this.failed.get(scope))?.items;
+  }
+
+  /**
+   * A fresh load of one scope: returns what the screen should show. Normally the
+   * loaded copy (which becomes what is known to be saved). When a change made here
+   * is not saved yet, the screen keeps showing that change, so the retry saves
+   * exactly what is shown, and what this browser knew stays the base for it, so a
+   * record someone else added meanwhile is never deleted by the retry.
+   */
+  adoptLoaded(
+    items: EntityForCollection<C>[],
+    scope: string,
+    inScope: (item: EntityForCollection<C>) => boolean = () => true
+  ): EntityForCollection<C>[] {
+    const unsaved = this.unsaved(scope);
+    if (unsaved) return unsaved;
+    this.replaceKnown(items, inScope);
+    return items;
+  }
+
+  /** Forgets everything: unsaved states and what is known (on sign out, so nothing is saved for the next account). */
+  reset(): void {
+    this.pending.clear();
+    this.failed.clear();
+    this.known.clear();
+    this.onChange?.();
+  }
+
+  /** Drops the unsaved state of a scope (the planner chose to reload without it). */
+  discard(scope: string): void {
+    this.pending.delete(scope);
+    this.failed.delete(scope);
+    this.onChange?.();
+  }
+
   /** True while a save is running, waiting, or failed and not yet retried. */
   hasUnsaved(scope?: string): boolean {
     if (scope !== undefined) return this.pending.has(scope) || this.failed.has(scope) || this.writingScope === scope;
@@ -182,6 +224,14 @@ export class CollectionSyncer<C extends CollectionName> {
 
   private async write(items: EntityForCollection<C>[], inScope: (item: EntityForCollection<C>) => boolean): Promise<void> {
     const { removeIds, upserts } = planSync(this.known, items, inScope);
+    if (this.repo.bulkWrite && removeIds.length + upserts.length > 0) {
+      // One write: new and changed records first, then removals, in as few batches as
+      // possible, so a write cut short leaves the old records, never empty cells.
+      await this.repo.bulkWrite(this.collection, { upserts, removeIds, replace: true });
+      for (const id of removeIds) this.known.delete(id);
+      for (const item of upserts) this.known.set(item.id, { item, print: fingerprint(item) });
+      return;
+    }
     if (removeIds.length > 0) {
       await this.repo.bulkRemove(this.collection, removeIds);
       for (const id of removeIds) this.known.delete(id);

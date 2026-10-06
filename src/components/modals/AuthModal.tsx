@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { authService, UserProfile, UserPrivileges, MASTER_ADMIN_EMAIL } from '../../services/auth/authService';
+import { signOutSafely } from '../common/signOut';
 import { UserRole } from '../../types';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify } from '../common/dialogs';
@@ -67,7 +68,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleSignOut = async () => {
     onClose();
-    await authService.signOut();
+    await signOutSafely();
   };
 
   const tokenState = authService.getTokenState();

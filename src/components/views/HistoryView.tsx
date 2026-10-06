@@ -43,7 +43,7 @@ import {
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
-import { syncScheduleAssignments } from '../../services/repository/assignmentSync';
+import { restoreVersion } from '../../services/history/versionRestore';
 import {
   Schedule,
   ScheduleVersion,
@@ -249,46 +249,20 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
     }
   };
 
-  // Safe non-destructive restore
+  // A version goes back into its own roster (History lists every roster's versions,
+  // so the roster selected on screen can be a different one).
   const handleConfirmRestore = async () => {
-    if (!activeSchedule || !versionToRestore) return;
+    if (!versionToRestore) return;
 
     try {
-      const nextVerNumber = (activeSchedule.activeVersionNumber || 1) + 1;
-
-      // 1. Update Schedule active version number
-      await repo.update('schedules', activeSchedule.id, {
-        activeVersionNumber: nextVerNumber,
-        updatedAt: new Date().toISOString(),
-      });
-
-      // 2. Overwrite active assignments with the snapshot assignments
-      const restoredAssignments = versionToRestore.snapshot.assignments;
-      await syncScheduleAssignments(repo, activeSchedule.id, restoredAssignments);
-
-      // 3. Create a brand new version documenting the restore
-      await repo.create('versions', {
-        scheduleId: activeSchedule.id,
-        number: nextVerNumber,
-        timestamp: new Date().toISOString(),
-        author: context.currentUser?.name || 'Dr. Fatima (Admin)',
-        note: `Restored from version ${versionToRestore.number} ("${versionToRestore.note || 'Snapshot'}")`,
-        snapshot: versionToRestore.snapshot,
-        isPublished: false,
-      });
-
-      // 4. Record audit event
-      await repo.create('audit', {
-        actor: context.currentUser?.name || 'Admin',
-        action: 'RESTORE',
-        entity: 'Schedule',
-        entityId: activeSchedule.id,
-        before: { version: activeSchedule.activeVersionNumber },
-        note: `Restored to state of v${versionToRestore.number}`,
-        timestamp: new Date().toISOString(),
-      });
-
-      triggerToast(`Restored v${versionToRestore.number} as new version v${nextVerNumber}.`);
+      const result = await restoreVersion(
+        repo,
+        versionToRestore,
+        context.currentUser?.name || context.currentUser?.email || 'Planner'
+      );
+      triggerToast(
+        `Restored v${versionToRestore.number} of "${result.schedule.name}" as v${result.newVersionNumber}. A backup copy of the shifts before it was kept.`
+      );
       setIsRestoreModalOpen(false);
       setVersionToRestore(null);
       await loadData();
@@ -1567,23 +1541,30 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
             <div className="flex items-center gap-2 text-indigo-600">
               <RotateCcw className="w-5 h-5 shrink-0" aria-hidden="true" />
               <h3 id={restoreTitleId} className="text-sm font-bold text-slate-900">
-                Safe Non-Destructive Restore
+                Restore this version?
               </h3>
             </div>
 
-            <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-900 space-y-2 leading-relaxed text-[11px]">
-              <p className="font-semibold text-xs">Non-Destructive Principle:</p>
-              <p>
-                Restores <strong>v{versionToRestore.number}</strong> as{' '}
-                <strong className="font-mono text-indigo-950 font-bold">
-                  v{(activeSchedule?.activeVersionNumber || 1) + 1}
-                </strong>
-                . Nothing is overwritten or deleted.
-              </p>
-              <p className="text-slate-600 text-[10px]">
-                Active assignments will be safely populated from this checkpoint snapshot, and a new version entry will record the restoration event.
-              </p>
-            </div>
+            {(() => {
+              // The version's own roster, which is not always the one selected on screen.
+              const roster = schedules.find((s) => s.id === versionToRestore.scheduleId);
+              const shiftCount = versionToRestore.snapshot?.assignments?.length || 0;
+              return (
+                <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-900 space-y-2 leading-relaxed text-[11px]">
+                  <p>
+                    The shifts of <strong>{roster?.name || versionToRestore.snapshot?.schedule?.name || 'this roster'}</strong> are
+                    replaced by the {shiftCount} shift{shiftCount === 1 ? '' : 's'} saved in{' '}
+                    <strong>v{versionToRestore.number}</strong>, and{' '}
+                    <strong className="font-mono text-indigo-950 font-bold">v{(roster?.activeVersionNumber || 1) + 1}</strong>{' '}
+                    records the restore.
+                  </p>
+                  <p className="text-slate-600 text-[10px]">
+                    A backup copy of the shifts as they are now is kept first, so you can go back (Rosters, More, Backup copies).
+                    Pinned days and leave are not changed.
+                  </p>
+                </div>
+              );
+            })()}
 
             <div className="pt-2 flex items-center justify-end gap-2">
               <button

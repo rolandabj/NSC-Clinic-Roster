@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { authService, MASTER_ADMIN_EMAIL } from '../../services/auth/authService';
+import { signOutSafely } from '../common/signOut';
 import { canEditClinicData } from '../../services/auth/access';
 
 interface TopBarProps {
@@ -37,7 +38,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   const handleSignOut = async () => {
     setIsProfileMenuOpen(false);
-    await authService.signOut();
+    await signOutSafely();
   };
 
   return (

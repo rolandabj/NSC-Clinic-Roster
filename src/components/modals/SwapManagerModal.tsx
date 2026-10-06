@@ -42,6 +42,7 @@ import { notify } from '../common/dialogs';
 import { authService } from '../../services/auth/authService';
 import { resolveRule } from '../../services/engine/SchedulingEngine';
 import { formatDate } from '../../utils/dateUtils';
+import { swapShifts } from '../../services/schedule/shiftMoves';
 
 interface SwapManagerModalProps {
   schedule: Schedule;
@@ -210,24 +211,10 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
       const recordedBy = user?.name || user?.email || 'Planner';
       const reasonText = swapReason.trim() || 'agreed between the nurses';
 
-      const updatedAssignments = assignments.map((a) => {
-        if (a.id === selectedAsgnA.id) {
-          return {
-            ...a,
-            nurseId: nurseBId,
-            source: 'MANUAL' as const,
-            note: `Swapped with ${nurseA?.fullName}. Reason: ${reasonText}`,
-          };
-        }
-        if (a.id === selectedAsgnB.id) {
-          return {
-            ...a,
-            nurseId: nurseAId,
-            source: 'MANUAL' as const,
-            note: `Swapped with ${nurseB?.fullName}. Reason: ${reasonText}`,
-          };
-        }
-        return a;
+      // Both shifts change nurse, so both get new ids (see shiftMoves).
+      const updatedAssignments = swapShifts(assignments, selectedAsgnA, selectedAsgnB, {
+        a: `Swapped with ${nurseA?.fullName}. Reason: ${reasonText}`,
+        b: `Swapped with ${nurseB?.fullName}. Reason: ${reasonText}`,
       });
 
       // Record SwapRequest and AuditEvent

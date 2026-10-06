@@ -307,6 +307,48 @@ export class FirestoreRepository implements IRepository {
     }
   }
 
+  /**
+   * Upserts then removals in shared batches. A change of up to BATCH_LIMIT
+   * records (every hand edit, most fills) is one atomic batch; a bigger one is
+   * split, upserts first, so a write cut short leaves old records next to new
+   * ones (the retry removes them) rather than empty cells.
+   */
+  async bulkWrite<T extends CollectionName>(
+    colName: T,
+    changes: { upserts: EntityForCollection<T>[]; removeIds: string[]; replace?: boolean }
+  ): Promise<void> {
+    const ops = [
+      ...changes.upserts.map((item) => ({ kind: 'set' as const, item })),
+      ...changes.removeIds.map((id) => ({ kind: 'delete' as const, id })),
+    ];
+    if (ops.length === 0) return;
+    if (colName === 'schedules' || colName === 'systemMetadata') {
+      // Rosters and the roster calendar keep their own transactional paths.
+      await this.bulkUpsert(colName, changes.upserts, { replace: changes.replace });
+      await this.bulkRemove(colName, changes.removeIds);
+      return;
+    }
+    quotaTracker.assertWritable();
+    try {
+      for (let i = 0; i < ops.length; i += BATCH_LIMIT) {
+        const batch = writeBatch(this.db);
+        for (const op of ops.slice(i, i + BATCH_LIMIT)) {
+          if (op.kind === 'delete') {
+            batch.delete(doc(this.db, colName, op.id));
+          } else {
+            const docRef = doc(this.db, colName, (op.item as any).id);
+            if (changes.replace) batch.set(docRef, sanitizePayload(op.item));
+            else batch.set(docRef, sanitizePayload(op.item), { merge: true });
+          }
+        }
+        await batch.commit();
+      }
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
+      throw err;
+    }
+  }
+
   async clearCollection<T extends CollectionName>(colName: T): Promise<void> {
     const items = await this.list(colName);
     const ids = items.map((item: any) => item?.id).filter(Boolean);

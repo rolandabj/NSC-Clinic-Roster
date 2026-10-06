@@ -48,6 +48,7 @@ import { loadYearToDate, YearToDate } from '../../services/fairness/yearToDate';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog } from '../common/dialogs';
 import { authService } from '../../services/auth/authService';
+import { moveShift } from '../../services/schedule/shiftMoves';
 
 interface FairnessModalProps {
   schedule: Schedule;
@@ -325,13 +326,12 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
 
       const updated = assignments.map((a) => {
         const swap = swapsToApply.find((s) => s.assignmentA.id === a.id);
+        // A moved shift gets a new id (see shiftMoves).
         if (swap) {
-          return {
-            ...a,
-            nurseId: swap.underloadedNurse.id,
-            source: 'GENERATED' as const,
+          return moveShift(a, swap.underloadedNurse.id, {
+            source: 'GENERATED',
             note: `Rebalanced from ${swap.overloadedNurse.fullName}`,
-          };
+          });
         }
         return a;
       });

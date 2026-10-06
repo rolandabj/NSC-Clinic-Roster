@@ -75,6 +75,16 @@ export interface IRepository {
   ): Promise<void>;
 
   /**
+   * Writes and removes in one go: the upserts first, then the removals, in as
+   * few batches as possible (one atomic batch when they fit). Optional: callers
+   * fall back to bulkRemove and bulkUpsert.
+   */
+  bulkWrite?<T extends CollectionName>(
+    collection: T,
+    changes: { upserts: EntityForCollection<T>[]; removeIds: string[]; replace?: boolean }
+  ): Promise<void>;
+
+  /**
    * Clear all documents in a collection (used for reset/tests)
    */
   clearCollection<T extends CollectionName>(

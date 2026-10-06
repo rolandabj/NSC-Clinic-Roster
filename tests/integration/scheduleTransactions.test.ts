@@ -65,7 +65,14 @@ try {
   ], { restore: true });
   // Outside a restore, those dates are still refused.
   await assert.rejects(a.repo.create('schedules', makeSchedule({ id: 'new-may', startDate: '2027-05-05', endDate: '2027-05-06' })), /overlap/);
-  console.log('PASS: simultaneous planners, legacy bootstrap, updates, atomic imports, deletion and protected calendar restore');
+  // A roster save writes new shifts and removals together; a big one takes more than one batch.
+  const shiftOf = (id: string) => ({ id, scheduleId: 'replacement', nurseId: 'n1', date: '2026-10-20', dutyWindowId: 'D',
+    kind: 'CLINICAL_ROLE', clinicalRoleId: 'role-float', locked: false, source: 'GENERATED' } as any);
+  const many = Array.from({ length: 500 }, (_, i) => shiftOf(`old-${i}`));
+  await a.repo.bulkWrite!('assignments', { upserts: many, removeIds: [], replace: true });
+  await a.repo.bulkWrite!('assignments', { upserts: [shiftOf('new-1')], removeIds: many.map((x) => x.id), replace: true });
+  assert.deepEqual((await getDocs(collection(a.db, 'assignments'))).docs.map((d) => d.id), ['new-1']);
+  console.log('PASS: simultaneous planners, legacy bootstrap, updates, atomic imports, deletion, protected calendar restore and combined shift writes');
 } finally {
   await Promise.all(apps.map(app => deleteApp(app)));
   await env.cleanup();
