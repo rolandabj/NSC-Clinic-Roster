@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791357661.665243,
-    "seen": 1791357674.5346336,
-    "ast_hash": "e33633403db3749f27d7c35096f73ce2",
+    "mtime": 1791357904.823161,
+    "seen": 1791357914.2361379,
+    "ast_hash": "35525cb4b488548b393de3dca99f28e4",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1365,6 +1365,18 @@
     "mtime": 1791298081.0348773,
     "seen": 1791298307.8206508,
     "ast_hash": "70770093fbc1f5bb70fdb7ab6c65ea18",
+    "semantic_hash": ""
+  },
+  "skills-lock.json": {
+    "mtime": 1791357893.5721028,
+    "seen": 1791357914.2355285,
+    "ast_hash": "8545a14ece744a533a452f03d68a68d8",
+    "semantic_hash": ""
+  },
+  ".claude/skills/find-skills/SKILL.md": {
+    "mtime": 1791357893.5649798,
+    "seen": 1791357914.2361145,
+    "ast_hash": "62b297abdee9aea84c577ab2e04e1974",
     "semantic_hash": ""
   }
 }

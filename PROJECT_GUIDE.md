@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-07, after turning on the claude-code-setup plugin for the project (section 16, item 34), pushed to main.
+Last updated: 2026-10-07, after saving the find-skills skill in the repo (section 16, item 35), on the working branch; not pushed to main yet.
 
 ---
 
@@ -28,6 +28,7 @@ Last updated: 2026-10-07, after turning on the claude-code-setup plugin for the 
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
 | Plugin `claude-code-setup` (skill `claude-automation-recommender`) | Suggests Claude Code automations for the repo (hooks, skills, MCP servers, subagents). From Anthropic's official plugin marketplace, declared and turned on for the project in `.claude/settings.json`, so every Claude Code session on this repo, cloud sessions included, loads it at start. |
+| Skill `find-skills` | Finds other agent skills in the public catalogue at skills.sh (`npx skills find`), favouring well used skills from known publishers, and installs one (`npx skills add`) only when you agree. Saved in `.claude/skills/find-skills/` from `vercel-labs/skills`; `skills-lock.json` records its source, so `npx skills update` can refresh it. |
 
 **Working agreements with the owner (important).**
 
@@ -130,6 +131,8 @@ tests/
   settings.json                   Session start hook, the official plugin marketplace and the claude-code-setup plugin
   hooks/session-start.sh          Web sessions: npm install and the graphify tool
   skills/graphify/                The /graphify skill
+  skills/find-skills/             Finds and installs other agent skills (from vercel-labs/skills)
+skills-lock.json                  Where the find-skills skill came from (for `npx skills update`)
 firestore.rules
 firebase-applet-config.json   Firebase web config (project gen-lang-client-0671372661, named database)
 firebase-blueprint.json       AI Studio schema description (out of date, informational)
@@ -568,6 +571,9 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 
 
 34. Claude Code plugin for the project, the owner's request of 2026-10-07: `claude-code-setup` from Anthropic's official plugin marketplace (`anthropics/claude-plugins-official`) is declared and turned on in `.claude/settings.json` (`extraKnownMarketplaces`, `enabledPlugins`), so every Claude Code session on this repo loads it, cloud sessions included (a plugin installed only in a cloud container's home folder is lost when the container is reclaimed). It adds one skill, `claude-automation-recommender`, which looks at the codebase and suggests Claude Code automations (hooks, skills, MCP servers, subagents); it has no hooks or servers of its own and adds about 140 tokens to each session. No app code changed. The owner approved pushing it to main on 2026-10-07.
+
+
+35. The `find-skills` skill saved in the repo, the owner's request of 2026-10-07: installed for the project with `npx skills add vercel-labs/skills@find-skills -a claude-code --copy -y`, which copies it into `.claude/skills/find-skills/SKILL.md` and records its source and hash in `skills-lock.json`. Every Claude Code session on this repo loads it (it was first installed only in a cloud container's home folder, which is lost when the container is reclaimed). When asked for a skill for some task, it searches skills.sh, checks install counts and publishers, shows the install command, and installs only with agreement. No app code changed.
 
 ---
 
