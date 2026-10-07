@@ -56,8 +56,9 @@ background (4.3:1), so it is kept for field borders and never used for text.
 
 **Shift and leave colours** are chosen by planners in Settings and stored with the data. The grid shows
 them as a light tint (10 % of the colour on white) with a 3 px edge in the full colour, and the text on
-them stays `ink` and `ink-muted` (6:1 or more on every tint tried, black included). The real app will work the tint
-out in one helper, so the text is always readable whatever colour a planner picks.
+them stays `ink` and `ink-muted` (6:1 or more on every tint tried, black included). The app works the tint out
+in one helper, `src/utils/colorContrast.ts` (`tint`, and `readableTextOn` for a solid chip), so the text is always
+readable whatever colour a planner picks.
 
 ## Roster marks
 

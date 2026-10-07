@@ -966,15 +966,15 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791399109.9726646,
-    "seen": 1791399133.1078944,
-    "ast_hash": "0819c4cf496b71924bed812722bc6132",
+    "mtime": 1791399585.1352189,
+    "seen": 1791399601.423711,
+    "ast_hash": "8077ef6ae55fa61bfb85595e6d54e643",
     "semantic_hash": ""
   },
   "index.html": {
-    "mtime": 1791362587.9497638,
-    "seen": 1791365225.134212,
-    "ast_hash": "27ec8572fcf0a329d9b756f38d24c42d",
+    "mtime": 1791399356.9781127,
+    "seen": 1791399601.4237144,
+    "ast_hash": "0a36abfcb554a6f999615762a8706409",
     "semantic_hash": ""
   },
   ".claude/hooks/session-start.sh": {
@@ -1494,9 +1494,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/harness/index.html": {
-    "mtime": 1791378696.017544,
-    "seen": 1791379364.2706025,
-    "ast_hash": "e59f3fe85e191024ddc02c66c891faee",
+    "mtime": 1791399356.978695,
+    "seen": 1791399601.4236796,
+    "ast_hash": "1d9cd97fc3706b1ffb2eb8b95a51eda3",
     "semantic_hash": ""
   },
   ".claude/skills/finish-change/SKILL.md": {
@@ -1590,9 +1590,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791399109.9731717,
-    "seen": 1791399133.1079006,
-    "ast_hash": "83594671da6cebb5582e06a7cf9696a7",
+    "mtime": 1791399585.1366668,
+    "seen": 1791399601.423717,
+    "ast_hash": "e69f69782605e42683d33255b5fa700b",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1668,15 +1668,27 @@
     "semantic_hash": ""
   },
   "design-system/nsc-clinic-roster/MASTER.md": {
-    "mtime": 1791398992.5813398,
-    "seen": 1791398998.0521917,
-    "ast_hash": "fb6a58ca18c2e1c96528f97898e9f04d",
+    "mtime": 1791399585.1361275,
+    "seen": 1791399601.4237132,
+    "ast_hash": "8e0e54cfe1c61ec277cf6d8ac934220c",
     "semantic_hash": ""
   },
   "tests/unit/dateUtils.test.ts": {
     "mtime": 1791399061.1567328,
     "seen": 1791399133.1078057,
     "ast_hash": "6c5ce5df7aa1feb2837f02844dd5f962",
+    "semantic_hash": ""
+  },
+  "src/utils/colorContrast.ts": {
+    "mtime": 1791399526.8327603,
+    "seen": 1791399601.4235923,
+    "ast_hash": "733e25dee5e6768988f0d1e89c28957d",
+    "semantic_hash": ""
+  },
+  "tests/unit/colorContrast.test.ts": {
+    "mtime": 1791399514.4169478,
+    "seen": 1791399601.4236178,
+    "ast_hash": "1956d21303d19cb72cc30b43c10e1d5d",
     "semantic_hash": ""
   }
 }

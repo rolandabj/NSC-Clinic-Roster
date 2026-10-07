@@ -1,5 +1,57 @@
 @import "tailwindcss";
 
+/* The look approved by the owner on 07-10-2026 (design-system/nsc-clinic-roster/MASTER.md).
+   Colour roles: use these names (bg-brand, text-ink-muted, border-line ...) in new code.
+   Contrast is against white unless noted. */
+@theme {
+  --color-brand: #0e7490; /* main buttons, links, the open menu item: white text 5.4:1 */
+  --color-brand-strong: #155e75; /* hover and pressed; text on brand-soft 7.0:1 */
+  --color-brand-soft: #ecfeff; /* selected rows, the open menu item */
+  --color-canvas: #f8fafc; /* page background */
+  --color-surface: #ffffff; /* cards, tables, dialogs */
+  --color-sunken: #f1f5f9; /* table headers, weekends, hover */
+  --color-line: #e2e8f0; /* card borders and dividers */
+  --color-line-strong: #cbd5e1; /* roster grid lines, plain buttons */
+  --color-control: #64748b; /* borders of text fields and selects: 4.8:1 */
+  --color-ink: #0f172a; /* main text: 17.9:1 */
+  --color-ink-muted: #475569; /* second level text: 7.6:1, 6.9:1 on sunken */
+  --color-danger: #b91c1c; /* Must fix, errors: 6.5:1, 5.9:1 on danger-soft */
+  --color-danger-soft: #fef2f2;
+  --color-danger-line: #dc2626;
+  --color-warning: #92400e; /* Check, Waiting: 7.1:1, 6.8:1 on warning-soft */
+  --color-warning-soft: #fffbeb;
+  --color-warning-line: #d97706;
+  --color-success: #047857; /* Approved, saved: 5.5:1, 5.2:1 on success-soft */
+  --color-success-soft: #ecfdf5;
+  --color-info: #1d4ed8; /* Note: 6.7:1, 6.2:1 on info-soft */
+  --color-info-soft: #eff6ff;
+  --color-focus: #0891b2; /* keyboard focus ring: 3.7:1 */
+
+  /* Until each screen moves to the colour roles above (Phases 4 to 8), the old brand colour's
+     names show the new teal, one shade darker from 500 up so white text on them stays readable.
+     Phase 9 removes these lines once no screen uses indigo. */
+  --color-indigo-50: #ecfeff;
+  --color-indigo-100: #cffafe;
+  --color-indigo-200: #a5f3fc;
+  --color-indigo-300: #67e8f9;
+  --color-indigo-400: #22d3ee;
+  --color-indigo-500: #0891b2;
+  --color-indigo-600: #0e7490;
+  --color-indigo-700: #155e75;
+  --color-indigo-800: #164e63;
+  --color-indigo-900: #083344;
+  --color-indigo-950: #052a33;
+
+  /* One font. Numbers that sit in columns use tabular-nums; font-mono, used on plain words and
+     numbers across the screens, now shows Inter with digits of equal width. */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.06);
+  --shadow-pop: 0 8px 24px -4px rgb(15 23 42 / 0.18);
+  --shadow-dialog: 0 24px 48px -12px rgb(15 23 42 / 0.35);
+}
+
 /* The app has a light theme only. Without this, Tailwind applies the few
    dark: classes whenever the computer is in dark mode, which darkened the top
    bar and a few dialogs while everything else stayed light. */
@@ -32,26 +84,46 @@
   .animate-in {
     animation: none;
   }
+  /* Colour changes happen at once; loading spinners keep turning, as they show work going on. */
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @layer base {
   :root {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-sans);
   }
 
   body {
     font-size: 14px;
-    color: #1e293b;
-    background-color: #f8fafc;
+    line-height: 1.5;
+    color: var(--color-ink);
+    background-color: var(--color-canvas);
   }
 
-  .font-mono, code, kbd, samp, pre {
-    font-family: 'JetBrains Mono', monospace;
-  }
-
-  /* Tabular numbers for clinical scheduling, hours, dates, codes */
-  .tabular-nums {
+  /* Text that was set in a monospace font keeps its digits in line. */
+  .font-mono {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Real code (rare on screens) keeps a monospace font, the computer's own. */
+  code, kbd, samp, pre {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  /* A visible ring for keyboard focus wherever a screen sets none of its own. */
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  ::placeholder {
+    color: var(--color-ink-muted);
+    opacity: 1;
   }
 }
 

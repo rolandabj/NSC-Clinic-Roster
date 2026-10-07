@@ -25,7 +25,7 @@ Main moves only when the owner says "push to main".
 ## Phase 2: design system and app shell
 - [x] Sample page from the `ui-ux-pro-max` design system (`?view=sample`, `?view=sample-nurse`), checked, and `design-system/nsc-clinic-roster/MASTER.md`
 - [x] The owner approved the sample with Inter (07-10-2026)
-- [ ] Tokens in `src/index.css`
+- [x] Tokens in `src/index.css`, Inter, focus ring, indigo shown as the new teal, `colorContrast.ts`
 - [ ] Shared components in `src/components/ui/` and a gallery view
 - [x] One date module (`dateUtils.ts`: day with weekday, typed dates; `dateFormatter.ts` deleted)
 - [ ] App shell: skip link, titles, deep links, Back between tabs, app context
