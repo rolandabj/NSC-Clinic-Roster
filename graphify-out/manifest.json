@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791358081.800577,
-    "seen": 1791358090.7518194,
-    "ast_hash": "cf42b5756fbd44e4c6a232faa943220d",
+    "mtime": 1791358301.0966403,
+    "seen": 1791358311.1934154,
+    "ast_hash": "39effb3f7feb686b52bc8c9091f1a003",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1368,15 +1368,57 @@
     "semantic_hash": ""
   },
   "skills-lock.json": {
-    "mtime": 1791357893.5721028,
-    "seen": 1791357914.2355285,
-    "ast_hash": "8545a14ece744a533a452f03d68a68d8",
+    "mtime": 1791358281.7368302,
+    "seen": 1791358311.192998,
+    "ast_hash": "da0a156fec0c9e0252c389072a66cc0b",
     "semantic_hash": ""
   },
   ".claude/skills/find-skills/SKILL.md": {
     "mtime": 1791357893.5649798,
     "seen": 1791357914.2361145,
     "ast_hash": "62b297abdee9aea84c577ab2e04e1974",
+    "semantic_hash": ""
+  },
+  ".claude/skills/code-review-and-quality/SKILL.md": {
+    "mtime": 1791358281.6795764,
+    "seen": 1791358311.1933837,
+    "ast_hash": "c1da82040ec947080ba9a241b83edb4d",
+    "semantic_hash": ""
+  },
+  ".claude/skills/debugging-and-error-recovery/SKILL.md": {
+    "mtime": 1791358281.6829596,
+    "seen": 1791358311.1933854,
+    "ast_hash": "e906de3fe5071e70402b2705d3794a34",
+    "semantic_hash": ""
+  },
+  ".claude/skills/frontend-ui-engineering/SKILL.md": {
+    "mtime": 1791358281.6885517,
+    "seen": 1791358311.193389,
+    "ast_hash": "57095c41b26abbc6bd92e576d9d2891a",
+    "semantic_hash": ""
+  },
+  ".claude/skills/performance-optimization/SKILL.md": {
+    "mtime": 1791358281.691943,
+    "seen": 1791358311.1934068,
+    "ast_hash": "112f6f487ebbe046f2cc357ec11228ac",
+    "semantic_hash": ""
+  },
+  ".claude/skills/performance-optimization/references/optimization-patterns.md": {
+    "mtime": 1791358281.6927912,
+    "seen": 1791358311.1934083,
+    "ast_hash": "423e92e3393e28cf2f0f6812a7f26487",
+    "semantic_hash": ""
+  },
+  ".claude/skills/security-and-hardening/SKILL.md": {
+    "mtime": 1791358281.697293,
+    "seen": 1791358311.1934092,
+    "ast_hash": "9ee1a18c60eeae27068783eda15a727c",
+    "semantic_hash": ""
+  },
+  ".claude/skills/security-and-hardening/references/hardening-patterns.md": {
+    "mtime": 1791358281.6981866,
+    "seen": 1791358311.1934106,
+    "ast_hash": "fd03ccd4920dd963dfe21f2cb6466ff9",
     "semantic_hash": ""
   }
 }

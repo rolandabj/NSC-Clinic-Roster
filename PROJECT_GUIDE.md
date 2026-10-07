@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-07, after the session start script set git to fetch GitHub over HTTPS (section 16, item 36), pushed to main with item 35.
+Last updated: 2026-10-07, after saving five skills from addyosmani/agent-skills in the repo (section 16, item 37), on the working branch; not pushed to main yet.
 
 ---
 
@@ -29,6 +29,7 @@ Last updated: 2026-10-07, after the session start script set git to fetch GitHub
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
 | Plugin `claude-code-setup` (skill `claude-automation-recommender`) | Suggests Claude Code automations for the repo (hooks, skills, MCP servers, subagents). From Anthropic's official plugin marketplace, declared and turned on for the project in `.claude/settings.json`, so every Claude Code session on this repo, cloud sessions included, loads it at start. |
 | Skill `find-skills` | Finds other agent skills in the public catalogue at skills.sh (`npx skills find`), favouring well used skills from known publishers, and installs one (`npx skills add`) only when you agree. Saved in `.claude/skills/find-skills/` from `vercel-labs/skills`; `skills-lock.json` records its source, so `npx skills update` can refresh it. |
+| Skills from `addyosmani/agent-skills` | Five engineering guides, used when they fit the task: `debugging-and-error-recovery` (reproduce and find the root cause before fixing), `code-review-and-quality`, `security-and-hardening` (asks a person first before sign in changes, new outside services or new permissions), `frontend-ui-engineering` (accessible, responsive screens) and `performance-optimization`. Saved in `.claude/skills/`, with their sources in `skills-lock.json`. The project's own rules (`CLAUDE.md`, this guide) come first where they differ. |
 
 **Working agreements with the owner (important).**
 
@@ -132,7 +133,9 @@ tests/
   hooks/session-start.sh          Web sessions: git fetches GitHub over HTTPS, npm install, the graphify tool
   skills/graphify/                The /graphify skill
   skills/find-skills/             Finds and installs other agent skills (from vercel-labs/skills)
-skills-lock.json                  Where the find-skills skill came from (for `npx skills update`)
+  skills/debugging-and-error-recovery/, code-review-and-quality/, security-and-hardening/,
+         frontend-ui-engineering/, performance-optimization/   Engineering guides (from addyosmani/agent-skills)
+skills-lock.json                  Where the skills in .claude/skills came from (for `npx skills update`)
 firestore.rules
 firebase-applet-config.json   Firebase web config (project gen-lang-client-0671372661, named database)
 firebase-blueprint.json       AI Studio schema description (out of date, informational)
@@ -577,6 +580,9 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 
 
 36. Git in cloud sessions, the owner's request of 2026-10-07: the session start script (`.claude/hooks/session-start.sh`) now runs `git config --global url."https://github.com/".insteadOf git@github.com:`, so GitHub addresses written for SSH (`git@github.com:owner/repo`) are fetched over HTTPS; cloud sessions have no SSH keys. It runs before `npm install`, so a package with such an address installs too, and only in cloud sessions, like the rest of the script. A full run of the script passes and sets the rule. The owner approved pushing items 35 and 36 to main on 2026-10-07.
+
+
+37. Five skills from `addyosmani/agent-skills` saved in the repo, the owner's choice of 2026-10-07: debugging-and-error-recovery, code-review-and-quality, security-and-hardening, frontend-ui-engineering and performance-optimization, installed for the project with `npx skills add addyosmani/agent-skills -a claude-code --copy -y --skill ...` (copied into `.claude/skills/`, sources added to `skills-lock.json`). All seven files were read before saving: standard engineering guidance, no commands that run by themselves, no settings or permission changes. The other 20 skills of the collection were left out on purpose: they would add about 2,000 tokens to every session, and some overlap with how the owner works (git-workflow-and-versioning covers committing and pushing, using-agent-skills and context-engineering steer every session start, test-driven-development applies to almost every change; browser-testing-with-devtools needs a Chrome DevTools server that is not set up). No app code changed.
 
 ---
 
