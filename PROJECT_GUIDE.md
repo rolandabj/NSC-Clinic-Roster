@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-07, after closing the Gemini routes to people who are not signed in (section 16, item 43), on the working branch with Phase 0 of the UI overhaul (item 42); not pushed to main yet.
+Last updated: 2026-10-07, after Phase 1 of the UI overhaul began (section 16, item 44: dates), on the working branch with Phase 0 (item 42) and the Gemini sign in fix (item 43); not pushed to main yet.
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-07, after closing the Gemini routes to people who are not 
 | `npm start` | Built server in production mode, or current source when no build exists |
 | `npm run preview` | Vite preview with the shared protected API mounted before the web app fallback |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 280 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 286 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `build/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -130,7 +130,7 @@ src/
     settings/    emailSettingsStore.ts
     i18n/        index.ts (English and Arabic)
   types/  index.ts (all data types), navigation.ts, settings.ts
-  utils/  csv.ts, dateUtils.ts, dateFormatter.ts, escapeHtml.ts, weekend.ts
+  utils/  csv.ts, dateUtils.ts, dateDefaults.ts (default dates worked out from today), dateFormatter.ts, escapeHtml.ts, weekend.ts
 tests/
   unit/*.test.ts + fixtures.ts
   firestore-rules/rules.test.mjs (+ its own package.json)
@@ -497,7 +497,7 @@ Without the key the firebase server shows as not connected and nothing is downlo
 
 ## 15. Tests
 
-`tests/unit/` (Node test runner, `node --import tsx --test`, 280 tests): analysisExport, assignmentChecks, backupCheck, changeAlerts, clinicModel (main engine + validator scenarios), continuousHours, csv, dashboard, doctorWeekChange (a doctor's week changed from a date, the leave switch), emailPublishing, engineRules, explainCell, geminiApi, generatorRequests, handMoves (swaps and fairness moves against the roster check, the agreed exception), hoursAccounting, hoursDecisions (the owner's hours decisions), hoursPolicy, hoursRules, liveCollectionCache, liveUpdates, newRosterDates, nurseRoster, preferenceFocus, publicHolidays (option 1 for public holidays), requestFindings, rosterSaving, ruleChecker, rules, savingSafety, schedulingEngine, shiftIds, teamRoster, versionRestore, weekHours (the 7 day hours rule), yearFairness.
+`tests/unit/` (Node test runner, `node --import tsx --test`, 286 tests): analysisExport, assignmentChecks, backupCheck, changeAlerts, clinicModel (main engine + validator scenarios), continuousHours, csv, dashboard, dateDefaults (default dates of screens and forms), doctorWeekChange (a doctor's week changed from a date, the leave switch), emailPublishing, engineRules, explainCell, geminiApi, generatorRequests, handMoves (swaps and fairness moves against the roster check, the agreed exception), hoursAccounting, hoursDecisions (the owner's hours decisions), hoursPolicy, hoursRules, liveCollectionCache, liveUpdates, newRosterDates, nurseRoster, preferenceFocus, publicHolidays (option 1 for public holidays), requestFindings, rosterSaving, ruleChecker, rules, savingSafety, schedulingEngine, shiftIds, teamRoster, versionRestore, weekHours (the 7 day hours rule), yearFairness.
 
 `fixtures.ts` helpers: `DAY_DUTY` (09:00 to 17:00), `SENIOR`, `makeNurse(id, overrides)`, `makeSchedule(overrides)` (week of 2026-10-05, 40 h), `ANNUAL_LEAVE`, `UNPAID_LEAVE`, `makeLeave`, `makeLock`, `hoursOnlyRules()` (turns off the Nurse Clinic and plus one rules).
 
@@ -627,6 +627,8 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 
 43. The Gemini routes now need sign in, the owner's decision of 2026-10-07. The Gemini change (item 41) had put `GET` and `POST` `/api/gemini/` on the list of API routes that skip sign in (`PUBLIC_API_ROUTES` in `server/apiApp.ts`), so anyone who found the app's address could send any text to `POST /api/gemini/generate` and use the clinic's Gemini key and quota, up to 60 requests a minute from each address. Asked who should use them (planners only, any signed in user, or everyone), the owner chose any signed in user: the routes are off that list, so the shared sign in check answers 401 to everyone else. The Gemini tab in Fairness already sends the sign in token (`authorizedFetch`), so it keeps working. Tests (`tests/unit/geminiApi.test.ts`): a new test asks all three routes without signing in and expects 401 (it failed on the old code: the status route answered 200); the three earlier tests now call the Gemini routes behind a signed in user, so they still check the answers and the input checks. 280 unit tests in all. Checks: type check, 280 unit tests, build and the four email server modes pass. No Firestore rules change.
 
+44. UI overhaul Phase 1, quick fixes and safety (plan in `tasks/plan.md`). **Dates**: three screens started in October 2026 whatever the date. Availability now opens on the current month (`AvailabilityView.tsx`); a nurse's leave and day off request forms start one day a week ahead (`NurseSelfServicePanel.tsx`, they started on 15 to 18 and 20 October 2026); in Doctors, "Expand Pattern to Dates" offers the open roster's dates (else the roster covering today, else the next one, else the current month; never an archived roster), and a new extra clinic starts today, or on the open roster's first day when it has not started yet (`DoctorsView.tsx`). The rules live in `src/utils/dateDefaults.ts` (`monthRange`, `defaultPatternRange`, `defaultSessionDate`, `requestDefaults`), with six new unit tests that failed before the module existed. The version dialog's fallback when no roster is loaded is the current month instead of October 2026. The Time periods form in Settings still starts at 19-01-2026; it is on the Phase 8 list. Browser check with the browser's clock set to 10-03-2027: Availability shows March 2027, both nurse forms show 17-03-2027, the usual week is offered for the open November roster, and a new extra clinic starts on 10-03-2027 (that roster has ended). Checks: type check, 286 unit tests, build and the four email server modes pass. No Firestore rules change.
+
 ---
 
 ## 17. Known quirks and ideas for later
@@ -644,4 +646,3 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 - Shortcuts modal misses Space and undo/redo keys. TopBar acceptance button is dead. `WalkthroughModal` returns null.
 - `cors` dependency unused; PLANNER and STAFF roles unused; `firebase-blueprint.json` is out of date; package name is still `react-example`.
 - Single clinic assumed (`clinics[0]`); `publicRosters` has no TypeScript collection mapping.
-- `Doctors` "Expand pattern" default dates are hard coded to October 2026.

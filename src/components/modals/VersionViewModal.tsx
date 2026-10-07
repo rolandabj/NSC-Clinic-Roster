@@ -39,7 +39,8 @@ import {
   LeaveType,
 } from '../../types';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, localTodayIso } from '../../utils/dateUtils';
+import { monthRange } from '../../utils/dateDefaults';
 
 const SOURCE_LABELS: Record<string, string> = { GENERATED: 'Filled automatically', MANUAL: 'Set by hand', LOCK: 'From a pinned day' };
 import { isFloatShift } from '../../services/engine/floatShift';
@@ -97,8 +98,10 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
 
   // Effective schedule dates
   const effectiveSchedule = version.snapshot.schedule || schedule;
-  const startDateStr = effectiveSchedule?.startDate || '2026-10-01';
-  const endDateStr = effectiveSchedule?.endDate || '2026-10-31';
+  // Without a roster (never expected), show the current month rather than a fixed one.
+  const fallbackMonth = monthRange(localTodayIso());
+  const startDateStr = effectiveSchedule?.startDate || fallbackMonth.startDate;
+  const endDateStr = effectiveSchedule?.endDate || fallbackMonth.endDate;
   const blockWeeks = effectiveSchedule?.blockWeeks || 2;
   const daysPerBlock = blockWeeks * 7;
 

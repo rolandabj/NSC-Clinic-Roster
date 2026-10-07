@@ -46,6 +46,7 @@ import {
   weekChanged,
 } from '../../services/schedule/doctorScheduleService';
 import { formatDate, localTodayIso } from '../../utils/dateUtils';
+import { defaultPatternRange, defaultSessionDate } from '../../utils/dateDefaults';
 
 interface DoctorsViewProps {
   context: ClinicContextState;
@@ -114,8 +115,9 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
     endDate: string;
     targetDoctorId: string;
   }>({
-    startDate: '2026-10-01',
-    endDate: '2026-10-31',
+    // Replaced by the open roster's dates each time the dialog opens (defaultPatternRange).
+    startDate: localTodayIso(),
+    endDate: localTodayIso(),
     targetDoctorId: 'ALL',
   });
 
@@ -542,7 +544,10 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
           </button>
 
           <button
-            onClick={() => setIsExpandModalOpen(true)}
+            onClick={() => {
+              setExpandRange((r) => ({ ...r, ...defaultPatternRange(schedules, context.activeScheduleId ?? undefined, localTodayIso()) }));
+              setIsExpandModalOpen(true);
+            }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-medium transition-colors cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
@@ -756,7 +761,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                   onClick={() => {
                     setEditingSession({
                       doctorId: selectedDoctor.id,
-                      date: '2026-10-15',
+                      date: defaultSessionDate(schedules, context.activeScheduleId ?? undefined, localTodayIso()),
                       startTime: '09:00',
                       endTime: '13:00',
                       specialtyId: selectedDoctor.specialtyIds[0],
@@ -863,7 +868,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
 
                   {selectedDoctorSessions.length === 0 && (
                     <div className="p-4 text-center text-slate-400 text-xs">
-                      No concrete sessions generated yet. Click "Expand Pattern to Dates" to populate October 2026.
+                      No clinics on the calendar yet. Click "Expand Pattern to Dates" to put this doctor's usual week on the roster's days.
                     </div>
                   )}
                 </div>

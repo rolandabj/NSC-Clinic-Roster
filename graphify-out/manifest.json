@@ -222,9 +222,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/VersionViewModal.tsx": {
-    "mtime": 1791362587.9577637,
-    "seen": 1791365225.1339924,
-    "ast_hash": "cdcecbc45b538e4f0ada0138542e5286",
+    "mtime": 1791379727.641877,
+    "seen": 1791379811.2848577,
+    "ast_hash": "edfcb235fe69e2168f6cb0be713b2a9d",
     "semantic_hash": ""
   },
   "src/components/modals/WalkthroughModal.tsx": {
@@ -258,9 +258,9 @@
     "semantic_hash": "4c2c62984ee0483cd6eae5986a19910b"
   },
   "src/components/views/AvailabilityView.tsx": {
-    "mtime": 1791362587.9600093,
-    "seen": 1791365225.1340036,
-    "ast_hash": "651538d56279778195a1e7b034da0cbf",
+    "mtime": 1791379707.8680825,
+    "seen": 1791379811.2848723,
+    "ast_hash": "9527283f2a1780589d3d29acc1f03d77",
     "semantic_hash": ""
   },
   "src/components/views/DashboardView.tsx": {
@@ -270,9 +270,9 @@
     "semantic_hash": ""
   },
   "src/components/views/DoctorsView.tsx": {
-    "mtime": 1791362587.9617636,
-    "seen": 1791365225.1340067,
-    "ast_hash": "595c02824028c20beff7a6dc8315cb61",
+    "mtime": 1791379707.865995,
+    "seen": 1791379811.2848747,
+    "ast_hash": "f3180357e6b888309266a84bf5decb59",
     "semantic_hash": ""
   },
   "src/components/views/HistoryView.tsx": {
@@ -282,9 +282,9 @@
     "semantic_hash": ""
   },
   "src/components/views/NurseSelfServicePanel.tsx": {
-    "mtime": 1791362587.9617636,
-    "seen": 1791365225.1340115,
-    "ast_hash": "e5454cee37ba0880b528d16e544a57f9",
+    "mtime": 1791379707.866708,
+    "seen": 1791379811.2848792,
+    "ast_hash": "5ad74a38b981384cc196ef52ddbbdc03",
     "semantic_hash": ""
   },
   "src/components/views/NursesView.tsx": {
@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791379574.4584818,
-    "seen": 1791379605.7810748,
-    "ast_hash": "d0d5fad59d8c128d857c1e1f1baf815b",
+    "mtime": 1791379781.6881824,
+    "seen": 1791379811.2851117,
+    "ast_hash": "1ed4b21cc4173cbffef9a5f3f7d7c45a",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1602,9 +1602,21 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791379168.593711,
-    "seen": 1791379364.2706363,
-    "ast_hash": "7324bc453f9815224b2e20cfda64d2ec",
+    "mtime": 1791379781.6889873,
+    "seen": 1791379811.2851164,
+    "ast_hash": "27865cab8640afe7915880050ffd4b17",
+    "semantic_hash": ""
+  },
+  "src/utils/dateDefaults.ts": {
+    "mtime": 1791379682.4582608,
+    "seen": 1791379811.2850056,
+    "ast_hash": "c50bf38a588201b08e85da0d9221e0dd",
+    "semantic_hash": ""
+  },
+  "tests/unit/dateDefaults.test.ts": {
+    "mtime": 1791379670.55826,
+    "seen": 1791379811.2850275,
+    "ast_hash": "374faa01544f94921da77b308f02b06c",
     "semantic_hash": ""
   }
 }

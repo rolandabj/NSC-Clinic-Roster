@@ -82,8 +82,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   const [holidays, setHolidays] = useState<PublicHoliday[]>([]);
 
   // Active Month & Period
-  const [currentYear, setCurrentYear] = useState(2026);
-  const [currentMonthIndex, setCurrentMonthIndex] = useState(9); // 0-based: 9 = October
+  // Opens on the current month (it used to open on October 2026 whatever the date).
+  const [currentYear, setCurrentYear] = useState(() => new Date().getFullYear());
+  const [currentMonthIndex, setCurrentMonthIndex] = useState(() => new Date().getMonth()); // 0-based
 
   // Drag selection state for date range leave creation
   const [dragStart, setDragStart] = useState<{ nurseId: string; day: number } | null>(null);

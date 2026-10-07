@@ -13,7 +13,7 @@ Main moves only when the owner says "push to main".
 - [x] Guide item 42, graph, commit, push the working branch
 
 ## Phase 1: quick fixes and safety
-- [ ] Dates: Availability month, nurse request form, Doctors defaults
+- [x] Dates: Availability month, nurse request form, Doctors defaults
 - [ ] Phones: sidebar becomes a drawer below 1024 px, top bar wraps
 - [ ] Permissions: `usePermissions`, hide refused History actions and viewer exports, Pending Approvals for planners, viewers' roster button and forbidden routes
 - [ ] Publishing safety: email log without full emails, warning before closing while sending
@@ -67,6 +67,7 @@ Main moves only when the owner says "push to main".
 
 ## Phase 8: Settings, Reports, Audit
 - [ ] Settings sections with links and Save and Cancel
+- [ ] Time periods: the new period form starts at the next cycle, not at 19-01-2026
 - [ ] Reports in plain words
 - [ ] Audit paging and count queries
 - [ ] Checkpoint 8

@@ -38,6 +38,8 @@ import {
 } from '../../services/requests/staffRequestService';
 import { LeaveEntry, AvailabilityRequest, LeaveType, Nurse, DutyWindow } from '../../types';
 import { useDialogA11y } from '../common/useDialogA11y';
+import { localTodayIso } from '../../utils/dateUtils';
+import { requestDefaults } from '../../utils/dateDefaults';
 import { notify, confirmDialog } from '../common/dialogs';
 
 interface NurseSelfServicePanelProps {
@@ -71,12 +73,14 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
 
   // Leave Form
   const [leaveTypeId, setLeaveTypeId] = useState(leaveTypes[0]?.id || 'leave-annual');
-  const [leaveStartDate, setLeaveStartDate] = useState('2026-10-15');
-  const [leaveEndDate, setLeaveEndDate] = useState('2026-10-18');
+  // The forms start a week ahead (they used to start in October 2026 whatever the date).
+  const [initialDates] = useState(() => requestDefaults(localTodayIso()));
+  const [leaveStartDate, setLeaveStartDate] = useState(initialDates.leaveStartDate);
+  const [leaveEndDate, setLeaveEndDate] = useState(initialDates.leaveEndDate);
   const [leaveNote, setLeaveNote] = useState('');
 
   // Availability Form
-  const [availDate, setAvailDate] = useState('2026-10-20');
+  const [availDate, setAvailDate] = useState(initialDates.dayOffDate);
   const [availIsAvailable, setAvailIsAvailable] = useState(false); // default to requesting day off
   const [availPreferredDutyId, setAvailPreferredDutyId] = useState('');
   const [availNote, setAvailNote] = useState('');
