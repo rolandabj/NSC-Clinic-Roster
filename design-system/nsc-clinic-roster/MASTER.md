@@ -4,10 +4,10 @@
 > If that file exists, its rules come first. If not, follow this file.
 > The owner's rules in `PROJECT_GUIDE.md` (plain English, no hyphens in prose, DD-MM-YYYY dates) come before both.
 
-**Status:** proposed on 07-10-2026 and shown as a sample on the test page (`?view=sample` for a planner's
-roster screen, `?view=sample-nurse` for a nurse's phone page). It waits for the owner's approval; no
-real screen uses it yet. After approval the colours move into `src/index.css` (Tailwind `@theme`) and
-the parts into `src/components/ui/` (UI overhaul Phase 2, `tasks/plan.md`).
+**Status:** approved by the owner on 07-10-2026, with Inter as the font, after seeing the sample on the
+test page (`?view=sample` for a planner's roster screen, `?view=sample-nurse` for a nurse's phone page).
+The colours move into `src/index.css` (Tailwind `@theme`) and the parts into `src/components/ui/`
+(UI overhaul Phase 2, `tasks/plan.md`); each screen takes them up in its own phase.
 
 **Where it comes from:** the `ui-ux-pro-max` skill (`--design-system`, "healthcare clinic staff
 scheduling dashboard calm trustworthy", density 8), then edited:

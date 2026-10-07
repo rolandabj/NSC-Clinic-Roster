@@ -24,7 +24,7 @@ Main moves only when the owner says "push to main".
 
 ## Phase 2: design system and app shell
 - [x] Sample page from the `ui-ux-pro-max` design system (`?view=sample`, `?view=sample-nurse`), checked, and `design-system/nsc-clinic-roster/MASTER.md`
-- [ ] The owner approves the sample (or asks for changes)
+- [x] The owner approved the sample with Inter (07-10-2026)
 - [ ] Tokens in `src/index.css`
 - [ ] Shared components in `src/components/ui/` and a gallery view
 - [ ] One date module

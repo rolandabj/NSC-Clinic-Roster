@@ -972,9 +972,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791398744.0736732,
-    "seen": 1791398763.7438295,
-    "ast_hash": "957606e3e32b7711cc4c6a17b261e9cc",
+    "mtime": 1791398992.5831485,
+    "seen": 1791398998.052188,
+    "ast_hash": "692c69d4667a815b376857099886993a",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1596,9 +1596,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791398572.0763187,
-    "seen": 1791398763.7438357,
-    "ast_hash": "ef1255b3d4e5a171e37c821a5ddbc457",
+    "mtime": 1791398992.5836961,
+    "seen": 1791398998.0521953,
+    "ast_hash": "926722e989ef23004a49c2e9e3f71bee",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1674,9 +1674,9 @@
     "semantic_hash": ""
   },
   "design-system/nsc-clinic-roster/MASTER.md": {
-    "mtime": 1791398540.9506483,
-    "seen": 1791398763.7438319,
-    "ast_hash": "ba6ec9766023ed8fa29bc8f16ef82706",
+    "mtime": 1791398992.5813398,
+    "seen": 1791398998.0521917,
+    "ast_hash": "fb6a58ca18c2e1c96528f97898e9f04d",
     "semantic_hash": ""
   }
 }
