@@ -1,7 +1,7 @@
-# Graph Report - NSC-Clinic-Roster  (2026-10-06)
+# Graph Report - NSC-Clinic-Roster  (2026-10-07)
 
 ## Corpus Check
-- 224 files · ~280,438 words
+- 224 files · ~280,639 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 7 file(s) not represented in the graph (top: (none) 2, .css 2, .example 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `78ae8f97`
+- Built from commit: `c8e7f09f`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -432,7 +432,7 @@ Nodes (3): RuleDef, CanonicalRuleDef, RuleTemplateKey
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `react` connect `react` to `SchedulesView.tsx`, `hoursBalance.ts`, `nurseRosterService.ts`, `authService.ts`, `SettingsView.tsx`, `authService`, `package.json`, `AppShell.tsx`, `getRepository`, `App.tsx`, `DashboardView.tsx`, `RulesTab.tsx`, `PublishModal.tsx`, `notify`, `NSC Clinic Roster: complete project guide`, `WorkbookGrid.tsx`, `PublishedRosterView.tsx`, `usePresence.ts`, `MenuButton.tsx`, `seedRunner.ts`, `fixtures.ts`, `holidayLeave.ts`?**
-  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+  _High betweenness centrality (0.052) - this node is a cross-community bridge._
 - **Why does `Assignment` connect `SchedulesView.tsx` to `rosterPdfService.ts`, `hoursBalance.ts`, `clinicModel.test.ts`, `nurseRosterService.ts`, `DashboardView.tsx`, `makeNurse`, `PublishModal.tsx`, `yearToDate.ts`, `IRepository`, `types/index.ts`, `assignmentChecks.ts`, `sharing.test.ts`, `notify`, `analysisExportService.ts`, `teamRoster.test.ts`, `makeSchedule`, `nurseClinicFloat.test.ts`, `doctorWeekChange.test.ts`, `SchedulingEngine.ts`, `WorkbookGrid.tsx`, `savingSafety.test.ts`, `continuousHours.test.ts`, `PublishedRosterView.tsx`, `fixtures.ts`, `weekHours.test.ts`, `engineRules.test.ts`, `handMoves.test.ts`?**
   _High betweenness centrality (0.040) - this node is a cross-community bridge._
 - **Why does `lucide-react` connect `react` to `SchedulesView.tsx`, `notify`, `nurseRosterService.ts`, `authService.ts`, `SettingsView.tsx`, `authService`, `seedRunner.ts`, `package.json`, `AppShell.tsx`, `holidayLeave.ts`, `getRepository`, `App.tsx`, `DashboardView.tsx`, `WorkbookGrid.tsx`, `RulesTab.tsx`, `PublishedRosterView.tsx`, `PublishModal.tsx`?**
