@@ -20,12 +20,18 @@ export function canApproveRequests(user?: UserProfile | null): boolean {
   return canEditClinicData(user) || user?.isManager === true;
 }
 
-/** Owner, editors and managers can download payroll, timesheets and roster exports (canExportReports). */
+/**
+ * Owner, editors and managers can download payroll, timesheets and roster exports (canExportReports).
+ * A screen choice: the rules let every approved user read this data.
+ */
 export function canExportReports(user?: UserProfile | null): boolean {
   return canEditClinicData(user) || user?.isManager === true;
 }
 
-/** What a person may do, in one place, so screens never show a button the rules would refuse. */
+/**
+ * What a person may do, in one place: screens show only actions the rules allow (canEdit,
+ * canApprove) and keep downloads to planners and managers (canExport).
+ */
 export interface Permissions {
   canEdit: boolean;
   canApprove: boolean;

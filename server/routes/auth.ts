@@ -25,7 +25,7 @@ function computePrivileges(role: BackendRole, isManager: boolean) {
     canPublishSchedules: isEditorOrOwner,
     canRunSolver: isEditorOrOwner,
     canEditRosterAssignments: isEditorOrOwner,
-    canApproveSwaps: canApprove,
+    canApproveSwaps: isEditorOrOwner, // swaps are saved by planners (the rules let only editors write swaps)
     canApproveLeave: canApprove,
     canApproveAvailability: canApprove,
     canRequestSwaps: true,

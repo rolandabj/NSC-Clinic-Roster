@@ -42,9 +42,9 @@
     "semantic_hash": "3ade82a1157ce38d702553f742578c2d"
   },
   "server/routes/auth.ts": {
-    "mtime": 1791380849.1324518,
-    "seen": 1791380918.1580265,
-    "ast_hash": "41ecaa409eed9f7eef5f7c8500112744",
+    "mtime": 1791381116.983602,
+    "seen": 1791381333.30285,
+    "ast_hash": "db5a0a3b1f5d65c5a94913b3865f2f1e",
     "semantic_hash": ""
   },
   "server/routes/email.ts": {
@@ -54,10 +54,10 @@
     "semantic_hash": ""
   },
   "server/services/auth/firebaseIdentityService.ts": {
-    "mtime": 1791362587.953462,
-    "seen": 1791365225.1339452,
-    "ast_hash": "43fdd2e1e49479f533140a711f73705f",
-    "semantic_hash": "43fdd2e1e49479f533140a711f73705f"
+    "mtime": 1791381134.8171525,
+    "seen": 1791381333.3028572,
+    "ast_hash": "4b53b93c18c56c81d1dde0ffcc73f7f2",
+    "semantic_hash": ""
   },
   "server/services/email/emailService.ts": {
     "mtime": 1791362587.953462,
@@ -108,9 +108,9 @@
     "semantic_hash": "5e21b5b122c895dce73f2e1445074004"
   },
   "src/components/layout/AppShell.tsx": {
-    "mtime": 1791380849.1328619,
-    "seen": 1791380918.15806,
-    "ast_hash": "22364cc1255362a8725843b2c1212138",
+    "mtime": 1791381116.9843543,
+    "seen": 1791381333.302888,
+    "ast_hash": "e078024703cffac43d428f9e53b587dd",
     "semantic_hash": ""
   },
   "src/components/layout/LocalModeBanner.tsx": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/AuthModal.tsx": {
-    "mtime": 1791362587.954563,
-    "seen": 1791365225.1339703,
-    "ast_hash": "15c84ceb0807b371f9649bd60ac1dcf4",
+    "mtime": 1791381116.9829297,
+    "seen": 1791381333.302894,
+    "ast_hash": "51a1044a14d70a2813bcc2d80e70323d",
     "semantic_hash": ""
   },
   "src/components/modals/BulkImportModal.tsx": {
@@ -216,9 +216,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/VersionCompareModal.tsx": {
-    "mtime": 1791362587.9577637,
-    "seen": 1791365225.1339912,
-    "ast_hash": "e1aa2b25e4284374de0b1a9fd0e4e91a",
+    "mtime": 1791381116.9784305,
+    "seen": 1791381333.3029196,
+    "ast_hash": "6c416de3670d638cf42f482173d2c5ce",
     "semantic_hash": ""
   },
   "src/components/modals/VersionViewModal.tsx": {
@@ -276,15 +276,15 @@
     "semantic_hash": ""
   },
   "src/components/views/HistoryView.tsx": {
-    "mtime": 1791380849.1345632,
-    "seen": 1791380918.1581116,
-    "ast_hash": "41a4f3155898bf2f05b0c4b6a62370bd",
+    "mtime": 1791381116.980686,
+    "seen": 1791381333.3029382,
+    "ast_hash": "aba35dc8759b60ecccadb8f6cdb2ed2f",
     "semantic_hash": ""
   },
   "src/components/views/NurseSelfServicePanel.tsx": {
-    "mtime": 1791379707.866708,
-    "seen": 1791379811.2848792,
-    "ast_hash": "5ad74a38b981384cc196ef52ddbbdc03",
+    "mtime": 1791381116.9825294,
+    "seen": 1791381333.3029413,
+    "ast_hash": "e6b52333aeaefc0153b8d9387a5a0cea",
     "semantic_hash": ""
   },
   "src/components/views/NursesView.tsx": {
@@ -438,15 +438,15 @@
     "semantic_hash": "8c082c0093e4ad9e0581005a21e72308"
   },
   "src/services/auth/access.ts": {
-    "mtime": 1791380849.1351883,
-    "seen": 1791380918.1581533,
-    "ast_hash": "16b4a0d8f385baa85a5bf53fbf3a9fe1",
+    "mtime": 1791381116.9815178,
+    "seen": 1791381333.302987,
+    "ast_hash": "a6d6e1fd69bbea72ac089a1b300358de",
     "semantic_hash": ""
   },
   "src/services/auth/authService.ts": {
-    "mtime": 1791380849.1351883,
-    "seen": 1791380918.1581542,
-    "ast_hash": "9fc8b3d2ab9fa901c42f6fb3dd315c70",
+    "mtime": 1791381116.9833307,
+    "seen": 1791381333.3029888,
+    "ast_hash": "29affef39fa90262aa0a101349a123b8",
     "semantic_hash": ""
   },
   "src/services/engine/SchedulingEngine.ts": {
@@ -588,9 +588,9 @@
     "semantic_hash": "0dffc6200bbc63a11dc6ae5d2a04366c"
   },
   "src/services/requests/staffRequestService.ts": {
-    "mtime": 1791362587.9777637,
-    "seen": 1791365225.1341057,
-    "ast_hash": "335077311b36b941285c34d74ff14ae5",
+    "mtime": 1791381116.9847765,
+    "seen": 1791381333.3030787,
+    "ast_hash": "99bf107bb13ba10805fb1f6c3e6f240e",
     "semantic_hash": ""
   },
   "src/services/rules/ruleSyncService.ts": {
@@ -696,9 +696,9 @@
     "semantic_hash": "94e7df994dfb4bb52fd64b5a2595b411"
   },
   "tests/firestore-rules/rules.test.mjs": {
-    "mtime": 1791362587.9820576,
-    "seen": 1791365225.1341295,
-    "ast_hash": "c3fa49588df1e5c4ab1784ae7fe32e33",
+    "mtime": 1791381153.8485913,
+    "seen": 1791381333.30311,
+    "ast_hash": "5a09816aa15ebcbbafa3c5cb4f3584aa",
     "semantic_hash": ""
   },
   "tests/unit/assignmentChecks.test.ts": {
@@ -972,9 +972,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791380938.5389545,
-    "seen": 1791380969.2655969,
-    "ast_hash": "31cede41b3791f4e094aedc36eb70fda",
+    "mtime": 1791381306.049608,
+    "seen": 1791381333.3032155,
+    "ast_hash": "9e06a39ae5b068caa1ef5f0d8c111996",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1434,9 +1434,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/harness/fakeAuth.ts": {
-    "mtime": 1791380893.744231,
-    "seen": 1791380918.1579864,
-    "ast_hash": "987c5ef5f0f14517e2d3464b05bd22c5",
+    "mtime": 1791381116.98386,
+    "seen": 1791381333.302808,
+    "ast_hash": "843ee85eaca89dc10de9932f972b0e8a",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/harness/fakeRepo.ts": {
@@ -1596,9 +1596,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791380938.539669,
-    "seen": 1791380969.265605,
-    "ast_hash": "6de7770e7eeed9ad2762d8cad8294d34",
+    "mtime": 1791381306.0503418,
+    "seen": 1791381333.3032205,
+    "ast_hash": "b54a3f7e36dbea5167792791ac400411",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1632,9 +1632,15 @@
     "semantic_hash": ""
   },
   "tests/unit/permissions.test.ts": {
-    "mtime": 1791380849.1351883,
-    "seen": 1791380918.1583118,
-    "ast_hash": "e1537914b7a08ebb6d9a4d7aae62e37a",
+    "mtime": 1791381134.8261008,
+    "seen": 1791381333.303157,
+    "ast_hash": "b440e2aa6682be9392d540183df36b4c",
+    "semantic_hash": ""
+  },
+  "tests/unit/authPrivileges.test.ts": {
+    "mtime": 1791381134.828239,
+    "seen": 1791381333.30312,
+    "ast_hash": "2d9c2b89b3581ea8b3ae3b8a04c3be7e",
     "semantic_hash": ""
   }
 }

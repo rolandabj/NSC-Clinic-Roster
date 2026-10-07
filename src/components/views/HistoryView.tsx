@@ -80,7 +80,8 @@ interface HistoryViewProps {
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
-  // Restore and delete need a planner (firestore.rules); downloads need a planner or a manager.
+  // Restore and delete need a planner (firestore.rules refuses everyone else). Downloads are kept
+  // to planners and managers: a screen choice, since the rules let approved users read this data.
   const { canEdit, canExport } = usePermissions();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
@@ -1645,6 +1646,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
         initialTargetVersionId={compareTargetId}
         isOpen={isCompareModalOpen}
         onClose={() => setIsCompareModalOpen(false)}
+        canDownload={canExport}
         onRestoreVersion={canEdit ? (v) => {
           setIsCompareModalOpen(false);
           setVersionToRestore(v);

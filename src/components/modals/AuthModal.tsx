@@ -324,6 +324,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Footer */}
         <div className="p-3 bg-slate-50 dark:bg-slate-800/60 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          {context.currentUser?.role === 'OWNER' ? (
           <button
             onClick={() => {
               onClose();
@@ -332,8 +333,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             className="text-indigo-600 dark:text-indigo-400 hover:underline text-[11px] font-semibold cursor-pointer flex items-center gap-1"
           >
             <Settings className="w-3 h-3" aria-hidden="true" />
-            <span>Enterprise Directory &amp; RBAC in Settings</span>
+            <span>Access and permissions in Settings</span>
           </button>
+          ) : <span />}
 
           <button
             onClick={onClose}

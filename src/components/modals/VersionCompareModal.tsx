@@ -57,6 +57,8 @@ interface VersionCompareModalProps {
   isOpen: boolean;
   onClose: () => void;
   onRestoreVersion?: (version: ScheduleVersion) => void;
+  /** Shows "Download changes (CSV)": planners and managers (History passes canExport). */
+  canDownload?: boolean;
 }
 
 export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
@@ -73,6 +75,7 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
   isOpen,
   onClose,
   onRestoreVersion,
+  canDownload = true,
 }) => {
   // 'DRAFT' represents active current draft
   const [baseId, setBaseId] = useState<string>(() => {
@@ -218,6 +221,7 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {canDownload && (
             <button
               type="button"
               onClick={handleExportDiffCsv}
@@ -226,6 +230,7 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
               <Download className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
               <span>Download changes (CSV)</span>
             </button>
+            )}
 
             <button
               type="button"

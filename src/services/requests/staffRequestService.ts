@@ -29,10 +29,6 @@ function daysInclusive(startDate: string, endDate: string): number {
   return Math.max(1, Math.round((e - s) / DAY_MS) + 1);
 }
 
-export function isManagerOrOwner(user?: UserProfile | null): boolean {
-  return !!user && (user.role === 'OWNER' || user.isManager === true);
-}
-
 function isPendingLeave(l: LeaveEntry): boolean {
   return l.status === 'PENDING' || (l.status === undefined && l.approved === false);
 }

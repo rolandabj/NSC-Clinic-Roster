@@ -6,14 +6,14 @@ export const MASTER_ADMIN_EMAIL = 'rolandabj@gmail.com';
 export function computePrivileges(role: string, isManager = false) {
   const isOwner = role === 'OWNER';
   const isEditorOrOwner = isOwner || role === 'EDITOR' || role === 'PLANNER';
-  const canApprove = isOwner || isManager;
+  const canApprove = isEditorOrOwner || isManager;
   return {
     canEditClinicSettings: isOwner,
     canCreateSchedules: isEditorOrOwner,
     canPublishSchedules: isEditorOrOwner,
     canRunSolver: isEditorOrOwner,
     canEditRosterAssignments: isEditorOrOwner,
-    canApproveSwaps: canApprove,
+    canApproveSwaps: isEditorOrOwner,
     canApproveLeave: canApprove,
     canApproveAvailability: canApprove,
     canRequestSwaps: true,

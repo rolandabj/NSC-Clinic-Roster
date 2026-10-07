@@ -215,7 +215,9 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
           prev.currentUser.name === user.name &&
           prev.currentUser.email === user.email &&
           prev.currentUser.role === user.role &&
-          prev.currentUser.isLocal === user.isLocal
+          prev.currentUser.isLocal === user.isLocal &&
+          prev.currentUser.isManager === user.isManager &&
+          prev.currentUser.linkedNurseId === user.linkedNurseId
         ) {
           return prev;
         }
@@ -353,6 +355,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     const handleHashChange = () => {
       const parsed = parseUrlState();
       setCurrentRoute(parsed.route);
+      syncAddress(parsed.route);
       setShareTokenParam(parsed.token);
       setNurseIdParam(parsed.nurse);
 
@@ -364,14 +367,15 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   }, []);
 
   // Keeps the address in step with the screen shown, for example #dashboard after a
-  // link to a screen this person may not open.
-  useEffect(() => {
-    if (currentRoute === 'published' || currentRoute === 'me') return;
+  // link to a screen this person may not open (also when that screen is already showing).
+  const syncAddress = (route: AppRoute) => {
+    if (route === 'published' || route === 'me') return;
     const shown = window.location.hash.replace('#', '').split('?')[0];
-    if (shown !== currentRoute) {
-      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${currentRoute}`);
+    if (shown !== route) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${route}`);
     }
-  }, [currentRoute]);
+  };
+  useEffect(() => syncAddress(currentRoute), [currentRoute]);
 
   const navigateTo = (route: AppRoute) => {
     setIsMenuOpen(false);

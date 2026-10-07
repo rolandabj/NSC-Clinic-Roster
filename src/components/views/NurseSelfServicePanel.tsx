@@ -235,6 +235,11 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
           </div>
         </div>
 
+        {!currentUser?.linkedNurseId ? (
+          <p className="text-xs text-slate-700 max-w-xs" role="note">
+            This account is not linked to a nurse profile, so it cannot send requests. The clinic owner can link it in Settings, Access and permissions.
+          </p>
+        ) : (
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setIsAvailModalOpen(true)}
@@ -251,6 +256,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
             <span>Request Leave</span>
           </button>
         </div>
+        )}
       </div>
 
       {/* 1. MY SUBMITTED LEAVE REQUESTS */}

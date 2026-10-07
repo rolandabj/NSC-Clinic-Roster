@@ -18,7 +18,8 @@ Main moves only when the owner says "push to main".
 - [x] Permissions: `usePermissions`, hide refused History actions and viewer exports, Pending Approvals for planners, viewers' roster button and forbidden routes
 - [x] Publishing safety: email log kept under the size limit (whole emails while they fit), warning before closing while sending
 - [x] English only: remove `src/services/i18n`, plain menu labels
-- [ ] Guide section 3 corrected
+- [x] Guide section 3 corrected
+- [x] Reviews: rules reviewer (fixes made, 96 rules checks) and wording reviewer
 - [ ] Checkpoint 1: screenshots and numbers to the owner
 
 ## Phase 2: design system and app shell

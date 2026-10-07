@@ -73,6 +73,12 @@ await t('viewer cannot approve own leave', false, updateDoc(doc(viewer, 'leaveEn
 await t('viewer cancels own pending leave', true, deleteDoc(doc(viewer, 'leaveEntries/l1')));
 await t('viewer cannot delete approved leave', false, deleteDoc(doc(viewer, 'leaveEntries/l2')));
 await t('viewer files own availability', true, setDoc(doc(viewer, 'availabilityRequests/a1'), { nurseId: 'n1', status: 'PENDING' }));
+// Deciding requests (the screens show Pending Approvals to planners and managers, 07-10-2026)
+await t('viewer cannot decide own availability request', false, updateDoc(doc(viewer, 'availabilityRequests/a1'), { status: 'APPROVED' }));
+await t('editor decides an availability request', true, updateDoc(doc(editor, 'availabilityRequests/a1'), { status: 'APPROVED', reviewedBy: 'editor@x.com' }));
+await t('manager decides an availability request', true, updateDoc(doc(manager, 'availabilityRequests/a1'), { status: 'REJECTED', reviewedBy: 'mgr@x.com' }));
+await t('editor writes audit entries', true, setDoc(doc(editor, 'audit/a2'), { action: 'APPROVE' }));
+await t('editor cannot change an audit entry', false, updateDoc(doc(editor, 'audit/a2'), { action: 'CHANGED' }));
 await t('editor without nurse link cannot be blocked: editor files any leave', true, setDoc(doc(editor, 'leaveEntries/l3'), { nurseId: 'n2', status: 'APPROVED', approved: true }));
 await t('manager approves leave', true, updateDoc(doc(manager, 'leaveEntries/l2'), { reviewNotes: 'ok' }));
 // acknowledgments

@@ -191,7 +191,6 @@ export async function resolveFirebaseUser(idToken: string): Promise<AuthUser | n
         uid: payload.sub,
         name: record.name || displayName,
         email,
-        // Managers may edit clinic data in Firestore, so they act as planners here too.
         // A manager approves requests but is not an editor (same as firestore.rules)
         role: record.appRole === 'EDITOR' ? 'EDITOR' : 'VIEWER',
         appRole: record.appRole === 'EDITOR' ? 'EDITOR' : 'VIEWER',
