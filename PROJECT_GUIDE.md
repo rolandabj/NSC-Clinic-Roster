@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-07, after adding four more skills from `addyosmani/agent-skills` (section 16, item 40), pushed to main.
+Last updated: 2026-10-07, after migrating Gemini API to Gemini 3.8 Flash (section 16, item 41), pushed to main.
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-10-07, after adding four more skills from `addyosmani/agent-s
 | `npm start` | Built server in production mode, or current source when no build exists |
 | `npm run preview` | Vite preview with the shared protected API mounted before the web app fallback |
 | `npx tsc --noEmit` (or `npm run lint`) | Type check |
-| `npm test` | Unit tests (Node test runner via tsx), currently 274 passing |
+| `npm test` | Unit tests (Node test runner via tsx), currently 279 passing |
 | `npm run build` | Vite client build + esbuild server bundle to `build/server.js` |
 | `cd tests/firestore-rules && npm install && npm test` | Firestore rules tests in the emulator (needs Java 11+), about 90 assertions |
 | `graphify query "<question>"`, `graphify explain "X"`, `graphify update .` | Code knowledge graph in `graphify-out/` (see `CLAUDE.md`). Installed automatically by `.claude/hooks/session-start.sh` in web sessions; the `/graphify` skill lives in `.claude/skills/graphify/`. |
@@ -615,6 +615,8 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 
 40. Four more skills from `addyosmani/agent-skills`, the owner's request of 2026-10-07 ("install the ones you would use for this project the most"): `test-driven-development`, `incremental-implementation`, `planning-and-task-breakdown` and `source-driven-development`, installed with `npx skills add addyosmani/agent-skills -a claude-code --copy -y --skill ...` (copied into `.claude/skills/`, sources added to `skills-lock.json`). Why these: the roster engine and the checker are pure logic with 274 unit tests, and every bug fix since batch 2 already starts with a test that fails on the old code; the owner's changes come in batches that suit small checked slices; large requests benefit from a written plan; and the app's React, Vite and Firebase code should follow the documentation of the installed versions (context7 is connected for that). All four files were read before saving: guidance only, no commands that run by themselves, no settings or permission changes. Two notes: `planning-and-task-breakdown` saves plans in `tasks/plan.md` and `tasks/todo.md`, and the project's own rules (`CLAUDE.md`, this guide, the `finish-change` routine, asking before pushing to main) come first wherever a skill says otherwise, for example on committing after every slice. The other 16 skills of the collection stay out for the reasons in item 37 (token cost, overlap with `finish-change`, `browser-check` and `/simplify`, or a Chrome DevTools server that is not set up). Also seen in this session: the Firebase and context7 servers connected and the database tools answered (21 collections listed, a `clinics` document read), so the role from item 39 works; the session start script again did not install the app's packages, and `npm install --legacy-peer-deps` by hand fixed that. Checks: type check, 274 unit tests, build and the four email server modes pass. No app code changed and no Firestore rules change. The owner approved pushing it to main on 2026-10-07.
 
+41. Migration to Gemini 3.8 Flash (`gemini-3.8-flash`), the owner's request of 2026-10-07 (`/gemini-api-dev migrate my app to Gemini 3.8 Flash`). Uses the modern `@google/genai` TypeScript SDK on the server (`server/services/gemini/geminiClient.ts`) with model `gemini-3.8-flash` and User-Agent `'aistudio-build'` for AI Studio telemetry. API endpoints in `server/routes/gemini.ts`: `POST /api/gemini/generate` (general prompt generation), `POST /api/gemini/insights` (clinical roster fairness & workload analysis), and `GET /api/gemini/status` (readiness status). Client service `src/services/gemini/geminiService.ts` calls the backend with no browser SDK imports. `FairnessModal.tsx` integrates a "Gemini 3.8 Flash" tab for on-demand roster fairness evaluation. 5 unit tests added in `tests/unit/geminiApi.test.ts`. Checks: 279 unit tests pass, type check and build pass.
+
 ---
 
 ## 17. Known quirks and ideas for later
@@ -630,6 +632,6 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 - The hours report counts late shifts at a fixed 21:00, while the engine uses the rule threshold.
 - Version restore in History replaces all shifts of the version's roster (a backup is kept first) and does not restore locks or leave.
 - Shortcuts modal misses Space and undo/redo keys. TopBar acceptance button is dead. `WalkthroughModal` returns null.
-- `cors` dependency unused; PLANNER and STAFF roles unused; `metadata.json` mentions Gemini; `firebase-blueprint.json` is out of date; package name is still `react-example`.
+- `cors` dependency unused; PLANNER and STAFF roles unused; `firebase-blueprint.json` is out of date; package name is still `react-example`.
 - Single clinic assumed (`clinics[0]`); `publicRosters` has no TypeScript collection mapping.
 - `Doctors` "Expand pattern" default dates are hard coded to October 2026.

@@ -16,6 +16,7 @@ import { authMiddleware, requireAuth } from './middleware/auth';
 import { authRouter } from './routes/auth';
 import { emailRouter } from './routes/email';
 import { calendarRouter } from './routes/calendar';
+import { geminiRouter } from './routes/gemini';
 
 export function createApiApp() {
   const app = express();
@@ -99,6 +100,8 @@ export function createApiApp() {
     { method: 'GET', pattern: /^\/api\/health$/ },
     { method: 'GET', pattern: /^\/api\/auth\/(me|verify)$/ },
     { method: 'POST', pattern: /^\/api\/auth\/logout$/ },
+    { method: 'GET', pattern: /^\/api\/gemini\// },
+    { method: 'POST', pattern: /^\/api\/gemini\// },
   ];
   app.use('/api', (req: Request, res: Response, next) => {
     const fullPath = (req.baseUrl + req.path).replace(/\/+$/, '') || '/';
@@ -114,6 +117,7 @@ export function createApiApp() {
 
   app.use('/api/auth', authRouter);
   app.use('/api', emailRouter);
+  app.use('/api/gemini', geminiRouter);
 
   // Unknown API routes
   app.use('/api', (_req: Request, res: Response) => {

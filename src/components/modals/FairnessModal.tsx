@@ -55,6 +55,7 @@ import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog } from '../common/dialogs';
 import { authService } from '../../services/auth/authService';
 import { moveShift } from '../../services/schedule/shiftMoves';
+import { fetchRosterInsights } from '../../services/gemini/geminiService';
 
 interface FairnessModalProps {
   schedule: Schedule;
@@ -125,9 +126,12 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
   priorAssignments = NONE,
   checkRoster,
 }) => {
-  const [activeTab, setActiveTab] = useState<'METRICS' | 'REBALANCE'>('METRICS');
+  const [activeTab, setActiveTab] = useState<'METRICS' | 'REBALANCE' | 'AI_INSIGHTS'>('METRICS');
   const [selectedSwaps, setSelectedSwaps] = useState<Set<string>>(new Set());
   const [isApplying, setIsApplying] = useState(false);
+  const [aiInsights, setAiInsights] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const dutyMap = useMemo(() => new Map(dutyWindows.map((d) => [d.id, d])), [dutyWindows]);
   const holidayDateSet = useMemo(() => new Set(holidays.map((h) => h.date)), [holidays]);
@@ -357,6 +361,31 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
     }
   };
 
+  const handleGenerateAiInsights = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const totalDutyHours = metrics.reduce((acc, r) => acc + r.totalDutyHours, 0);
+      const totalWeekendDays = metrics.reduce((acc, r) => acc + r.weekendsWorked, 0);
+      const totalLateDuties = metrics.reduce((acc, r) => acc + r.lateEndsCount, 0);
+      const summaryText = `${metrics.length} nurses analyzed. Overall workload balance score: ${spreadScore}/100. Total scheduled duty hours: ${totalDutyHours}h. Total weekend duties: ${totalWeekendDays}. Total late shifts: ${totalLateDuties}.`;
+
+      const insights = await fetchRosterInsights({
+        scheduleName: schedule.name,
+        startDate: schedule.startDate,
+        endDate: schedule.endDate,
+        nurseCount: nurses.length,
+        totalHours: totalDutyHours,
+        fairnessSummary: summaryText,
+      });
+      setAiInsights(insights);
+    } catch (err: any) {
+      setAiError(err?.message || 'Could not retrieve insights from Gemini.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
       <div
@@ -446,6 +475,23 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
             >
               <Sparkles className="w-3 h-3" aria-hidden="true" />
               <span>Suggested changes{proposedSwaps ? ` (${proposedSwaps.length})` : ''}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('AI_INSIGHTS');
+                if (!aiInsights && !aiLoading) {
+                  void handleGenerateAiInsights();
+                }
+              }}
+              className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1 ${
+                activeTab === 'AI_INSIGHTS'
+                  ? 'bg-indigo-600 text-white'
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Sparkles className="w-3 h-3" aria-hidden="true" />
+              <span>Gemini 3.8 Flash</span>
             </button>
           </div>
         </div>
@@ -609,6 +655,62 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
               ) : (
                 <div className="p-8 border border-slate-200 rounded text-center text-slate-400 text-xs">
                   No moves to suggest. The work is already shared as evenly as the rules allow.
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'AI_INSIGHTS' && (
+            <div className="space-y-4">
+              <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-lg p-4 flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-indigo-600" aria-hidden="true" />
+                    <h3 className="text-sm font-semibold text-indigo-950">
+                      Roster Intelligence (Gemini 3.8 Flash)
+                    </h3>
+                  </div>
+                  <p className="text-xs text-indigo-700 mt-1">
+                    Workload analysis, equity assessment, and operational advice generated securely via server-side Gemini 3.8 Flash.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={aiLoading}
+                  onClick={handleGenerateAiInsights}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded cursor-pointer transition-colors shadow-xs"
+                >
+                  {aiLoading ? 'Analyzing…' : aiInsights ? 'Re-analyze' : 'Analyze Roster'}
+                </button>
+              </div>
+
+              {aiLoading && (
+                <div className="p-8 border border-slate-200 rounded-lg text-center space-y-2">
+                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent" />
+                  <p className="text-xs text-slate-500 font-medium">
+                    Consulting Gemini 3.8 Flash for roster equity and operations analysis…
+                  </p>
+                </div>
+              )}
+
+              {aiError && !aiLoading && (
+                <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs">
+                  <p className="font-semibold">Unable to generate AI analysis</p>
+                  <p className="mt-1">{aiError}</p>
+                </div>
+              )}
+
+              {aiInsights && !aiLoading && (
+                <div className="border border-slate-200 rounded-lg p-5 bg-white space-y-4 shadow-xs">
+                  <div className="prose prose-sm max-w-none text-slate-800 text-xs leading-relaxed whitespace-pre-line font-sans">
+                    {aiInsights}
+                  </div>
+                </div>
+              )}
+
+              {!aiInsights && !aiLoading && !aiError && (
+                <div className="p-8 border border-slate-200 rounded-lg text-center text-slate-400 text-xs">
+                  Click "Analyze Roster" to generate executive summary and fairness recommendations using Gemini 3.8 Flash.
                 </div>
               )}
             </div>
