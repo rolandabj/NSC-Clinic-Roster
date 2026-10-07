@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-07, after saving the find-skills skill in the repo (section 16, item 35), on the working branch; not pushed to main yet.
+Last updated: 2026-10-07, after the session start script set git to fetch GitHub over HTTPS (section 16, item 36), pushed to main with item 35.
 
 ---
 
@@ -129,7 +129,7 @@ tests/
   firestore-rules/rules.test.mjs (+ its own package.json)
 .claude/
   settings.json                   Session start hook, the official plugin marketplace and the claude-code-setup plugin
-  hooks/session-start.sh          Web sessions: npm install and the graphify tool
+  hooks/session-start.sh          Web sessions: git fetches GitHub over HTTPS, npm install, the graphify tool
   skills/graphify/                The /graphify skill
   skills/find-skills/             Finds and installs other agent skills (from vercel-labs/skills)
 skills-lock.json                  Where the find-skills skill came from (for `npx skills update`)
@@ -574,6 +574,9 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 
 
 35. The `find-skills` skill saved in the repo, the owner's request of 2026-10-07: installed for the project with `npx skills add vercel-labs/skills@find-skills -a claude-code --copy -y`, which copies it into `.claude/skills/find-skills/SKILL.md` and records its source and hash in `skills-lock.json`. Every Claude Code session on this repo loads it (it was first installed only in a cloud container's home folder, which is lost when the container is reclaimed). When asked for a skill for some task, it searches skills.sh, checks install counts and publishers, shows the install command, and installs only with agreement. No app code changed.
+
+
+36. Git in cloud sessions, the owner's request of 2026-10-07: the session start script (`.claude/hooks/session-start.sh`) now runs `git config --global url."https://github.com/".insteadOf git@github.com:`, so GitHub addresses written for SSH (`git@github.com:owner/repo`) are fetched over HTTPS; cloud sessions have no SSH keys. It runs before `npm install`, so a package with such an address installs too, and only in cloud sessions, like the rest of the script. A full run of the script passes and sets the rule. The owner approved pushing items 35 and 36 to main on 2026-10-07.
 
 ---
 

@@ -978,9 +978,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791357904.823161,
-    "seen": 1791357914.2361379,
-    "ast_hash": "35525cb4b488548b393de3dca99f28e4",
+    "mtime": 1791358081.800577,
+    "seen": 1791358090.7518194,
+    "ast_hash": "cf42b5756fbd44e4c6a232faa943220d",
     "semantic_hash": ""
   },
   "index.html": {
@@ -990,9 +990,9 @@
     "semantic_hash": ""
   },
   ".claude/hooks/session-start.sh": {
-    "mtime": 1791283082.6137857,
-    "seen": 1791287116.853815,
-    "ast_hash": "4c03d7e0d1ecfad784660fd81594e33b",
+    "mtime": 1791358055.3410032,
+    "seen": 1791358090.7512507,
+    "ast_hash": "23e7dfe2b647b20d69a9eeb0377acc13",
     "semantic_hash": ""
   },
   ".claude/settings.json": {

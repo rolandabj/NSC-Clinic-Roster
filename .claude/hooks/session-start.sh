@@ -1,6 +1,7 @@
 #!/bin/bash
-# Runs when a Claude Code on the web session starts: installs the app's npm
-# packages and the graphify tool used by the project's /graphify skill.
+# Runs when a Claude Code on the web session starts: has git fetch GitHub over
+# HTTPS, installs the app's npm packages and the graphify tool used by the
+# project's /graphify skill.
 set -euo pipefail
 
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
@@ -8,6 +9,10 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
 fi
 
 cd "$CLAUDE_PROJECT_DIR"
+
+# GitHub addresses written for SSH (git@github.com:owner/repo) are fetched over
+# HTTPS: cloud sessions have no SSH keys. Setting it again is harmless.
+git config --global url."https://github.com/".insteadOf git@github.com:
 
 # App dependencies (the flag is needed for esbuild/vite peer conflicts, as in CI)
 npm install --legacy-peer-deps --no-audit --no-fund

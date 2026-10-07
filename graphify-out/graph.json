@@ -15825,7 +15825,7 @@
       "node_kind": "heading",
       "norm_label": "17. known quirks and ideas for later",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L580"
+      "source_location": "L583"
     },
     {
       "id": "project_guide_1_features_at_a_glance",
@@ -17424,7 +17424,7 @@
       },
       "norm_label": "path",
       "source_file": ".claude/hooks/session-start.sh",
-      "source_location": "L16"
+      "source_location": "L21"
     },
     {
       "id": "claude_hooks_session_start_sh__entry",
@@ -78039,7 +78039,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L580",
+      "source_location": "L583",
       "weight": 1.0
     },
     {
@@ -89765,7 +89765,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": ".claude/hooks/session-start.sh",
-      "source_location": "L16",
+      "source_location": "L21",
       "weight": 1.0
     },
     {
@@ -92647,7 +92647,7 @@
       "confidence_score": 0.95,
       "context": "WalkthroughModal",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L589",
+      "source_location": "L592",
       "weight": 1.0
     },
     {
@@ -92935,7 +92935,7 @@
       "confidence_score": 0.95,
       "context": "doctorSessionsOn",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L586",
+      "source_location": "L589",
       "weight": 1.0
     },
     {
@@ -93576,5 +93576,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "6824d81964d92c4e80ee985c71d9a8f950b72276"
+  "built_at_commit": "22ac501505e8b233c94a67857b1d7d8706b909a6"
 }
