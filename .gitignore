@@ -14,3 +14,6 @@ graphify-out/cost.json
 graphify-out/20*/
 graphify-out/.graphify_python
 graphify-out/.rebuild.lock
+
+# The browser-check skill's temporary test page (never commit it)
+_preview/

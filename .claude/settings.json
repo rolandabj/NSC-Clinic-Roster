@@ -1,4 +1,7 @@
 {
+  "env": {
+    "MCP_TIMEOUT": "180000"
+  },
   "hooks": {
     "SessionStart": [
       {
@@ -9,7 +12,29 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/ask-before-main.mjs\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guide-with-code.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
+  },
+  "enabledPlugins": {
+    "claude-code-setup@claude-plugins-official": true,
+    "hookify@claude-plugins-official": true,
+    "nsc-tools@nsc-local": true
   },
   "extraKnownMarketplaces": {
     "claude-plugins-official": {
@@ -17,9 +42,12 @@
         "source": "github",
         "repo": "anthropics/claude-plugins-official"
       }
+    },
+    "nsc-local": {
+      "source": {
+        "source": "directory",
+        "path": "./.claude/plugins-local"
+      }
     }
-  },
-  "enabledPlugins": {
-    "claude-code-setup@claude-plugins-official": true
   }
 }

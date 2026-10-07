@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-07, after saving five skills from addyosmani/agent-skills in the repo (section 16, item 37), pushed to main.
+Last updated: 2026-10-07, after setting up the Claude Code automations (section 16, item 38), on the working branch; not pushed to main yet.
 
 ---
 
@@ -30,16 +30,21 @@ Last updated: 2026-10-07, after saving five skills from addyosmani/agent-skills 
 | Plugin `claude-code-setup` (skill `claude-automation-recommender`) | Suggests Claude Code automations for the repo (hooks, skills, MCP servers, subagents). From Anthropic's official plugin marketplace, declared and turned on for the project in `.claude/settings.json`, so every Claude Code session on this repo, cloud sessions included, loads it at start. |
 | Skill `find-skills` | Finds other agent skills in the public catalogue at skills.sh (`npx skills find`), favouring well used skills from known publishers, and installs one (`npx skills add`) only when you agree. Saved in `.claude/skills/find-skills/` from `vercel-labs/skills`; `skills-lock.json` records its source, so `npx skills update` can refresh it. |
 | Skills from `addyosmani/agent-skills` | Five engineering guides, used when they fit the task: `debugging-and-error-recovery` (reproduce and find the root cause before fixing), `code-review-and-quality`, `security-and-hardening` (asks a person first before sign in changes, new outside services or new permissions), `frontend-ui-engineering` (accessible, responsive screens) and `performance-optimization`. Saved in `.claude/skills/`, with their sources in `skills-lock.json`. The project's own rules (`CLAUDE.md`, this guide) come first where they differ. |
+| Plugin `nsc-tools` (this repo's own, `.claude/plugins-local/`) | Two MCP servers: **context7** (current documentation for the libraries the app uses, no key needed) and **firebase** (Firebase's own server with read tools only, for the live project; it starts only once the owner has added the key, see section 14). |
+| Plugin `hookify` | Turns a rule said in plain English into a hook (`/hookify`). Its rules are files named `.claude/hookify.*.local.md`; commit them to keep them. |
+| Skills `browser-check` and `finish-change` | `browser-check`: the test page with fake data for checking screens in Chromium (section 15). `finish-change`: the routine for finishing every change (verify, clean up, guide, graph, commit, push; main only on the owner's word). |
+| Subagents `plain-english-reviewer` and `firestore-rules-reviewer` | Reviews in parallel: the words people see, against the owner's style; and the Firestore rules and access code (runs the rules tests, compares the published rules with the repo). |
+| Hooks in `.claude/settings.json` | A push to `main` asks the owner first in the app (`hooks/ask-before-main.mjs`); a commit that changes anything without `PROJECT_GUIDE.md` is refused (`hooks/guide-with-code.mjs`; a merge is let through). |
 
 **Working agreements with the owner (important).**
 
 1. Write prose with **no hyphens**, in plain English. Explain with concrete examples (for example "Amy, whose list is #1 Cardiology, #2 Dr Lee").
-2. **Ask before pushing to `main`.** The owner approves with "push to main" or "push to github". Develop and commit on the working branch first, then fast forward `main` when approved.
+2. **Ask before pushing to `main`.** The owner approves with "push to main" or "push to github". Develop and commit on the working branch first, then fast forward `main` when approved. A hook also makes the app ask the owner before any push to `main`.
 3. For bug reports, **inspect before writing code**: read the code, explain what is happening, then fix.
 4. When something is unclear, ask questions in plain English with examples of each option.
 5. No model identifiers in commits. Commit messages end with the Co-Authored-By and Claude-Session trailers given by the session.
 6. After changing `firestore.rules`, remind the owner to **publish the rules by hand** in the Firebase console (Firestore → the named database `ai-studio-clinicroster-…` → Rules). AI Studio does not deploy rules.
-7. Verify every change with: type check, unit tests, build, and (for rules) the emulator tests. For UI changes, check in a browser (see section 13).
+7. Verify every change with: type check, unit tests, build, and (for rules) the emulator tests. For UI changes, check in a browser (the `browser-check` skill, section 15). The `finish-change` skill holds the whole routine.
 
 ---
 
@@ -129,9 +134,16 @@ tests/
   unit/*.test.ts + fixtures.ts
   firestore-rules/rules.test.mjs (+ its own package.json)
 .claude/
-  settings.json                   Session start hook, the official plugin marketplace and the claude-code-setup plugin
-  hooks/session-start.sh          Web sessions: git fetches GitHub over HTTPS, npm install, the graphify tool
+  settings.json                   Hooks, plugins and their marketplaces, MCP_TIMEOUT for the Firebase server's first start
+  hooks/session-start.sh          Web sessions: git fetches GitHub over HTTPS, Firebase's tools (with the key), npm install, graphify
+  hooks/ask-before-main.mjs       A push to main asks the owner first
+  hooks/guide-with-code.mjs       A commit without PROJECT_GUIDE.md is refused
+  agents/                         plain-english-reviewer, firestore-rules-reviewer
+  plugins-local/                  This repo's plugin marketplace: nsc-tools (the firebase and context7 MCP servers)
+  scripts/published-rules.mjs     Compares the published Firestore rules with firestore.rules (needs the Firebase key)
   skills/graphify/                The /graphify skill
+  skills/browser-check/           The test page for browser checks (harness/, scripts/)
+  skills/finish-change/           The routine for finishing every change
   skills/find-skills/             Finds and installs other agent skills (from vercel-labs/skills)
   skills/debugging-and-error-recovery/, code-review-and-quality/, security-and-hardening/,
          frontend-ui-engineering/, performance-optimization/   Engineering guides (from addyosmani/agent-skills)
@@ -463,6 +475,16 @@ The server verifies Firebase ID tokens itself (jose, Google JWKS) and reads `use
 
 **Deploy**: push to GitHub `main` → AI Studio syncs and redeploys. Rules: publish by hand in the Firebase console. CI (`.github/workflows/ci.yml`, ignored by AI Studio): type check, unit tests, build, rules tests in the emulator.
 
+**Firebase access for Claude Code** (read only, the owner's request of 2026-10-07): the `nsc-tools` plugin's firebase server and `.claude/scripts/published-rules.mjs` use a service account key that the owner adds to the cloud environment. A key is never pasted into a chat.
+
+1. Google Cloud console, project `gen-lang-client-0671372661`: IAM and admin, Service accounts, Create service account (for example `claude-readonly`).
+2. Roles: **Firebase Rules Viewer** (reads the published rules). Add **Cloud Datastore Viewer** only to let Claude read the data as well (every collection, staff details included). Never an editor or owner role.
+3. The new account's Keys tab: Add key, Create new key, JSON. The browser downloads a key file.
+4. In the Claude app: the cloud environment menu in the session's title bar, Edit, then an environment variable named `FIREBASE_SERVICE_ACCOUNT` whose value is the key file's contents. When the settings take a value on one line only, use the file in base64 instead (Mac Terminal: `base64 -i key.json | pbcopy`; Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("key.json")) | Set-Clipboard`). Then delete the downloaded file.
+5. Start a new session. The session start script downloads Firebase's tools in the background (about a minute, 465 MB) and the server connects when they are ready.
+
+Without the key the firebase server shows as not connected and nothing is downloaded. To take access away: delete the key or the service account in the Google Cloud console, and remove the variable.
+
 ---
 
 ## 15. Tests
@@ -489,7 +511,7 @@ const result = await SchedulingEngine.generate(
 
 **Email server integration**: after `npm run build`, run `node --import tsx tests/integration/emailServer.test.ts`. This starts dev, production, direct Vite and Vite preview locally. Each must serve the web app, return authenticated JSON API errors, handle malformed JSON without an HTML error page and block plain, encoded, source map, build folder and Vite filesystem URLs for the backend bundle. The integration test also checks that the backend exists in `build` and is absent from `dist`. It sends no email and needs no Firebase credentials. CI runs it after the build.
 
-**Browser checks**: there is no Firebase emulator UI setup in the repo. In earlier sessions an in memory test page was built in the session scratchpad (a copy of the app wired to fake data), copied into a temporary `_preview/` folder, run with `npx vite --port 5179`, and driven with Playwright scripts (Chromium is preinstalled; `NODE_PATH=$(npm root -g)`). Delete `_preview/` before committing. A new session needs to rebuild such a page if it wants browser checks.
+**Browser checks**: the `browser-check` skill keeps the test page in the repo (`.claude/skills/browser-check/`). `scripts/start.sh` copies `harness/` into `_preview/` and serves it at http://localhost:5179. The harness has a Vite config that swaps the database and sign in modules for in memory fakes, sample data with a draft November roster, and seven screens chosen with `?view=`. Playwright scripts, started from `scripts/example.cjs` and run with `NODE_PATH=$(npm root -g)` (Chromium is preinstalled), drive it. `scripts/stop.sh` stops it and deletes `_preview/`. `_preview/` is ignored by git, and `tsconfig.json` leaves it and `.claude/` out of the type check.
 
 ---
 
@@ -584,10 +606,16 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 
 37. Five skills from `addyosmani/agent-skills` saved in the repo, the owner's choice of 2026-10-07: debugging-and-error-recovery, code-review-and-quality, security-and-hardening, frontend-ui-engineering and performance-optimization, installed for the project with `npx skills add addyosmani/agent-skills -a claude-code --copy -y --skill ...` (copied into `.claude/skills/`, sources added to `skills-lock.json`). All seven files were read before saving: standard engineering guidance, no commands that run by themselves, no settings or permission changes. The other 20 skills of the collection were left out on purpose: they would add about 2,000 tokens to every session, and some overlap with how the owner works (git-workflow-and-versioning covers committing and pushing, using-agent-skills and context-engineering steer every session start, test-driven-development applies to almost every change; browser-testing-with-devtools needs a Chrome DevTools server that is not set up). No app code changed. The owner approved pushing it to main on 2026-10-07.
 
+
+38. Claude Code automations from the `claude-automation-recommender` skill, the owner's request of 2026-10-07 ("set up all, with firebase"). **MCP servers** come from this repo's own plugin, `nsc-tools`, in a marketplace kept in the repo (`.claude/plugins-local/`, declared with a path). Servers from an enabled plugin start without the approval that servers in `.mcp.json` need; the repo's own settings cannot give that approval. context7 is the downloadable server: the official context7 plugin was removed because its online service now needs a login. Firebase is Firebase's own server (`firebase-tools@15`) with 15 read tools only: no deploy, no writes, no new projects, databases or indexes. It starts only when the key `FIREBASE_SERVICE_ACCOUNT` is set (section 14). Its tools take about a minute and 465 MB to download, so the session start script installs them in the background, and `MCP_TIMEOUT` is 3 minutes so the first start is not cut off. `.claude/scripts/published-rules.mjs` compares the published rules of the app's named database with `firestore.rules`. **Skills**: `browser-check` (section 15) and `finish-change`. **Hooks**: ask before any push to main; refuse a commit that changes anything without the guide. **Subagents**: `plain-english-reviewer` and `firestore-rules-reviewer`. **Plugin**: hookify. `tsconfig.json` leaves `_preview/` and `.claude/` out of the type check, and `.gitignore` has `_preview/`. Checks: the two hooks against 20 sample commands (one bug fixed: git status lines lost a letter); the Firebase launcher and the rules script with no key, a made up key (Google answered "account not found", so the sign in path works) and text that is not a key; the launcher showed exactly the 15 read tools; `claude mcp list` shows context7 connected and Firebase not connected until the key is set; the background download with a stand in for npm; the test page with all seven screens and no errors, and the example script; `claude plugin validate` passes for `.claude/` and the plugin. Type check, 274 unit tests, build and the four email server modes pass. No app code changed. Not tested yet: Firebase with the real key, in a new session.
+
 ---
 
 ## 17. Known quirks and ideas for later
 
+- Firebase for Claude Code: once the key is set, every cloud session downloads Firebase's tools (about 465 MB). The server's own rules tool may read only the default database's rules; use `.claude/scripts/published-rules.mjs` for the app's named database.
+- context7 runs without a key, so heavy use may meet its rate limit; a free key from context7.com could be added later.
+- The push to main hook asks even after the owner said "push to main": one extra tap, by design.
 - Historical hours use the contract percent saved with each published version (from 2026-10-06; older versions use the current contract), and the current shift durations, leave settings and working hours periods. The app does not store dated employment or contract changes, attendance records, or a separate opening balance per nurse. Editing those settings recalculates history. Deleting the earliest saved roster also moves the tracking start to the earliest remaining roster.
 - SOFT rules in the engine: H2 SOFT is only a −60 score; H3 SOFT is not checked; S1 SOFT gives −150/−50; H7 SOFT removes the ceiling (over goal penalties still apply); H9 SOFT is not checked. The validator reports SOFT breaks as "Check".
 - The swap and fairness dialogs compare the roster check by finding id, plus `amount` for problems that can grow; a "Must fix" that changes without a new id or a bigger amount (none known today) would not be refused. Fairness runs the roster check at most 12 times, so on a big roster with many refused moves it may suggest fewer than 6.
