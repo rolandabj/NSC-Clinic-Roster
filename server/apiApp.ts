@@ -95,13 +95,12 @@ export function createApiApp() {
   app.use(calendarRouter);
   app.use(authMiddleware);
 
-  // Every API route requires a signed in, approved user, except these.
+  // Every API route requires a signed in, approved user, except these. The Gemini routes
+  // are not among them: they spend the clinic's Gemini key (owner's decision of 2026-10-07).
   const PUBLIC_API_ROUTES: Array<{ method: string; pattern: RegExp }> = [
     { method: 'GET', pattern: /^\/api\/health$/ },
     { method: 'GET', pattern: /^\/api\/auth\/(me|verify)$/ },
     { method: 'POST', pattern: /^\/api\/auth\/logout$/ },
-    { method: 'GET', pattern: /^\/api\/gemini\// },
-    { method: 'POST', pattern: /^\/api\/gemini\// },
   ];
   app.use('/api', (req: Request, res: Response, next) => {
     const fullPath = (req.baseUrl + req.path).replace(/\/+$/, '') || '/';
