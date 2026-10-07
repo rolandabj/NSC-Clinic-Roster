@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
-import { AppRoute, ClinicContextState } from '../../types/navigation';
+import { AddressChange, AppRoute, ClinicContextState } from '../../types/navigation';
 import { LocalModeBanner } from './LocalModeBanner';
 import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
@@ -24,6 +24,7 @@ import { quotaTracker } from '../../services/firebase/quotaTracker';
 import { TriangleAlert, X } from 'lucide-react';
 import { IconButton } from '../ui';
 import { screenTitle } from './screenTitles';
+import { addressHash, readAddress } from '../../services/navigation/address';
 import { LoadErrorBoundary } from '../common/LoadErrorBoundary';
 import { chooseScheduleToOpen } from '../../services/schedule/openSchedule';
 import { todayIso } from '../../services/publish/nurseRosterService';
@@ -93,6 +94,10 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
 
   const initialUrl = parseUrlState();
   const [currentRoute, setCurrentRoute] = useState<AppRoute>(initialUrl.route);
+  // What the address names on the screen: a roster, sheet, nurse, day or settings tab.
+  const [routeParams, setRouteParams] = useState<Record<string, string>>(() => readAddress(window.location.hash).params);
+  const currentRouteRef = useRef(currentRoute);
+  currentRouteRef.current = currentRoute;
   const [shareTokenParam, setShareTokenParam] = useState<string | undefined>(initialUrl.token);
   const [nurseIdParam, setNurseIdParam] = useState<string | undefined>(initialUrl.nurse);
 
@@ -354,12 +359,28 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       syncAddress(parsed.route);
       setShareTokenParam(parsed.token);
       setNurseIdParam(parsed.nurse);
+      setRouteParams(readAddress(window.location.hash).params);
 
       // Receipt links open the confirm page (see App.tsx); nothing is confirmed automatically.
     };
 
+    // Back and Forward between addresses the screens added (a new tab) come here too.
     window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener('popstate', handleHashChange);
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('popstate', handleHashChange);
+    };
+  }, []);
+
+  // A screen changed what is open on it: the address follows, adding a step to Back for 'push'.
+  const updateAddress = useCallback<AddressChange>((params, mode) => {
+    const next = addressHash(currentRouteRef.current, params);
+    if (window.location.hash === next) return;
+    const url = `${window.location.pathname}${window.location.search}${next}`;
+    if (mode === 'push') window.history.pushState(null, '', url);
+    else window.history.replaceState(null, '', url);
+    setRouteParams(readAddress(next).params);
   }, []);
 
   // Keeps the address in step with the screen shown, for example #dashboard after a
@@ -440,12 +461,14 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
             context={clinicContext}
             onOpenSharePreview={handleOpenPublishedPreview}
             initialOpenCreate={openCreateInSchedules}
+            address={routeParams}
+            onAddressChange={updateAddress}
           />
         );
       case 'availability':
         return <AvailabilityView context={clinicContext} />;
       case 'nurses':
-        return <NursesView context={clinicContext} />;
+        return <NursesView context={clinicContext} nurseId={routeParams.nurse} onAddressChange={updateAddress} />;
       case 'doctors':
         return <DoctorsView context={clinicContext} />;
       case 'history':
@@ -462,6 +485,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
             context={clinicContext}
             onUpdateClinicProfile={handleUpdateClinicProfile}
             onUpdateClinicName={handleUpdateClinicName}
+            tab={routeParams.tab}
+            onAddressChange={updateAddress}
           />
         );
       default:

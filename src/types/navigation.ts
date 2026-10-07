@@ -14,6 +14,12 @@ export type AppRoute =
   | 'published'
   | 'me';
 
+/**
+ * A screen changed what is open on it (a roster, sheet, nurse or settings tab) and the address
+ * follows: 'push' adds a step to Back (a new tab), 'replace' does not.
+ */
+export type AddressChange = (params: Record<string, string | undefined>, mode: 'push' | 'replace') => void;
+
 export interface NavItem {
   id: AppRoute;
   label: string;

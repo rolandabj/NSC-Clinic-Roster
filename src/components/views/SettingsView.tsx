@@ -22,7 +22,7 @@ import {
   ShieldCheck,
   CalendarRange,
 } from 'lucide-react';
-import { ClinicContextState } from '../../types/navigation';
+import { AddressChange, ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
 import { authService } from '../../services/auth/authService';
 import { getWeekendDays, setClinicWeekendDays } from '../../utils/weekend';
@@ -62,6 +62,9 @@ interface SettingsViewProps {
   onUpdateClinicProfile?: (profile: ClinicProfile) => void;
   onUpdateClinicName?: (name: string) => void;
   onOpenAcceptance?: () => void;
+  /** The tab the address names (#settings?tab=email). */
+  tab?: string;
+  onAddressChange?: AddressChange;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -69,8 +72,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateClinicProfile,
   onUpdateClinicName,
   onOpenAcceptance,
+  tab,
+  onAddressChange,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>(() => {
+    if (tab) return tab as SettingsTab;
     try {
       const saved = localStorage.getItem('clinic_roster_settings_active_tab') as SettingsTab;
       // 'acceptance' was a removed tab
@@ -357,6 +363,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const handleTabSwitch = (newTab: SettingsTab) => {
     flushAllSettings();
     setActiveTab(newTab);
+    // A new step for Back, which then returns to the tab before.
+    onAddressChange?.({ tab: newTab }, 'push');
     try {
       localStorage.setItem('clinic_roster_settings_active_tab', newTab);
     } catch {
@@ -410,6 +418,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   useEffect(() => {
     if (!tabs.some((t) => t.id === activeTab)) setActiveTab('clinic');
   }, [activeTab, isMasterAdmin]);
+
+  // The address names the open tab. Back, Forward or a link to another tab opens it; an
+  // address without a tab gets the open one, so the link can be copied.
+  useEffect(() => {
+    if (!tab) onAddressChange?.({ tab: activeTab }, 'replace');
+    else if (tab !== activeTab) {
+      flushAllSettings();
+      setActiveTab(tab as SettingsTab);
+    }
+  }, [tab]);
+  useEffect(() => {
+    if (tab && tab !== activeTab) onAddressChange?.({ tab: activeTab }, 'replace');
+    // Only when the tab changes here without a click (a tab this person may not open).
+  }, [activeTab]);
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">

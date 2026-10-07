@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useId } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import {
   Users,
   Plus,
@@ -23,7 +23,7 @@ import {
   ChevronUp,
   ChevronDown,
 } from 'lucide-react';
-import { ClinicContextState } from '../../types/navigation';
+import { AddressChange, ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import {
@@ -44,9 +44,12 @@ import { revokeNurseLink } from '../../services/publish/nurseRosterService';
 
 interface NursesViewProps {
   context: ClinicContextState;
+  /** The nurse the address names (#nurses?nurse=mary): their details open. */
+  nurseId?: string;
+  onAddressChange?: AddressChange;
 }
 
-export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
+export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddressChange }) => {
   const [nurses, setNurses] = useState<Nurse[]>([]);
   const [seniorityLevels, setSeniorityLevels] = useState<SeniorityLevel[]>([]);
   const [clinicalRoles, setClinicalRoles] = useState<ClinicalRole[]>([]);
@@ -203,6 +206,24 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
     validateFormRealtime(nurse.gmail, nurse.fullName, nurse.preferences || [], nurse.id);
     setIsModalOpen(true);
   };
+
+  // A link to a nurse opens their details once the list has loaded.
+  const linkHandledRef = useRef(!nurseId);
+  useEffect(() => {
+    if (!nurseId || nurses.length === 0) return;
+    linkHandledRef.current = true;
+    if (isModalOpen && editingNurse?.id === nurseId) return;
+    const nurse = nurses.find((n) => n.id === nurseId);
+    if (nurse) handleOpenEdit(nurse);
+  }, [nurseId, nurses.length]);
+
+  // The address follows the open details (#nurses?nurse=mary), so the link can be copied.
+  // Back is left alone: opening details is not a new step.
+  useEffect(() => {
+    if (!linkHandledRef.current) return;
+    const open = isModalOpen && editingNurse ? editingNurse.id : undefined;
+    if (open !== nurseId) onAddressChange?.({ nurse: open }, 'replace');
+  }, [isModalOpen, editingNurse?.id]);
 
   const validateFormRealtime = (
     gmail: string,

@@ -42,12 +42,13 @@ import { announceProblems } from '../../services/dashboard/problemCount';
 import { WhoCanCover } from '../workbook/WhoCanCover';
 import { HolidayDayOffPicker } from '../workbook/HolidayDayOffPicker';
 import { nurseClinicRoleOf, canBeFreeNurse } from '../../services/engine/clinicModel';
-import { ClinicContextState } from '../../types/navigation';
+import { AddressChange, ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
 import { rosterSaveQueues } from '../../services/repository/rosterSaveQueues';
 import { createLiveReconciler } from '../../services/repository/liveReconcile';
 import { rebaseEdit } from '../../services/schedule/rebaseEdit';
 import { chooseScheduleToOpen } from '../../services/schedule/openSchedule';
+import { rosterSheetFromAddress, rosterSheetToAddress } from '../../services/navigation/address';
 import { quotaTracker, QuotaExceededError } from '../../services/firebase/quotaTracker';
 import {
   Schedule,
@@ -132,12 +133,17 @@ interface SchedulesViewProps {
   context: ClinicContextState;
   onOpenSharePreview?: (token: string) => void;
   initialOpenCreate?: boolean;
+  /** What the address names: #schedules?roster=nov&sheet=problems&nurse=mary&date=2026-11-20. */
+  address?: { roster?: string; sheet?: string; nurse?: string; date?: string };
+  onAddressChange?: AddressChange;
 }
 
 export const SchedulesView: React.FC<SchedulesViewProps> = ({
   context,
   onOpenSharePreview,
   initialOpenCreate = false,
+  address,
+  onAddressChange,
 }) => {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
@@ -214,7 +220,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   // Active Block & Tab selection in Workbook View
   const [selectedBlockIndex, setSelectedBlockIndex] = useState(0);
-  const [activeTab, setActiveTab] = useState<'roster' | 'doctors' | 'coverage' | 'warnings' | 'leave' | 'hours' | 'legend'>('roster');
+  type Sheet = 'roster' | 'doctors' | 'coverage' | 'warnings' | 'leave' | 'hours' | 'legend';
+  const [activeTab, setActiveTab] = useState<Sheet>(() => (rosterSheetFromAddress(address?.sheet) as Sheet) || 'roster');
 
   // Unpin a day dialog
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
@@ -251,7 +258,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const workspaceLoadedRef = useRef(false);
   // The roster that is open, kept across reloads of the page data (and in this
   // browser), so saving or publishing never switches to another roster.
-  const openScheduleIdRef = useRef<string | null>(readStoredScheduleId());
+  // A link to a roster opens it; otherwise the one last opened in this browser.
+  const openScheduleIdRef = useRef<string | null>(address?.roster || readStoredScheduleId());
   // Guards against an older "open roster" load finishing after a newer one.
   const openRequestRef = useRef(0);
   // True while a roster (or the page data) is loading: edits wait, so nothing is
@@ -1579,6 +1587,44 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (activeTab !== 'roster') setFocusRequest(undefined);
   }, [activeTab]);
 
+  // The address follows the open roster and sheet (#schedules?roster=nov&sheet=problems). It is
+  // replaced here; a click on a sheet's tab adds a step to Back instead (see the tabs below).
+  useEffect(() => {
+    if (!activeSchedule) return;
+    onAddressChange?.({ roster: activeSchedule.id, sheet: rosterSheetToAddress(activeTab) }, 'replace');
+  }, [activeSchedule?.id, activeTab]);
+
+  // Back, Forward or a link to another sheet opens it.
+  useEffect(() => {
+    if (!address) return;
+    const sheet = (rosterSheetFromAddress(address.sheet) as Sheet) || 'roster';
+    if (sheet !== activeTab) setActiveTab(sheet);
+  }, [address?.sheet]);
+
+  // Back, Forward or a link to another roster opens it.
+  useEffect(() => {
+    const wanted = address?.roster;
+    if (!wanted || wanted === openScheduleIdRef.current) return;
+    const sched = schedules.find((s) => s.id === wanted);
+    if (sched) openSchedule(sched).catch((err) => notify(`Could not open "${sched.name}": ${err?.message || err}`, 'error'));
+  }, [address?.roster, schedules]);
+
+  // A link to a day (#schedules?roster=nov&nurse=mary&date=2026-11-20) shows that cell once its
+  // roster is open: the nurse's, or the first nurse's when none is named.
+  const pendingJumpRef = useRef(address?.date ? { nurse: address.nurse, date: address.date } : null);
+  useEffect(() => {
+    if (address?.date) pendingJumpRef.current = { nurse: address.nurse, date: address.date };
+  }, [address?.date, address?.nurse]);
+  useEffect(() => {
+    const jump = pendingJumpRef.current;
+    if (!jump || !activeSchedule || nurses.length === 0) return;
+    if (address?.roster && address.roster !== activeSchedule.id) return; // its roster is still opening
+    pendingJumpRef.current = null;
+    if (jump.date < activeSchedule.startDate || jump.date > activeSchedule.endDate) return;
+    const nurseId = jump.nurse && nurses.some((n) => n.id === jump.nurse) ? jump.nurse : nurses[0].id;
+    handleJumpToCell(nurseId, jump.date);
+  }, [activeSchedule?.id, nurses.length, address?.date, address?.nurse]);
+
   /** "Add" in Who could cover: a Nurse Clinic shift for a nurse free that day (a hand change). */
   /**
    * The day off a nurse chose for working a public holiday (owner's decision of 2026-10-06):
@@ -2285,7 +2331,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         ].map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
+            onClick={() => {
+              // A new sheet is a step Back returns from.
+              if (tab.id !== activeTab) onAddressChange?.({ roster: activeSchedule?.id, sheet: rosterSheetToAddress(tab.id) }, 'push');
+              setActiveTab(tab.id as Sheet);
+            }}
             aria-current={activeTab === tab.id ? 'page' : undefined}
             className={`px-3 py-1 text-xs font-medium rounded-t transition-colors cursor-pointer border-t border-x ${
               activeTab === tab.id
