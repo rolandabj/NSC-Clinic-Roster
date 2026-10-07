@@ -26,8 +26,12 @@ in `/opt/pw-browsers`; never run `playwright install`.
      and `ack` (the read receipt page). These three publish the November roster on the spot.
    - `?as=` who is signed in: `owner` (the default), `planner`, `manager`, `nurse` (Mary,
      a viewer linked to her nurse profile) or `none` (signed out, for the sign in page).
-   - `?seed=` other data: `fair` (Amy well over her goal) or `big` (a full size clinic:
-     60 nurses with long names, 12 doctors, a 31 day roster from 02-11-2026).
+   - `?seed=` other data: `fair` (Amy well over her goal), `big` (a full size clinic:
+     60 nurses with long names, 12 doctors, a 31 day roster from 02-11-2026) or `clean`
+     (a one day roster with nothing to fix, so the publish dialog goes on to sending).
+   - `?email=live` takes email out of test mode. The test page has no email server, so a
+     script answers it: `page.route('**/api/email/status', ...)`, `/api/email/check` and
+     `/api/email/test` (reply `{ data: { status: 'SENT' } }`, slowly to watch the sending).
    The sample data is in `_preview/seed.ts`: a draft November 2026 roster, Dr Lee (Mondays)
    and Dr Ray (Tuesdays), and Mary, whose list holds only Dr Lee. Add variants behind a URL
    parameter, as `?seed=fair` does, to check several cases with one page.
@@ -64,6 +68,9 @@ in `/opt/pw-browsers`; never run `playwright install`.
   `computePrivileges`, `AuthService`, `authService`, `authorizedFetch`).
 - Some screens use today's date (for example the doctor week change dialog's first date),
   so keep test dates in the future or set the date in the script.
+- Headless Chromium never shows "Leave site?" warnings, even for a page that asks. To check
+  that a page would ask, dispatch the event yourself:
+  `page.evaluate(() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; })`.
 - A nurse's private page needs a private link before its page is written: `main.tsx` calls
   `ensureNurseLink` and then `syncNurseRosters`, as publishing does.
 - The page rarely scrolls sideways even when a phone layout is broken, because the app

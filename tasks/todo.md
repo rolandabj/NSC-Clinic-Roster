@@ -16,7 +16,7 @@ Main moves only when the owner says "push to main".
 - [x] Dates: Availability month, nurse request form, Doctors defaults
 - [x] Phones: sidebar becomes a slide in menu below 1024 px, top bar trimmed on phones
 - [x] Permissions: `usePermissions`, hide refused History actions and viewer exports, Pending Approvals for planners, viewers' roster button and forbidden routes
-- [ ] Publishing safety: email log without full emails, warning before closing while sending
+- [x] Publishing safety: email log kept under the size limit (whole emails while they fit), warning before closing while sending
 - [ ] English only: remove `src/services/i18n`
 - [ ] Guide section 3 corrected
 - [ ] Checkpoint 1: screenshots and numbers to the owner

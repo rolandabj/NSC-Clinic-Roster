@@ -56,6 +56,7 @@ import { loadClinicSetup } from '../../services/engine/clinicSetupService';
 import { ScheduleValidator, ValidationReport } from '../../services/validation/ScheduleValidator';
 import { computeScheduleDiff, ScheduleVersionDiff } from '../../services/history/diffEngine';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
+import { recipientsForLog } from '../../services/publish/emailLogSize';
 import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
 import { getRepository } from '../../services/repository';
 import { syncPublicRoster } from '../../services/publish/publicRosterService';
@@ -123,6 +124,17 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   const [hoursHistory, setHoursHistory] = useState<HoursHistory>();
   const hoursHistoryRef = useRef<HoursHistory | undefined>(undefined);
   const [currentStep, setCurrentStep] = useState<Step>('VALIDATION');
+  // Closing or reloading the tab while emails go out would leave the rest of the nurses
+  // without their email, so the browser asks first.
+  useEffect(() => {
+    if (currentStep !== 'SENDING') return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [currentStep]);
   const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
   const [acknowledgeWarnings, setAcknowledgeWarnings] = useState(false);
 
@@ -615,7 +627,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       done++;
       setProgressPercent(Math.round((done / Math.max(1, targetNurses.length)) * 100));
       try {
-        await repo.update('emailLog', run.logId, { recipients: run.recipients, status: 'SENDING' });
+        await repo.update('emailLog', run.logId, { recipients: recipientsForLog(run.recipients), status: 'SENDING' });
       } catch {
         // the final update below tries again
       }
@@ -627,7 +639,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   const finishSend = async (isRetry = false) => {
     const run = runRef.current!;
     const status = overallStatus(run.recipients);
-    await repo.update('emailLog', run.logId, { recipients: run.recipients, status });
+    await repo.update('emailLog', run.logId, { recipients: recipientsForLog(run.recipients), status });
     setSendResults([...run.recipients]);
     setCurrentStep('DONE');
     if (isRetry) {

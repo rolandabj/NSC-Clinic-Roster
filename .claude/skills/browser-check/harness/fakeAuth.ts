@@ -49,6 +49,7 @@ export const authService: any = {
   signInWithGoogle: async () => user,
   getTokenState: () => ({ hasToken: !!user }),
   getIdToken: async () => (user ? 'token' : null),
+  getFreshToken: async () => (user ? 'token' : null),
 };
 
 export class AuthService {}

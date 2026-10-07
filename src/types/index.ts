@@ -408,6 +408,8 @@ export interface EmailRecipientLog {
   subject: string;
   bodyPreview: string;
   fullBodyHtml: string;
+  /** The email was sent, but its body was left out of the log to keep the record under Firestore's size limit. */
+  htmlNotKept?: boolean;
   status: EmailLogStatus;
   errorMessage?: string;
 }

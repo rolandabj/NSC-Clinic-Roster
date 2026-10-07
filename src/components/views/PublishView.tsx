@@ -35,6 +35,7 @@ import {
   X,
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
+import { escapeHtml } from '../../utils/escapeHtml';
 import { getRepository } from '../../services/repository';
 import {
   Schedule,
@@ -434,6 +435,12 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
     downloadCsv(`${activeSchedule.name}_acknowledgments.csv`, toCsv(rows));
   };
 
+  /** What "View HTML" shows for an email whose body the log did not keep (see emailLogSize.ts). */
+  const notKeptHtml = (summary: string) =>
+    '<div style="font-family:sans-serif;font-size:14px;line-height:1.5;color:#1e293b">' +
+    '<p>This email was sent, but its full text was not kept in the log, so that the record stays within the database size limit.</p>' +
+    `<p><strong>Summary:</strong> ${escapeHtml(summary || 'none')}</p></div>`;
+
   // Flat transmissions list for Email Log
   const allTransmissions = publishLogs.flatMap((log) =>
     log.recipients.map((rec) => ({
@@ -824,7 +831,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
                               subject: log.subject,
                               recipientName: log.nurseName,
                               recipientEmail: log.email,
-                              html: log.fullBodyHtml,
+                              html: log.fullBodyHtml || notKeptHtml(log.bodyPreview),
                             })
                           }
                           className="inline-flex items-center gap-1 px-2 py-1 border border-slate-300 hover:bg-slate-50 text-indigo-700 rounded text-[11px] font-semibold cursor-pointer"

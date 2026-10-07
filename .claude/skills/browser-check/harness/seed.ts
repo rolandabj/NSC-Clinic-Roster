@@ -126,3 +126,20 @@ if (typeof location !== 'undefined' && new URLSearchParams(location.search).get(
   Object.assign(seed, { nurses: bigNurses, doctors: bigDoctors, doctorSessions: sessions, assignments: bigShifts, leaveEntries: [] });
   seed.versions[0].snapshot.assignments = bigShifts;
 }
+
+// ?seed=clean: a one day roster (Wednesday 18-11-2026, no doctors) with no "Must fix" problems,
+// so the publish dialog can go on to sending: Amy, the only active nurse, runs Nurse Clinic
+// from 09:00 to 21:00. ?email=live switches email out of test mode (sends then go to
+// /api/email/test, which a Playwright script can answer with page.route).
+const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+if (params?.get('seed') === 'clean') {
+  Object.assign(november, { startDate: '2026-11-18', endDate: '2026-11-18', blockWeeks: 1, hoursTargetFullTime: 12 });
+  seed.dutyWindows.push(duty('d921', 'F', '09:00', '21:00'));
+  for (const n of seed.nurses) if (n.id !== 'amy') n.active = false;
+  const amyDay = { ...shift('amy', '2026-11-18'), dutyWindowId: 'd921', kind: 'CLINICAL_ROLE', clinicalRoleId: 'role-nurse-clinic' };
+  Object.assign(seed, { assignments: [amyDay], doctorSessions: [], leaveEntries: [] });
+  seed.versions[0].snapshot.assignments = [amyDay];
+}
+if (params?.get('email') === 'live') {
+  seed.systemMetadata = [{ id: 'email_settings', emailMockMode: false, emailSenderName: 'Test Clinic' }];
+}
