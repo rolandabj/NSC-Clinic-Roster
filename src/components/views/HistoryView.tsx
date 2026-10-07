@@ -10,6 +10,7 @@
 import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
+import { usePermissions } from '../common/usePermissions';
 import { notify } from '../common/dialogs';
 import {
   History,
@@ -79,6 +80,8 @@ interface HistoryViewProps {
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
+  // Restore and delete need a planner (firestore.rules); downloads need a planner or a manager.
+  const { canEdit, canExport } = usePermissions();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
   const [activeAssignments, setActiveAssignments] = useState<Assignment[]>([]);
@@ -802,6 +805,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                         <span>Diff</span>
                       </button>
 
+                      {canEdit && (<>
                       <button
                         type="button"
                         onClick={(e) => {
@@ -830,6 +834,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                         <Trash2 className="w-2.5 h-2.5 text-rose-600" aria-hidden="true" />
                         <span>Delete</span>
                       </button>
+                      </>)}
                     </div>
                   </div>
                 );
@@ -903,6 +908,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                   </div>
 
                   {/* Export button */}
+                  {canExport && (
                   <button
                     type="button"
                     onClick={() => setIsExportModalOpen(true)}
@@ -912,6 +918,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                     <Download className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
                     <span className="hidden sm:inline">Export</span>
                   </button>
+                  )}
 
                   {/* Popout Fullscreen Modal */}
                   <button
@@ -924,7 +931,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                     <span className="hidden sm:inline">Popout</span>
                   </button>
 
-                  {/* Restore button */}
+                  {/* Restore and delete buttons (planners) */}
+                  {canEdit && (<>
                   <button
                     type="button"
                     onClick={() => {
@@ -967,6 +975,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
                       <span>Delete Schedule</span>
                     </button>
                   )}
+                  </>)}
                 </div>
               </div>
 
@@ -1636,11 +1645,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
         initialTargetVersionId={compareTargetId}
         isOpen={isCompareModalOpen}
         onClose={() => setIsCompareModalOpen(false)}
-        onRestoreVersion={(v) => {
+        onRestoreVersion={canEdit ? (v) => {
           setIsCompareModalOpen(false);
           setVersionToRestore(v);
           setIsRestoreModalOpen(true);
-        }}
+        } : undefined}
       />
 
       {/* --- VERSION VIEW MODAL --- */}
@@ -1655,15 +1664,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
         leaveTypes={leaveTypes}
         isOpen={isViewModalOpen}
         onClose={() => setIsViewModalOpen(false)}
-        onRestore={(v) => {
+        onRestore={canEdit ? (v) => {
           setVersionToRestore(v);
           setIsRestoreModalOpen(true);
-        }}
-        onDelete={(v) => {
+        } : undefined}
+        onDelete={canEdit ? (v) => {
           setIsViewModalOpen(false);
           setVersionToDelete(v);
           setIsDeleteModalOpen(true);
-        }}
+        } : undefined}
       />
 
       {/* --- EXPORT MODAL FOR HISTORICAL SNAPSHOT --- */}

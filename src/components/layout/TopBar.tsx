@@ -75,6 +75,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         {/* Schedule Selector Pill/Dropdown affordance */}
         <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 hidden md:block" />
 
+        {/* The roster shortcut, for people who can open the roster */}
+        {canEditClinicData(authService.getCurrentUser()) && (
         <button
           onClick={onNavigateToSchedules}
           className="group hidden md:flex items-center gap-2 px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left cursor-pointer"
@@ -98,6 +100,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             )}
           </div>
         </button>
+        )}
       </div>
 
       {/* Zone 2 & 3: Alerts, Utilities & Auth Actions */}

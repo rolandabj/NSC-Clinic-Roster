@@ -26,6 +26,7 @@ import { Schedule } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
 import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
 import { useDialogA11y } from '../common/useDialogA11y';
+import { usePermissions } from '../common/usePermissions';
 
 /** Hours as shown to people: at most one decimal. */
 const fmtHours = (h: number) => `${Math.round((h || 0) * 10) / 10}h`;
@@ -59,6 +60,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  const { canExport } = usePermissions();
   const [filterType, setFilterType] = useState<'ALL' | 'DUTY' | 'LEAVE' | 'WEEKEND'>('ALL');
   const titleId = useId();
   const dialogRef = useDialogA11y<HTMLDivElement>(isOpen && !!accounting, onClose);
@@ -181,6 +183,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {canExport && (
             <button
               type="button"
               onClick={handleExportNurseCsv}
@@ -189,6 +192,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
               <Download className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
               <span>Download timesheet (CSV)</span>
             </button>
+            )}
             <button
               type="button"
               onClick={onClose}

@@ -20,6 +20,30 @@ export function canApproveRequests(user?: UserProfile | null): boolean {
   return canEditClinicData(user) || user?.isManager === true;
 }
 
+/** Owner, editors and managers can download payroll, timesheets and roster exports (canExportReports). */
+export function canExportReports(user?: UserProfile | null): boolean {
+  return canEditClinicData(user) || user?.isManager === true;
+}
+
+/** What a person may do, in one place, so screens never show a button the rules would refuse. */
+export interface Permissions {
+  canEdit: boolean;
+  canApprove: boolean;
+  canExport: boolean;
+  isOwner: boolean;
+  linkedNurseId?: string;
+}
+
+export function permissionsFor(user?: UserProfile | null): Permissions {
+  return {
+    canEdit: canEditClinicData(user),
+    canApprove: canApproveRequests(user),
+    canExport: canExportReports(user),
+    isOwner: user?.role === 'OWNER',
+    linkedNurseId: user?.linkedNurseId,
+  };
+}
+
 const VIEWER_ROUTES: AppRoute[] = ['dashboard', 'availability', 'history', 'reports', 'published'];
 
 export function canAccessRoute(user: UserProfile | null | undefined, route: AppRoute): boolean {

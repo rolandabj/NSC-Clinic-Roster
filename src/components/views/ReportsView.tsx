@@ -61,6 +61,7 @@ import {
   HoursAccountingStatus,
 } from '../../services/reports/hoursAccounting';
 import { NurseTimesheetModal } from '../modals/NurseTimesheetModal';
+import { usePermissions } from '../common/usePermissions';
 import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
 
 interface ReportsViewProps {
@@ -82,6 +83,8 @@ type SortField =
   | 'late';
 
 export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
+  // Payroll and timesheet downloads: planners and managers only (canExportReports).
+  const { canExport } = usePermissions();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -506,6 +509,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
             </select>
           </div>
 
+          {canExport && (<>
           <button
             onClick={handleExportPayrollCsv}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition-colors shadow-xs cursor-pointer"
@@ -521,6 +525,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
             <FileSpreadsheet className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
             <span>Export Timesheets CSV</span>
           </button>
+          </>)}
 
           <button
             onClick={handlePrint}

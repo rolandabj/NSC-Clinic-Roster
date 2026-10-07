@@ -34,5 +34,9 @@ export interface ClinicContextState {
     email: string;
     role: UserRole;
     isLocal: boolean;
+    /** Can approve leave and day off requests without being a planner. */
+    isManager?: boolean;
+    /** The nurse profile this account belongs to, if any. */
+    linkedNurseId?: string;
   } | null;
 }

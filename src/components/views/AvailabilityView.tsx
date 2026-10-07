@@ -62,11 +62,9 @@ const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) => {
   const currentUser = authService.getCurrentUser();
-  const isMasterAdmin = currentUser?.email?.toLowerCase() === 'rolandabj@gmail.com' || currentUser?.role === 'OWNER';
-  const isManager = Boolean(currentUser?.isManager) || isMasterAdmin;
-
   const canEdit = canEditClinicData(currentUser);
-  // Planners and managers see and manage every request, decided or not
+  // Planners and managers approve requests and see every request, decided or not
+  // (canApprove() in firestore.rules); the owner is a planner.
   const canManageRequests = canApproveRequests(currentUser);
   const [activeTab, setActiveTab] = useState<'calendar' | 'self-service' | 'approvals' | 'requests'>(canEdit ? 'calendar' : 'self-service');
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
@@ -159,8 +157,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       setClinicalRoles(crList);
       setHolidays(hList);
 
-      // If user is manager or admin, fetch pending approvals count
-      if (isManager) {
+      // People who approve requests see how many are waiting
+      if (canManageRequests) {
         try {
           setPendingApprovalsCount(await countPendingApprovals());
         } catch {
@@ -803,7 +801,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           <span>My Availability &amp; Leave Requests</span>
         </button>
 
-        {isManager && (
+        {canManageRequests && (
           <button
             onClick={() => setActiveTab('approvals')}
             className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
@@ -843,7 +841,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       )}
 
       {/* VIEW PANEL 1: MANAGER APPROVALS QUEUE */}
-      {activeTab === 'approvals' && isManager && (
+      {activeTab === 'approvals' && canManageRequests && (
         <ApprovalsQueuePanel currentUser={currentUser || undefined} onRequestDecided={loadData} />
       )}
 

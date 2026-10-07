@@ -78,8 +78,11 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       return { route: 'published', token, nurse, ackToken };
     }
 
+    // An unknown screen, or one this person may not open, becomes the dashboard (and the
+    // address is corrected below, so the menu shows where they are).
+    const route: AppRoute = validRoutes.includes(baseRoute) ? baseRoute : 'dashboard';
     return {
-      route: validRoutes.includes(baseRoute) ? baseRoute : 'dashboard',
+      route: canAccessRoute(authService.getCurrentUser(), route) ? route : 'dashboard',
       token,
       nurse,
       ackToken,
@@ -117,6 +120,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       email: initialUser?.email || '',
       role: initialUser?.role || 'VIEWER',
       isLocal: initialUser?.isLocal ?? false,
+      isManager: initialUser?.isManager,
+      linkedNurseId: initialUser?.linkedNurseId,
     },
   });
 
@@ -221,6 +226,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
             email: user.email,
             role: user.role,
             isLocal: user.isLocal,
+            isManager: user.isManager,
+            linkedNurseId: user.linkedNurseId,
           },
         };
       });
@@ -356,6 +363,16 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  // Keeps the address in step with the screen shown, for example #dashboard after a
+  // link to a screen this person may not open.
+  useEffect(() => {
+    if (currentRoute === 'published' || currentRoute === 'me') return;
+    const shown = window.location.hash.replace('#', '').split('?')[0];
+    if (shown !== currentRoute) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${currentRoute}`);
+    }
+  }, [currentRoute]);
+
   const navigateTo = (route: AppRoute) => {
     setIsMenuOpen(false);
     if (route !== 'schedules') {
@@ -387,7 +404,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
         <PublishedRosterView
           shareToken={shareTokenParam}
           nurseIdParam={nurseIdParam}
-          onExitPreview={() => navigateTo('schedules')}
+          onExitPreview={() => navigateTo(canAccessRoute(authService.getCurrentUser(), 'schedules') ? 'schedules' : 'dashboard')}
         />
       </Suspense></LoadErrorBoundary>
     );

@@ -60,7 +60,8 @@ export interface UserProfile {
 export function computePrivileges(role: UserRole, isManager: boolean = false): UserPrivileges {
   const isOwner = role === 'OWNER';
   const isEditorOrOwner = isOwner || role === 'EDITOR' || role === 'PLANNER';
-  const canApprove = isOwner || isManager;
+  // Same as canApprove() in firestore.rules and canApproveRequests in access.ts: editors or managers.
+  const canApprove = isEditorOrOwner || isManager;
 
   return {
     canEditClinicSettings: isOwner,

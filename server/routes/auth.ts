@@ -17,7 +17,8 @@ export const authRouter = Router();
 function computePrivileges(role: BackendRole, isManager: boolean) {
   const isOwner = role === 'OWNER';
   const isEditorOrOwner = isOwner || role === 'EDITOR' || role === 'PLANNER';
-  const canApprove = isOwner || isManager;
+  // Same as canApprove() in firestore.rules: editors or managers.
+  const canApprove = isEditorOrOwner || isManager;
   return {
     canEditClinicSettings: isOwner,
     canCreateSchedules: isEditorOrOwner,
