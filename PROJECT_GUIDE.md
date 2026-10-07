@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 2026-10-07, after saving five skills from addyosmani/agent-skills in the repo (section 16, item 37), on the working branch; not pushed to main yet.
+Last updated: 2026-10-07, after saving five skills from addyosmani/agent-skills in the repo (section 16, item 37), pushed to main.
 
 ---
 
@@ -582,7 +582,7 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 36. Git in cloud sessions, the owner's request of 2026-10-07: the session start script (`.claude/hooks/session-start.sh`) now runs `git config --global url."https://github.com/".insteadOf git@github.com:`, so GitHub addresses written for SSH (`git@github.com:owner/repo`) are fetched over HTTPS; cloud sessions have no SSH keys. It runs before `npm install`, so a package with such an address installs too, and only in cloud sessions, like the rest of the script. A full run of the script passes and sets the rule. The owner approved pushing items 35 and 36 to main on 2026-10-07.
 
 
-37. Five skills from `addyosmani/agent-skills` saved in the repo, the owner's choice of 2026-10-07: debugging-and-error-recovery, code-review-and-quality, security-and-hardening, frontend-ui-engineering and performance-optimization, installed for the project with `npx skills add addyosmani/agent-skills -a claude-code --copy -y --skill ...` (copied into `.claude/skills/`, sources added to `skills-lock.json`). All seven files were read before saving: standard engineering guidance, no commands that run by themselves, no settings or permission changes. The other 20 skills of the collection were left out on purpose: they would add about 2,000 tokens to every session, and some overlap with how the owner works (git-workflow-and-versioning covers committing and pushing, using-agent-skills and context-engineering steer every session start, test-driven-development applies to almost every change; browser-testing-with-devtools needs a Chrome DevTools server that is not set up). No app code changed.
+37. Five skills from `addyosmani/agent-skills` saved in the repo, the owner's choice of 2026-10-07: debugging-and-error-recovery, code-review-and-quality, security-and-hardening, frontend-ui-engineering and performance-optimization, installed for the project with `npx skills add addyosmani/agent-skills -a claude-code --copy -y --skill ...` (copied into `.claude/skills/`, sources added to `skills-lock.json`). All seven files were read before saving: standard engineering guidance, no commands that run by themselves, no settings or permission changes. The other 20 skills of the collection were left out on purpose: they would add about 2,000 tokens to every session, and some overlap with how the owner works (git-workflow-and-versioning covers committing and pushing, using-agent-skills and context-engineering steer every session start, test-driven-development applies to almost every change; browser-testing-with-devtools needs a Chrome DevTools server that is not set up). No app code changed. The owner approved pushing it to main on 2026-10-07.
 
 ---
 
