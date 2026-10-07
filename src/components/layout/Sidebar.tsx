@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
+  X,
 } from 'lucide-react';
 import { AppRoute, NavItem } from '../../types/navigation';
 import { i18n, t, Language } from '../../services/i18n';
@@ -24,6 +25,8 @@ interface SidebarProps {
   onNavigate: (route: AppRoute) => void;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  /** Shown as the slide in menu on narrow screens: a Close button replaces the collapse toggle. */
+  onClose?: () => void;
 }
 
 export const NAV_ITEMS: { id: AppRoute; labelKey: string; defaultLabel: string; icon: React.ElementType; badge?: string }[] = [
@@ -44,6 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNavigate,
   isCollapsed = false,
   onToggleCollapse,
+  onClose,
 }) => {
   const [, setLang] = useState<Language>(i18n.getLanguage());
   const [user, setUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
@@ -65,15 +69,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* App Branding & Collapse Toggle */}
       <div className={`h-14 ${isCollapsed ? 'px-2' : 'px-3'} flex items-center justify-between border-b border-slate-800`}>
         <div className="flex items-center gap-2.5 overflow-hidden">
-          <button
-            type="button"
-            className="w-7 h-7 rounded bg-indigo-600 flex items-center justify-center text-white shrink-0 cursor-pointer"
-            onClick={onToggleCollapse}
-            title={isCollapsed ? 'Expand sidebar' : 'ClinicRoster'}
-            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <Activity className="w-4 h-4" aria-hidden="true" />
-          </button>
+          {onClose ? (
+            <span className="w-7 h-7 rounded bg-indigo-600 flex items-center justify-center text-white shrink-0" aria-hidden="true">
+              <Activity className="w-4 h-4" />
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="w-7 h-7 rounded bg-indigo-600 flex items-center justify-center text-white shrink-0 cursor-pointer"
+              onClick={onToggleCollapse}
+              title={isCollapsed ? 'Expand sidebar' : 'ClinicRoster'}
+              aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <Activity className="w-4 h-4" aria-hidden="true" />
+            </button>
+          )}
           {!isCollapsed && (
             <div className="flex flex-col min-w-0">
               <span className="font-semibold text-white text-sm tracking-tight leading-tight truncate">
@@ -86,7 +96,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {onToggleCollapse && (
+        {onClose ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" aria-hidden="true" />
+          </button>
+        ) : onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
             className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"

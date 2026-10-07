@@ -1,17 +1,17 @@
 # Graph Report - NSC-Clinic-Roster  (2026-10-07)
 
 ## Corpus Check
-- 265 files · ~322,278 words
+- 265 files · ~322,744 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 9 file(s) not represented in the graph (top: .css 3, (none) 3, .example 1)
 
 ## Summary
-- 2128 nodes · 6804 edges · 107 communities (96 shown, 11 thin omitted)
+- 2128 nodes · 6807 edges · 107 communities (96 shown, 11 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 219 edges (avg confidence: 0.9)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `e3ce826e`
+- Built from commit: `7c5adbb5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -131,8 +131,8 @@
 4. `Nurse` - 82 edges
 5. `DutyWindow` - 81 edges
 6. `react` - 75 edges
-7. `Doctor` - 70 edges
-8. `useDialogA11y()` - 68 edges
+7. `useDialogA11y()` - 70 edges
+8. `Doctor` - 70 edges
 9. `lucide-react` - 63 edges
 10. `ClinicalRole` - 63 edges
 

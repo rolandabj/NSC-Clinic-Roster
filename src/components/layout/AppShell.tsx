@@ -7,6 +7,7 @@ import { DashboardView } from '../views/DashboardView';
 import { SettingsView } from '../views/SettingsView';
 import { AuthModal } from '../modals/AuthModal';
 import { PageLoading } from '../common/PageLoading';
+import { useDialogA11y } from '../common/useDialogA11y';
 import { ShortcutsModal } from '../modals/ShortcutsModal';
 import { repositoryManager } from '../../services/repository';
 import {
@@ -139,6 +140,20 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       return next;
     });
   };
+
+  // Below 1024 px the sidebar is hidden and opens as a slide in menu from the top bar.
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useDialogA11y<HTMLDivElement>(isMenuOpen, () => setIsMenuOpen(false));
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const wide = window.matchMedia('(min-width: 1024px)');
+    // A window made wider shows the sidebar again, so the menu closes (and stops holding the focus).
+    const onChange = () => {
+      if (wide.matches) setIsMenuOpen(false);
+    };
+    wide.addEventListener('change', onChange);
+    return () => wide.removeEventListener('change', onChange);
+  }, []);
 
   const handleUpdateClinicProfile = useCallback((profile: any) => {
     setClinicContext((prev) => {
@@ -342,6 +357,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   }, []);
 
   const navigateTo = (route: AppRoute) => {
+    setIsMenuOpen(false);
     if (route !== 'schedules') {
       setOpenCreateInSchedules(false);
     }
@@ -482,13 +498,25 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
 
       {/* Main Layout: Left Sidebar + (TopBar + Content Viewport) */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Left Nav */}
-        <Sidebar
-          currentRoute={currentRoute}
-          onNavigate={navigateTo}
-          isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={toggleSidebarCollapse}
-        />
+        {/* Left Nav (1024 px and wider) */}
+        <div className="hidden lg:flex shrink-0">
+          <Sidebar
+            currentRoute={currentRoute}
+            onNavigate={navigateTo}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={toggleSidebarCollapse}
+          />
+        </div>
+
+        {/* The same menu, sliding in on narrower screens */}
+        {isMenuOpen && (
+          <div className="fixed inset-0 z-50 flex lg:hidden">
+            <div className="absolute inset-0 bg-slate-900/50" aria-hidden="true" onClick={() => setIsMenuOpen(false)} />
+            <div ref={menuRef} role="dialog" aria-modal="true" aria-label="Menu" className="relative flex h-full shadow-xl">
+              <Sidebar currentRoute={currentRoute} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
+            </div>
+          </div>
+        )}
 
         {/* Right Content Area */}
         <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden bg-slate-50">
@@ -498,6 +526,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
             onOpenWarnings={() => navigateTo('schedules')}
             onOpenAuthModal={() => setIsAuthModalOpen(true)}
             onOpenShortcuts={() => setIsShortcutsOpen(true)}
+            onOpenMenu={() => setIsMenuOpen(true)}
+            isMenuOpen={isMenuOpen}
           />
 
           <main className="flex-1 min-h-0 overflow-y-auto">

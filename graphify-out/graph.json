@@ -2354,7 +2354,7 @@
       "file_type": "code",
       "norm_label": "appshellprops",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L42"
+      "source_location": "L43"
     },
     {
       "id": "src_components_modals_authmodal_authmodalprops",
@@ -2913,7 +2913,7 @@
       "file_type": "code",
       "norm_label": "sidebarprops",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L22"
+      "source_location": "L23"
     },
     {
       "id": "src_components_modals_shortcutsmodal_shortcutitem",
@@ -3823,7 +3823,7 @@
       "file_type": "code",
       "norm_label": "topbarprops",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L16"
+      "source_location": "L17"
     },
     {
       "id": "src_components_views_audittrailview_audittrailviewprops",
@@ -4189,7 +4189,7 @@
       "file_type": "code",
       "norm_label": "appshell()",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L46"
+      "source_location": "L47"
     },
     {
       "id": "src_components_layout_appshell_appshell_bootstrap",
@@ -4201,7 +4201,7 @@
       "file_type": "code",
       "norm_label": "bootstrap()",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L223"
+      "source_location": "L238"
     },
     {
       "id": "src_components_layout_localmodebanner_localmodebanner",
@@ -4225,7 +4225,7 @@
       "file_type": "code",
       "norm_label": "topbar()",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L25"
+      "source_location": "L29"
     },
     {
       "id": "src_components_modals_shortcutsmodal_shortcutsmodal",
@@ -10921,7 +10921,7 @@
       "file_type": "code",
       "norm_label": "sidebar()",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L42"
+      "source_location": "L45"
     },
     {
       "id": "src_services_i18n_index_t",
@@ -12435,7 +12435,7 @@
       "node_kind": "heading",
       "norm_label": "5. data model (firestore collections)",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L209"
+      "source_location": "L210"
     },
     {
       "id": "src_services_export_rosterpdfservice",
@@ -12611,7 +12611,7 @@
       "file_type": "code",
       "norm_label": "audittrailview",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L40"
+      "source_location": "L41"
     },
     {
       "id": "src_components_layout_appshell_availabilityview",
@@ -12622,7 +12622,7 @@
       "file_type": "code",
       "norm_label": "availabilityview",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L32"
+      "source_location": "L33"
     },
     {
       "id": "src_components_layout_appshell_doctorsview",
@@ -12633,7 +12633,7 @@
       "file_type": "code",
       "norm_label": "doctorsview",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L34"
+      "source_location": "L35"
     },
     {
       "id": "src_components_layout_appshell_historyview",
@@ -12644,7 +12644,7 @@
       "file_type": "code",
       "norm_label": "historyview",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L35"
+      "source_location": "L36"
     },
     {
       "id": "src_components_layout_appshell_myrosterview",
@@ -12655,7 +12655,7 @@
       "file_type": "code",
       "norm_label": "myrosterview",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L39"
+      "source_location": "L40"
     },
     {
       "id": "src_components_layout_appshell_nursesview",
@@ -12666,7 +12666,7 @@
       "file_type": "code",
       "norm_label": "nursesview",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L33"
+      "source_location": "L34"
     },
     {
       "id": "src_components_layout_appshell_publishedrosterview",
@@ -12677,7 +12677,7 @@
       "file_type": "code",
       "norm_label": "publishedrosterview",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L38"
+      "source_location": "L39"
     },
     {
       "id": "src_components_layout_appshell_publishview",
@@ -12688,7 +12688,7 @@
       "file_type": "code",
       "norm_label": "publishview",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L36"
+      "source_location": "L37"
     },
     {
       "id": "src_components_layout_appshell_reportsview",
@@ -12699,7 +12699,7 @@
       "file_type": "code",
       "norm_label": "reportsview",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L37"
+      "source_location": "L38"
     },
     {
       "id": "src_components_layout_appshell_schedulesview",
@@ -12710,7 +12710,7 @@
       "file_type": "code",
       "norm_label": "schedulesview",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L31"
+      "source_location": "L32"
     },
     {
       "id": "src_components_layout_localmodebanner",
@@ -13791,7 +13791,7 @@
       "node_kind": "heading",
       "norm_label": "10. hours",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L364"
+      "source_location": "L365"
     },
     {
       "id": "project_guide_13_screens_in_detail",
@@ -13803,7 +13803,7 @@
       "node_kind": "heading",
       "norm_label": "13. screens in detail",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L424"
+      "source_location": "L425"
     },
     {
       "id": "project_guide_14_server_security_and_config",
@@ -13815,7 +13815,7 @@
       "node_kind": "heading",
       "norm_label": "14. server, security and config",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L458"
+      "source_location": "L459"
     },
     {
       "id": "project_guide_16_history_of_work_for_context",
@@ -13827,7 +13827,7 @@
       "node_kind": "heading",
       "norm_label": "16. history of work (for context)",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L526"
+      "source_location": "L527"
     },
     {
       "id": "project_guide_17_known_quirks_and_ideas_for_later",
@@ -13839,7 +13839,7 @@
       "node_kind": "heading",
       "norm_label": "17. known quirks and ideas for later",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L634"
+      "source_location": "L635"
     },
     {
       "id": "project_guide_1_features_at_a_glance",
@@ -13887,7 +13887,7 @@
       "node_kind": "heading",
       "norm_label": "9. checking a roster (`src/services/validation/schedulevalidator.ts`)",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L354"
+      "source_location": "L355"
     },
     {
       "id": "project_guide_nsc_clinic_roster_complete_project_guide",
@@ -14096,7 +14096,7 @@
       "node_kind": "heading",
       "norm_label": "11. saving, live updates, versions",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L383"
+      "source_location": "L384"
     },
     {
       "id": "src_components_views_dashboardview",
@@ -18841,7 +18841,7 @@
       "node_kind": "heading",
       "norm_label": "12. publishing and nurse links",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L402"
+      "source_location": "L403"
     },
     {
       "id": "claude_hooks_ask_before_main",
@@ -19392,7 +19392,7 @@
       "node_kind": "heading",
       "norm_label": "6. clinic model (the business rules in plain english)",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L247"
+      "source_location": "L248"
     },
     {
       "id": "project_guide_7_rules",
@@ -19404,7 +19404,7 @@
       "node_kind": "heading",
       "norm_label": "7. rules",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L265"
+      "source_location": "L266"
     },
     {
       "id": "src_services_export_analysisexportservice_analysis_format",
@@ -19724,7 +19724,7 @@
       "node_kind": "heading",
       "norm_label": "15. tests",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L498"
+      "source_location": "L499"
     },
     {
       "id": "src_components_auth_loginpage",
@@ -20497,7 +20497,7 @@
       "node_kind": "heading",
       "norm_label": "8. the roster engine (`src/services/engine/schedulingengine.ts`)",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L286"
+      "source_location": "L287"
     },
     {
       "id": "project_guide_entry_points",
@@ -20509,7 +20509,7 @@
       "node_kind": "heading",
       "norm_label": "entry points",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L288"
+      "source_location": "L289"
     },
     {
       "id": "project_guide_how_a_run_works",
@@ -20521,7 +20521,7 @@
       "node_kind": "heading",
       "norm_label": "how a run works",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L305"
+      "source_location": "L306"
     },
     {
       "id": "project_guide_other_engine_files",
@@ -20533,7 +20533,7 @@
       "node_kind": "heading",
       "norm_label": "other engine files",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L342"
+      "source_location": "L343"
     },
     {
       "id": "claude_skills_incremental_implementation_skill",
@@ -22289,7 +22289,7 @@
       "file_type": "code",
       "norm_label": "nav_items",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L29"
+      "source_location": "L32"
     },
     {
       "id": "src_components_modals_shortcutsmodal",
@@ -26357,6 +26357,18 @@
     },
     {
       "source": "src_components_layout_appshell_appshell",
+      "target": "src_components_common_usedialoga11y_usedialoga11y",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "src/components/layout/AppShell.tsx",
+      "source_location": "L146",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_layout_appshell_appshell",
       "target": "src_services_firebase_firebaseconfig_testfirestoreconnection",
       "relation": "calls",
       "_origin": "ast",
@@ -26364,7 +26376,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L225",
+      "source_location": "L240",
       "weight": 1.0
     },
     {
@@ -26376,7 +26388,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L242",
+      "source_location": "L257",
       "weight": 1.0
     },
     {
@@ -26388,7 +26400,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L259",
+      "source_location": "L274",
       "weight": 1.0
     },
     {
@@ -26400,7 +26412,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L259",
+      "source_location": "L274",
       "weight": 1.0
     },
     {
@@ -26412,7 +26424,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L264",
+      "source_location": "L279",
       "weight": 1.0
     },
     {
@@ -26424,7 +26436,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L361",
+      "source_location": "L377",
       "weight": 1.0
     },
     {
@@ -26436,7 +26448,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L361",
+      "source_location": "L377",
       "weight": 1.0
     },
     {
@@ -26448,7 +26460,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L362",
+      "source_location": "L378",
       "weight": 1.0
     },
     {
@@ -26460,7 +26472,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L371",
+      "source_location": "L387",
       "weight": 1.0
     },
     {
@@ -26472,7 +26484,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L382",
+      "source_location": "L398",
       "weight": 1.0
     },
     {
@@ -26484,7 +26496,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L386",
+      "source_location": "L402",
       "weight": 1.0
     },
     {
@@ -26496,7 +26508,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L397",
+      "source_location": "L413",
       "weight": 1.0
     },
     {
@@ -26508,7 +26520,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L404",
+      "source_location": "L420",
       "weight": 1.0
     },
     {
@@ -26520,7 +26532,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L406",
+      "source_location": "L422",
       "weight": 1.0
     },
     {
@@ -26532,7 +26544,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L408",
+      "source_location": "L424",
       "weight": 1.0
     },
     {
@@ -26544,7 +26556,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L410",
+      "source_location": "L426",
       "weight": 1.0
     },
     {
@@ -26556,7 +26568,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L412",
+      "source_location": "L428",
       "weight": 1.0
     },
     {
@@ -26568,7 +26580,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L414",
+      "source_location": "L430",
       "weight": 1.0
     },
     {
@@ -26580,7 +26592,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L416",
+      "source_location": "L432",
       "weight": 1.0
     },
     {
@@ -26592,7 +26604,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L419",
+      "source_location": "L435",
       "weight": 1.0
     },
     {
@@ -26604,7 +26616,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L480",
+      "source_location": "L496",
       "weight": 1.0
     },
     {
@@ -26616,7 +26628,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L486",
+      "source_location": "L503",
       "weight": 1.0
     },
     {
@@ -26628,7 +26640,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L495",
+      "source_location": "L523",
       "weight": 1.0
     },
     {
@@ -26640,7 +26652,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L510",
+      "source_location": "L540",
       "weight": 1.0
     },
     {
@@ -26652,7 +26664,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L517",
+      "source_location": "L547",
       "weight": 1.0
     },
     {
@@ -26664,7 +26676,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L225",
+      "source_location": "L240",
       "weight": 1.0
     },
     {
@@ -26676,7 +26688,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L242",
+      "source_location": "L257",
       "weight": 1.0
     },
     {
@@ -26688,7 +26700,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L259",
+      "source_location": "L274",
       "weight": 1.0
     },
     {
@@ -26700,7 +26712,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L259",
+      "source_location": "L274",
       "weight": 1.0
     },
     {
@@ -26712,7 +26724,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L264",
+      "source_location": "L279",
       "weight": 1.0
     },
     {
@@ -26724,7 +26736,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L110",
+      "source_location": "L129",
       "weight": 1.0
     },
     {
@@ -26736,7 +26748,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L57",
+      "source_location": "L61",
       "weight": 1.0
     },
     {
@@ -26748,7 +26760,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L113",
+      "source_location": "L130",
       "weight": 1.0
     },
     {
@@ -26760,7 +26772,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L41",
+      "source_location": "L47",
       "weight": 1.0
     },
     {
@@ -39192,7 +39204,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L223",
+      "source_location": "L238",
       "weight": 1.0
     },
     {
@@ -40405,7 +40417,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L43",
+      "source_location": "L44",
       "weight": 1.0
     },
     {
@@ -40417,7 +40429,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L23",
+      "source_location": "L24",
       "weight": 1.0
     },
     {
@@ -40429,7 +40441,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L17",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -45066,7 +45078,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L40",
+      "source_location": "L41",
       "weight": 1.0
     },
     {
@@ -45079,7 +45091,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L32",
+      "source_location": "L33",
       "weight": 1.0
     },
     {
@@ -45092,7 +45104,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L34",
+      "source_location": "L35",
       "weight": 1.0
     },
     {
@@ -45105,7 +45117,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L35",
+      "source_location": "L36",
       "weight": 1.0
     },
     {
@@ -45118,7 +45130,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -45131,7 +45143,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L33",
+      "source_location": "L34",
       "weight": 1.0
     },
     {
@@ -45144,7 +45156,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -45157,7 +45169,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L36",
+      "source_location": "L37",
       "weight": 1.0
     },
     {
@@ -45170,7 +45182,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L37",
+      "source_location": "L38",
       "weight": 1.0
     },
     {
@@ -45183,7 +45195,7 @@
       "context": "import",
       "deferred": true,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L31",
+      "source_location": "L32",
       "weight": 1.0
     },
     {
@@ -46168,7 +46180,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_components_modals_shortcutsmodal_shortcutsmodal",
+      "target": "src_components_common_usedialoga11y_usedialoga11y",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -46180,7 +46192,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_repository_index_repositorymanager",
+      "target": "src_components_modals_shortcutsmodal_shortcutsmodal",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -46192,7 +46204,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_seed_seedrunner_ensureworkinghoursperiodsdefaults",
+      "target": "src_services_repository_index_repositorymanager",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -46200,6 +46212,18 @@
       "context": "import",
       "source_file": "src/components/layout/AppShell.tsx",
       "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_layout_appshell",
+      "target": "src_services_seed_seedrunner_ensureworkinghoursperiodsdefaults",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/components/layout/AppShell.tsx",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -46211,7 +46235,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -46223,7 +46247,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -46235,24 +46259,12 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L17",
-      "weight": 1.0
-    },
-    {
-      "source": "src_components_layout_appshell",
-      "target": "src_services_auth_access_canaccessroute",
-      "relation": "imports",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "import",
-      "source_file": "src/components/layout/AppShell.tsx",
       "source_location": "L18",
       "weight": 1.0
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_utils_weekend_setclinicweekenddays",
+      "target": "src_services_auth_access_canaccessroute",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -46288,31 +46300,19 @@
     },
     {
       "source": "src_components_layout_appshell",
+      "target": "src_utils_weekend_setclinicweekenddays",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/components/layout/AppShell.tsx",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_layout_appshell",
       "target": "src_services_auth_authservice_authservice",
-      "relation": "imports",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "import",
-      "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L20",
-      "weight": 1.0
-    },
-    {
-      "source": "src_components_layout_appshell",
-      "target": "src_services_auth_authservice_userprofile",
-      "relation": "imports",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "import",
-      "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L20",
-      "weight": 1.0
-    },
-    {
-      "source": "src_components_layout_appshell",
-      "target": "src_services_publish_rosterpublishservice_rosterpublishservice",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -46324,7 +46324,19 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_firebase_quotatracker_quotatracker",
+      "target": "src_services_auth_authservice_userprofile",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/components/layout/AppShell.tsx",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_layout_appshell",
+      "target": "src_services_publish_rosterpublishservice_rosterpublishservice",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -46336,19 +46348,19 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_components_common_loaderrorboundary_loaderrorboundary",
+      "target": "src_services_firebase_quotatracker_quotatracker",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L24",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_schedule_openschedule_choosescheduletoopen",
+      "target": "src_components_common_loaderrorboundary_loaderrorboundary",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -46360,7 +46372,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_publish_nurserosterservice_todayiso",
+      "target": "src_services_schedule_openschedule_choosescheduletoopen",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -46372,7 +46384,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_utils_dateutils_formatdaterange",
+      "target": "src_services_publish_nurserosterservice_todayiso",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -46384,7 +46396,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_dashboard_problemcount_problemcount",
+      "target": "src_utils_dateutils_formatdaterange",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -46396,6 +46408,18 @@
     },
     {
       "source": "src_components_layout_appshell",
+      "target": "src_services_dashboard_problemcount_problemcount",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/components/layout/AppShell.tsx",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_layout_appshell",
       "target": "src_services_dashboard_problemcount_problems_event",
       "relation": "imports",
       "_origin": "ast",
@@ -46403,7 +46427,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L28",
+      "source_location": "L29",
       "weight": 1.0
     },
     {
@@ -46499,7 +46523,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L17",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -46511,7 +46535,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L17",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -46523,7 +46547,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L18",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
@@ -46535,7 +46559,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L18",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
@@ -46547,7 +46571,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L18",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
@@ -46559,7 +46583,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L19",
+      "source_location": "L20",
       "weight": 1.0
     },
     {
@@ -46571,7 +46595,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L19",
+      "source_location": "L20",
       "weight": 1.0
     },
     {
@@ -46583,7 +46607,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L20",
+      "source_location": "L21",
       "weight": 1.0
     },
     {
@@ -46595,7 +46619,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L11",
+      "source_location": "L12",
       "weight": 1.0
     },
     {
@@ -46607,7 +46631,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -46619,7 +46643,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -46631,7 +46655,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0
     },
     {
@@ -46643,7 +46667,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -69989,7 +70013,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_components_modals_shortcutsmodal",
+      "target": "src_components_common_usedialoga11y",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70001,7 +70025,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_repository_index",
+      "target": "src_components_modals_shortcutsmodal",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70013,7 +70037,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_seed_seedrunner",
+      "target": "src_services_repository_index",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70025,19 +70049,19 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_firebase_firebaseconfig",
+      "target": "src_services_seed_seedrunner",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L17",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_auth_access",
+      "target": "src_services_firebase_firebaseconfig",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70049,7 +70073,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_utils_weekend",
+      "target": "src_services_auth_access",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70073,7 +70097,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_auth_authservice",
+      "target": "src_utils_weekend",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70085,7 +70109,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_publish_rosterpublishservice",
+      "target": "src_services_auth_authservice",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70097,7 +70121,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_firebase_quotatracker",
+      "target": "src_services_publish_rosterpublishservice",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70109,7 +70133,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "ref_lucide_react",
+      "target": "src_services_firebase_quotatracker",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70121,7 +70145,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_components_common_loaderrorboundary",
+      "target": "ref_lucide_react",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70133,7 +70157,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_schedule_openschedule",
+      "target": "src_components_common_loaderrorboundary",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70145,7 +70169,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_publish_nurserosterservice",
+      "target": "src_services_schedule_openschedule",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70157,7 +70181,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_utils_dateutils",
+      "target": "src_services_publish_nurserosterservice",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70169,7 +70193,7 @@
     },
     {
       "source": "src_components_layout_appshell",
-      "target": "src_services_dashboard_problemcount",
+      "target": "src_utils_dateutils",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70177,6 +70201,18 @@
       "context": "import",
       "source_file": "src/components/layout/AppShell.tsx",
       "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_layout_appshell",
+      "target": "src_services_dashboard_problemcount",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/components/layout/AppShell.tsx",
+      "source_location": "L29",
       "weight": 1.0
     },
     {
@@ -70308,24 +70344,12 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L17",
-      "weight": 1.0
-    },
-    {
-      "source": "src_components_layout_sidebar",
-      "target": "src_services_i18n_index",
-      "relation": "imports_from",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "import",
-      "source_file": "src/components/layout/Sidebar.tsx",
       "source_location": "L18",
       "weight": 1.0
     },
     {
       "source": "src_components_layout_sidebar",
-      "target": "src_services_auth_authservice",
+      "target": "src_services_i18n_index",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70349,7 +70373,7 @@
     },
     {
       "source": "src_components_layout_sidebar",
-      "target": "src_services_auth_access",
+      "target": "src_services_auth_authservice",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -70357,6 +70381,18 @@
       "context": "import",
       "source_file": "src/components/layout/Sidebar.tsx",
       "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_layout_sidebar",
+      "target": "src_services_auth_access",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/components/layout/Sidebar.tsx",
+      "source_location": "L21",
       "weight": 1.0
     },
     {
@@ -70380,7 +70416,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L11",
+      "source_location": "L12",
       "weight": 1.0
     },
     {
@@ -70392,7 +70428,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -70404,7 +70440,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0
     },
     {
@@ -70416,7 +70452,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -88478,7 +88514,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L288",
+      "source_location": "L289",
       "weight": 1.0
     },
     {
@@ -88489,7 +88525,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L305",
+      "source_location": "L306",
       "weight": 1.0
     },
     {
@@ -88500,7 +88536,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L342",
+      "source_location": "L343",
       "weight": 1.0
     },
     {
@@ -88533,7 +88569,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L209",
+      "source_location": "L210",
       "weight": 1.0
     },
     {
@@ -88544,7 +88580,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L247",
+      "source_location": "L248",
       "weight": 1.0
     },
     {
@@ -88555,7 +88591,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L265",
+      "source_location": "L266",
       "weight": 1.0
     },
     {
@@ -88566,7 +88602,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L286",
+      "source_location": "L287",
       "weight": 1.0
     },
     {
@@ -88577,7 +88613,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L354",
+      "source_location": "L355",
       "weight": 1.0
     },
     {
@@ -88588,7 +88624,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L364",
+      "source_location": "L365",
       "weight": 1.0
     },
     {
@@ -88599,7 +88635,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L383",
+      "source_location": "L384",
       "weight": 1.0
     },
     {
@@ -88610,7 +88646,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L402",
+      "source_location": "L403",
       "weight": 1.0
     },
     {
@@ -88621,7 +88657,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L424",
+      "source_location": "L425",
       "weight": 1.0
     },
     {
@@ -88632,7 +88668,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L458",
+      "source_location": "L459",
       "weight": 1.0
     },
     {
@@ -88643,7 +88679,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L498",
+      "source_location": "L499",
       "weight": 1.0
     },
     {
@@ -88665,7 +88701,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L526",
+      "source_location": "L527",
       "weight": 1.0
     },
     {
@@ -88676,7 +88712,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L634",
+      "source_location": "L635",
       "weight": 1.0
     },
     {
@@ -89754,7 +89790,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L31",
+      "source_location": "L32",
       "weight": 1.0
     },
     {
@@ -89765,7 +89801,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L32",
+      "source_location": "L33",
       "weight": 1.0
     },
     {
@@ -89776,7 +89812,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L33",
+      "source_location": "L34",
       "weight": 1.0
     },
     {
@@ -89787,7 +89823,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L34",
+      "source_location": "L35",
       "weight": 1.0
     },
     {
@@ -89798,7 +89834,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L35",
+      "source_location": "L36",
       "weight": 1.0
     },
     {
@@ -89809,7 +89845,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L36",
+      "source_location": "L37",
       "weight": 1.0
     },
     {
@@ -89820,7 +89856,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L37",
+      "source_location": "L38",
       "weight": 1.0
     },
     {
@@ -89831,7 +89867,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L38",
+      "source_location": "L39",
       "weight": 1.0
     },
     {
@@ -89842,7 +89878,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -89853,7 +89889,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L40",
+      "source_location": "L41",
       "weight": 1.0
     },
     {
@@ -89864,7 +89900,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L42",
+      "source_location": "L43",
       "weight": 1.0
     },
     {
@@ -89875,7 +89911,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/AppShell.tsx",
-      "source_location": "L46",
+      "source_location": "L47",
       "weight": 1.0
     },
     {
@@ -89908,7 +89944,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L22",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
@@ -89919,7 +89955,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L29",
+      "source_location": "L32",
       "weight": 1.0
     },
     {
@@ -89930,7 +89966,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/Sidebar.tsx",
-      "source_location": "L42",
+      "source_location": "L45",
       "weight": 1.0
     },
     {
@@ -89941,7 +89977,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L16",
+      "source_location": "L17",
       "weight": 1.0
     },
     {
@@ -89952,7 +89988,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/layout/TopBar.tsx",
-      "source_location": "L25",
+      "source_location": "L29",
       "weight": 1.0
     },
     {
@@ -103595,7 +103631,7 @@
       "confidence_score": 0.95,
       "context": "AllRequestsPanel",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L448",
+      "source_location": "L449",
       "weight": 1.0
     },
     {
@@ -103619,7 +103655,7 @@
       "confidence_score": 0.95,
       "context": "ApprovalsQueuePanel",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L448",
+      "source_location": "L449",
       "weight": 1.0
     },
     {
@@ -103631,7 +103667,7 @@
       "confidence_score": 0.95,
       "context": "Assignment",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L225",
+      "source_location": "L226",
       "weight": 1.0
     },
     {
@@ -103643,7 +103679,7 @@
       "confidence_score": 0.95,
       "context": "AuditEvent",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L239",
+      "source_location": "L240",
       "weight": 1.0
     },
     {
@@ -103667,7 +103703,7 @@
       "confidence_score": 0.95,
       "context": "AvailabilityRequest",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L228",
+      "source_location": "L229",
       "weight": 1.0
     },
     {
@@ -103691,7 +103727,7 @@
       "confidence_score": 0.95,
       "context": "ClinicContextState",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L204",
+      "source_location": "L205",
       "weight": 1.0
     },
     {
@@ -103703,7 +103739,7 @@
       "confidence_score": 0.95,
       "context": "ClinicProfile",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L215",
+      "source_location": "L216",
       "weight": 1.0
     },
     {
@@ -103715,7 +103751,7 @@
       "confidence_score": 0.95,
       "context": "ClinicalRole",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L219",
+      "source_location": "L220",
       "weight": 1.0
     },
     {
@@ -103727,7 +103763,7 @@
       "confidence_score": 0.95,
       "context": "CollectionSyncer",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L388",
+      "source_location": "L389",
       "weight": 1.0
     },
     {
@@ -103751,7 +103787,7 @@
       "confidence_score": 0.95,
       "context": "Doctor",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L222",
+      "source_location": "L223",
       "weight": 1.0
     },
     {
@@ -103763,7 +103799,7 @@
       "confidence_score": 0.95,
       "context": "DoctorSession",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L223",
+      "source_location": "L224",
       "weight": 1.0
     },
     {
@@ -103775,7 +103811,7 @@
       "confidence_score": 0.95,
       "context": "DoctorWeekChangeDialog",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L446",
+      "source_location": "L447",
       "weight": 1.0
     },
     {
@@ -103787,7 +103823,7 @@
       "confidence_score": 0.95,
       "context": "DoctorsScheduleSheet",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L446",
+      "source_location": "L447",
       "weight": 1.0
     },
     {
@@ -103799,7 +103835,7 @@
       "confidence_score": 0.95,
       "context": "DutyWindow",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L216",
+      "source_location": "L217",
       "weight": 1.0
     },
     {
@@ -103811,7 +103847,7 @@
       "confidence_score": 0.95,
       "context": "EditDoctorShiftModal",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L446",
+      "source_location": "L447",
       "weight": 1.0
     },
     {
@@ -103823,7 +103859,7 @@
       "confidence_score": 0.95,
       "context": "EmailHtmlPreview",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L205",
+      "source_location": "L206",
       "weight": 1.0
     },
     {
@@ -103835,7 +103871,7 @@
       "confidence_score": 0.95,
       "context": "FirestoreRepository.update",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L549",
+      "source_location": "L550",
       "weight": 1.0
     },
     {
@@ -103847,7 +103883,7 @@
       "confidence_score": 0.95,
       "context": "FirestoreRepository.writeSchedules",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L386",
+      "source_location": "L387",
       "weight": 1.0
     },
     {
@@ -103859,7 +103895,7 @@
       "confidence_score": 0.95,
       "context": "GenerationResult",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L303",
+      "source_location": "L304",
       "weight": 1.0
     },
     {
@@ -103883,7 +103919,7 @@
       "confidence_score": 0.95,
       "context": "LeaveEntry",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L227",
+      "source_location": "L228",
       "weight": 1.0
     },
     {
@@ -103895,7 +103931,7 @@
       "confidence_score": 0.95,
       "context": "LeaveType",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L217",
+      "source_location": "L218",
       "weight": 1.0
     },
     {
@@ -103907,7 +103943,7 @@
       "confidence_score": 0.95,
       "context": "LockEntry",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L226",
+      "source_location": "L227",
       "weight": 1.0
     },
     {
@@ -103931,7 +103967,7 @@
       "confidence_score": 0.95,
       "context": "MenuButton",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L205",
+      "source_location": "L206",
       "weight": 1.0
     },
     {
@@ -103967,7 +104003,7 @@
       "confidence_score": 0.95,
       "context": "Nurse",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L221",
+      "source_location": "L222",
       "weight": 1.0
     },
     {
@@ -103979,7 +104015,7 @@
       "confidence_score": 0.95,
       "context": "NurseRosterDoc",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L236",
+      "source_location": "L237",
       "weight": 1.0
     },
     {
@@ -103991,7 +104027,7 @@
       "confidence_score": 0.95,
       "context": "NurseSelfServicePanel",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L448",
+      "source_location": "L449",
       "weight": 1.0
     },
     {
@@ -104015,7 +104051,7 @@
       "confidence_score": 0.95,
       "context": "PublicHoliday",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L230",
+      "source_location": "L231",
       "weight": 1.0
     },
     {
@@ -104027,7 +104063,7 @@
       "confidence_score": 0.95,
       "context": "PublicRosterDoc",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L234",
+      "source_location": "L235",
       "weight": 1.0
     },
     {
@@ -104039,7 +104075,7 @@
       "confidence_score": 0.95,
       "context": "PublishLog",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L238",
+      "source_location": "L239",
       "weight": 1.0
     },
     {
@@ -104051,7 +104087,7 @@
       "confidence_score": 0.95,
       "context": "PublishedRosterSheet",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L418",
+      "source_location": "L419",
       "weight": 1.0
     },
     {
@@ -104063,7 +104099,7 @@
       "confidence_score": 0.95,
       "context": "RosterPublishService.generatePersonalEmailHtml",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L409",
+      "source_location": "L410",
       "weight": 1.0
     },
     {
@@ -104075,7 +104111,7 @@
       "confidence_score": 0.95,
       "context": "Rule",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L229",
+      "source_location": "L230",
       "weight": 1.0
     },
     {
@@ -104087,7 +104123,7 @@
       "confidence_score": 0.95,
       "context": "Schedule",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L224",
+      "source_location": "L225",
       "weight": 1.0
     },
     {
@@ -104099,7 +104135,7 @@
       "confidence_score": 0.95,
       "context": "ScheduleVersion",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L232",
+      "source_location": "L233",
       "weight": 1.0
     },
     {
@@ -104111,7 +104147,7 @@
       "confidence_score": 0.95,
       "context": "SchedulesView",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L434",
+      "source_location": "L435",
       "weight": 1.0
     },
     {
@@ -104123,7 +104159,7 @@
       "confidence_score": 0.95,
       "context": "SeniorityLevel",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L218",
+      "source_location": "L219",
       "weight": 1.0
     },
     {
@@ -104135,7 +104171,7 @@
       "confidence_score": 0.95,
       "context": "ShareLink",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L233",
+      "source_location": "L234",
       "weight": 1.0
     },
     {
@@ -104147,7 +104183,7 @@
       "confidence_score": 0.95,
       "context": "Specialty",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L220",
+      "source_location": "L221",
       "weight": 1.0
     },
     {
@@ -104159,7 +104195,7 @@
       "confidence_score": 0.95,
       "context": "VersionCompareModal",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L397",
+      "source_location": "L398",
       "weight": 1.0
     },
     {
@@ -104171,7 +104207,7 @@
       "confidence_score": 0.95,
       "context": "WalkthroughModal",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L646",
+      "source_location": "L647",
       "weight": 1.0
     },
     {
@@ -104183,7 +104219,7 @@
       "confidence_score": 0.95,
       "context": "WorkingHoursPeriod",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L231",
+      "source_location": "L232",
       "weight": 1.0
     },
     {
@@ -104195,7 +104231,7 @@
       "confidence_score": 0.95,
       "context": "adoptLoaded",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L390",
+      "source_location": "L391",
       "weight": 1.0
     },
     {
@@ -104207,7 +104243,7 @@
       "confidence_score": 0.95,
       "context": "analysisExportService.buildRosterAnalysis",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L454",
+      "source_location": "L455",
       "weight": 1.0
     },
     {
@@ -104219,7 +104255,7 @@
       "confidence_score": 0.95,
       "context": "announceProblems",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L426",
+      "source_location": "L427",
       "weight": 1.0
     },
     {
@@ -104231,7 +104267,7 @@
       "confidence_score": 0.95,
       "context": "applyPreferenceFocus",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L261",
+      "source_location": "L262",
       "weight": 1.0
     },
     {
@@ -104243,7 +104279,7 @@
       "confidence_score": 0.95,
       "context": "applyPreferenceFocus",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L307",
+      "source_location": "L308",
       "weight": 1.0
     },
     {
@@ -104279,7 +104315,7 @@
       "confidence_score": 0.95,
       "context": "buildTeamRosterSheet",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L416",
+      "source_location": "L417",
       "weight": 1.0
     },
     {
@@ -104315,7 +104351,7 @@
       "confidence_score": 0.95,
       "context": "canBeFreeNurse",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L254",
+      "source_location": "L255",
       "weight": 1.0
     },
     {
@@ -104339,7 +104375,7 @@
       "confidence_score": 0.95,
       "context": "checkAssignment",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L345",
+      "source_location": "L346",
       "weight": 1.0
     },
     {
@@ -104351,7 +104387,7 @@
       "confidence_score": 0.95,
       "context": "checkSwap",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L345",
+      "source_location": "L346",
       "weight": 1.0
     },
     {
@@ -104375,7 +104411,7 @@
       "confidence_score": 0.95,
       "context": "computeScheduleDiff",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L398",
+      "source_location": "L399",
       "weight": 1.0
     },
     {
@@ -104423,7 +104459,7 @@
       "confidence_score": 0.95,
       "context": "createLiveReconciler",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L392",
+      "source_location": "L393",
       "weight": 1.0
     },
     {
@@ -104435,7 +104471,7 @@
       "confidence_score": 0.95,
       "context": "defaultPatternRange",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L630",
+      "source_location": "L631",
       "weight": 1.0
     },
     {
@@ -104447,7 +104483,7 @@
       "confidence_score": 0.95,
       "context": "defaultSessionDate",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L630",
+      "source_location": "L631",
       "weight": 1.0
     },
     {
@@ -104459,7 +104495,7 @@
       "confidence_score": 0.95,
       "context": "deleteAvailabilityRequest",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L448",
+      "source_location": "L449",
       "weight": 1.0
     },
     {
@@ -104471,7 +104507,7 @@
       "confidence_score": 0.95,
       "context": "deleteDoctorShift",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L446",
+      "source_location": "L447",
       "weight": 1.0
     },
     {
@@ -104483,7 +104519,7 @@
       "confidence_score": 0.95,
       "context": "discard",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L390",
+      "source_location": "L391",
       "weight": 1.0
     },
     {
@@ -104495,7 +104531,7 @@
       "confidence_score": 0.95,
       "context": "dispatchEmail",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L409",
+      "source_location": "L410",
       "weight": 1.0
     },
     {
@@ -104507,7 +104543,7 @@
       "confidence_score": 0.95,
       "context": "doctorScheduleService.saveDoctorShift",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L446",
+      "source_location": "L447",
       "weight": 1.0
     },
     {
@@ -104519,7 +104555,7 @@
       "confidence_score": 0.95,
       "context": "doctorScheduleService.weekOn",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L222",
+      "source_location": "L223",
       "weight": 1.0
     },
     {
@@ -104531,7 +104567,7 @@
       "confidence_score": 0.95,
       "context": "doctorSessionsOn",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L643",
+      "source_location": "L644",
       "weight": 1.0
     },
     {
@@ -104555,7 +104591,7 @@
       "confidence_score": 0.95,
       "context": "escapeHtml",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L409",
+      "source_location": "L410",
       "weight": 1.0
     },
     {
@@ -104567,7 +104603,7 @@
       "confidence_score": 0.95,
       "context": "explainDay",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L348",
+      "source_location": "L349",
       "weight": 1.0
     },
     {
@@ -104579,7 +104615,7 @@
       "confidence_score": 0.95,
       "context": "explainNurseDay",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L348",
+      "source_location": "L349",
       "weight": 1.0
     },
     {
@@ -104591,7 +104627,7 @@
       "confidence_score": 0.95,
       "context": "fitsWeekHours",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L347",
+      "source_location": "L348",
       "weight": 1.0
     },
     {
@@ -104603,7 +104639,7 @@
       "confidence_score": 0.95,
       "context": "floatShift.isFloatShift",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L331",
+      "source_location": "L332",
       "weight": 1.0
     },
     {
@@ -104615,7 +104651,7 @@
       "confidence_score": 0.95,
       "context": "forgetCachedRoster",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L367",
+      "source_location": "L368",
       "weight": 1.0
     },
     {
@@ -104627,7 +104663,7 @@
       "confidence_score": 0.95,
       "context": "forgetCachedRoster",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L389",
+      "source_location": "L390",
       "weight": 1.0
     },
     {
@@ -104639,7 +104675,7 @@
       "confidence_score": 0.95,
       "context": "handMoveChecks.checkSwap",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L434",
+      "source_location": "L435",
       "weight": 1.0
     },
     {
@@ -104651,7 +104687,7 @@
       "confidence_score": 0.95,
       "context": "handMoveChecks.suggestMoves",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L435",
+      "source_location": "L436",
       "weight": 1.0
     },
     {
@@ -104663,7 +104699,7 @@
       "confidence_score": 0.95,
       "context": "heaviestWeekAround",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L347",
+      "source_location": "L348",
       "weight": 1.0
     },
     {
@@ -104675,7 +104711,7 @@
       "confidence_score": 0.95,
       "context": "hoursAccounting.summarizeNurseHours",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L376",
+      "source_location": "L377",
       "weight": 1.0
     },
     {
@@ -104687,7 +104723,7 @@
       "confidence_score": 0.95,
       "context": "hoursBalance.resolveNurseHoursBalance",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L367",
+      "source_location": "L368",
       "weight": 1.0
     },
     {
@@ -104699,7 +104735,7 @@
       "confidence_score": 0.95,
       "context": "hoursHistoryService.loadHoursHistory",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L367",
+      "source_location": "L368",
       "weight": 1.0
     },
     {
@@ -104711,7 +104747,7 @@
       "confidence_score": 0.95,
       "context": "hoursOnlyRules()",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L502",
+      "source_location": "L503",
       "weight": 1.0
     },
     {
@@ -104723,7 +104759,7 @@
       "confidence_score": 0.95,
       "context": "hoursPolicy.hoursCeiling",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L277",
+      "source_location": "L278",
       "weight": 1.0
     },
     {
@@ -104735,7 +104771,7 @@
       "confidence_score": 0.95,
       "context": "hoursPolicy.resolveFullTimeTarget",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L366",
+      "source_location": "L367",
       "weight": 1.0
     },
     {
@@ -104747,7 +104783,7 @@
       "confidence_score": 0.95,
       "context": "isExclusiveNurseClinic",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L258",
+      "source_location": "L259",
       "weight": 1.0
     },
     {
@@ -104759,7 +104795,7 @@
       "confidence_score": 0.95,
       "context": "isLateDuty",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L280",
+      "source_location": "L281",
       "weight": 1.0
     },
     {
@@ -104771,7 +104807,7 @@
       "confidence_score": 0.95,
       "context": "leaveAfterHolidayChange",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L375",
+      "source_location": "L376",
       "weight": 1.0
     },
     {
@@ -104783,7 +104819,7 @@
       "confidence_score": 0.95,
       "context": "leaveApprovalFields",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L350",
+      "source_location": "L351",
       "weight": 1.0
     },
     {
@@ -104795,7 +104831,7 @@
       "confidence_score": 0.95,
       "context": "leaveStatus.leaveApprovalFields",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L227",
+      "source_location": "L228",
       "weight": 1.0
     },
     {
@@ -104807,7 +104843,7 @@
       "confidence_score": 0.95,
       "context": "makeLeave",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L502",
+      "source_location": "L503",
       "weight": 1.0
     },
     {
@@ -104819,7 +104855,7 @@
       "confidence_score": 0.95,
       "context": "makeLock",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L502",
+      "source_location": "L503",
       "weight": 1.0
     },
     {
@@ -104831,7 +104867,7 @@
       "confidence_score": 0.95,
       "context": "missingPatternSessions",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L253",
+      "source_location": "L254",
       "weight": 1.0
     },
     {
@@ -104843,7 +104879,7 @@
       "confidence_score": 0.95,
       "context": "monthRange",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L630",
+      "source_location": "L631",
       "weight": 1.0
     },
     {
@@ -104855,7 +104891,7 @@
       "confidence_score": 0.95,
       "context": "newFindings",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L345",
+      "source_location": "L346",
       "weight": 1.0
     },
     {
@@ -104879,7 +104915,7 @@
       "confidence_score": 0.95,
       "context": "nurseRosterService.ensureNurseLink",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L408",
+      "source_location": "L409",
       "weight": 1.0
     },
     {
@@ -104903,7 +104939,7 @@
       "confidence_score": 0.95,
       "context": "outsideNurseList",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L346",
+      "source_location": "L347",
       "weight": 1.0
     },
     {
@@ -104915,7 +104951,7 @@
       "confidence_score": 0.95,
       "context": "planHolidayLeaveTidy",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L375",
+      "source_location": "L376",
       "weight": 1.0
     },
     {
@@ -104927,7 +104963,7 @@
       "confidence_score": 0.95,
       "context": "planPatternSessions",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L446",
+      "source_location": "L447",
       "weight": 1.0
     },
     {
@@ -104951,7 +104987,7 @@
       "confidence_score": 0.95,
       "context": "publicRosterService.removePublicRoster",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L549",
+      "source_location": "L550",
       "weight": 1.0
     },
     {
@@ -104963,7 +104999,7 @@
       "confidence_score": 0.95,
       "context": "publicRosterService.syncPublicRoster",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L407",
+      "source_location": "L408",
       "weight": 1.0
     },
     {
@@ -104975,7 +105011,7 @@
       "confidence_score": 0.95,
       "context": "readEmailResponse",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L414",
+      "source_location": "L415",
       "weight": 1.0
     },
     {
@@ -104987,7 +105023,7 @@
       "confidence_score": 0.95,
       "context": "rebalancedFields",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L345",
+      "source_location": "L346",
       "weight": 1.0
     },
     {
@@ -104999,7 +105035,7 @@
       "confidence_score": 0.95,
       "context": "rebaseEdit",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L393",
+      "source_location": "L394",
       "weight": 1.0
     },
     {
@@ -105011,7 +105047,7 @@
       "confidence_score": 0.95,
       "context": "recordHolidayDayOff",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L358",
+      "source_location": "L359",
       "weight": 1.0
     },
     {
@@ -105023,7 +105059,7 @@
       "confidence_score": 0.95,
       "context": "reopenAvailabilityRequest",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L448",
+      "source_location": "L449",
       "weight": 1.0
     },
     {
@@ -105035,7 +105071,7 @@
       "confidence_score": 0.95,
       "context": "requestDefaults",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L630",
+      "source_location": "L631",
       "weight": 1.0
     },
     {
@@ -105047,7 +105083,7 @@
       "confidence_score": 0.95,
       "context": "ruleSyncService.syncStandardRules",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L267",
+      "source_location": "L268",
       "weight": 1.0
     },
     {
@@ -105059,7 +105095,7 @@
       "confidence_score": 0.95,
       "context": "safeColor",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L409",
+      "source_location": "L410",
       "weight": 1.0
     },
     {
@@ -105071,7 +105107,7 @@
       "confidence_score": 0.95,
       "context": "shiftHoursAllowed",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L277",
+      "source_location": "L278",
       "weight": 1.0
     },
     {
@@ -105083,7 +105119,7 @@
       "confidence_score": 0.95,
       "context": "signOutSafely",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L390",
+      "source_location": "L391",
       "weight": 1.0
     },
     {
@@ -105095,7 +105131,7 @@
       "confidence_score": 0.95,
       "context": "staffRequestService.decideRequest",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L448",
+      "source_location": "L449",
       "weight": 1.0
     },
     {
@@ -105119,7 +105155,7 @@
       "confidence_score": 0.95,
       "context": "staffRequestService.syncDayOffLock",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L540",
+      "source_location": "L541",
       "weight": 1.0
     },
     {
@@ -105131,7 +105167,7 @@
       "confidence_score": 0.95,
       "context": "suggestMoves",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L345",
+      "source_location": "L346",
       "weight": 1.0
     },
     {
@@ -105143,7 +105179,7 @@
       "confidence_score": 0.95,
       "context": "swapNotes",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L345",
+      "source_location": "L346",
       "weight": 1.0
     },
     {
@@ -105167,7 +105203,7 @@
       "confidence_score": 0.95,
       "context": "syncNurseRosters",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L408",
+      "source_location": "L409",
       "weight": 1.0
     },
     {
@@ -105179,7 +105215,7 @@
       "confidence_score": 0.95,
       "context": "syncScheduleAssignments",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L396",
+      "source_location": "L397",
       "weight": 1.0
     },
     {
@@ -105191,7 +105227,7 @@
       "confidence_score": 0.95,
       "context": "updateAvailabilityRequest",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L448",
+      "source_location": "L449",
       "weight": 1.0
     },
     {
@@ -105203,7 +105239,7 @@
       "confidence_score": 0.95,
       "context": "useDialogA11y",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L205",
+      "source_location": "L203",
       "weight": 1.0
     },
     {
@@ -105239,7 +105275,7 @@
       "confidence_score": 0.95,
       "context": "weekOn",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L446",
+      "source_location": "L447",
       "weight": 1.0
     },
     {
@@ -105251,7 +105287,7 @@
       "confidence_score": 0.95,
       "context": "weeksOverLimit",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L347",
+      "source_location": "L348",
       "weight": 1.0
     },
     {
@@ -105263,10 +105299,10 @@
       "confidence_score": 0.95,
       "context": "withHolidaysAtZero",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L375",
+      "source_location": "L376",
       "weight": 1.0
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "e3ce826edbf8512b0240220730ab3a7aff00f513"
+  "built_at_commit": "7c5adbb5fc9259021797efb0af366982eac3a1b3"
 }

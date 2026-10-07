@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Shield,
   LogOut,
+  Menu,
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { authService, MASTER_ADMIN_EMAIL } from '../../services/auth/authService';
@@ -20,6 +21,9 @@ interface TopBarProps {
   onOpenAuthModal: () => void;
   onOpenShortcuts?: () => void;
   onOpenAcceptance?: () => void;
+  /** Opens the menu on narrow screens, where the sidebar is hidden. */
+  onOpenMenu?: () => void;
+  isMenuOpen?: boolean;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -29,6 +33,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenAuthModal,
   onOpenShortcuts,
   onOpenAcceptance,
+  onOpenMenu,
+  isMenuOpen = false,
 }) => {
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
@@ -42,9 +48,20 @@ export const TopBar: React.FC<TopBarProps> = ({
   };
 
   return (
-    <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-5 flex items-center justify-between z-20 shrink-0 transition-colors">
+    <header className="h-14 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-3 sm:px-5 gap-2 flex items-center justify-between z-20 shrink-0 transition-colors">
       {/* Zone 1: Clinic Context & Active Schedule */}
-      <div className="flex items-center gap-4 min-w-0">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+        {onOpenMenu && (
+          <button
+            type="button"
+            onClick={onOpenMenu}
+            className="lg:hidden p-2 -ml-1 rounded text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+            aria-label="Open menu"
+            aria-expanded={isMenuOpen}
+          >
+            <Menu className="w-5 h-5" aria-hidden="true" />
+          </button>
+        )}
         <div className="flex items-baseline gap-2 min-w-0">
           <span className="font-semibold text-slate-900 dark:text-white text-sm tracking-tight truncate">
             {context.clinicName}
@@ -60,7 +77,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         <button
           onClick={onNavigateToSchedules}
-          className="group flex items-center gap-2 px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left cursor-pointer"
+          className="group hidden md:flex items-center gap-2 px-2.5 py-1 rounded border border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-left cursor-pointer"
           title="Switch or manage active schedule"
         >
           <div className="flex flex-col">
@@ -84,12 +101,12 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       {/* Zone 2 & 3: Alerts, Utilities & Auth Actions */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2.5 shrink-0">
         {/* Keyboard Shortcuts Trigger */}
         {onOpenShortcuts && (
           <button
             onClick={onOpenShortcuts}
-            className="p-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+            className="hidden lg:inline-flex p-1.5 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
             title="Keyboard Shortcuts Cheat-sheet (?)"
             aria-label="Keyboard shortcuts"
           >
