@@ -27,7 +27,7 @@ if [ -n "${FIREBASE_SERVICE_ACCOUNT:-}" ] && ! command -v firebase >/dev/null 2>
 fi
 
 # App dependencies (the flag is needed for esbuild/vite peer conflicts, as in CI)
-npm install --legacy-peer-deps --no-audit --no-fund
+npm install --legacy-peer-deps --no-audit --no-fund --no-package-lock
 
 # graphify (PyPI package "graphifyy"), installed as a uv tool into ~/.local/bin
 export PATH="$HOME/.local/bin:$PATH"

@@ -972,9 +972,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791381306.049608,
-    "seen": 1791381333.3032155,
-    "ast_hash": "9e06a39ae5b068caa1ef5f0d8c111996",
+    "mtime": 1791382357.9039848,
+    "seen": 1791382364.4054072,
+    "ast_hash": "44255b8225de6e96cdb9c973b4b5461d",
     "semantic_hash": ""
   },
   "index.html": {
@@ -984,9 +984,9 @@
     "semantic_hash": ""
   },
   ".claude/hooks/session-start.sh": {
-    "mtime": 1791362587.9099908,
-    "seen": 1791365225.1339025,
-    "ast_hash": "d9f33ac1efc4e61ea9b0ba8eb53c6cb1",
+    "mtime": 1791382345.7373183,
+    "seen": 1791382364.4050536,
+    "ast_hash": "07c0753ff83205a8f4a9b01691344052",
     "semantic_hash": ""
   },
   ".claude/settings.json": {
@@ -1596,9 +1596,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791381306.0503418,
-    "seen": 1791381333.3032205,
-    "ast_hash": "b54a3f7e36dbea5167792791ac400411",
+    "mtime": 1791382357.9056025,
+    "seen": 1791382364.4054122,
+    "ast_hash": "2cf0f318fab7e305743979b09d1c4e8a",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {

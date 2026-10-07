@@ -20,7 +20,7 @@ Main moves only when the owner says "push to main".
 - [x] English only: remove `src/services/i18n`, plain menu labels
 - [x] Guide section 3 corrected
 - [x] Reviews: rules reviewer (fixes made, 96 rules checks) and wording reviewer
-- [ ] Checkpoint 1: screenshots and numbers to the owner
+- [x] Checkpoint 1: screenshots and numbers to the owner; pushed to main on 07-10-2026
 
 ## Phase 2: design system and app shell
 - [ ] Sample page from the `ui-ux-pro-max` design system, approved by the owner
