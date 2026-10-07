@@ -50,6 +50,16 @@ export function permissionsFor(user?: UserProfile | null): Permissions {
   };
 }
 
+/** The role in plain words, as the top bar shows it: Owner, Planner, Manager, Nurse or Viewer. */
+export function roleLabel(user?: UserProfile | null): string {
+  if (!user) return '';
+  if (user.role === 'OWNER') return 'Owner';
+  if (canEditClinicData(user)) return 'Planner';
+  if (user.isManager) return 'Manager';
+  if (user.linkedNurseId) return 'Nurse';
+  return 'Viewer';
+}
+
 const VIEWER_ROUTES: AppRoute[] = ['dashboard', 'availability', 'history', 'reports', 'published'];
 
 export function canAccessRoute(user: UserProfile | null | undefined, route: AppRoute): boolean {

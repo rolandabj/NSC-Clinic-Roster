@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { canAccessRoute, permissionsFor } from '../../src/services/auth/access';
+import { canAccessRoute, permissionsFor, roleLabel } from '../../src/services/auth/access';
 import { computePrivileges, type UserProfile } from '../../src/services/auth/authService';
 
 const person = (role: UserProfile['role'], extra: Partial<UserProfile> = {}): UserProfile =>
@@ -60,4 +60,14 @@ test('each role opens the screens it may use: planners all, everyone else the vi
 test('only planners approve swaps, because only editors may save them', () => {
   assert.equal(computePrivileges('EDITOR').canApproveSwaps, true);
   assert.equal(computePrivileges('VIEWER', true).canApproveSwaps, false);
+});
+
+test('the top bar names each role in plain words', () => {
+  assert.equal(roleLabel(person('OWNER', { isManager: true })), 'Owner');
+  assert.equal(roleLabel(person('EDITOR')), 'Planner');
+  assert.equal(roleLabel(person('PLANNER')), 'Planner');
+  assert.equal(roleLabel(person('VIEWER', { isManager: true })), 'Manager');
+  assert.equal(roleLabel(person('VIEWER', { linkedNurseId: 'mary' })), 'Nurse');
+  assert.equal(roleLabel(person('VIEWER')), 'Viewer');
+  assert.equal(roleLabel(null), '');
 });

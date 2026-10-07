@@ -29,7 +29,9 @@ Main moves only when the owner says "push to main".
 - [x] Shared components in `src/components/ui/` and a gallery view (`?view=gallery`)
 - [x] The 15 local copies of the corner message replaced by `notify`, and its look updated
 - [x] One date module (`dateUtils.ts`: day with weekday, typed dates; `dateFormatter.ts` deleted)
-- [ ] App shell: skip link, titles, deep links, Back between tabs, app context
+- [x] App shell look: sidebar and top bar, skip link, a title for each screen, one app name
+- [ ] Links to a roster, nurse, date or settings tab, and Back between tabs
+- [ ] App context in place of the window events
 - [ ] Checkpoint 2
 
 ## Phase 3: roster grid speed and structure

@@ -183,10 +183,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         localStorage.setItem('clinic_roster_clinic_name', clinicToSave.name);
         localStorage.setItem('clinic_roster_clinic_timezone', clinicToSave.timezone);
 
-        if (typeof document !== 'undefined') {
-          document.title = `${clinicToSave.name} — Clinical Roster`;
-        }
-
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('clinic-name-updated', { detail: clinicToSave.name }));
         }

@@ -9,42 +9,46 @@ import {
   Send,
   BarChart3,
   Settings,
-  Activity,
   ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
   X,
 } from 'lucide-react';
-import { AppRoute, NavItem } from '../../types/navigation';
+import { AppRoute } from '../../types/navigation';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { canAccessRoute } from '../../services/auth/access';
+import { IconButton, cx } from '../ui';
+import { APP_NAME, SCREEN_NAMES } from './screenTitles';
 
 interface SidebarProps {
   currentRoute: AppRoute;
   onNavigate: (route: AppRoute) => void;
+  /** The clinic's name, shown under the app's name. */
+  clinicName?: string;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   /** Shown as the slide in menu on narrow screens: a Close button replaces the collapse toggle. */
   onClose?: () => void;
 }
 
-// Plain English labels (the app is English only since 07-10-2026).
+// Plain English labels (the app is English only since 07-10-2026), from the screens' names.
 export const NAV_ITEMS: { id: AppRoute; label: string; icon: React.ElementType }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'schedules', label: 'Rosters', icon: CalendarRange },
-  { id: 'availability', label: 'Availability', icon: CalendarCheck2 },
-  { id: 'nurses', label: 'Nurses', icon: Users },
-  { id: 'doctors', label: 'Doctors', icon: Stethoscope },
-  { id: 'history', label: 'History', icon: History },
-  { id: 'publish', label: 'Publish', icon: Send },
-  { id: 'reports', label: 'Reports', icon: BarChart3 },
-  { id: 'audit', label: 'Audit trail', icon: ShieldCheck },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'dashboard', label: SCREEN_NAMES.dashboard, icon: LayoutDashboard },
+  { id: 'schedules', label: SCREEN_NAMES.schedules, icon: CalendarRange },
+  { id: 'availability', label: SCREEN_NAMES.availability, icon: CalendarCheck2 },
+  { id: 'nurses', label: SCREEN_NAMES.nurses, icon: Users },
+  { id: 'doctors', label: SCREEN_NAMES.doctors, icon: Stethoscope },
+  { id: 'history', label: SCREEN_NAMES.history, icon: History },
+  { id: 'publish', label: SCREEN_NAMES.publish, icon: Send },
+  { id: 'reports', label: SCREEN_NAMES.reports, icon: BarChart3 },
+  { id: 'audit', label: SCREEN_NAMES.audit, icon: ShieldCheck },
+  { id: 'settings', label: SCREEN_NAMES.settings, icon: Settings },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentRoute,
   onNavigate,
+  clinicName,
   isCollapsed = false,
   onToggleCollapse,
   onClose,
@@ -57,96 +61,79 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`${
-        isCollapsed ? 'w-16' : 'w-56'
-      } bg-slate-900 text-slate-300 flex flex-col shrink-0 select-none border-r border-slate-800 transition-all duration-200`}
+      className={cx(
+        'flex h-full shrink-0 flex-col border-r border-line bg-surface select-none transition-[width] duration-200',
+        // The slide in menu is a little wider, so the app's name fits beside its Close button.
+        onClose ? 'w-64' : isCollapsed ? 'w-16' : 'w-56'
+      )}
     >
-      {/* App Branding & Collapse Toggle */}
-      <div className={`h-14 ${isCollapsed ? 'px-2' : 'px-3'} flex items-center justify-between border-b border-slate-800`}>
-        <div className="flex items-center gap-2.5 overflow-hidden">
-          {onClose ? (
-            <span className="w-7 h-7 rounded bg-indigo-600 flex items-center justify-center text-white shrink-0" aria-hidden="true">
-              <Activity className="w-4 h-4" />
-            </span>
-          ) : (
-            <button
-              type="button"
-              className="w-7 h-7 rounded bg-indigo-600 flex items-center justify-center text-white shrink-0 cursor-pointer"
-              onClick={onToggleCollapse}
-              title={isCollapsed ? 'Expand sidebar' : 'ClinicRoster'}
-              aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              <Activity className="w-4 h-4" aria-hidden="true" />
-            </button>
-          )}
-          {!isCollapsed && (
-            <div className="flex flex-col min-w-0">
-              <span className="font-semibold text-white text-sm tracking-tight leading-tight truncate">
-                ClinicRoster
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono tracking-wide leading-tight truncate">
-                NURSING SCHEDULER
-              </span>
-            </div>
-          )}
-        </div>
-
-        {onClose ? (
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded text-slate-300 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-            aria-label="Close menu"
-          >
-            <X className="w-5 h-5" aria-hidden="true" />
-          </button>
-        ) : onToggleCollapse && (
-          <button
-            onClick={onToggleCollapse}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-            title={isCollapsed ? 'Expand sidebar (Ctrl+\\)' : 'Collapse sidebar to expand view (Ctrl+\\)'}
-            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {isCollapsed ? (
-              <PanelLeftOpen className="w-4 h-4" aria-hidden="true" />
-            ) : (
-              <PanelLeftClose className="w-4 h-4" aria-hidden="true" />
-            )}
-          </button>
+      {/* The app's name and the clinic (with Close in the slide in menu) */}
+      <div className={cx('flex h-14 shrink-0 items-center gap-2.5 border-b border-line', isCollapsed ? 'justify-center px-2' : 'px-3')}>
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand text-white" title={isCollapsed ? APP_NAME : undefined}>
+          <CalendarRange className="size-5" aria-hidden="true" />
+          {isCollapsed && <span className="sr-only">{APP_NAME}</span>}
+        </span>
+        {!isCollapsed && (
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className="block truncate text-sm font-bold text-ink">{APP_NAME}</span>
+            {clinicName && <span className="block truncate text-xs text-ink-muted">{clinicName}</span>}
+          </span>
         )}
+        {onClose && <IconButton label="Close menu" icon={X} onClick={onClose} className="-mr-1" />}
       </div>
 
-      {/* Nav List */}
-      <nav aria-label="Main" className={`flex-1 ${isCollapsed ? 'px-1.5' : 'px-2'} py-3 space-y-1 overflow-y-auto`}>
-        {visibleItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = currentRoute === item.id;
-          const label = item.label;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onNavigate(item.id)}
-              title={isCollapsed ? label : undefined}
-              aria-label={isCollapsed ? label : undefined}
-              aria-current={isActive ? 'page' : undefined}
-              className={`w-full flex items-center ${
-                isCollapsed ? 'justify-center p-2' : 'justify-between px-3 py-2'
-              } rounded text-xs font-medium transition-colors cursor-pointer text-left ${
-                isActive
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
-              }`}
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
-                {!isCollapsed && <span className="truncate">{label}</span>}
-              </div>
-            </button>
-          );
-        })}
+      {/* The screens this person may open */}
+      <nav aria-label="Main" className="flex-1 overflow-y-auto px-2 py-2">
+        <ul className="space-y-0.5">
+          {visibleItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = currentRoute === item.id;
+            return (
+              <li key={item.id}>
+                <a
+                  href={`#${item.id}`}
+                  onClick={(e) => {
+                    // A plain click opens the screen here; Ctrl, Shift or the middle button opens it elsewhere.
+                    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+                    e.preventDefault();
+                    onNavigate(item.id);
+                  }}
+                  title={isCollapsed ? item.label : undefined}
+                  aria-label={isCollapsed ? item.label : undefined}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={cx(
+                    'flex h-9 items-center gap-2.5 rounded-md text-sm transition-colors duration-150 pointer-coarse:h-11',
+                    isCollapsed ? 'justify-center px-0' : 'px-2.5',
+                    isActive ? 'bg-brand-soft font-semibold text-brand-strong' : 'font-medium text-ink-muted hover:bg-sunken hover:text-ink'
+                  )}
+                >
+                  <Icon className="size-[18px] shrink-0" aria-hidden="true" />
+                  {!isCollapsed && <span className="truncate">{item.label}</span>}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
       </nav>
 
+      {/* Hiding the labels leaves more room for the roster */}
+      {onToggleCollapse && !onClose && (
+        <div className="shrink-0 border-t border-line p-2">
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            title={isCollapsed ? 'Show the menu labels (Ctrl+\\)' : 'Hide the menu labels (Ctrl+\\)'}
+            aria-label={isCollapsed ? 'Show the menu labels' : undefined}
+            className={cx(
+              'flex h-9 w-full items-center gap-2.5 rounded-md text-sm font-medium text-ink-muted transition-colors duration-150 hover:bg-sunken hover:text-ink',
+              isCollapsed ? 'justify-center' : 'px-2.5'
+            )}
+          >
+            {isCollapsed ? <PanelLeftOpen className="size-[18px]" aria-hidden="true" /> : <PanelLeftClose className="size-[18px]" aria-hidden="true" />}
+            {!isCollapsed && 'Hide labels'}
+          </button>
+        </div>
+      )}
     </aside>
   );
 };

@@ -108,27 +108,27 @@
     "semantic_hash": "5e21b5b122c895dce73f2e1445074004"
   },
   "src/components/layout/AppShell.tsx": {
-    "mtime": 1791381116.9843543,
-    "seen": 1791381333.302888,
-    "ast_hash": "e078024703cffac43d428f9e53b587dd",
+    "mtime": 1791400884.456841,
+    "seen": 1791401169.9945865,
+    "ast_hash": "aa2d7e28da371fbe585a1a7262d816f2",
     "semantic_hash": ""
   },
   "src/components/layout/LocalModeBanner.tsx": {
-    "mtime": 1791362587.954563,
-    "seen": 1791365225.1339657,
-    "ast_hash": "e78e9eea6bab6f1330d21a1a4bc4fc11",
-    "semantic_hash": "e78e9eea6bab6f1330d21a1a4bc4fc11"
+    "mtime": 1791400892.3039377,
+    "seen": 1791401169.994589,
+    "ast_hash": "3e165eeee85e2c23984b5563fc5cf708",
+    "semantic_hash": ""
   },
   "src/components/layout/Sidebar.tsx": {
-    "mtime": 1791380918.4183342,
-    "seen": 1791380969.2650886,
-    "ast_hash": "bf3945b52f5e0bd2dc2ce3c5b9002dd7",
+    "mtime": 1791401105.2123117,
+    "seen": 1791401169.994591,
+    "ast_hash": "c94bbf4de469819e52682ba1d4e5359f",
     "semantic_hash": ""
   },
   "src/components/layout/TopBar.tsx": {
-    "mtime": 1791380849.1331215,
-    "seen": 1791380918.1580644,
-    "ast_hash": "b6c97c69e7afdb1478721d29d1a3e27c",
+    "mtime": 1791401021.237788,
+    "seen": 1791401169.994592,
+    "ast_hash": "2dc61bb694afb5ce56706c02185efaec",
     "semantic_hash": ""
   },
   "src/components/modals/AuthModal.tsx": {
@@ -318,9 +318,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
-    "mtime": 1791400260.6041954,
-    "seen": 1791400660.2541468,
-    "ast_hash": "8b683f5b9ebcbb1ffa17fb7b2acb64a0",
+    "mtime": 1791400892.285851,
+    "seen": 1791401169.994661,
+    "ast_hash": "4de698440828fdd5266f830d8e87d207",
     "semantic_hash": ""
   },
   "src/components/views/WorkingHoursPeriodsPanel.tsx": {
@@ -438,9 +438,9 @@
     "semantic_hash": "8c082c0093e4ad9e0581005a21e72308"
   },
   "src/services/auth/access.ts": {
-    "mtime": 1791381116.9815178,
-    "seen": 1791381333.302987,
-    "ast_hash": "a6d6e1fd69bbea72ac089a1b300358de",
+    "mtime": 1791400810.7943666,
+    "seen": 1791401169.994692,
+    "ast_hash": "f31570e8095f773b7e65a286b794945e",
     "semantic_hash": ""
   },
   "src/services/auth/authService.ts": {
@@ -966,15 +966,15 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791400532.7615955,
-    "seen": 1791400660.254394,
-    "ast_hash": "11152461b6a1007e24e723c79f176e81",
+    "mtime": 1791401139.4867265,
+    "seen": 1791401169.9948807,
+    "ast_hash": "5c7358b2433f1a3a18a380f4b06a3821",
     "semantic_hash": ""
   },
   "index.html": {
-    "mtime": 1791399356.9781127,
-    "seen": 1791399601.4237144,
-    "ast_hash": "0a36abfcb554a6f999615762a8706409",
+    "mtime": 1791400901.886322,
+    "seen": 1791401169.9948838,
+    "ast_hash": "0a00c5ce83ce50231f285c8c545b9a22",
     "semantic_hash": ""
   },
   ".claude/hooks/session-start.sh": {
@@ -1590,9 +1590,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791400532.7622344,
-    "seen": 1791400660.2544003,
-    "ast_hash": "925f1a8fbcc27322547271a69f1dac3c",
+    "mtime": 1791401139.4875383,
+    "seen": 1791401169.994886,
+    "ast_hash": "a397f009bce452679176ff0887822669",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1626,9 +1626,9 @@
     "semantic_hash": ""
   },
   "tests/unit/permissions.test.ts": {
-    "mtime": 1791381134.8261008,
-    "seen": 1791381333.303157,
-    "ast_hash": "b440e2aa6682be9392d540183df36b4c",
+    "mtime": 1791400802.4425118,
+    "seen": 1791401169.9948251,
+    "ast_hash": "ac37fd52b958923625505b79b7781f43",
     "semantic_hash": ""
   },
   "tests/unit/authPrivileges.test.ts": {
@@ -1773,6 +1773,18 @@
     "mtime": 1791400351.1528094,
     "seen": 1791400660.254122,
     "ast_hash": "9ceeb715b4883ce7fde3282c8849e7f9",
+    "semantic_hash": ""
+  },
+  "src/components/layout/screenTitles.ts": {
+    "mtime": 1791400810.7768366,
+    "seen": 1791401169.9945948,
+    "ast_hash": "9f19c97ee96cc1d23aa8067d3c393b56",
+    "semantic_hash": ""
+  },
+  "tests/unit/screenTitles.test.ts": {
+    "mtime": 1791400802.4248362,
+    "seen": 1791401169.9948359,
+    "ast_hash": "d1d6d7bfa145209c6f33f52f8d812004",
     "semantic_hash": ""
   }
 }

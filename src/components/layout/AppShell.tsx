@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
 import { AppRoute, ClinicContextState } from '../../types/navigation';
 import { LocalModeBanner } from './LocalModeBanner';
 import { Sidebar } from './Sidebar';
@@ -21,7 +21,9 @@ import { setClinicWeekendDays } from '../../utils/weekend';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { quotaTracker } from '../../services/firebase/quotaTracker';
-import { Check, AlertTriangle, X } from 'lucide-react';
+import { TriangleAlert, X } from 'lucide-react';
+import { IconButton } from '../ui';
+import { screenTitle } from './screenTitles';
 import { LoadErrorBoundary } from '../common/LoadErrorBoundary';
 import { chooseScheduleToOpen } from '../../services/schedule/openSchedule';
 import { todayIso } from '../../services/publish/nurseRosterService';
@@ -264,9 +266,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
             timezone: mainClinic.timezone || 'Asia/Dubai',
           }));
           setClinicWeekendDays(mainClinic.weekendDays);
-          if (typeof document !== 'undefined') {
-            document.title = `${resolvedName} — Clinical Roster`;
-          }
           try {
             // Cached so the login page and public links can show the clinic name.
             localStorage.setItem('clinic_roster_clinic_name', resolvedName);
@@ -336,9 +335,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
           ...prev,
           clinicName: e.detail,
         }));
-        if (typeof document !== 'undefined') {
-          document.title = `${e.detail} — Clinical Roster`;
-        }
       }
     };
 
@@ -376,6 +372,15 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     }
   };
   useEffect(() => syncAddress(currentRoute), [currentRoute]);
+
+  // The browser tab names the screen shown ("Rosters · NSC Clinic Roster").
+  useEffect(() => {
+    document.title = screenTitle(currentRoute);
+  }, [currentRoute]);
+
+  // "Skip to main content" moves the keyboard past the menu and the top bar. It is a button,
+  // because a link to #main would change the address, which picks the screen.
+  const mainRef = useRef<HTMLElement>(null);
 
   const navigateTo = (route: AppRoute) => {
     setIsMenuOpen(false);
@@ -474,41 +479,37 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-100 font-sans text-slate-800">
-      {/* Cloud Quota Limit Notice Banner */}
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-canvas text-ink">
+      <button
+        type="button"
+        onClick={() => mainRef.current?.focus()}
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[300] focus:rounded-md focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-ink focus:shadow-pop"
+      >
+        Skip to main content
+      </button>
+
+      {/* The database's free daily limit is used up: changes are not saved until it resets */}
       {isQuotaExceeded && !isQuotaBannerDismissed && (
-        <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 px-4 py-2.5 text-xs flex items-center justify-between shrink-0 z-50">
-          <div className="flex items-center gap-2.5 min-w-0 pr-4">
-            <span className="p-1 rounded-md bg-amber-200/60 dark:bg-amber-800/60 text-amber-800 dark:text-amber-200 shrink-0">
-              <AlertTriangle className="w-4 h-4" aria-hidden="true" />
-            </span>
-            <div className="leading-tight">
-              <strong className="font-semibold mr-1">Firestore Free Daily Quota Reached:</strong>
-              <span className="text-amber-800/90 dark:text-amber-300/90">
-                The database reached its free daily limit. Saved data is safe, but <strong>new changes are not being saved</strong>. Screens show
-                &quot;Not saved&quot; for anything that could not be stored, and the roster retries automatically after the quota resets at
-                midnight Pacific time. Upgrading the Firebase plan removes the limit.
-              </span>
-            </div>
+        <div role="alert" className="z-50 flex shrink-0 items-start justify-between gap-3 border-b border-warning-line/40 bg-warning-soft px-4 py-2.5 text-sm">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <TriangleAlert className="mt-0.5 size-5 shrink-0 text-warning" aria-hidden="true" />
+            <p className="text-ink">
+              <strong className="font-semibold">Changes are not being saved today.</strong>{' '}
+              <span className="text-ink-muted">
+                The database reached its free daily limit. Saved data is safe. Screens show &quot;Not saved&quot; for anything that
+                could not be stored, and saving starts again by itself after midnight Pacific time. A paid Firebase plan removes the limit.
+              </span>{' '}
+              <a
+                href="https://console.firebase.google.com/project/gen-lang-client-0671372661/firestore/databases/ai-studio-clinicroster-1845fa77-65a1-4351-a0d8-2f23afdb1499/data?openUpgradeDialog=true"
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold whitespace-nowrap text-brand-strong underline"
+              >
+                Open the database in Firebase
+              </a>
+            </p>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <a
-              href="https://console.firebase.google.com/project/gen-lang-client-0671372661/firestore/databases/ai-studio-clinicroster-1845fa77-65a1-4351-a0d8-2f23afdb1499/data?openUpgradeDialog=true"
-              target="_blank"
-              rel="noreferrer"
-              className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium text-xs whitespace-nowrap"
-            >
-              Manage Database in Firebase
-            </a>
-            <button
-              onClick={() => setIsQuotaBannerDismissed(true)}
-              className="p-1 text-amber-700 dark:text-amber-400 hover:text-amber-950 dark:hover:text-white rounded transition-colors"
-              title="Dismiss notice"
-              aria-label="Dismiss notice"
-            >
-              <X className="w-3.5 h-3.5" aria-hidden="true" />
-            </button>
-          </div>
+          <IconButton label="Close this notice" icon={X} onClick={() => setIsQuotaBannerDismissed(true)} className="-my-1.5" />
         </div>
       )}
 
@@ -524,6 +525,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
           <Sidebar
             currentRoute={currentRoute}
             onNavigate={navigateTo}
+            clinicName={clinicContext.clinicName}
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={toggleSidebarCollapse}
           />
@@ -532,15 +534,15 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
         {/* The same menu, sliding in on narrower screens */}
         {isMenuOpen && (
           <div className="fixed inset-0 z-50 flex lg:hidden">
-            <div className="absolute inset-0 bg-slate-900/50" aria-hidden="true" onClick={() => setIsMenuOpen(false)} />
-            <div ref={menuRef} role="dialog" aria-modal="true" aria-label="Menu" className="relative flex h-full shadow-xl">
-              <Sidebar currentRoute={currentRoute} onNavigate={navigateTo} onClose={() => setIsMenuOpen(false)} />
+            <div className="absolute inset-0 bg-ink/50" aria-hidden="true" onClick={() => setIsMenuOpen(false)} />
+            <div ref={menuRef} role="dialog" aria-modal="true" aria-label="Menu" className="animate-in slide-in-from-left relative flex h-full shadow-dialog">
+              <Sidebar currentRoute={currentRoute} onNavigate={navigateTo} clinicName={clinicContext.clinicName} onClose={() => setIsMenuOpen(false)} />
             </div>
           </div>
         )}
 
         {/* Right Content Area */}
-        <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden bg-slate-50">
+        <div className="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden bg-canvas">
           <TopBar
             context={clinicContext}
             onNavigateToSchedules={() => navigateTo('schedules')}
@@ -551,7 +553,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
             isMenuOpen={isMenuOpen}
           />
 
-          <main className="flex-1 min-h-0 overflow-y-auto">
+          <main ref={mainRef} tabIndex={-1} className="flex-1 min-h-0 overflow-y-auto outline-none">
             <LoadErrorBoundary resetKey={currentRoute}><Suspense fallback={<PageLoading />}>{renderCurrentView()}</Suspense></LoadErrorBoundary>
           </main>
         </div>

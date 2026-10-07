@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Database, ArrowRight, X } from 'lucide-react';
+import { Button, IconButton } from '../ui';
 
 interface LocalModeBannerProps {
   onNavigateToSettings: () => void;
@@ -18,29 +19,19 @@ export const LocalModeBanner: React.FC<LocalModeBannerProps> = ({ onNavigateToSe
   };
 
   return (
-    <div className="bg-slate-900 text-slate-100 text-xs py-2 px-4 flex items-center justify-between border-b border-slate-800 transition-colors">
-      <div className="flex items-center gap-2.5">
-        <span className="flex h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-emerald-400/30" />
-        <span className="text-slate-300">
-          <strong className="text-white font-medium">Local mode</strong> — add Firebase config in Settings → Integrations to enable Google login, sharing &amp; email. All roster building &amp; engine features work locally.
+    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-sunken px-4 py-2 text-sm">
+      <p className="flex min-w-0 items-center gap-2.5 text-ink-muted">
+        <Database className="size-4 shrink-0 text-ink-muted" aria-hidden="true" />
+        <span>
+          <strong className="font-semibold text-ink">Saved in this browser only.</strong> Add the Firebase details in Settings to sign in with
+          Google, share rosters and send email. Building rosters works without them.
         </span>
-      </div>
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onNavigateToSettings}
-          className="inline-flex items-center gap-1 font-medium text-indigo-400 hover:text-indigo-300 transition-colors text-xs cursor-pointer"
-        >
-          <span>Open Integrations</span>
-          <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
-        </button>
-        <button
-          onClick={handleDismiss}
-          title="Dismiss banner"
-          className="text-slate-400 hover:text-slate-200 transition-colors p-1 rounded hover:bg-slate-800 cursor-pointer"
-          aria-label="Dismiss banner"
-        >
-          <X className="w-3.5 h-3.5" aria-hidden="true" />
-        </button>
+      </p>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button size="sm" variant="ghost" icon={ArrowRight} onClick={onNavigateToSettings}>
+          Open Settings
+        </Button>
+        <IconButton label="Close this notice" icon={X} onClick={handleDismiss} />
       </div>
     </div>
   );
