@@ -8,7 +8,6 @@
 
 import React, { useId } from 'react';
 import { X, Command, Keyboard } from 'lucide-react';
-import { t } from '../../services/i18n';
 import { useDialogA11y } from '../common/useDialogA11y';
 
 interface ShortcutsModalProps {

@@ -16,7 +16,6 @@ import {
   X,
 } from 'lucide-react';
 import { AppRoute, NavItem } from '../../types/navigation';
-import { i18n, t, Language } from '../../services/i18n';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { canAccessRoute } from '../../services/auth/access';
 
@@ -29,17 +28,18 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-export const NAV_ITEMS: { id: AppRoute; labelKey: string; defaultLabel: string; icon: React.ElementType; badge?: string }[] = [
-  { id: 'dashboard', labelKey: 'nav.dashboard', defaultLabel: 'Dashboard', icon: LayoutDashboard },
-  { id: 'schedules', labelKey: 'nav.schedules', defaultLabel: 'Schedules', icon: CalendarRange, badge: 'Grid' },
-  { id: 'availability', labelKey: 'nav.availability', defaultLabel: 'Availability', icon: CalendarCheck2 },
-  { id: 'nurses', labelKey: 'nav.nurses', defaultLabel: 'Nurses', icon: Users },
-  { id: 'doctors', labelKey: 'nav.doctors', defaultLabel: 'Doctors', icon: Stethoscope },
-  { id: 'history', labelKey: 'nav.history', defaultLabel: 'History', icon: History },
-  { id: 'publish', labelKey: 'nav.publish', defaultLabel: 'Publish', icon: Send },
-  { id: 'reports', labelKey: 'nav.reports', defaultLabel: 'Reports', icon: BarChart3 },
-  { id: 'audit', labelKey: 'nav.audit', defaultLabel: 'Audit Trail', icon: ShieldCheck },
-  { id: 'settings', labelKey: 'nav.settings', defaultLabel: 'Settings', icon: Settings },
+// Plain English labels (the app is English only since 07-10-2026).
+export const NAV_ITEMS: { id: AppRoute; label: string; icon: React.ElementType }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'schedules', label: 'Rosters', icon: CalendarRange },
+  { id: 'availability', label: 'Availability', icon: CalendarCheck2 },
+  { id: 'nurses', label: 'Nurses', icon: Users },
+  { id: 'doctors', label: 'Doctors', icon: Stethoscope },
+  { id: 'history', label: 'History', icon: History },
+  { id: 'publish', label: 'Publish', icon: Send },
+  { id: 'reports', label: 'Reports', icon: BarChart3 },
+  { id: 'audit', label: 'Audit trail', icon: ShieldCheck },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -49,12 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
   onClose,
 }) => {
-  const [, setLang] = useState<Language>(i18n.getLanguage());
   const [user, setUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
-
-  useEffect(() => {
-    return i18n.subscribe((newLang) => setLang(newLang));
-  }, []);
 
   useEffect(() => authService.subscribe(setUser), []);
 
@@ -126,13 +121,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {visibleItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentRoute === item.id;
-          const label = t(item.labelKey, item.defaultLabel);
+          const label = item.label;
           return (
             <button
               key={item.id}
               type="button"
               onClick={() => onNavigate(item.id)}
-              title={isCollapsed ? `${label}${item.badge ? ` (${item.badge})` : ''}` : undefined}
+              title={isCollapsed ? label : undefined}
               aria-label={isCollapsed ? label : undefined}
               aria-current={isActive ? 'page' : undefined}
               className={`w-full flex items-center ${
@@ -147,38 +142,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} aria-hidden="true" />
                 {!isCollapsed && <span className="truncate">{label}</span>}
               </div>
-              {!isCollapsed && item.badge && (
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
-                    isActive
-                      ? 'bg-indigo-700/60 text-indigo-100'
-                      : 'bg-slate-800 text-slate-400'
-                  }`}
-                >
-                  {item.badge}
-                </span>
-              )}
             </button>
           );
         })}
       </nav>
 
-      {/* Bottom Footer Info */}
-      <div className={`${isCollapsed ? 'p-2 text-center' : 'p-3'} border-t border-slate-800 text-[11px] text-slate-400`}>
-        {isCollapsed ? (
-          <div className="w-2 h-2 rounded-full bg-emerald-400 mx-auto" title="Deterministic Engine: Ready" />
-        ) : (
-          <>
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-slate-300">Deterministic Engine</span>
-              <span className="font-mono text-[10px] text-emerald-400">Ready</span>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-1 leading-normal">
-              Strict rules · Zero over-target drift
-            </p>
-          </>
-        )}
-      </div>
     </aside>
   );
 };
