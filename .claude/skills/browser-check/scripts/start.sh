@@ -27,7 +27,7 @@ else
 fi
 for _ in $(seq 1 90); do
   if up; then
-    echo "Serving at http://localhost:$PORT/ (?view=schedules|doctors|availability|history|nurses|reports|dashboard|app|me|published|ack|sample|sample-nurse, ?as=owner|planner|manager|nurse|none, ?seed=big|fair|clean)"
+    echo "Serving at http://localhost:$PORT/ (?view=schedules|doctors|availability|history|nurses|reports|dashboard|app|me|published|ack|sample|sample-nurse|gallery, ?as=owner|planner|manager|nurse|none, ?seed=big|fair|clean)"
     exit 0
   fi
   sleep 1

@@ -8,6 +8,8 @@
 //        page, made from the November roster published on the spot.
 //   sample, sample-nurse: the proposed new look (Phase 2) with made up data, its own styles
 //        and font; &open=publish opens its publish dialog (see sample/index.tsx).
+//   gallery: every shared part in src/components/ui/ with the app's styles (gallery.tsx);
+//        &open=dialog opens its dialog.
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from '../src/App';
@@ -19,6 +21,7 @@ import { NursesView } from '../src/components/views/NursesView';
 import { ReportsView } from '../src/components/views/ReportsView';
 import { DashboardView } from '../src/components/views/DashboardView';
 import { DialogHost } from '../src/components/common/dialogs';
+import { Gallery } from './gallery';
 import { authService } from '../src/services/auth/authService';
 import { getRepository } from '../src/services/repository';
 import { ensureNurseLink, syncNurseRosters } from '../src/services/publish/nurseRosterService';
@@ -63,6 +66,7 @@ function Single({ view }: { view: string }) {
     nurses: <NursesView context={context} />,
     reports: <ReportsView context={context} />,
     dashboard: <DashboardView context={context} onNavigate={(route) => console.log('navigate', route)} />,
+    gallery: <Gallery />,
   };
   return (
     <>

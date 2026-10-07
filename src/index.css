@@ -18,6 +18,7 @@
   --color-danger: #b91c1c; /* Must fix, errors: 6.5:1, 5.9:1 on danger-soft */
   --color-danger-soft: #fef2f2;
   --color-danger-line: #dc2626;
+  --color-danger-strong: #991b1b; /* hover of a red button: white text 8.3:1 */
   --color-warning: #92400e; /* Check, Waiting: 7.1:1, 6.8:1 on warning-soft */
   --color-warning-soft: #fffbeb;
   --color-warning-line: #d97706;
@@ -124,6 +125,14 @@
   ::placeholder {
     color: var(--color-ink-muted);
     opacity: 1;
+  }
+
+  /* Everything that can be clicked shows the hand (Tailwind 4 leaves buttons on the arrow). */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  select:not(:disabled),
+  summary {
+    cursor: pointer;
   }
 }
 

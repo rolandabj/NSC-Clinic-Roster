@@ -117,7 +117,7 @@ One count everywhere: "2 must fix · 2 to check · 1 note". A cell with a Must f
 * Touch screens (`pointer-coarse`): every button, field and menu item at least 44 px.
 * Nothing anyone can click is under 24 px anywhere.
 
-## Parts (first drafts in `.claude/skills/browser-check/harness/sample/`)
+## Parts (in `src/components/ui/`, shown together on the test page's `?view=gallery`; first drafts in `.claude/skills/browser-check/harness/sample/`)
 
 * **App frame:** a white sidebar (224 px) with the app name, the clinic and plain menu labels; the open
   item in brand soft. Below 1024 px it becomes a menu that opens over the page from a Menu button.

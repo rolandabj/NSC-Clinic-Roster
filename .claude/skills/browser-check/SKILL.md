@@ -26,7 +26,8 @@ in `/opt/pw-browsers`; never run `playwright install`.
      and `ack` (the read receipt page). These three publish the November roster on the spot.
      `sample` and `sample-nurse` show the proposed new look of the UI overhaul (`harness/sample/`)
      with made up data and none of the app's styles; `&open=publish` opens its publish dialog and
-     `&font=atkinson` shows the other font.
+     `&font=atkinson` shows the other font. `gallery` shows every shared part in
+     `src/components/ui/` with the app's styles (`&open=dialog` opens its dialog).
    - `?as=` who is signed in: `owner` (the default), `planner`, `manager`, `nurse` (Mary,
      a viewer linked to her nurse profile) or `none` (signed out, for the sign in page).
    - `?seed=` other data: `fair` (Amy well over her goal), `big` (a full size clinic:
