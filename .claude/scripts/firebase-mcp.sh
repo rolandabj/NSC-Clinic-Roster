@@ -1,5 +1,5 @@
 #!/bin/bash
-# Starts Firebase's MCP server for this project (from the nsc-tools plugin), with
+# Starts Firebase's MCP server for this project (from .mcp.json), with
 # read only tools only. The key
 # is the read only service account key the owner added to the cloud environment
 # settings as FIREBASE_SERVICE_ACCOUNT (the key file's JSON, or the same in base64).

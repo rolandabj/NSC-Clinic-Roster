@@ -1,7 +1,7 @@
 # Graph Report - NSC-Clinic-Roster  (2026-10-07)
 
 ## Corpus Check
-- 252 files · ~303,408 words
+- 251 files · ~303,767 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 8 file(s) not represented in the graph (top: .css 3, (none) 2, .example 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f37817f8`
+- Built from commit: `56ebcf69`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -89,7 +89,7 @@
 - ref_node_assert
 - createLiveReconciler
 - DoctorsView.tsx
-- Sidebar.tsx
+- navigation.ts
 - weekHours.test.ts
 - publicHolidays.test.ts
 - README.md
@@ -194,40 +194,40 @@ Cohesion: 0.09
 Nodes (21): firebase, name, private, type, version, autoprefixer, cors, date-fns (+13 more)
 
 ### Community 10 - "AppShell.tsx"
-Cohesion: 0.14
-Nodes (22): AppShell(), bootstrap(), AppShellProps, AuditTrailView, AvailabilityView, DoctorsView, HistoryView, MyRosterView (+14 more)
+Cohesion: 0.15
+Nodes (22): PageLoading(), AppShell(), bootstrap(), AppShellProps, AuditTrailView, AvailabilityView, DoctorsView, HistoryView (+14 more)
 
 ### Community 11 - "dependencies"
 Cohesion: 0.09
 Nodes (22): dependencies, cors, date-fns, dotenv, express, express-rate-limit, firebase, @google/genai (+14 more)
 
 ### Community 12 - "middleware/auth.ts"
-Cohesion: 0.16
-Nodes (14): express, express-rate-limit, helmet, authMiddleware(), AuthUser, BackendRole, Express, requireOwner (+6 more)
+Cohesion: 0.14
+Nodes (16): express, express-rate-limit, helmet, authMiddleware(), AuthUser, BackendRole, Express, requireOwner (+8 more)
 
 ### Community 13 - "AllRequestsPanel.tsx"
 Cohesion: 0.15
 Nodes (18): AccessManagementPanelProps, AllRequestsPanel(), AllRequestsPanelProps, Draft, KindFilter, STATUS_LABEL, STATUS_STYLE, StatusFilter (+10 more)
 
 ### Community 14 - "App.tsx"
-Cohesion: 0.14
-Nodes (13): App(), AppShell, MyRosterView, parsePublicLink(), PublishedRosterView, LoginPage(), LoginPageProps, LoadErrorBoundary (+5 more)
+Cohesion: 0.15
+Nodes (12): App(), AppShell, MyRosterView, parsePublicLink(), PublishedRosterView, LoginPage(), LoginPageProps, LoadErrorBoundary (+4 more)
 
 ### Community 15 - "EntityForCollection"
 Cohesion: 0.14
 Nodes (5): 11. Saving, live updates, versions, CollectionSyncer, fingerprint(), planSync(), EntityForCollection
 
 ### Community 16 - "DashboardView.tsx"
-Cohesion: 0.14
-Nodes (26): Card(), DashboardView(), loadPlannerData(), loadViewerData(), longDate(), PlannerData, readStoredId(), TodayList() (+18 more)
+Cohesion: 0.16
+Nodes (24): Card(), DashboardView(), loadPlannerData(), loadViewerData(), longDate(), PlannerData, readStoredId(), TodayList() (+16 more)
 
 ### Community 17 - "fixtures.ts"
 Cohesion: 0.08
 Nodes (27): 15. Tests, ANALYSIS_FORMAT, CARD, input(), KHAN, LATE, SCHEDULE, SESSIONS (+19 more)
 
 ### Community 18 - "firebaseIdentityService.ts"
-Cohesion: 0.19
-Nodes (14): jose, AccessRecordFields, cacheKey(), fetchAccessRecord(), fetchStaffEmails(), FirebaseProjectConfig, getFirebaseProjectConfig(), identityCache (+6 more)
+Cohesion: 0.16
+Nodes (17): jose, AccessRecordFields, cacheKey(), fetchAccessRecord(), fetchStaffEmails(), FirebaseProjectConfig, getFirebaseProjectConfig(), identityCache (+9 more)
 
 ### Community 19 - "react"
 Cohesion: 0.19
@@ -366,8 +366,8 @@ Cohesion: 0.08
 Nodes (21): moveShift(), swapShifts(), AMY, BEA, CARA, DAN, DOCTORS, DUTIES (+13 more)
 
 ### Community 54 - "icsExportService.ts"
-Cohesion: 0.12
-Nodes (23): RFC-5545, calendarRouter, fromFirestoreFields(), fromFirestoreValue(), getPublicDocument(), buildNurseIcs(), buildNurseRosterIcs(), escapeIcsText() (+15 more)
+Cohesion: 0.16
+Nodes (18): RFC-5545, buildNurseIcs(), buildNurseRosterIcs(), escapeIcsText(), foldLine(), formatIcsDate(), nextDayCompact(), NurseRosterIcsInput (+10 more)
 
 ### Community 56 - "graphify reference: query, path, explain"
 Cohesion: 0.33
@@ -421,9 +421,9 @@ Nodes (3): createLiveReconciler(), LiveReconcileOptions, LiveSaveQueue
 Cohesion: 0.15
 Nodes (24): DoctorWeekChangeDialog(), DoctorWeekChangeDialogProps, WeekChangePreview, DoctorsView(), WEEKDAY_NAMES, doctorFromDate(), generateDoctorSessionsForDateRange(), missingPatternSessions() (+16 more)
 
-### Community 73 - "Sidebar.tsx"
-Cohesion: 0.18
-Nodes (12): NAV_ITEMS, Sidebar(), SidebarProps, ShortcutItem, SHORTCUTS, ShortcutsModalProps, DICTIONARY, i18n (+4 more)
+### Community 73 - "navigation.ts"
+Cohesion: 0.16
+Nodes (15): NAV_ITEMS, Sidebar(), SidebarProps, ShortcutItem, SHORTCUTS, ShortcutsModalProps, canAccessRoute(), VIEWER_ROUTES (+7 more)
 
 ### Community 74 - "weekHours.test.ts"
 Cohesion: 0.15
@@ -519,7 +519,7 @@ Nodes (5): DR_PEDS, ENT, FULL, PEDS, RULES
 
 ### Community 99 - "context7"
 Cohesion: 0.33
-Nodes (5): context7, firebase, bash, npx, @upstash/context7-mcp
+Nodes (5): bash, npx, context7, firebase, @upstash/context7-mcp
 
 ### Community 100 - "emailSettingsStore.ts"
 Cohesion: 0.47
@@ -541,9 +541,9 @@ Nodes (3): Report, What to check, What to look at
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `react` connect `react` to `Assignment`, `analysisExportService.ts`, `hoursBalance.ts`, `nurseRosterService.ts`, `authService.ts`, `notify`, `package.json`, `AppShell.tsx`, `AllRequestsPanel.tsx`, `App.tsx`, `DashboardView.tsx`, `fixtures.ts`, `RulesTab.tsx`, `dialogs.tsx`, `formatDate`, `NSC Clinic Roster: complete project guide`, `PublishModal.tsx`, `WorkbookGrid.tsx`, `getRepository`, `repository/index.ts`, `DoctorsView.tsx`, `Sidebar.tsx`, `staffRequestService.ts`, `WhoCanCover.tsx`, `HistoryView.tsx`, `SchedulesView.tsx`, `AvailabilityView.tsx`, `NurseTimesheetModal.tsx`, `harness/main.tsx`, `DoctorsScheduleSheet.tsx`?**
-  _High betweenness centrality (0.040) - this node is a cross-community bridge._
-- **Why does `authService` connect `authService` to `Assignment`, `getRepository`, `nurseRosterService.ts`, `authService.ts`, `repository/index.ts`, `Sidebar.tsx`, `AppShell.tsx`, `App.tsx`, `PublishModal.tsx`, `DashboardView.tsx`, `react`, `SchedulesView.tsx`, `AvailabilityView.tsx`, `fakeAuth.ts`?**
+- **Why does `react` connect `react` to `Assignment`, `analysisExportService.ts`, `hoursBalance.ts`, `nurseRosterService.ts`, `authService.ts`, `notify`, `package.json`, `AppShell.tsx`, `AllRequestsPanel.tsx`, `App.tsx`, `DashboardView.tsx`, `fixtures.ts`, `RulesTab.tsx`, `dialogs.tsx`, `formatDate`, `NSC Clinic Roster: complete project guide`, `PublishModal.tsx`, `WorkbookGrid.tsx`, `getRepository`, `repository/index.ts`, `DoctorsView.tsx`, `navigation.ts`, `staffRequestService.ts`, `WhoCanCover.tsx`, `HistoryView.tsx`, `SchedulesView.tsx`, `AvailabilityView.tsx`, `NurseTimesheetModal.tsx`, `harness/main.tsx`, `DoctorsScheduleSheet.tsx`?**
+  _High betweenness centrality (0.047) - this node is a cross-community bridge._
+- **Why does `authService` connect `authService` to `Assignment`, `getRepository`, `nurseRosterService.ts`, `authService.ts`, `repository/index.ts`, `navigation.ts`, `AppShell.tsx`, `App.tsx`, `PublishModal.tsx`, `DashboardView.tsx`, `react`, `SchedulesView.tsx`, `AvailabilityView.tsx`, `fakeAuth.ts`?**
   _High betweenness centrality (0.039) - this node is a cross-community bridge._
 - **Why does `Assignment` connect `Assignment` to `analysisExportService.ts`, `hoursBalance.ts`, `clinicModel.test.ts`, `nurseRosterService.ts`, `DashboardView.tsx`, `fixtures.ts`, `react`, `yearToDate.ts`, `IRepository`, `makeNurse`, `nurseClinicFloat.test.ts`, `PublishModal.tsx`, `SchedulingEngine.ts`, `WorkbookGrid.tsx`, `savingSafety.test.ts`, `handMoves.test.ts`, `icsExportService.ts`, `hoursRules.test.ts`, `ref_node_assert`, `DoctorsView.tsx`, `weekHours.test.ts`, `publicHolidays.test.ts`, `sharing.test.ts`, `types/index.ts`, `engineRules.test.ts`, `HistoryView.tsx`, `SchedulesView.tsx`, `continuousHours.test.ts`, `clinicSetupService.ts`, `DoctorsScheduleSheet.tsx`?**
   _High betweenness centrality (0.026) - this node is a cross-community bridge._

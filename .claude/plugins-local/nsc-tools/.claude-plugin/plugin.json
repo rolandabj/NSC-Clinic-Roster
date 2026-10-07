@@ -1,8 +1,0 @@
-{
-  "name": "nsc-tools",
-  "version": "1.0.0",
-  "description": "The project's MCP servers: Firebase (read only, once the key is set) and context7 (library documentation, no key needed).",
-  "author": {
-    "name": "NSC Clinic Roster"
-  }
-}

@@ -2,7 +2,7 @@
   "mcpServers": {
     "firebase": {
       "command": "bash",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/firebase-mcp.sh"]
+      "args": ["${CLAUDE_PROJECT_DIR:-.}/.claude/scripts/firebase-mcp.sh"]
     },
     "context7": {
       "command": "npx",

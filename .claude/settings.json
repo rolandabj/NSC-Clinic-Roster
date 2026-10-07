@@ -2,6 +2,10 @@
   "env": {
     "MCP_TIMEOUT": "180000"
   },
+  "enabledMcpjsonServers": [
+    "firebase",
+    "context7"
+  ],
   "hooks": {
     "SessionStart": [
       {
@@ -33,20 +37,13 @@
   },
   "enabledPlugins": {
     "claude-code-setup@claude-plugins-official": true,
-    "hookify@claude-plugins-official": true,
-    "nsc-tools@nsc-local": true
+    "hookify@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "claude-plugins-official": {
       "source": {
         "source": "github",
         "repo": "anthropics/claude-plugins-official"
-      }
-    },
-    "nsc-local": {
-      "source": {
-        "source": "directory",
-        "path": "./.claude/plugins-local"
       }
     }
   }

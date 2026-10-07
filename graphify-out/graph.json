@@ -823,6 +823,19 @@
       "source_location": "L14"
     },
     {
+      "id": "src_types_index_nurserosterdoc",
+      "label": "NurseRosterDoc",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 12,
+      "community_name": "middleware/auth.ts",
+      "file_type": "code",
+      "norm_label": "nurserosterdoc",
+      "source_file": "src/types/index.ts",
+      "source_location": "L548"
+    },
+    {
       "id": "src_components_views_accessmanagementpanel_accessmanagementpanelprops",
       "label": "AccessManagementPanelProps",
       "_callable": true,
@@ -1094,19 +1107,6 @@
       "norm_label": "nurserostershift",
       "source_file": "src/types/index.ts",
       "source_location": "L515"
-    },
-    {
-      "id": "src_types_navigation_approute",
-      "label": "AppRoute",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "DashboardView.tsx",
-      "file_type": "code",
-      "norm_label": "approute",
-      "source_file": "src/types/navigation.ts",
-      "source_location": "L3"
     },
     {
       "id": "server_services_auth_firebaseidentityservice_accessrecordfields",
@@ -2825,19 +2825,6 @@
       "source_location": "L183"
     },
     {
-      "id": "src_types_index_nurserosterdoc",
-      "label": "NurseRosterDoc",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 54,
-      "community_name": "icsExportService.ts",
-      "file_type": "code",
-      "norm_label": "nurserosterdoc",
-      "source_file": "src/types/index.ts",
-      "source_location": "L548"
-    },
-    {
       "id": "src_services_i18n_index_i18nmanager",
       "label": "I18nManager",
       "_callable": true,
@@ -3208,7 +3195,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "sidebarprops",
       "source_file": "src/components/layout/Sidebar.tsx",
@@ -3221,7 +3208,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "shortcutitem",
       "source_file": "src/components/modals/ShortcutsModal.tsx",
@@ -3234,7 +3221,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "shortcutsmodalprops",
       "source_file": "src/components/modals/ShortcutsModal.tsx",
@@ -3247,7 +3234,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "language",
       "source_file": "src/services/i18n/index.ts",
@@ -3260,11 +3247,24 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "translations",
       "source_file": "src/services/i18n/index.ts",
       "source_location": "L11"
+    },
+    {
+      "id": "src_types_navigation_approute",
+      "label": "AppRoute",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 73,
+      "community_name": "navigation.ts",
+      "file_type": "code",
+      "norm_label": "approute",
+      "source_file": "src/types/navigation.ts",
+      "source_location": "L3"
     },
     {
       "id": "src_types_navigation_navitem",
@@ -3273,7 +3273,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "navitem",
       "source_file": "src/types/navigation.ts",
@@ -4329,6 +4329,18 @@
       "source_location": "L38"
     },
     {
+      "id": "src_components_common_pageloading_pageloading",
+      "label": "PageLoading()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "AppShell.tsx",
+      "file_type": "code",
+      "norm_label": "pageloading()",
+      "source_file": "src/components/common/PageLoading.tsx",
+      "source_location": "L11"
+    },
+    {
       "id": "src_components_layout_appshell_appshell",
       "label": "AppShell()",
       "_callable": true,
@@ -4713,18 +4725,6 @@
       "source_location": "L39"
     },
     {
-      "id": "src_components_common_pageloading_pageloading",
-      "label": "PageLoading()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 14,
-      "community_name": "App.tsx",
-      "file_type": "code",
-      "norm_label": "pageloading()",
-      "source_file": "src/components/common/PageLoading.tsx",
-      "source_location": "L11"
-    },
-    {
       "id": "src_components_views_acknowledgepage_acknowledgepage",
       "label": "AcknowledgePage()",
       "_callable": true,
@@ -5097,18 +5097,6 @@
       "source_location": "L295"
     },
     {
-      "id": "src_services_auth_access_canaccessroute",
-      "label": "canAccessRoute()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "DashboardView.tsx",
-      "file_type": "code",
-      "norm_label": "canaccessroute()",
-      "source_file": "src/services/auth/access.ts",
-      "source_location": "L25"
-    },
-    {
       "id": "src_services_dashboard_dashboardsummary_adddays",
       "label": "addDays()",
       "_callable": true,
@@ -5467,6 +5455,42 @@
       "norm_label": "writecache()",
       "source_file": "server/services/auth/firebaseIdentityService.ts",
       "source_location": "L78"
+    },
+    {
+      "id": "server_services_firestore_firestorerest_fromfirestorefields",
+      "label": "fromFirestoreFields()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "firebaseIdentityService.ts",
+      "file_type": "code",
+      "norm_label": "fromfirestorefields()",
+      "source_file": "server/services/firestore/firestoreRest.ts",
+      "source_location": "L31"
+    },
+    {
+      "id": "server_services_firestore_firestorerest_fromfirestorevalue",
+      "label": "fromFirestoreValue()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "firebaseIdentityService.ts",
+      "file_type": "code",
+      "norm_label": "fromfirestorevalue()",
+      "source_file": "server/services/firestore/firestoreRest.ts",
+      "source_location": "L14"
+    },
+    {
+      "id": "server_services_firestore_firestorerest_getpublicdocument",
+      "label": "getPublicDocument()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "firebaseIdentityService.ts",
+      "file_type": "code",
+      "norm_label": "getpublicdocument()",
+      "source_file": "server/services/firestore/firestoreRest.ts",
+      "source_location": "L42"
     },
     {
       "id": "src_components_common_usedialoga11y_usedialoga11y",
@@ -9129,42 +9153,6 @@
       "source_location": "L16"
     },
     {
-      "id": "server_services_firestore_firestorerest_fromfirestorefields",
-      "label": "fromFirestoreFields()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 54,
-      "community_name": "icsExportService.ts",
-      "file_type": "code",
-      "norm_label": "fromfirestorefields()",
-      "source_file": "server/services/firestore/firestoreRest.ts",
-      "source_location": "L31"
-    },
-    {
-      "id": "server_services_firestore_firestorerest_fromfirestorevalue",
-      "label": "fromFirestoreValue()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 54,
-      "community_name": "icsExportService.ts",
-      "file_type": "code",
-      "norm_label": "fromfirestorevalue()",
-      "source_file": "server/services/firestore/firestoreRest.ts",
-      "source_location": "L14"
-    },
-    {
-      "id": "server_services_firestore_firestorerest_getpublicdocument",
-      "label": "getPublicDocument()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 54,
-      "community_name": "icsExportService.ts",
-      "file_type": "code",
-      "norm_label": "getpublicdocument()",
-      "source_file": "server/services/firestore/firestoreRest.ts",
-      "source_location": "L42"
-    },
-    {
       "id": "src_services_export_icsexportservice_buildnurseics",
       "label": "buildNurseIcs()",
       "_callable": true,
@@ -10358,11 +10346,23 @@
       "_callable": true,
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "sidebar()",
       "source_file": "src/components/layout/Sidebar.tsx",
       "source_location": "L42"
+    },
+    {
+      "id": "src_services_auth_access_canaccessroute",
+      "label": "canAccessRoute()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 73,
+      "community_name": "navigation.ts",
+      "file_type": "code",
+      "norm_label": "canaccessroute()",
+      "source_file": "src/services/auth/access.ts",
+      "source_location": "L25"
     },
     {
       "id": "src_services_i18n_index_t",
@@ -10370,7 +10370,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "t()",
       "source_file": "src/services/i18n/index.ts",
@@ -12345,6 +12345,17 @@
       "source_location": "L36"
     },
     {
+      "id": "src_components_common_pageloading",
+      "label": "PageLoading.tsx",
+      "_origin": "ast",
+      "community": 10,
+      "community_name": "AppShell.tsx",
+      "file_type": "code",
+      "norm_label": "pageloading.tsx",
+      "source_file": "src/components/common/PageLoading.tsx",
+      "source_location": "L1"
+    },
+    {
       "id": "src_components_layout_appshell",
       "label": "AppShell.tsx",
       "_origin": "ast",
@@ -12475,28 +12486,6 @@
       "norm_label": "localmodebanner.tsx",
       "source_file": "src/components/layout/LocalModeBanner.tsx",
       "source_location": "L1"
-    },
-    {
-      "id": "src_services_dashboard_problemcount",
-      "label": "problemCount.ts",
-      "_origin": "ast",
-      "community": 10,
-      "community_name": "AppShell.tsx",
-      "file_type": "code",
-      "norm_label": "problemcount.ts",
-      "source_file": "src/services/dashboard/problemCount.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_services_dashboard_problemcount_problems_event",
-      "label": "PROBLEMS_EVENT",
-      "_origin": "ast",
-      "community": 10,
-      "community_name": "AppShell.tsx",
-      "file_type": "code",
-      "norm_label": "problems_event",
-      "source_file": "src/services/dashboard/problemCount.ts",
-      "source_location": "L9"
     },
     {
       "id": "src_services_schedule_openschedule",
@@ -12663,7 +12652,7 @@
       "source_location": "L11"
     },
     {
-      "id": "claude_plugins_local_nsc_tools_scripts_firebase_mcp",
+      "id": "claude_scripts_firebase_mcp",
       "label": "firebase-mcp.sh",
       "_origin": "ast",
       "community": 103,
@@ -12674,11 +12663,11 @@
         "kind": "file"
       },
       "norm_label": "firebase-mcp.sh",
-      "source_file": ".claude/plugins-local/nsc-tools/scripts/firebase-mcp.sh",
+      "source_file": ".claude/scripts/firebase-mcp.sh",
       "source_location": "L1"
     },
     {
-      "id": "claude_plugins_local_nsc_tools_scripts_firebase_mcp_google_application_credentials",
+      "id": "claude_scripts_firebase_mcp_google_application_credentials",
       "label": "GOOGLE_APPLICATION_CREDENTIALS",
       "_origin": "ast",
       "community": 103,
@@ -12689,11 +12678,11 @@
         "kind": "code"
       },
       "norm_label": "google_application_credentials",
-      "source_file": ".claude/plugins-local/nsc-tools/scripts/firebase-mcp.sh",
+      "source_file": ".claude/scripts/firebase-mcp.sh",
       "source_location": "L30"
     },
     {
-      "id": "claude_plugins_local_nsc_tools_scripts_firebase_mcp_sh__entry",
+      "id": "claude_scripts_firebase_mcp_sh__entry",
       "label": "firebase-mcp.sh script",
       "_origin": "ast",
       "community": 103,
@@ -12704,7 +12693,7 @@
         "kind": "bash_entrypoint"
       },
       "norm_label": "firebase-mcp.sh script",
-      "source_file": ".claude/plugins-local/nsc-tools/scripts/firebase-mcp.sh",
+      "source_file": ".claude/scripts/firebase-mcp.sh",
       "source_location": "L1"
     },
     {
@@ -13135,6 +13124,28 @@
       "source_location": "L14"
     },
     {
+      "id": "server_routes_calendar",
+      "label": "calendar.ts",
+      "_origin": "ast",
+      "community": 12,
+      "community_name": "middleware/auth.ts",
+      "file_type": "code",
+      "norm_label": "calendar.ts",
+      "source_file": "server/routes/calendar.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "server_routes_calendar_calendarrouter",
+      "label": "calendarRouter",
+      "_origin": "ast",
+      "community": 12,
+      "community_name": "middleware/auth.ts",
+      "file_type": "code",
+      "norm_label": "calendarrouter",
+      "source_file": "server/routes/calendar.ts",
+      "source_location": "L17"
+    },
+    {
       "id": "server_routes_email",
       "label": "email.ts",
       "_origin": "ast",
@@ -13300,17 +13311,6 @@
       "source_location": "L1"
     },
     {
-      "id": "src_components_common_pageloading",
-      "label": "PageLoading.tsx",
-      "_origin": "ast",
-      "community": 14,
-      "community_name": "App.tsx",
-      "file_type": "code",
-      "norm_label": "pageloading.tsx",
-      "source_file": "src/components/common/PageLoading.tsx",
-      "source_location": "L1"
-    },
-    {
       "id": "src_components_views_acknowledgepage",
       "label": "AcknowledgePage.tsx",
       "_origin": "ast",
@@ -13345,28 +13345,6 @@
       "source_location": "L1"
     },
     {
-      "id": "src_services_auth_access",
-      "label": "access.ts",
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "DashboardView.tsx",
-      "file_type": "code",
-      "norm_label": "access.ts",
-      "source_file": "src/services/auth/access.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_services_auth_access_viewer_routes",
-      "label": "VIEWER_ROUTES",
-      "_origin": "ast",
-      "community": 16,
-      "community_name": "DashboardView.tsx",
-      "file_type": "code",
-      "norm_label": "viewer_routes",
-      "source_file": "src/services/auth/access.ts",
-      "source_location": "L23"
-    },
-    {
       "id": "src_services_dashboard_dashboardsummary",
       "label": "dashboardSummary.ts",
       "_origin": "ast",
@@ -13389,15 +13367,26 @@
       "source_location": "L13"
     },
     {
-      "id": "src_types_navigation",
-      "label": "navigation.ts",
+      "id": "src_services_dashboard_problemcount",
+      "label": "problemCount.ts",
       "_origin": "ast",
       "community": 16,
       "community_name": "DashboardView.tsx",
       "file_type": "code",
-      "norm_label": "navigation.ts",
-      "source_file": "src/types/navigation.ts",
+      "norm_label": "problemcount.ts",
+      "source_file": "src/services/dashboard/problemCount.ts",
       "source_location": "L1"
+    },
+    {
+      "id": "src_services_dashboard_problemcount_problems_event",
+      "label": "PROBLEMS_EVENT",
+      "_origin": "ast",
+      "community": 16,
+      "community_name": "DashboardView.tsx",
+      "file_type": "code",
+      "norm_label": "problems_event",
+      "source_file": "src/services/dashboard/problemCount.ts",
+      "source_location": "L9"
     },
     {
       "id": "src_services_export_analysisexportservice_analysis_format",
@@ -13795,6 +13784,17 @@
       "norm_label": "staffemailcache",
       "source_file": "server/services/auth/firebaseIdentityService.ts",
       "source_location": "L215"
+    },
+    {
+      "id": "server_services_firestore_firestorerest",
+      "label": "firestoreRest.ts",
+      "_origin": "ast",
+      "community": 18,
+      "community_name": "firebaseIdentityService.ts",
+      "file_type": "code",
+      "norm_label": "firestorerest.ts",
+      "source_file": "server/services/firestore/firestoreRest.ts",
+      "source_location": "L1"
     },
     {
       "id": "ref_jose",
@@ -17252,7 +17252,7 @@
       "node_kind": "heading",
       "norm_label": "17. known quirks and ideas for later",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L614"
+      "source_location": "L616"
     },
     {
       "id": "project_guide_1_features_at_a_glance",
@@ -19177,39 +19177,6 @@
       "source_location": "L11"
     },
     {
-      "id": "server_routes_calendar",
-      "label": "calendar.ts",
-      "_origin": "ast",
-      "community": 54,
-      "community_name": "icsExportService.ts",
-      "file_type": "code",
-      "norm_label": "calendar.ts",
-      "source_file": "server/routes/calendar.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "server_routes_calendar_calendarrouter",
-      "label": "calendarRouter",
-      "_origin": "ast",
-      "community": 54,
-      "community_name": "icsExportService.ts",
-      "file_type": "code",
-      "norm_label": "calendarrouter",
-      "source_file": "server/routes/calendar.ts",
-      "source_location": "L17"
-    },
-    {
-      "id": "server_services_firestore_firestorerest",
-      "label": "firestoreRest.ts",
-      "_origin": "ast",
-      "community": 54,
-      "community_name": "icsExportService.ts",
-      "file_type": "code",
-      "norm_label": "firestorerest.ts",
-      "source_file": "server/services/firestore/firestoreRest.ts",
-      "source_location": "L1"
-    },
-    {
       "id": "src_services_export_icsexportservice",
       "label": "icsExportService.ts",
       "_origin": "ast",
@@ -20682,7 +20649,7 @@
       "label": "Sidebar.tsx",
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "sidebar.tsx",
       "source_file": "src/components/layout/Sidebar.tsx",
@@ -20693,7 +20660,7 @@
       "label": "NAV_ITEMS",
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "nav_items",
       "source_file": "src/components/layout/Sidebar.tsx",
@@ -20704,7 +20671,7 @@
       "label": "ShortcutsModal.tsx",
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "shortcutsmodal.tsx",
       "source_file": "src/components/modals/ShortcutsModal.tsx",
@@ -20715,18 +20682,40 @@
       "label": "SHORTCUTS",
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "shortcuts",
       "source_file": "src/components/modals/ShortcutsModal.tsx",
       "source_location": "L26"
     },
     {
+      "id": "src_services_auth_access",
+      "label": "access.ts",
+      "_origin": "ast",
+      "community": 73,
+      "community_name": "navigation.ts",
+      "file_type": "code",
+      "norm_label": "access.ts",
+      "source_file": "src/services/auth/access.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_services_auth_access_viewer_routes",
+      "label": "VIEWER_ROUTES",
+      "_origin": "ast",
+      "community": 73,
+      "community_name": "navigation.ts",
+      "file_type": "code",
+      "norm_label": "viewer_routes",
+      "source_file": "src/services/auth/access.ts",
+      "source_location": "L23"
+    },
+    {
       "id": "src_services_i18n_index",
       "label": "i18n/index.ts",
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "i18n/index.ts",
       "source_file": "src/services/i18n/index.ts",
@@ -20737,7 +20726,7 @@
       "label": "DICTIONARY",
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "dictionary",
       "source_file": "src/services/i18n/index.ts",
@@ -20748,11 +20737,22 @@
       "label": "i18n",
       "_origin": "ast",
       "community": 73,
-      "community_name": "Sidebar.tsx",
+      "community_name": "navigation.ts",
       "file_type": "code",
       "norm_label": "i18n",
       "source_file": "src/services/i18n/index.ts",
       "source_location": "L140"
+    },
+    {
+      "id": "src_types_navigation",
+      "label": "navigation.ts",
+      "_origin": "ast",
+      "community": 73,
+      "community_name": "navigation.ts",
+      "file_type": "code",
+      "norm_label": "navigation.ts",
+      "source_file": "src/types/navigation.ts",
+      "source_location": "L1"
     },
     {
       "id": "tests_unit_rulechecker_test",
@@ -22785,7 +22785,7 @@
       "source_location": "L14"
     },
     {
-      "id": "claude_plugins_local_nsc_tools_mcp",
+      "id": "mcp",
       "label": ".mcp.json",
       "_origin": "ast",
       "community": 99,
@@ -22795,35 +22795,7 @@
         "mcp_kind": "mcp_config_file"
       },
       "norm_label": ".mcp.json",
-      "source_file": ".claude/plugins-local/nsc-tools/.mcp.json",
-      "source_location": "L1"
-    },
-    {
-      "id": "claude_plugins_local_nsc_tools_mcp_mcp_server_context7",
-      "label": "context7",
-      "_origin": "ast",
-      "community": 99,
-      "community_name": "context7",
-      "file_type": "code",
-      "metadata": {
-        "mcp_kind": "mcp_server"
-      },
-      "norm_label": "context7",
-      "source_file": ".claude/plugins-local/nsc-tools/.mcp.json",
-      "source_location": "L1"
-    },
-    {
-      "id": "claude_plugins_local_nsc_tools_mcp_mcp_server_firebase",
-      "label": "firebase",
-      "_origin": "ast",
-      "community": 99,
-      "community_name": "context7",
-      "file_type": "code",
-      "metadata": {
-        "mcp_kind": "mcp_server"
-      },
-      "norm_label": "firebase",
-      "source_file": ".claude/plugins-local/nsc-tools/.mcp.json",
+      "source_file": ".mcp.json",
       "source_location": "L1"
     },
     {
@@ -22837,7 +22809,7 @@
         "mcp_kind": "mcp_command"
       },
       "norm_label": "bash",
-      "source_file": ".claude/plugins-local/nsc-tools/.mcp.json",
+      "source_file": ".mcp.json",
       "source_location": "L1"
     },
     {
@@ -22851,7 +22823,35 @@
         "mcp_kind": "mcp_command"
       },
       "norm_label": "npx",
-      "source_file": ".claude/plugins-local/nsc-tools/.mcp.json",
+      "source_file": ".mcp.json",
+      "source_location": "L1"
+    },
+    {
+      "id": "mcp_mcp_server_context7",
+      "label": "context7",
+      "_origin": "ast",
+      "community": 99,
+      "community_name": "context7",
+      "file_type": "code",
+      "metadata": {
+        "mcp_kind": "mcp_server"
+      },
+      "norm_label": "context7",
+      "source_file": ".mcp.json",
+      "source_location": "L1"
+    },
+    {
+      "id": "mcp_mcp_server_firebase",
+      "label": "firebase",
+      "_origin": "ast",
+      "community": 99,
+      "community_name": "context7",
+      "file_type": "code",
+      "metadata": {
+        "mcp_kind": "mcp_server"
+      },
+      "norm_label": "firebase",
+      "source_file": ".mcp.json",
       "source_location": "L1"
     },
     {
@@ -22865,8 +22865,20 @@
         "mcp_kind": "mcp_package"
       },
       "norm_label": "@upstash/context7-mcp",
-      "source_file": ".claude/plugins-local/nsc-tools/.mcp.json",
+      "source_file": ".mcp.json",
       "source_location": "L1"
+    },
+    {
+      "id": "ref_playwright",
+      "label": "ref_playwright",
+      "_origin": "semantic",
+      "community": 104,
+      "community_name": "example.cjs",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_playwright",
+      "source_file": "",
+      "type": "external"
     },
     {
       "id": "ref_crypto",
@@ -22905,6 +22917,18 @@
       "type": "external"
     },
     {
+      "id": "ref_node_crypto",
+      "label": "ref_node_crypto",
+      "_origin": "semantic",
+      "community": 47,
+      "community_name": "published-rules.mjs",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_node_crypto",
+      "source_file": "",
+      "type": "external"
+    },
+    {
       "id": "ref_node_fs",
       "label": "ref_node_fs",
       "_origin": "semantic",
@@ -22925,6 +22949,18 @@
       "external": true,
       "file_type": "concept",
       "norm_label": "ref_node_net",
+      "source_file": "",
+      "type": "external"
+    },
+    {
+      "id": "ref_node_os",
+      "label": "ref_node_os",
+      "_origin": "semantic",
+      "community": 47,
+      "community_name": "published-rules.mjs",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_node_os",
       "source_file": "",
       "type": "external"
     },
@@ -23049,41 +23085,9 @@
       "type": "external"
     },
     {
-      "id": "ref_playwright",
-      "label": "ref_playwright",
-      "community": 104,
-      "community_name": "example.cjs",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_playwright",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "ref_node_crypto",
-      "label": "ref_node_crypto",
-      "community": 47,
-      "community_name": "published-rules.mjs",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_node_crypto",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "ref_node_os",
-      "label": "ref_node_os",
-      "community": 47,
-      "community_name": "published-rules.mjs",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_node_os",
-      "source_file": "",
-      "type": "external"
-    },
-    {
       "id": "claude_skills_browser_check_harness_preview",
       "label": "claude_skills_browser_check_harness_preview",
+      "_origin": "semantic",
       "community": 92,
       "community_name": "harness/main.tsx",
       "external": true,
@@ -23095,6 +23099,7 @@
     {
       "id": "ref_src_components_common_dialogs",
       "label": "ref_src_components_common_dialogs",
+      "_origin": "semantic",
       "community": 92,
       "community_name": "harness/main.tsx",
       "external": true,
@@ -23106,6 +23111,7 @@
     {
       "id": "ref_src_components_views_availabilityview",
       "label": "ref_src_components_views_availabilityview",
+      "_origin": "semantic",
       "community": 92,
       "community_name": "harness/main.tsx",
       "external": true,
@@ -23117,6 +23123,7 @@
     {
       "id": "ref_src_components_views_dashboardview",
       "label": "ref_src_components_views_dashboardview",
+      "_origin": "semantic",
       "community": 92,
       "community_name": "harness/main.tsx",
       "external": true,
@@ -23128,6 +23135,7 @@
     {
       "id": "ref_src_components_views_doctorsview",
       "label": "ref_src_components_views_doctorsview",
+      "_origin": "semantic",
       "community": 92,
       "community_name": "harness/main.tsx",
       "external": true,
@@ -23139,6 +23147,7 @@
     {
       "id": "ref_src_components_views_historyview",
       "label": "ref_src_components_views_historyview",
+      "_origin": "semantic",
       "community": 92,
       "community_name": "harness/main.tsx",
       "external": true,
@@ -23150,6 +23159,7 @@
     {
       "id": "ref_src_components_views_nursesview",
       "label": "ref_src_components_views_nursesview",
+      "_origin": "semantic",
       "community": 92,
       "community_name": "harness/main.tsx",
       "external": true,
@@ -23161,6 +23171,7 @@
     {
       "id": "ref_src_components_views_reportsview",
       "label": "ref_src_components_views_reportsview",
+      "_origin": "semantic",
       "community": 92,
       "community_name": "harness/main.tsx",
       "external": true,
@@ -23172,6 +23183,7 @@
     {
       "id": "ref_src_components_views_schedulesview",
       "label": "ref_src_components_views_schedulesview",
+      "_origin": "semantic",
       "community": 92,
       "community_name": "harness/main.tsx",
       "external": true,
@@ -37847,26 +37859,26 @@
       "weight": 1.0
     },
     {
-      "source": "claude_plugins_local_nsc_tools_mcp_mcp_server_context7",
+      "source": "mcp_mcp_server_context7",
       "target": "mcp_command_npx",
       "relation": "references",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "context": "command",
-      "source_file": ".claude/plugins-local/nsc-tools/.mcp.json",
+      "source_file": ".mcp.json",
       "source_location": "L1",
       "weight": 1.0
     },
     {
-      "source": "claude_plugins_local_nsc_tools_mcp_mcp_server_firebase",
+      "source": "mcp_mcp_server_firebase",
       "target": "mcp_command_bash",
       "relation": "references",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "context": "command",
-      "source_file": ".claude/plugins-local/nsc-tools/.mcp.json",
+      "source_file": ".mcp.json",
       "source_location": "L1",
       "weight": 1.0
     },
@@ -79801,14 +79813,14 @@
       "weight": 1.0
     },
     {
-      "source": "claude_plugins_local_nsc_tools_mcp_mcp_server_context7",
+      "source": "mcp_mcp_server_context7",
       "target": "mcp_package_upstash_context7_mcp",
       "relation": "references",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "context": "package",
-      "source_file": ".claude/plugins-local/nsc-tools/.mcp.json",
+      "source_file": ".mcp.json",
       "source_location": "L1",
       "weight": 1.0
     },
@@ -80945,35 +80957,13 @@
       "weight": 1.0
     },
     {
-      "source": "claude_plugins_local_nsc_tools_mcp",
-      "target": "claude_plugins_local_nsc_tools_mcp_mcp_server_context7",
+      "source": "claude_scripts_firebase_mcp",
+      "target": "claude_scripts_firebase_mcp_sh__entry",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "source_file": ".claude/plugins-local/nsc-tools/.mcp.json",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "claude_plugins_local_nsc_tools_mcp",
-      "target": "claude_plugins_local_nsc_tools_mcp_mcp_server_firebase",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".claude/plugins-local/nsc-tools/.mcp.json",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "claude_plugins_local_nsc_tools_scripts_firebase_mcp",
-      "target": "claude_plugins_local_nsc_tools_scripts_firebase_mcp_sh__entry",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": ".claude/plugins-local/nsc-tools/scripts/firebase-mcp.sh",
+      "source_file": ".claude/scripts/firebase-mcp.sh",
       "source_location": "L1",
       "weight": 1.0
     },
@@ -83849,6 +83839,28 @@
       "weight": 1.0
     },
     {
+      "source": "mcp",
+      "target": "mcp_mcp_server_context7",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".mcp.json",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "mcp",
+      "target": "mcp_mcp_server_firebase",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": ".mcp.json",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
       "source": "package",
       "target": "package_dependencies",
       "relation": "contains",
@@ -84571,7 +84583,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L614",
+      "source_location": "L616",
       "weight": 1.0
     },
     {
@@ -96312,13 +96324,13 @@
       "weight": 1.0
     },
     {
-      "source": "claude_plugins_local_nsc_tools_scripts_firebase_mcp",
-      "target": "claude_plugins_local_nsc_tools_scripts_firebase_mcp_google_application_credentials",
+      "source": "claude_scripts_firebase_mcp",
+      "target": "claude_scripts_firebase_mcp_google_application_credentials",
       "relation": "defines",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
-      "source_file": ".claude/plugins-local/nsc-tools/scripts/firebase-mcp.sh",
+      "source_file": ".claude/scripts/firebase-mcp.sh",
       "source_location": "L30",
       "weight": 1.0
     },
@@ -99411,7 +99423,7 @@
       "confidence_score": 0.95,
       "context": "WalkthroughModal",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L626",
+      "source_location": "L628",
       "weight": 1.0
     },
     {
@@ -99723,7 +99735,7 @@
       "confidence_score": 0.95,
       "context": "doctorSessionsOn",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L623",
+      "source_location": "L625",
       "weight": 1.0
     },
     {
@@ -100352,5 +100364,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "f37817f83147b0c4ac33ca0adb4253dc269ce70c"
+  "built_at_commit": "56ebcf694e23d1c8fc256925585e6ec28704b1cc"
 }
