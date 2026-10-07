@@ -1,0 +1,93 @@
+/* Test page only: the proposed look for the UI overhaul (Phase 2), shown by ?view=sample
+   and ?view=sample-nurse for the owner to approve. The app does not use it yet.
+   Only the colours below exist here (Tailwind's own palette is switched off), which proves
+   these roles are enough for the screens. Contrast is on white unless noted. */
+@import "tailwindcss";
+@source "./";
+
+@theme {
+  --color-*: initial;
+  --color-white: #ffffff;
+
+  /* Brand: a calm teal blue */
+  --color-brand: #0e7490; /* main buttons, links, the open menu item: white text 5.4:1 */
+  --color-brand-strong: #155e75; /* hover and pressed; text on brand-soft 7.0:1 */
+  --color-brand-soft: #ecfeff; /* selected rows and the open menu item */
+
+  /* Surfaces and lines */
+  --color-canvas: #f8fafc; /* page background */
+  --color-surface: #ffffff; /* cards, tables, dialogs */
+  --color-sunken: #f1f5f9; /* table headers, weekends, hover */
+  --color-line: #e2e8f0; /* card borders and dividers */
+  --color-line-strong: #cbd5e1; /* roster grid lines */
+  --color-control: #64748b; /* form field borders, 4.8:1 */
+
+  /* Text: two levels only, so no grey text is too faint */
+  --color-ink: #0f172a; /* 17.9:1 */
+  --color-ink-muted: #475569; /* 7.6:1, and 6.9:1 on sunken */
+
+  /* Meaning, always with an icon or a word as well */
+  --color-danger: #b91c1c; /* Must fix, Declined, errors: 6.5:1, 5.9:1 on danger-soft */
+  --color-danger-soft: #fef2f2;
+  --color-danger-line: #dc2626;
+  --color-warning: #92400e; /* Check, Waiting: 7.1:1, 6.8:1 on warning-soft */
+  --color-warning-soft: #fffbeb;
+  --color-warning-line: #d97706;
+  --color-success: #047857; /* Approved, saved: 5.5:1, 5.2:1 on success-soft */
+  --color-success-soft: #ecfdf5;
+  --color-info: #1d4ed8; /* Note: 6.7:1, 6.2:1 on info-soft */
+  --color-info-soft: #eff6ff;
+  --color-focus: #0891b2; /* keyboard focus ring, 3.7:1 */
+
+  /* One font, with digits of equal width where numbers sit in columns (tabular-nums) */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.06);
+  --shadow-pop: 0 8px 24px -4px rgb(15 23 42 / 0.18);
+  --shadow-dialog: 0 24px 48px -12px rgb(15 23 42 / 0.35);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+  }
+  body {
+    background: var(--color-canvas);
+    color: var(--color-ink);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+  ::placeholder {
+    color: var(--color-ink-muted);
+    opacity: 1;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  select,
+  summary {
+    cursor: pointer;
+  }
+}
+
+@keyframes sample-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+@utility enter {
+  animation: sample-enter 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

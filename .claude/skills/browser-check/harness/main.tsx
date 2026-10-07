@@ -6,9 +6,10 @@
 //        (for example ?view=app&as=nurse#availability).
 //   me, published, ack: the nurse's private page, the shared roster page and the receipt
 //        page, made from the November roster published on the spot.
+//   sample, sample-nurse: the proposed new look (Phase 2) with made up data, its own styles
+//        and font; &open=publish opens its publish dialog (see sample/index.tsx).
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import './preview.css';
 import App from '../src/App';
 import { SchedulesView } from '../src/components/views/SchedulesView';
 import { DoctorsView } from '../src/components/views/DoctorsView';
@@ -74,6 +75,13 @@ function Single({ view }: { view: string }) {
 async function start() {
   const view = new URLSearchParams(location.search).get('view') || 'schedules';
   const root = createRoot(document.getElementById('root')!);
+  if (view === 'sample' || view === 'sample-nurse') {
+    const { renderSample } = await import('./sample');
+    renderSample(root, view);
+    return;
+  }
+  // The app's styles, loaded here so the sample pages above do not get them.
+  await import('./preview.css');
   if (view === 'me' || view === 'published' || view === 'ack') {
     const { meToken, shareToken } = await publishNovember();
     const hash = { me: `#me?t=${meToken}`, published: `#published?token=${shareToken}`, ack: '#ack?token=ack-test' }[view];

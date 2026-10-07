@@ -24,6 +24,9 @@ in `/opt/pw-browsers`; never run `playwright install`.
      where the part after `#` picks the screen (`?view=app&as=nurse#availability`); or the
      pages nurses open from links: `me` (their private page), `published` (a shared roster)
      and `ack` (the read receipt page). These three publish the November roster on the spot.
+     `sample` and `sample-nurse` show the proposed new look of the UI overhaul (`harness/sample/`)
+     with made up data and none of the app's styles; `&open=publish` opens its publish dialog and
+     `&font=atkinson` shows the other font.
    - `?as=` who is signed in: `owner` (the default), `planner`, `manager`, `nurse` (Mary,
      a viewer linked to her nurse profile) or `none` (signed out, for the sign in page).
    - `?seed=` other data: `fair` (Amy well over her goal), `big` (a full size clinic:
@@ -73,6 +76,11 @@ in `/opt/pw-browsers`; never run `playwright install`.
   `page.evaluate(() => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; })`.
 - A nurse's private page needs a private link before its page is written: `main.tsx` calls
   `ensureNurseLink` and then `syncNurseRosters`, as publishing does.
+- The browser's own date fields follow the computer's language, not the page: headless Chromium
+  shows 12/21/2026 even with a British locale or `--lang=en-GB`. The sample's `DateInput`
+  shows DD-MM-YYYY itself.
+- Since 07-10-2026 `ui-audit.cjs` leaves out text kept for screen readers only (1 px boxes, such
+  as skip links) when it counts small targets and cut off boxes; earlier numbers counted them.
 - The page rarely scrolls sideways even when a phone layout is broken, because the app
   scrolls inside boxes: read the audit's "main width" (on 07-10-2026 the app left 166 px
   of a 390 px phone for its content, beside the sidebar) and "cut off boxes" instead.

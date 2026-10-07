@@ -65,7 +65,9 @@ const isRoster = (page) => /view=schedules|#schedules/.test(page);
 
       const structure = await page.evaluate(() => {
         const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
-        const controls = [...document.querySelectorAll('button, a[href], input, select, textarea, [role=button], [role=tab]')].filter(visible);
+        // Text kept for screen readers only (the sr-only 1 px box) is neither a target nor cut off.
+        const shown = (el) => { const r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1; };
+        const controls = [...document.querySelectorAll('button, a[href], input, select, textarea, [role=button], [role=tab]')].filter(shown);
         const small = controls.filter((el) => { const r = el.getBoundingClientRect(); return r.width < 24 || r.height < 24; });
         const tinyText = new Set();
         for (const el of document.querySelectorAll('body *')) {
@@ -87,7 +89,7 @@ const isRoster = (page) => /view=schedules|#schedules/.test(page);
           mainWidth: Math.round((document.querySelector('main') || document.getElementById('root')).getBoundingClientRect().width),
           // Boxes that cut their content off without letting it scroll.
           clippedBoxes: [...document.querySelectorAll('body *')].filter((el) => {
-            if (!visible(el)) return false;
+            if (!shown(el)) return false;
             const cs = getComputedStyle(el);
             return cs.overflowX === 'hidden' && el.scrollWidth > el.clientWidth + 2 && el.clientWidth > 0 && cs.textOverflow !== 'ellipsis';
           }).length,

@@ -23,7 +23,8 @@ Main moves only when the owner says "push to main".
 - [x] Checkpoint 1: screenshots and numbers to the owner; pushed to main on 07-10-2026
 
 ## Phase 2: design system and app shell
-- [ ] Sample page from the `ui-ux-pro-max` design system, approved by the owner
+- [x] Sample page from the `ui-ux-pro-max` design system (`?view=sample`, `?view=sample-nurse`), checked, and `design-system/nsc-clinic-roster/MASTER.md`
+- [ ] The owner approves the sample (or asks for changes)
 - [ ] Tokens in `src/index.css`
 - [ ] Shared components in `src/components/ui/` and a gallery view
 - [ ] One date module
