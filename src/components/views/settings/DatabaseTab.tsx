@@ -17,6 +17,7 @@ import {
   DatabaseStats,
 } from '../../../services/seed/seedRunner';
 import { notify } from '../../common/dialogs';
+import { useAppContext } from '../../common/AppContext';
 import { defaultFirebaseConfig } from '../../../services/firebase/firebaseConfig';
 import { SaveNotifier, SettingsDialog } from './shared';
 
@@ -26,6 +27,8 @@ interface DatabaseTabProps {
 }
 
 export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveNotification }) => {
+  // Tells the app all data was deleted: the top bar forgets the roster and screens load again.
+  const clinicDataCleared = useAppContext()?.clinicDataCleared;
   const repo = getRepository();
   const clearModalTitleId = useId();
   const importModalTitleId = useId();
@@ -77,7 +80,7 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
       await loadStats();
       setIsClearConfirmOpen(false);
       setClearConfirmInput('');
-      window.dispatchEvent(new CustomEvent('clinic-roster-cleared'));
+      clinicDataCleared?.();
       if (failed.length > 0) {
         notify(`Some data could not be deleted: ${failed.join(', ')}. A backup was downloaded before the wipe.`, 'error');
       } else {

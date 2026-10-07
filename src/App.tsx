@@ -23,6 +23,15 @@ const PublishedRosterView = lazy(() =>
 );
 const MyRosterView = lazy(() => import('./components/views/MyRosterView').then((m) => ({ default: m.MyRosterView })));
 
+/** The clinic's name kept in this browser by the signed in app, for the pages shown before sign in. */
+function cachedClinicName(): string {
+  if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('clinic_roster_clinic_name');
+    if (stored && stored !== 'Hope Valley Polyclinic' && stored !== 'Outpatient Clinic') return stored;
+  }
+  return 'American Hospital Nad Al Sheba OutPatient clinic';
+}
+
 function parsePublicLink(): { kind: 'published' | 'ack' | 'me'; token: string; nurse?: string } | null {
   if (typeof window === 'undefined') return null;
   const hash = window.location.hash.replace(/^#/, '');
@@ -40,15 +49,7 @@ function parsePublicLink(): { kind: 'published' | 'ack' | 'me'; token: string; n
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(!authService.isInitialized());
-  const [clinicName, setClinicName] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('clinic_roster_clinic_name');
-      if (stored && stored !== 'Hope Valley Polyclinic' && stored !== 'Outpatient Clinic') {
-        return stored;
-      }
-    }
-    return 'American Hospital Nad Al Sheba OutPatient clinic';
-  });
+  const [clinicName, setClinicName] = useState<string>(cachedClinicName);
 
   useEffect(() => {
     // 1. Await the initial Firebase Auth session check
@@ -60,22 +61,12 @@ export default function App() {
     // 2. Subscribe to reactive auth updates (e.g. login, logout, token refresh)
     const unsub = authService.subscribe((user) => {
       setCurrentUser(user);
+      // The clinic name shown before sign in comes from the browser cache, which the signed in
+      // app keeps up to date (a name saved in Settings shows after signing out).
+      if (!user) setClinicName(cachedClinicName());
     });
 
-    // The clinic name shown before sign in comes from the browser cache; it is
-    // refreshed from Firestore once a user signs in.
-
-    const handleClinicNameUpdated = (e: any) => {
-      if (e.detail) {
-        setClinicName(e.detail);
-      }
-    };
-    window.addEventListener('clinic-name-updated', handleClinicNameUpdated);
-
-    return () => {
-      window.removeEventListener('clinic-name-updated', handleClinicNameUpdated);
-      unsub();
-    };
+    return unsub;
   }, []);
 
   // 1. Splash Screen while checking initial credentials

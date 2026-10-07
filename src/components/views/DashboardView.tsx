@@ -52,7 +52,8 @@ import {
   todayAtClinic,
   TodayAtClinic,
 } from '../../services/dashboard/dashboardSummary';
-import { announceProblems, ProblemCount } from '../../services/dashboard/problemCount';
+import type { ProblemCount } from '../../services/dashboard/problemCount';
+import { useAppContext } from '../common/AppContext';
 import { formatDate, formatDateRange } from '../../utils/dateUtils';
 import { PageLoading } from '../common/PageLoading';
 import { Assignment, NurseRosterShift, Schedule } from '../../types';
@@ -342,6 +343,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
   const [viewer, setViewer] = useState<ViewerData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // The app context: the top bar's problem count, and a new data version after all data was deleted.
+  const app = useAppContext();
+  const reportProblems = app?.reportProblems;
+  const dataVersion = app?.dataVersion ?? 0;
 
   // The time zone is read when loading, not a reason to load again (it arrives
   // from the clinic profile a moment after the page opens).
@@ -356,22 +361,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
           if (cancelled) return;
           setPlanner(d);
           // Only a load still on screen may update the top bar's count.
-          if (d.announce) announceProblems(d.announce);
+          if (d.announce) reportProblems?.(d.announce);
         })
       : loadViewerData(timezoneRef.current, user?.linkedNurseId, canApprove).then((d) => !cancelled && setViewer(d));
     load.catch((err) => {
       console.error('Dashboard could not load:', err);
       if (!cancelled) setError('Check your connection and try again.');
     });
-    const reload = () => setAttempt((n) => n + 1);
-    window.addEventListener('clinic-roster-cleared', reload);
-    window.addEventListener('clinic-roster-reseeded', reload);
     return () => {
       cancelled = true;
-      window.removeEventListener('clinic-roster-cleared', reload);
-      window.removeEventListener('clinic-roster-reseeded', reload);
     };
-  }, [isPlanner, canApprove, user?.linkedNurseId, attempt]);
+    // dataVersion: all clinic data was deleted, so the dashboard loads again.
+  }, [isPlanner, canApprove, user?.linkedNurseId, attempt, dataVersion]);
 
   const openCreate = onOpenCreateSchedule || (() => onNavigate('schedules'));
   const today = planner?.today || viewer?.today || todayIso(context.timezone);

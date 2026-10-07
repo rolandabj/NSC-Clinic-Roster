@@ -31,7 +31,7 @@ Main moves only when the owner says "push to main".
 - [x] One date module (`dateUtils.ts`: day with weekday, typed dates; `dateFormatter.ts` deleted)
 - [x] App shell look: sidebar and top bar, skip link, a title for each screen, one app name
 - [x] Links to a roster, nurse, date or settings tab, and Back between tabs
-- [ ] App context in place of the window events
+- [x] App context in place of the window events
 - [ ] Checkpoint 2
 
 ## Phase 3: roster grid speed and structure

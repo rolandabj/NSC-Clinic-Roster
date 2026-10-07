@@ -38,7 +38,7 @@ import { ProblemsPanel } from '../workbook/ProblemsPanel';
 import { withoutBackups } from '../../services/history/versionList';
 import { usePresence } from '../../services/presence/usePresence';
 import { countChangedCells } from '../../services/dashboard/dashboardSummary';
-import { announceProblems } from '../../services/dashboard/problemCount';
+import { useAppContext } from '../common/AppContext';
 import { WhoCanCover } from '../workbook/WhoCanCover';
 import { HolidayDayOffPicker } from '../workbook/HolidayDayOffPicker';
 import { nurseClinicRoleOf, canBeFreeNurse } from '../../services/engine/clinicModel';
@@ -273,11 +273,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [redoStack, setRedoStack] = useState<RosterSnapshot[]>([]);
 
 
-  // The top bar shows this roster's problem count.
+  // The top bar shows this roster's problem count (through the app context).
+  const reportProblems = useAppContext()?.reportProblems;
   useEffect(() => {
     const sched = activeScheduleRef.current;
     if (!sched || validationReport.scheduleId !== sched.id) return;
-    announceProblems({
+    reportProblems?.({
       scheduleId: sched.id,
       name: sched.name,
       startDate: sched.startDate,
@@ -295,7 +296,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // No roster open (e.g. the last one was deleted): the top bar shows none.
   useEffect(() => {
     if (!activeSchedule && !isFirstLoad) {
-      announceProblems({ scheduleId: '', name: '', startDate: '', endDate: '', mustFix: 0, toCheck: 0 });
+      reportProblems?.({ scheduleId: '', name: '', startDate: '', endDate: '', mustFix: 0, toCheck: 0 });
     }
   }, [activeSchedule, isFirstLoad]);
 

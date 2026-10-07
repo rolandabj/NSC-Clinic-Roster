@@ -23,6 +23,7 @@ import {
   CalendarRange,
 } from 'lucide-react';
 import { AddressChange, ClinicContextState } from '../../types/navigation';
+import { useAppContext } from '../common/AppContext';
 import { getRepository } from '../../services/repository';
 import { authService } from '../../services/auth/authService';
 import { getWeekendDays, setClinicWeekendDays } from '../../utils/weekend';
@@ -59,8 +60,6 @@ import { cachedEmailSettings, loadEmailSettings, saveEmailSettings } from '../..
 
 interface SettingsViewProps {
   context: ClinicContextState;
-  onUpdateClinicProfile?: (profile: ClinicProfile) => void;
-  onUpdateClinicName?: (name: string) => void;
   onOpenAcceptance?: () => void;
   /** The tab the address names (#settings?tab=email). */
   tab?: string;
@@ -69,8 +68,6 @@ interface SettingsViewProps {
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   context,
-  onUpdateClinicProfile,
-  onUpdateClinicName,
   onOpenAcceptance,
   tab,
   onAddressChange,
@@ -154,10 +151,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const triggerSaveNotification = (msg: string) => notify(msg, 'success');
 
   // --- 1. Clinic Profile Auto-Save & Persistence ---
-  const onUpdateClinicProfileRef = useRef(onUpdateClinicProfile);
-  onUpdateClinicProfileRef.current = onUpdateClinicProfile;
-  const onUpdateClinicNameRef = useRef(onUpdateClinicName);
-  onUpdateClinicNameRef.current = onUpdateClinicName;
+  // The app context shows the clinic's new name and time zone in the menu and the top bar.
+  const updateClinic = useAppContext()?.updateClinic;
+  const updateClinicRef = useRef(updateClinic);
+  updateClinicRef.current = updateClinic;
 
   const [clinicSaveStatus, setClinicSaveStatus] = useState<SaveStatus>('saved');
   const clinicDebounceTimerRef = useRef<any>(null);
@@ -189,12 +186,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         localStorage.setItem('clinic_roster_clinic_name', clinicToSave.name);
         localStorage.setItem('clinic_roster_clinic_timezone', clinicToSave.timezone);
 
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('clinic-name-updated', { detail: clinicToSave.name }));
-        }
-
-        onUpdateClinicProfileRef.current?.(clinicToSave);
-        onUpdateClinicNameRef.current?.(clinicToSave.name);
+        updateClinicRef.current?.({ name: clinicToSave.name, timezone: clinicToSave.timezone });
 
         setClinicSaveStatus('saved');
         if (showNotification) {

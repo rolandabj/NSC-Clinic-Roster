@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, Suspense, lazy } from 'react';
 import { AddressChange, AppRoute, ClinicContextState } from '../../types/navigation';
 import { LocalModeBanner } from './LocalModeBanner';
 import { Sidebar } from './Sidebar';
@@ -16,7 +16,7 @@ import {
   ensureWorkingHoursPeriodsDefaults,
 } from '../../services/seed/seedRunner';
 import { testFirestoreConnection } from '../../services/firebase/firebaseConfig';
-import { canAccessRoute } from '../../services/auth/access';
+import { canAccessRoute, permissionsFor } from '../../services/auth/access';
 import { setClinicWeekendDays } from '../../utils/weekend';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
@@ -29,7 +29,8 @@ import { LoadErrorBoundary } from '../common/LoadErrorBoundary';
 import { chooseScheduleToOpen } from '../../services/schedule/openSchedule';
 import { todayIso } from '../../services/publish/nurseRosterService';
 import { formatDateRange } from '../../utils/dateUtils';
-import { PROBLEMS_EVENT, ProblemCount } from '../../services/dashboard/problemCount';
+import type { ProblemCount } from '../../services/dashboard/problemCount';
+import { AppContext, AppContextValue } from '../common/AppContext';
 
 // Screens load on demand, so the first page does not download the whole app.
 const SchedulesView = lazy(() => import('../views/SchedulesView').then((m) => ({ default: m.SchedulesView })));
@@ -117,7 +118,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   const [clinicContext, setClinicContext] = useState<ClinicContextState>({
     clinicName: initialClinicName,
     timezone: initialClinicTimezone,
-    activeScheduleName: 'No Active Schedule',
+    activeScheduleName: '',
     activeSchedulePeriod: '',
     activeScheduleId: '',
     warningCount: 0,
@@ -167,7 +168,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     return () => wide.removeEventListener('change', onChange);
   }, []);
 
-  const handleUpdateClinicProfile = useCallback((profile: any) => {
+  // What screens tell the app (shared through AppContext, in place of window events).
+  const updateClinic = useCallback((profile: { name: string; timezone?: string }) => {
     setClinicContext((prev) => {
       if (prev.clinicName === profile.name && prev.timezone === (profile.timezone || prev.timezone)) {
         return prev;
@@ -180,11 +182,30 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     });
   }, []);
 
-  const handleUpdateClinicName = useCallback((name: string) => {
-    setClinicContext((prev) => {
-      if (prev.clinicName === name) return prev;
-      return { ...prev, clinicName: name };
-    });
+  // The open roster's problem count, for the top bar and the dashboard. The roster's name,
+  // dates and count always change together.
+  const reportProblems = useCallback((detail: ProblemCount) => {
+    setClinicContext((prev) => ({
+      ...prev,
+      warningCount: detail.mustFix + detail.toCheck,
+      activeScheduleId: detail.scheduleId || null,
+      activeScheduleName: detail.scheduleId ? detail.name : '',
+      activeSchedulePeriod: detail.scheduleId ? formatDateRange(detail.startDate, detail.endDate) : '',
+    }));
+  }, []);
+
+  // All clinic data was deleted: no roster is open, and screens load their data again.
+  const [dataVersion, setDataVersion] = useState(0);
+  const clinicDataCleared = useCallback(() => {
+    setClinicContext((prev) => ({
+      ...prev,
+      clinicName: 'Outpatient Clinic',
+      activeScheduleName: '',
+      activeSchedulePeriod: '',
+      activeScheduleId: '',
+      warningCount: 0,
+    }));
+    setDataVersion((v) => v + 1);
   }, []);
 
   useEffect(() => {
@@ -295,7 +316,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
         } else {
           setClinicContext((prev) => ({
             ...prev,
-            activeScheduleName: 'No Active Schedule',
+            activeScheduleName: '',
             activeSchedulePeriod: '',
             activeScheduleId: '',
           }));
@@ -307,49 +328,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       }
     }
     bootstrap();
-
-    // The open roster's problem count, for the top bar and the dashboard.
-    const handleProblems = (e: Event) => {
-      const detail = (e as CustomEvent<ProblemCount>).detail;
-      if (!detail) return;
-      // The roster's name, dates and count always change together.
-      setClinicContext((prev) => ({
-        ...prev,
-        warningCount: detail.mustFix + detail.toCheck,
-        activeScheduleId: detail.scheduleId || null,
-        activeScheduleName: detail.scheduleId ? detail.name : 'No Active Schedule',
-        activeSchedulePeriod: detail.scheduleId ? formatDateRange(detail.startDate, detail.endDate) : '',
-      }));
-    };
-    window.addEventListener(PROBLEMS_EVENT, handleProblems);
-
-    const handleClinicCleared = () => {
-      setClinicContext((prev) => ({
-        ...prev,
-        clinicName: 'Outpatient Clinic',
-        activeScheduleName: 'No Active Schedule',
-        activeSchedulePeriod: '',
-        activeScheduleId: '',
-        warningCount: 0,
-      }));
-    };
-
-    const handleClinicNameUpdated = (e: any) => {
-      if (e.detail) {
-        setClinicContext((prev) => ({
-          ...prev,
-          clinicName: e.detail,
-        }));
-      }
-    };
-
-    window.addEventListener('clinic-roster-cleared', handleClinicCleared);
-    window.addEventListener('clinic-name-updated', handleClinicNameUpdated);
-    return () => {
-      window.removeEventListener(PROBLEMS_EVENT, handleProblems);
-      window.removeEventListener('clinic-roster-cleared', handleClinicCleared);
-      window.removeEventListener('clinic-name-updated', handleClinicNameUpdated);
-    };
   }, []);
 
   useEffect(() => {
@@ -418,6 +396,18 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     window.location.hash = `published?token=${token}`;
   };
 
+  const appContext = useMemo<AppContextValue>(
+    () => ({
+      clinic: clinicContext,
+      permissions: permissionsFor(authService.getCurrentUser()),
+      reportProblems,
+      updateClinic,
+      clinicDataCleared,
+      dataVersion,
+    }),
+    [clinicContext, dataVersion, reportProblems, updateClinic, clinicDataCleared]
+  );
+
   // A nurse's private page, opened inside the app (the same page as without signing in).
   if (currentRoute === 'me') {
     return (
@@ -480,15 +470,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       case 'audit':
         return <AuditTrailView context={clinicContext} />;
       case 'settings':
-        return (
-          <SettingsView
-            context={clinicContext}
-            onUpdateClinicProfile={handleUpdateClinicProfile}
-            onUpdateClinicName={handleUpdateClinicName}
-            tab={routeParams.tab}
-            onAddressChange={updateAddress}
-          />
-        );
+        return <SettingsView context={clinicContext} tab={routeParams.tab} onAddressChange={updateAddress} />;
       default:
         return (
           <DashboardView
@@ -504,6 +486,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   };
 
   return (
+    <AppContext.Provider value={appContext}>
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-canvas text-ink">
       <button
         type="button"
@@ -598,5 +581,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       />
 
     </div>
+    </AppContext.Provider>
   );
 };
