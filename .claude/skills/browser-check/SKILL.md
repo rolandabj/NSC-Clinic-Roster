@@ -80,6 +80,8 @@ in `/opt/pw-browsers`; never run `playwright install`.
 - The browser's own date fields follow the computer's language, not the page: headless Chromium
   shows 12/21/2026 even with a British locale or `--lang=en-GB`. The sample's `DateInput`
   shows DD-MM-YYYY itself.
+- After code gains new imports while the test page runs, the development server can answer
+  "504 (Outdated Optimize Dep)" and a screen fails to load: run `stop.sh`, then `start.sh`.
 - Since 07-10-2026 `ui-audit.cjs` leaves out text kept for screen readers only (1 px boxes, such
   as skip links) when it counts small targets and cut off boxes; earlier numbers counted them.
 - The page rarely scrolls sideways even when a phone layout is broken, because the app

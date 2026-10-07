@@ -81,6 +81,9 @@
 @utility slide-in-from-right {
   --app-enter-x: 100%;
 }
+@utility slide-in-from-bottom-2 {
+  --app-enter-y: 0.5rem;
+}
 @media (prefers-reduced-motion: reduce) {
   .animate-in {
     animation: none;

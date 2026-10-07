@@ -28,7 +28,7 @@ import { UserProfile } from '../../services/auth/authService';
 import { listPendingApprovals, decideRequest } from '../../services/requests/staffRequestService';
 import { LeaveEntry, AvailabilityRequest, Nurse, LeaveType } from '../../types';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { notify } from '../common/dialogs';
+import { notify, type NoticeTone } from '../common/dialogs';
 
 interface ApprovalsQueuePanelProps {
   currentUser?: UserProfile;
@@ -43,7 +43,6 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
   const [availability, setAvailability] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Decision Modal
@@ -57,10 +56,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
   const decisionTitleId = useId();
   const decisionDialogRef = useDialogA11y<HTMLDivElement>(!!activeDecision, () => setActiveDecision(null));
 
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   const fetchPendingApprovals = async () => {
     setIsLoading(true);
@@ -111,14 +107,6 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({
 
   return (
     <div className="space-y-6 text-xs">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
       {/* Header Banner */}
       <div className="bg-slate-900 text-white p-5 rounded-lg border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
         <div className="flex items-start gap-3">

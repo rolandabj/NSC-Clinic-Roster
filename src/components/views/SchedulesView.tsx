@@ -2,7 +2,7 @@ import { HoursHistory, hoursHistoryOverlaps } from '../../services/hours/hoursBa
 import { loadHoursHistory } from '../../services/hours/hoursHistoryService';
 import React, { useState, useEffect, useRef, useId, useCallback } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { notify, confirmDialog } from '../common/dialogs';
+import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import {
   CalendarRange,
   Plus,
@@ -10,7 +10,6 @@ import {
   Download,
   Share2,
   Send,
-  CheckCircle2,
   Clock,
   Layers,
   AlertTriangle,
@@ -265,8 +264,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [undoStack, setUndoStack] = useState<RosterSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<RosterSnapshot[]>([]);
 
-  // Toast
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // The top bar shows this roster's problem count.
   useEffect(() => {
@@ -667,10 +664,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     return () => clearInterval(retryTimer);
   }, []);
 
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   // Debounce timer ref for live validation
   const validationTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -692,7 +686,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   ) => {
     if (!activeSchedule) return;
     if (loadingRef.current) {
-      triggerToast('The roster is still loading. Try again in a moment.');
+      triggerToast('The roster is still loading. Try again in a moment.', 'warning');
       return;
     }
     const sched = activeSchedule;
@@ -1036,7 +1030,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         generationClinicSetup = await loadClinicSetup(repo, activeSchedule);
       } catch (err: any) {
         setClinicSetupError('Public holidays, opening hours and the previous roster could not be loaded.');
-        triggerToast(`Not filled: the clinic details could not be loaded (${err?.message || 'database unavailable'}). Try again.`);
+        triggerToast(`Not filled: the clinic details could not be loaded (${err?.message || 'database unavailable'}). Try again.`, 'error');
         setIsGenerating(false);
         return;
       }
@@ -1125,7 +1119,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         triggerToast(
           clearSaved
             ? `Cleared ${clearedCount} shifts. ${finalAssignments.length} shifts kept (pinned${clearIncludeManual ? '' : ' or changed by hand'}).${backupNote}`
-            : `Cleared ${clearedCount} shifts on screen, but saving failed. See the message at the top.`
+            : `Cleared ${clearedCount} shifts on screen, but saving failed. See the message at the top.`,
+          clearSaved ? 'success' : 'error'
         );
         setIsPreflightModalOpen(false);
         setIsGenerating(false);
@@ -1250,7 +1245,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       ).length;
 
       if (!generatedSaved) {
-        triggerToast('The roster was filled, but saving failed. See the message at the top; it retries automatically.');
+        triggerToast('The roster was filled, but saving failed. See the message at the top; it retries automatically.', 'error');
         setIsPreflightModalOpen(false);
         setIsGenerating(false);
         return;
@@ -1268,7 +1263,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setIsPreflightModalOpen(false);
       setIsGenerating(false);
     } catch (err: any) {
-      triggerToast(`Could not fill the roster: ${err.message}`);
+      triggerToast(`Could not fill the roster: ${err.message}`, 'error');
       setIsGenerating(false);
     }
   };
@@ -1407,7 +1402,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setIsOverrideModalOpen(false);
       setActiveLockToOverride(null);
     } catch (err: any) {
-      triggerToast(`Could not unpin: ${err.message}`);
+      triggerToast(`Could not unpin: ${err.message}`, 'error');
     }
   };
 
@@ -1710,14 +1705,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           : 'h-full'
       }`}
     >
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
       {/* Toolbar: the roster, save status, and the few main actions (the rest under More) */}
       <div className="relative bg-white border-b border-slate-200 px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 z-[45]">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
@@ -2781,8 +2768,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           onClose={() => setIsPublishModalOpen(false)}
           onPublishComplete={() => {
             loadData();
-            setToastMessage('Roster published.');
-            setTimeout(() => setToastMessage(null), 3000);
+            triggerToast('Roster published.');
           }}
           initialMode={publishWizardMode}
           onShowProblems={() => {
@@ -2959,7 +2945,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           onApplyAssignments={(updated, note) => {
             // The dialog worked on this render's list; a change that arrived meanwhile is kept.
             handleAssignmentsChange(rebaseEdit(assignments, updated, liveRef.current.assignments));
-            setToastMessage(note);
+            triggerToast(note);
           }}
         />
       )}
@@ -2979,7 +2965,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           onApplyAssignments={(updated, note) => {
             // The dialog worked on this render's list; a change that arrived meanwhile is kept.
             handleAssignmentsChange(rebaseEdit(assignments, updated, liveRef.current.assignments));
-            setToastMessage(note);
+            triggerToast(note);
           }}
         />
       )}
@@ -3006,7 +2992,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           onApplySwap={(updated, note) => {
             // The dialog worked on this render's list; a change that arrived meanwhile is kept.
             handleAssignmentsChange(rebaseEdit(assignments, updated, liveRef.current.assignments));
-            setToastMessage(note);
+            triggerToast(note);
           }}
         />
       )}

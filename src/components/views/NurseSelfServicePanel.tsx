@@ -40,7 +40,7 @@ import { LeaveEntry, AvailabilityRequest, LeaveType, Nurse, DutyWindow } from '.
 import { useDialogA11y } from '../common/useDialogA11y';
 import { localTodayIso } from '../../utils/dateUtils';
 import { requestDefaults } from '../../utils/dateDefaults';
-import { notify, confirmDialog } from '../common/dialogs';
+import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 
 interface NurseSelfServicePanelProps {
   currentUser?: UserProfile;
@@ -61,7 +61,6 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
   const [myAvailability, setMyAvailability] = useState<AvailabilityRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isBusy, setIsBusy] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Submit Request Modals
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
@@ -85,10 +84,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
   const [availPreferredDutyId, setAvailPreferredDutyId] = useState('');
   const [availNote, setAvailNote] = useState('');
 
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   const fetchMyData = async () => {
     setIsLoading(true);
@@ -98,7 +94,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
       setMyAvailability(availability);
     } catch (err: any) {
       console.error('[NurseSelfService] fetch error:', err);
-      triggerToast(`Could not load your requests: ${err?.message || err}`);
+      triggerToast(`Could not load your requests: ${err?.message || err}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -204,14 +200,6 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
 
   return (
     <div className="space-y-6 text-xs">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
       {/* Header Banner */}
       <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-start gap-3">

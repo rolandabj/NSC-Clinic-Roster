@@ -72,7 +72,7 @@ import { authService } from '../../services/auth/authService';
 import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
 import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { notify, confirmDialog } from '../common/dialogs';
+import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import { EmailHtmlPreview } from '../common/EmailHtmlPreview';
 import { loadEmailSettings } from '../../services/settings/emailSettingsStore';
 import { withoutBackups } from '../../services/history/versionList';
@@ -128,7 +128,6 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
   const [nurseLinks, setNurseLinks] = useState<Map<string, NurseLink>>(new Map());
   const [busyLinkNurseId, setBusyLinkNurseId] = useState<string | null>(null);
 
-  const [notification, setNotification] = useState<string | null>(null);
 
   const repo = getRepository();
 
@@ -218,10 +217,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
     loadData();
   }, []);
 
-  const triggerToast = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 3000);
-  };
+  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   // --- ACKNOWLEDGMENT HELPERS ---
   const getLatestAckForNurse = (nurseId: string) => {
@@ -474,14 +470,6 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 select-none font-sans text-slate-800">
-      {/* Toast Notification */}
-      {notification && (
-        <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{notification}</span>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>

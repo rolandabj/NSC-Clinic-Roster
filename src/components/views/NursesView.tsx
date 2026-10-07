@@ -12,7 +12,6 @@ import {
   Edit2,
   Trash2,
   AlertTriangle,
-  CheckCircle2,
   GripVertical,
   Info,
   Droplets,
@@ -40,7 +39,7 @@ import {
 import { PREFERENCE_FOCUS_LABELS } from '../../services/engine/preferenceOrder';
 import { BulkImportModal } from '../modals/BulkImportModal';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { notify, confirmDialog } from '../common/dialogs';
+import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import { revokeNurseLink } from '../../services/publish/nurseRosterService';
 
 interface NursesViewProps {
@@ -110,7 +109,6 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
   // Validation Warnings
   const [formErrors, setFormErrors] = useState<{ gmail?: string; fullName?: string }>({});
   const [formWarnings, setFormWarnings] = useState<string[]>([]);
-  const [saveBanner, setSaveBanner] = useState<string | null>(null);
 
   // Drag and drop state for preferences priority
   const [draggedPrefIdx, setDraggedPrefIdx] = useState<number | null>(null);
@@ -147,10 +145,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
     loadAllData();
   }, []);
 
-  const triggerNotification = (msg: string) => {
-    setSaveBanner(msg);
-    setTimeout(() => setSaveBanner(null), 3000);
-  };
+  const triggerNotification = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   const handleOpenAdd = () => {
     const defaultSeniority = seniorityLevels[2]?.id || seniorityLevels[0]?.id || '';
@@ -420,14 +415,6 @@ export const NursesView: React.FC<NursesViewProps> = ({ context }) => {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Toast Notification */}
-      {saveBanner && (
-        <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{saveBanner}</span>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>

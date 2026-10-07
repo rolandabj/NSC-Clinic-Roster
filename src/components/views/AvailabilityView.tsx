@@ -1,7 +1,7 @@
 import { leaveCreditInRange } from '../../services/hours/hoursPolicy';
 import { planHolidayLeaveTidy, saveHolidayLeave, withHolidaysAtZero } from '../../services/hours/holidayLeave';
 import { leaveApprovalFields } from '../../services/engine/leaveStatus';
-import { confirmDialog } from '../common/dialogs';
+import { confirmDialog, notify, type NoticeTone } from '../common/dialogs';
 import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
@@ -108,7 +108,6 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   const [csvImportLog, setCsvImportLog] = useState<string | null>(null);
 
   // Notification Toast
-  const [notification, setNotification] = useState<string | null>(null);
   const [isDeletingLeave, setIsDeletingLeave] = useState(false);
   const [isOverridingLock, setIsOverridingLock] = useState(false);
 
@@ -174,10 +173,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     loadData();
   }, []);
 
-  const triggerToast = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 3500);
-  };
+  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   // Month date helpers
   const daysInMonth = new Date(Date.UTC(currentYear, currentMonthIndex + 1, 0)).getUTCDate();
@@ -312,7 +308,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     const start = editingLeaveEntry.startDate!;
     const end = editingLeaveEntry.endDate || start;
     if (start > end) {
-      triggerToast('Start date must be before or equal to end date.');
+      triggerToast('Start date must be before or equal to end date.', 'error');
       return;
     }
 
@@ -324,7 +320,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     // Strict Quota Ceiling Enforcement: Block save if quota would be exceeded
     if (leaveQuotaInfo && leaveQuotaInfo.isExceeded) {
       triggerToast(
-        `Cannot schedule leave: ${selectedNurseForLeave?.fullName || 'Staff'} has already scheduled ${leaveQuotaInfo.alreadyUsedDays} of ${leaveQuotaInfo.quotaDays} allowed ${selectedTypeForLeave?.name || 'leave'} days for ${leaveQuotaInfo.year}. Requesting ${leaveQuotaInfo.requestedDays} day(s) exceeds the annual limit by ${leaveQuotaInfo.excessDays} day(s).`
+        `Cannot schedule leave: ${selectedNurseForLeave?.fullName || 'Staff'} has already scheduled ${leaveQuotaInfo.alreadyUsedDays} of ${leaveQuotaInfo.quotaDays} allowed ${selectedTypeForLeave?.name || 'leave'} days for ${leaveQuotaInfo.year}. Requesting ${leaveQuotaInfo.requestedDays} day(s) exceeds the annual limit by ${leaveQuotaInfo.excessDays} day(s).`,
+        'error'
       );
       return;
     }
@@ -365,7 +362,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       setSelectedCellDate(null);
       loadData();
     } catch (err: any) {
-      triggerToast(`Error saving leave: ${err.message}`);
+      triggerToast(`Error saving leave: ${err.message}`, 'error');
     }
   };
 
@@ -381,7 +378,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       triggerToast('Selected leave entry removed successfully. Other leaves remain untouched.');
     } catch (err: any) {
       console.error('Failed to delete leave entry:', err);
-      triggerToast(`Failed to delete leave entry: ${err?.message || 'Error occurred'}`);
+      triggerToast(`Failed to delete leave entry: ${err?.message || 'Error occurred'}`, 'error');
     } finally {
       setIsDeletingLeave(false);
     }
@@ -451,7 +448,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       triggerToast(`Removed leave on ${targetDate}. All other days remain active.`);
     } catch (err: any) {
       console.error('Failed to remove date from leave:', err);
-      triggerToast(`Failed to update leave: ${err?.message || 'Error occurred'}`);
+      triggerToast(`Failed to update leave: ${err?.message || 'Error occurred'}`, 'error');
     } finally {
       setIsDeletingLeave(false);
     }
@@ -489,7 +486,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       setEditingLockEntry(null);
       loadData();
     } catch (err: any) {
-      triggerToast(`Failed to save lock: ${err.message}`);
+      triggerToast(`Failed to save lock: ${err.message}`, 'error');
     }
   };
 
@@ -528,7 +525,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       await loadData();
     } catch (err: any) {
       console.error('Lock override failed:', err);
-      triggerToast(`Override failed: ${err?.message || 'Error occurred'}`);
+      triggerToast(`Override failed: ${err?.message || 'Error occurred'}`, 'error');
     } finally {
       setIsOverridingLock(false);
     }
@@ -560,7 +557,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       triggerToast(`Public holiday leave tidied: ${remove.length} deleted, ${zero.length} set to 0 h on the holiday.`);
       loadData();
     } catch (err: any) {
-      triggerToast(`Could not tidy the public holiday leave: ${err?.message || err}`);
+      triggerToast(`Could not tidy the public holiday leave: ${err?.message || err}`, 'error');
       loadData();
     }
   };
@@ -568,7 +565,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   // --- CSV IMPORT LEAVE ---
   const handleProcessLeaveCsv = async () => {
     if (!csvContent.trim()) {
-      triggerToast('Please paste CSV content.');
+      triggerToast('Please paste CSV content.', 'warning');
       return;
     }
 
@@ -642,7 +639,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       triggerToast(`Imported ${successCount} leave records.`);
       loadData();
     } catch (err: any) {
-      triggerToast(`CSV Import failed: ${err.message}`);
+      triggerToast(`CSV Import failed: ${err.message}`, 'error');
     }
   };
 
@@ -682,14 +679,6 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 select-none">
-      {/* Toast Notification */}
-      {notification && (
-        <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{notification}</span>
-        </div>
-      )}
-
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>

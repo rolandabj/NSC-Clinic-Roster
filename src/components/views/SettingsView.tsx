@@ -18,7 +18,6 @@ import {
   Sliders,
   Flag,
   Mail,
-  CheckCircle2,
   Database,
   ShieldCheck,
   CalendarRange,
@@ -81,7 +80,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
     return 'clinic';
   });
-  const [saveBanner, setSaveBanner] = useState<string | null>(null);
 
   // Entities state loaded from repository
   const [clinic, setClinic] = useState<ClinicProfile | null>(null);
@@ -147,10 +145,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     loadData();
   }, []);
 
-  const triggerSaveNotification = (msg: string) => {
-    setSaveBanner(msg);
-    setTimeout(() => setSaveBanner(null), 3500);
-  };
+  const triggerSaveNotification = (msg: string) => notify(msg, 'success');
 
   // --- 1. Clinic Profile Auto-Save & Persistence ---
   const onUpdateClinicProfileRef = useRef(onUpdateClinicProfile);
@@ -422,14 +417,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Toast Save Notification */}
-      {saveBanner && (
-        <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-          <span>{saveBanner}</span>
-        </div>
-      )}
-
       {/* Header */}
       <div>
         <h1 className="text-xl font-semibold text-slate-900 tracking-tight">Settings</h1>
@@ -564,12 +551,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         {/* 9b. DEDICATED TIME PERIODS & WORKING HOURS */}
         {activeTab === 'working-hours-periods' && (
-          <WorkingHoursPeriodsPanel
-            onNotify={(msg) => {
-              setSaveBanner(msg);
-              setTimeout(() => setSaveBanner(null), 3000);
-            }}
-          />
+          <WorkingHoursPeriodsPanel />
         )}
 
         {/* 10. EMAIL NOTIFICATION SETTINGS (GOOGLE-ONLY COMMUNICATIONS) */}

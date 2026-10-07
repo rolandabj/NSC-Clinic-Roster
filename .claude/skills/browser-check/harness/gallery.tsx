@@ -28,6 +28,7 @@ import {
   type Column,
 } from '../src/components/ui';
 import { formatDate, formatDateRange, formatDayDate } from '../src/utils/dateUtils';
+import { confirmDialog, notify } from '../src/components/common/dialogs';
 
 interface Request {
   id: string;
@@ -186,6 +187,24 @@ export function Gallery() {
           No senior nurse on the evening shift on {formatDayDate('2026-11-18')}.
         </Notice>
       </div>
+
+      <Card title="Messages and questions">
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => notify('Leave saved for Joy, 21-12-2026 to 22-12-2026.', 'success')}>Saved</Button>
+          <Button onClick={() => notify('The roster opens on 16-11-2026.', 'info')}>Information</Button>
+          <Button onClick={() => notify("Couldn't copy. Select the link and copy it instead.", 'warning')}>Warning</Button>
+          <Button onClick={() => notify('Could not fill the roster: the database did not answer.', 'error')}>Error</Button>
+          <Button
+            variant="danger"
+            icon={Trash2}
+            onClick={() =>
+              confirmDialog({ title: 'Delete version 3?', message: 'The roster keeps its other versions.', confirmLabel: 'Delete version', danger: true })
+            }
+          >
+            Ask before deleting
+          </Button>
+        </div>
+      </Card>
 
       <Card title="Requests" bodyClassName="" actions={<Button size="sm" variant="ghost">All requests</Button>}>
         <DataTable caption="Requests from nurses" columns={columns} rows={REQUESTS} rowKey={(r) => r.id} />

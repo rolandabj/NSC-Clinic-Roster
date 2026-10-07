@@ -17,3 +17,4 @@ export { Field, Input, Select, Textarea, Checkbox, Switch, DateInput, inputClass
 export { Notice, type NoticeKind } from './Notice';
 export { EmptyState, LoadingState, ErrorState } from './States';
 export { DataTable, sortRows, type Column, type SortDirection, type SortState } from './DataTable';
+export { wholeDates } from './wholeDates';

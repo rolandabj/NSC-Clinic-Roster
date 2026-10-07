@@ -12,7 +12,6 @@ import {
   Layers,
   Copy,
   Save,
-  CheckCircle2,
   Trash2,
   Calendar,
   Sparkles,
@@ -32,7 +31,7 @@ import {
 } from '../../types';
 import { getRepository } from '../../services/repository';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { notify, confirmDialog } from '../common/dialogs';
+import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import { authService } from '../../services/auth/authService';
 
 interface TemplateModalProps {
@@ -67,7 +66,6 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [selectedSourceScheduleId, setSelectedSourceScheduleId] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const repo = getRepository();
 
@@ -99,10 +97,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
 
   if (!isOpen) return null;
 
-  const triggerToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 3000);
-  };
+  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   // 1. SAVE CURRENT AS TEMPLATE
   const handleSaveAsTemplate = async (e: React.FormEvent) => {
@@ -362,14 +357,6 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
         aria-labelledby={titleId}
         className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs font-sans text-slate-800"
       >
-        {/* Toast */}
-        {toastMsg && (
-          <div className="absolute top-4 right-4 z-50 bg-slate-900 text-white px-3 py-1.5 rounded shadow text-xs flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" aria-hidden="true" />
-            <span>{toastMsg}</span>
-          </div>
-        )}
-
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">

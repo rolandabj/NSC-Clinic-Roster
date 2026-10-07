@@ -21,7 +21,6 @@ import {
   ShieldCheck,
   AlertCircle,
   Eye,
-  CheckCircle2,
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { syncPublicRoster, removePublicRoster } from '../../services/publish/publicRosterService';
@@ -36,7 +35,7 @@ import {
 } from '../../types';
 import { getRepository } from '../../services/repository';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { notify, confirmDialog } from '../common/dialogs';
+import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 
 interface ShareModalProps {
   schedule: Schedule;
@@ -68,7 +67,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const [inviteRole, setInviteRole] = useState<'EDITOR' | 'VIEWER'>('EDITOR');
 
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const repo = getRepository();
 
@@ -99,10 +97,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   if (!isOpen) return null;
 
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
-  };
+  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   // --- CREATE VIEW-ONLY LINK ---
   const handleCreateShareLink = async () => {
@@ -248,14 +243,6 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         aria-labelledby={titleId}
         className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs"
       >
-        {/* Toast */}
-        {toastMessage && (
-          <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded shadow-lg flex items-center gap-2 animate-in fade-in duration-150">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" aria-hidden="true" />
-            <span>{toastMessage}</span>
-          </div>
-        )}
-
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div className="flex items-center gap-2.5">

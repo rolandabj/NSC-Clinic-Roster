@@ -11,7 +11,7 @@ import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { usePermissions } from '../common/usePermissions';
-import { notify } from '../common/dialogs';
+import { notify, type NoticeTone } from '../common/dialogs';
 import {
   History,
   RotateCcw,
@@ -140,7 +140,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
   const [scheduleToDelete, setScheduleToDelete] = useState<Schedule | null>(null);
 
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [notification, setNotification] = useState<string | null>(null);
 
   const repo = getRepository();
 
@@ -226,10 +225,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
     }
   }, [selectedVersion, allAssignments, schedules]);
 
-  const triggerToast = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 3500);
-  };
+  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   const handleScheduleChange = (schedId: string) => {
     const found = schedules.find((s) => s.id === schedId);
@@ -506,14 +502,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5 select-none">
-      {/* Toast Notification */}
-      {notification && (
-        <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded-lg shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span className="font-medium">{notification}</span>
-        </div>
-      )}
-
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>

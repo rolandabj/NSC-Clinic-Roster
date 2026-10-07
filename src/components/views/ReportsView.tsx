@@ -15,7 +15,6 @@ import {
   Download,
   TrendingUp,
   AlertTriangle,
-  CheckCircle2,
   Calendar,
   Users,
   Search,
@@ -63,6 +62,7 @@ import {
 import { NurseTimesheetModal } from '../modals/NurseTimesheetModal';
 import { usePermissions } from '../common/usePermissions';
 import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
+import { notify, type NoticeTone } from '../common/dialogs';
 
 interface ReportsViewProps {
   context: ClinicContextState;
@@ -114,8 +114,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
   const [sortField, setSortField] = useState<SortField>('pace');
   const [sortAscending, setSortAscending] = useState(false);
 
-  // Toast
-  const [notification, setNotification] = useState<string | null>(null);
 
   const repo = getRepository();
 
@@ -194,10 +192,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
     return () => { cancelled = true; };
   }, [activeSchedule?.id, schedules, workingHoursPeriods]);
 
-  const triggerToast = (msg: string) => {
-    setNotification(msg);
-    setTimeout(() => setNotification(null), 3500);
-  };
+  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   const handleScheduleChange = (schedId: string) => {
     const found = schedules.find((s) => s.id === schedId);
@@ -469,14 +464,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 select-none print:p-0 print:max-w-none">
       {historyProblem && <div role="alert" className="p-3 bg-rose-50 text-rose-800">{historyProblem}</div>}
-      {/* Toast Notification */}
-      {notification && (
-        <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150 print:hidden">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{notification}</span>
-        </div>
-      )}
-
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>

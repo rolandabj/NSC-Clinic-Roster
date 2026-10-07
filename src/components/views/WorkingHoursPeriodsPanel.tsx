@@ -16,7 +16,6 @@ import {
   Edit2,
   Trash2,
   RefreshCw,
-  CheckCircle2,
   AlertTriangle,
   Info,
   Calendar,
@@ -38,17 +37,13 @@ import {
   getPeriodDailyRate,
 } from '../../services/periods/workingHoursPeriodService';
 import { localTodayIso } from '../../utils/dateUtils';
+import { notify, type NoticeTone } from '../common/dialogs';
 
-interface WorkingHoursPeriodsPanelProps {
-  onNotify?: (message: string) => void;
-}
-
-export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> = ({ onNotify }) => {
+export const WorkingHoursPeriodsPanel: React.FC = () => {
   const [periods, setPeriods] = useState<WorkingHoursPeriod[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [yearFilter, setYearFilter] = useState<string>('ALL');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -80,15 +75,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
   const [testStartDate, setTestStartDate] = useState<string>('2026-01-19');
   const [testEndDate, setTestEndDate] = useState<string>('2026-02-01'); // 14-day sample
 
-  const showToast = (msg: string) => {
-    // The Settings page shows its own banner; only show one message.
-    if (onNotify) {
-      onNotify(msg);
-      return;
-    }
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+  const showToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   const loadPeriods = async () => {
     try {
@@ -297,7 +284,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
       setDeletingPeriod(null);
     } catch (err) {
       console.error('Failed to delete period:', err);
-      showToast('Error deleting period.');
+      showToast('Error deleting period.', 'error');
     }
   };
 
@@ -324,7 +311,7 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
       );
     } catch (err) {
       console.error('Failed to restore standard periods:', err);
-      showToast('Error loading standard periods.');
+      showToast('Error loading standard periods.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -341,19 +328,6 @@ export const WorkingHoursPeriodsPanel: React.FC<WorkingHoursPeriodsPanelProps> =
 
   return (
     <div className="space-y-6">
-      {/* Toast Alert */}
-      {toastMessage && (
-        <div className="p-3 bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-lg text-xs flex items-center justify-between shadow-2xs animate-in fade-in duration-150">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
-            <span className="font-medium">{toastMessage}</span>
-          </div>
-          <button onClick={() => setToastMessage(null)} className="text-indigo-400 hover:text-indigo-700" aria-label="Dismiss message" title="Dismiss message">
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-      )}
-
       {/* Header & Action Controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>

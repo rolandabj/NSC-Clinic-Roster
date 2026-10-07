@@ -146,8 +146,9 @@ One count everywhere: "2 must fix · 2 to check · 1 note". A cell with a Must f
   (Cancel, then the main action); on a phone it rises from the bottom. It keeps focus inside, Esc closes
   it and focus goes back to the button that opened it (`useDialogA11y`).
 * **Notices:** a soft box with the icon, a bold first line and an optional action.
-* **Messages (toasts):** dark, bottom right, with a Close button, read out politely (`role="status"`),
-  gone after 8 seconds.
+* **Messages (toasts):** `notify()` only: dark, bottom right, an icon for each kind (tick, information,
+  warning triangle, octagon for errors), a Close button, read out (`role="status"`, errors `role="alert"`),
+  gone after 5 seconds (errors and warnings after 9). Dates in them stay on one line (`wholeDates`).
 
 ## Nurse pages (phones first)
 

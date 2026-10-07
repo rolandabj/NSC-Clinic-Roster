@@ -23,6 +23,7 @@ import {
   Tabs,
   nextTabIndex,
   sortRows,
+  wholeDates,
   type Column,
 } from '../../src/components/ui';
 
@@ -169,4 +170,10 @@ test('a table names itself, marks its sorted column, and has a card for each row
   assert.match(out, /<dt class="text-ink-muted">Hours<\/dt><dd class="min-w-0 text-ink">80<\/dd>/);
   const empty = html(h(DataTable<Row>, { caption: 'x', columns, rows: [], rowKey: (r) => r.name, empty: h('p', null, 'No nurses yet') }));
   assert.equal(empty, '<p>No nurses yet</p>');
+});
+
+test('a date in a message stays on one line; text without dates is left as it is', () => {
+  const out = html(h('p', null, wholeDates('Leave saved for Joy, 21-12-2026 to 22-12-2026.')));
+  assert.equal(out, '<p>Leave saved for Joy, <span class="whitespace-nowrap">21-12-2026</span> to <span class="whitespace-nowrap">22-12-2026</span>.</p>');
+  assert.equal(wholeDates('Undone.'), 'Undone.');
 });

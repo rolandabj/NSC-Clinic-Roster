@@ -5,7 +5,6 @@ import {
   Calendar,
   Clock,
   MapPin,
-  CheckCircle2,
   Ban,
   Plus,
   Edit2,
@@ -20,6 +19,7 @@ import { Doctor, DoctorSession, Specialty, Schedule, Assignment, Nurse } from '.
 import { formatDate } from '../../utils/dateUtils';
 import { getRepository } from '../../services/repository';
 import { EditDoctorShiftModal } from '../modals/EditDoctorShiftModal';
+import { notify, type NoticeTone } from '../common/dialogs';
 import {
   saveDoctorShift,
   deleteDoctorShift,
@@ -58,7 +58,6 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [localExpanded, setLocalExpanded] = useState<boolean>(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Edit Shift Modal State
   const [selectedCell, setSelectedCell] = useState<{
@@ -123,11 +122,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
     return sessions.filter((s) => datesSet.has(s.date) && !s.cancelled).length;
   }, [sessions, displayedDates]);
 
-  // Trigger toast notification
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   // Cell click handler
   const handleCellClick = (doc: Doctor, dateStr: string) => {
@@ -239,7 +234,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
       );
     } catch (err: any) {
       console.error('Failed to sync recurring doctor patterns:', err);
-      triggerToast(`Couldn't add the weekly clinics: ${err.message || 'unknown error'}`);
+      triggerToast(`Couldn't add the weekly clinics: ${err.message || 'unknown error'}`, 'error');
     } finally {
       setIsSyncing(false);
     }
@@ -247,14 +242,6 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-slate-100 select-none overflow-hidden relative">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded-lg shadow-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
       {/* Top Filter & Expansion Bar */}
       <div className="bg-white border-b border-slate-200 px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0">
         <div className="flex items-center gap-2.5">

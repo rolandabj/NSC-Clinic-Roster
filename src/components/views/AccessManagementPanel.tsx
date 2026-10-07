@@ -34,7 +34,7 @@ import { UserProfile } from '../../services/auth/authService';
 import { getRepository } from '../../services/repository';
 import { UserAccessRecord, Nurse, Doctor, UserAccessRole, UserAccessStatus } from '../../types';
 import { useDialogA11y } from '../common/useDialogA11y';
-import { notify, confirmDialog } from '../common/dialogs';
+import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 
 interface AccessManagementPanelProps {
   currentUser?: UserProfile;
@@ -48,7 +48,6 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REVOKED'>('ALL');
   const [isBusy, setIsBusy] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // New Whitelist User Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -61,10 +60,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
   const [newLinkedNurseId, setNewLinkedNurseId] = useState('');
   const [checkEmail, setCheckEmail] = useState('');
 
-  const triggerToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
   // Access records are stored in Firestore with the lowercased email as the
   // document id, which is what the Firestore security rules look up.
@@ -84,7 +80,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
       setDoctors(doctorList as Doctor[]);
     } catch (err: any) {
       console.error('[AccessManagementPanel] fetch error:', err);
-      triggerToast(`Could not load the access directory: ${err?.message || err}`);
+      triggerToast(`Could not load the access directory: ${err?.message || err}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -247,14 +243,6 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
 
   return (
     <div className="space-y-6 text-xs">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed top-16 right-6 z-50 bg-slate-900 text-white text-xs px-4 py-2.5 rounded shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
       {/* Header Banner */}
       <div className="bg-indigo-900 text-white p-5 rounded-lg border border-indigo-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
         <div className="flex items-start gap-3">

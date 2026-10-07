@@ -13,8 +13,10 @@
  */
 
 import React, { useEffect, useId, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Info, X, XCircle } from 'lucide-react';
+import { CircleCheck, Info, OctagonAlert, TriangleAlert, X } from 'lucide-react';
 import { useDialogA11y } from './useDialogA11y';
+import { Button } from '../ui/Button';
+import { wholeDates } from '../ui/wholeDates';
 
 export type NoticeTone = 'info' | 'success' | 'warning' | 'error';
 
@@ -93,17 +95,12 @@ function settleConfirm(id: number, ok: boolean) {
   item?.resolve(ok);
 }
 
-const TONE_STYLES: Record<NoticeTone, { box: string; icon: React.ReactNode }> = {
-  info: { box: 'border-slate-200 bg-white text-slate-800', icon: <Info className="h-4 w-4 text-indigo-600" aria-hidden="true" /> },
-  success: {
-    box: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-    icon: <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden="true" />,
-  },
-  warning: {
-    box: 'border-amber-200 bg-amber-50 text-amber-900',
-    icon: <AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />,
-  },
-  error: { box: 'border-rose-200 bg-rose-50 text-rose-900', icon: <XCircle className="h-4 w-4 text-rose-600" aria-hidden="true" /> },
+// Messages are dark (the approved look); each tone has its own icon, light enough to read on it.
+const TONE_ICONS: Record<NoticeTone, React.ReactNode> = {
+  info: <Info className="size-5 text-cyan-300" aria-hidden="true" />,
+  success: <CircleCheck className="size-5 text-emerald-300" aria-hidden="true" />,
+  warning: <TriangleAlert className="size-5 text-amber-300" aria-hidden="true" />,
+  error: <OctagonAlert className="size-5 text-red-300" aria-hidden="true" />,
 };
 
 const ConfirmBox: React.FC<{ item: PendingConfirm }> = ({ item }) => {
@@ -111,40 +108,27 @@ const ConfirmBox: React.FC<{ item: PendingConfirm }> = ({ item }) => {
   const bodyId = useId();
   const ref = useDialogA11y<HTMLDivElement>(true, () => settleConfirm(item.id, false));
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/50 p-4" onMouseDown={() => settleConfirm(item.id, false)}>
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-ink/50 sm:items-center sm:p-4" onMouseDown={() => settleConfirm(item.id, false)}>
       <div
         ref={ref}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={bodyId}
-        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
+        className="animate-in fade-in zoom-in-95 w-full rounded-t-xl bg-surface p-5 shadow-dialog sm:max-w-md sm:rounded-xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <h2 id={titleId} className="text-base font-semibold text-slate-900">
+        <h2 id={titleId} className="text-lg font-semibold text-ink">
           {item.title || 'Please confirm'}
         </h2>
-        <div id={bodyId} className="mt-2 whitespace-pre-line text-sm text-slate-600">
-          {item.message}
+        <div id={bodyId} className="mt-2 whitespace-pre-line text-sm text-ink-muted">
+          {typeof item.message === 'string' ? wholeDates(item.message) : item.message}
         </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-            onClick={() => settleConfirm(item.id, false)}
-          >
-            {item.cancelLabel || 'Cancel'}
-          </button>
-          <button
-            type="button"
-            autoFocus
-            className={`rounded-lg px-4 py-2 text-sm font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
-              item.danger ? 'bg-rose-600 hover:bg-rose-700 focus-visible:ring-rose-500' : 'bg-indigo-600 hover:bg-indigo-700 focus-visible:ring-indigo-500'
-            }`}
-            onClick={() => settleConfirm(item.id, true)}
-          >
+        <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button onClick={() => settleConfirm(item.id, false)}>{item.cancelLabel || 'Cancel'}</Button>
+          <Button variant={item.danger ? 'danger' : 'primary'} autoFocus onClick={() => settleConfirm(item.id, true)}>
             {item.confirmLabel || 'OK'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -172,17 +156,18 @@ export const DialogHost: React.FC = () => {
           <div
             key={n.id}
             role={n.tone === 'error' ? 'alert' : 'status'}
-            className={`pointer-events-auto flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm shadow-lg ${TONE_STYLES[n.tone].box}`}
+            className="animate-in fade-in slide-in-from-bottom-2 pointer-events-auto flex items-start gap-3 rounded-lg bg-ink px-4 py-3 text-sm text-white shadow-pop"
           >
-            <span className="mt-0.5 shrink-0">{TONE_STYLES[n.tone].icon}</span>
-            <p className="flex-1 whitespace-pre-line">{n.message}</p>
+            <span className="shrink-0">{TONE_ICONS[n.tone]}</span>
+            <p className="flex-1 whitespace-pre-line">{wholeDates(n.message)}</p>
             <button
               type="button"
-              aria-label="Dismiss message"
-              className="shrink-0 rounded p-0.5 opacity-60 hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+              aria-label="Close message"
+              title="Close message"
+              className="-m-1 shrink-0 rounded p-1 text-white/80 hover:bg-white/10 hover:text-white"
               onClick={() => dismissNotice(n.id)}
             >
-              <X className="h-4 w-4" aria-hidden="true" />
+              <X className="size-4" aria-hidden="true" />
             </button>
           </div>
         ))}
