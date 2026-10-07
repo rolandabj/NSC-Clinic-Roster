@@ -27,7 +27,7 @@ Main moves only when the owner says "push to main".
 - [x] The owner approved the sample with Inter (07-10-2026)
 - [ ] Tokens in `src/index.css`
 - [ ] Shared components in `src/components/ui/` and a gallery view
-- [ ] One date module
+- [x] One date module (`dateUtils.ts`: day with weekday, typed dates; `dateFormatter.ts` deleted)
 - [ ] App shell: skip link, titles, deep links, Back between tabs, app context
 - [ ] Checkpoint 2
 
