@@ -1,6 +1,7 @@
 // Test page only: a small clinic with a draft November roster, two doctors with their
 // clinics, and a nurse with a list (Mary: Dr Lee only). Change it freely in _preview/.
 // ?seed=fair adds shifts so Amy is well over her goal (fairness suggestions).
+// ?seed=big makes a full size clinic (see the end of this file).
 const now = '2026-10-01T08:00:00Z';
 
 const nurse = (id: string, name: string, extra: any = {}) => ({
@@ -89,3 +90,39 @@ export const seed: Record<string, any[]> = {
     },
   ],
 };
+
+// ?seed=big: a full size clinic for timing the roster grid and checking long names:
+// 60 nurses (every fourth a senior, every third with a first choice doctor), 12 doctors on
+// weekdays, and a 31 day roster from 02-11-2026 filled five days in seven.
+if (typeof location !== 'undefined' && new URLSearchParams(location.search).get('seed') === 'big') {
+  const days: string[] = [];
+  for (let d = new Date('2026-11-02T00:00:00Z'); days.length < 31; d = new Date(d.getTime() + 86400000)) days.push(d.toISOString().slice(0, 10));
+  Object.assign(november, { startDate: days[0], endDate: days[30], blockWeeks: 5, hoursTargetFullTime: 184 });
+  const names = ['Amina', 'Bea', 'Carla', 'Dana', 'Eva', 'Fatima', 'Grace', 'Hana', 'Iris', 'Joy', 'Kim', 'Lina', 'Maya', 'Nora', 'Olga', 'Priya', 'Rana', 'Sofia', 'Tala', 'Uma'];
+  const bigNurses = Array.from({ length: 60 }, (_, i) =>
+    nurse(`n${i + 1}`, `${names[i % 20]} ${String.fromCharCode(65 + Math.floor(i / 20))}. Long Surname ${i + 1}`, {
+      seniorityLevelId: i % 4 === 0 ? 'sen' : 'jun',
+      preferences: i % 3 === 0 ? [{ kind: 'DOCTOR', refId: `doc${(i % 12) + 1}`, rank: 1 }] : [],
+    })
+  );
+  const bigDoctors = Array.from({ length: 12 }, (_, i) => ({
+    id: `doc${i + 1}`, fullName: `Dr Doctor ${i + 1}`, gmail: `doc${i + 1}@example.com`, specialtyIds: [i % 2 ? 'ortho' : 'ent'],
+    weeklyPattern: [1, 2, 3, 4, 5].filter((w) => (w + i) % 2 === 0 || w === 1).map((weekday) => ({ weekday, startTime: '09:00', endTime: '17:00', room: `R${i + 1}` })),
+    active: true,
+  }));
+  const sessions: any[] = [];
+  for (const date of days) {
+    const wd = new Date(date + 'T00:00:00Z').getUTCDay();
+    for (const doc of bigDoctors) if (doc.weeklyPattern.some((p) => p.weekday === wd)) sessions.push(clinic(doc.id, date, doc.specialtyIds[0]));
+  }
+  const bigShifts: any[] = [];
+  days.forEach((date, di) => {
+    const daySessions = sessions.filter((s) => s.date === date);
+    bigNurses.forEach((n, ni) => {
+      if ((di + ni) % 7 >= 5) return;
+      bigShifts.push(shift(n.id, date, ni < daySessions.length ? daySessions[ni].doctorId : undefined));
+    });
+  });
+  Object.assign(seed, { nurses: bigNurses, doctors: bigDoctors, doctorSessions: sessions, assignments: bigShifts, leaveEntries: [] });
+  seed.versions[0].snapshot.assignments = bigShifts;
+}

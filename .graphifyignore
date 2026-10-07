@@ -1,0 +1,3 @@
+# Folders the code graph (graphify) leaves out. Same pattern style as .gitignore.
+# The ui-ux-pro-max skill is design reference data and a search tool, not app code.
+.claude/skills/ui-ux-pro-max/
