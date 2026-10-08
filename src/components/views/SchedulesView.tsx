@@ -146,6 +146,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   onAddressChange,
 }) => {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const schedulesRef = useRef<Schedule[]>([]);
+  schedulesRef.current = schedules;
   const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
   const activeScheduleRef = useRef<Schedule | null>(null);
   activeScheduleRef.current = activeSchedule;
@@ -1602,13 +1604,15 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (sheet !== activeTab) setActiveTab(sheet);
   }, [address?.sheet]);
 
-  // Back, Forward or a link to another roster opens it.
+  // Back, Forward or a link to another roster opens it. Only a change of the address counts:
+  // when the list reloads (after New roster) the address still names the roster open before,
+  // and opening that one again made the address and the open roster swap back and forth.
   useEffect(() => {
     const wanted = address?.roster;
     if (!wanted || wanted === openScheduleIdRef.current) return;
-    const sched = schedules.find((s) => s.id === wanted);
+    const sched = schedulesRef.current.find((s) => s.id === wanted);
     if (sched) openSchedule(sched).catch((err) => notify(`Could not open "${sched.name}": ${err?.message || err}`, 'error'));
-  }, [address?.roster, schedules]);
+  }, [address?.roster]);
 
   // A link to a day (#schedules?roster=nov&nurse=mary&date=2026-11-20) shows that cell once its
   // roster is open: the nurse's, or the first nurse's when none is named.

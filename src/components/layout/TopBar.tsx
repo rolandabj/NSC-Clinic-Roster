@@ -124,8 +124,11 @@ const AccountMenu: React.FC<{ name: string; email: string; role: string; onOpenA
         }
       }}
       onBlur={(e) => {
-        // Tabbing out of the panel closes it.
-        if (open && wrapRef.current && !wrapRef.current.contains(e.relatedTarget as Node)) setOpen(false);
+        // Tabbing out of the panel closes it. Safari does not focus a button when it is clicked,
+        // so a click in the panel moves the focus to nowhere: that must not close it (a click
+        // outside is handled by the mousedown listener above).
+        const next = e.relatedTarget as Node | null;
+        if (open && next && wrapRef.current && !wrapRef.current.contains(next)) setOpen(false);
       }}
     >
       <button

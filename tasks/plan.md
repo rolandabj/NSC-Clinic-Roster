@@ -391,3 +391,21 @@ The review's first figures (2.2 s, 700 ms, 200 ms, 960 ms) came from the develop
 | Sign in, read receipt | 0 | 1 | |
 | Whole app on a 390 px phone | | | the content gets 166 px of 390: the sidebar never collapses |
 
+
+## Checkpoint 2, 08-10-2026 (after Phase 2)
+
+**Roster grid, full size clinic, production build** (`grid-timing.cjs`, median of 3 runs, 12,328 page elements):
+
+| | Baseline | Checkpoint 2 | Phase 3 target |
+|---|---|---|---|
+| Cells shown | 1,004 ms | 963 ms | under 1,000 ms |
+| Longest blocking task while loading | 341 ms | 257 ms | under 200 ms |
+| Cell popup opens | 209 ms | 208 ms | under 100 ms |
+| One arrow key | 62 ms | 55 ms | under 50 ms |
+| Deleting a shift | 147 ms | 132 ms | under 100 ms |
+
+Phase 2 did not change the grid, so these stay close to the baseline; Phase 3 works on them.
+
+**Screens** (`ui-audit.cjs`, 1366 px): no page has more serious axe problems than the baseline. History 26 (28). The whole app's dashboard has none for the owner and for the nurse (1 each before the new app frame), and its text under 12 px went from 11 to 7. The single screens keep their numbers until their own phases.
+
+**Links and Back** (`links.cjs`, 9 checks): all pass. Before the review's fixes, creating a roster while another was open made the page stop answering, and a click in the account panel was lost when the browser did not focus the button (as in Safari).

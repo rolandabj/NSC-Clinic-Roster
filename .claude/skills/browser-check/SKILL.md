@@ -39,7 +39,7 @@ in `/opt/pw-browsers`; never run `playwright install`.
    The sample data is in `_preview/seed.ts`: a draft November 2026 roster, Dr Lee (Mondays)
    and Dr Ray (Tuesdays), and Mary, whose list holds only Dr Lee. Add variants behind a URL
    parameter, as `?seed=fair` does, to check several cases with one page.
-3. **Measure** with the two scripts here, run with `NODE_PATH=$(npm root -g) node <script>`:
+3. **Measure** with the scripts here, run with `NODE_PATH=$(npm root -g) node <script>`:
    - `scripts/ui-audit.cjs <folder>`: screenshots at 1366, 1024 and 390 px and an axe
      accessibility scan of a list of pages (`--pages "view=nurses;view=app&as=nurse#dashboard"`,
      `--sizes 1366x768,390x844`, `--base http://localhost:5180`). It prints one line per page
@@ -49,6 +49,10 @@ in `/opt/pw-browsers`; never run `playwright install`.
    - `scripts/grid-timing.cjs --base http://localhost:5180`: the full size roster's timings
      (cells shown, popup, arrow key, deleting a shift, and the longest task that blocked the
      page), the median of three runs.
+   - `scripts/links.cjs --base http://localhost:5180`: links to a settings tab, a nurse, a roster
+     sheet and a nurse's day; Back and Forward between tabs; a screen opened from the menu; a new
+     roster staying open; and the account panel when a click does not focus its buttons (as in
+     Safari). One line for each check, and exit code 1 when one fails.
 4. **Script other checks** in the session scratchpad, not in the repo, starting from
    `scripts/example.cjs`. Run it with `NODE_PATH=$(npm root -g) node <script> <folder>`.
    - Wait for the grid with a cell: `[data-cell="<nurse id>|<YYYY-MM-DD>"]`.
@@ -82,6 +86,8 @@ in `/opt/pw-browsers`; never run `playwright install`.
   shows DD-MM-YYYY itself.
 - After code gains new imports while the test page runs, the development server can answer
   "504 (Outdated Optimize Dep)" and a screen fails to load: run `stop.sh`, then `start.sh`.
+  It can happen just after a start too: open one page of the whole app (`?view=app`) and wait
+  about 8 seconds before running a script. `stop.sh` stops the production page as well.
 - Since 07-10-2026 `ui-audit.cjs` leaves out text kept for screen readers only (1 px boxes, such
   as skip links) when it counts small targets and cut off boxes; earlier numbers counted them.
 - The page rarely scrolls sideways even when a phone layout is broken, because the app

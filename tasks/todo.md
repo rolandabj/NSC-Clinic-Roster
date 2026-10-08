@@ -32,7 +32,7 @@ Main moves only when the owner says "push to main".
 - [x] App shell look: sidebar and top bar, skip link, a title for each screen, one app name
 - [x] Links to a roster, nurse, date or settings tab, and Back between tabs
 - [x] App context in place of the window events
-- [ ] Checkpoint 2
+- [x] Checkpoint 2 (08-10-2026): the review's two fixes, `links.cjs`, the numbers in `tasks/plan.md`
 
 ## Phase 3: roster grid speed and structure
 - [ ] Memoized cells and per cell views
