@@ -1605,8 +1605,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   }, [address?.sheet]);
 
   // Back, Forward or a link to another roster opens it. Only a change of the address counts:
-  // when the list reloads (after New roster) the address still names the roster open before,
-  // and opening that one again made the address and the open roster swap back and forth.
+  // when the list reloads (after New roster) the address still names the roster that was open
+  // before, and opening that one again made the address and the open roster swap back and forth.
   useEffect(() => {
     const wanted = address?.roster;
     if (!wanted || wanted === openScheduleIdRef.current) return;

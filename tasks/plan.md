@@ -406,6 +406,6 @@ The review's first figures (2.2 s, 700 ms, 200 ms, 960 ms) came from the develop
 
 Phase 2 did not change the grid, so these stay close to the baseline; Phase 3 works on them.
 
-**Screens** (`ui-audit.cjs`, 1366 px): no page has more serious axe problems than the baseline. History 26 (28). The whole app's dashboard has none for the owner and for the nurse (1 each before the new app frame), and its text under 12 px went from 11 to 7. The single screens keep their numbers until their own phases.
+**Screens** (`ui-audit.cjs`, 1366 px): no page has more serious axe problems than the baseline. History has 26 serious axe problems, down from 28. The whole app's dashboard has no serious axe problems for the owner or the nurse (1 each before the new app frame), and its text under 12 px went from 11 to 7. The single screens keep their numbers until their own phases.
 
 **Links and Back** (`links.cjs`, 9 checks): all pass. Before the review's fixes, creating a roster while another was open made the page stop answering, and a click in the account panel was lost when the browser did not focus the button (as in Safari).

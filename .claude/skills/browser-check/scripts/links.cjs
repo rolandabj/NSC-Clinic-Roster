@@ -24,7 +24,7 @@ const within = (promise, what, ms = 8000) =>
 const checks = [];
 const check = (name, run) => checks.push({ name, run });
 
-check('Settings: a link opens its tab; a click adds a step; Back and Forward', async ({ open }) => {
+check('Settings: a link opens its tab; a click adds a step to Back; Back and Forward', async ({ open }) => {
   const page = await open('#settings?tab=email');
   const main = page.getByRole('main');
   await page.getByRole('heading', { name: 'Settings', level: 1 }).waitFor();
@@ -53,7 +53,7 @@ check('Nurses: a link opens their details; closing them clears the address', asy
   await page.waitForFunction(() => location.hash === '#nurses');
 });
 
-check('Roster: a link opens a sheet; a click on another adds a step; Back returns', async ({ open }) => {
+check('Rosters: a link opens a sheet; a click on another adds a step to Back; Back returns', async ({ open }) => {
   const page = await open('#schedules?roster=nov&sheet=problems');
   await page.waitForFunction(() => location.hash.startsWith('#schedules?roster=nov&sheet=problems'), null, { timeout: 60000 });
   await page.getByRole('button', { name: 'Hours', exact: true }).last().click();
@@ -64,7 +64,7 @@ check('Roster: a link opens a sheet; a click on another adds a step; Back return
   assert.equal(await page.getByRole('button', { name: /^Problems \(/ }).last().getAttribute('aria-current'), 'page');
 });
 
-check("Roster: a link to a nurse's day puts the focus on that cell", async ({ open }) => {
+check("Rosters: a link to a nurse's day puts the focus on that cell", async ({ open }) => {
   const page = await open('#schedules?roster=nov&nurse=mary&date=2026-11-19');
   await page.waitForSelector('[data-cell="mary|2026-11-19"]', { timeout: 60000 });
   await page.waitForFunction(
@@ -74,15 +74,15 @@ check("Roster: a link to a nurse's day puts the focus on that cell", async ({ op
   );
 });
 
-check('Roster: a link to a roster that does not exist opens the usual one', async ({ open }) => {
+check('Rosters: a link to a roster that does not exist opens the usual one', async ({ open }) => {
   const page = await open('#schedules?roster=nope');
   await page.waitForFunction(() => location.hash.startsWith('#schedules?roster=nov'), null, { timeout: 60000 });
 });
 
 // The menu sets the address, and the browser's popstate event (sent at once, before hashchange)
-// clears the last screen's parts in the same click. Without it, Nurses would take `nurse=mary`
+// clears the last screen's address details in the same click. Without it, Nurses would take `nurse=mary`
 // for a link and then never write the open details to the address.
-check('Menu: a screen starts without the address parts of the screen before', async ({ open }) => {
+check('Menu: a screen starts without the address details of the screen before', async ({ open }) => {
   const page = await open('#dashboard?nurse=mary');
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Nurses', exact: true }).click();
   await page.waitForFunction(() => location.hash === '#nurses');
@@ -128,7 +128,7 @@ check('Account panel: its buttons work when a click does not focus them; Tab out
 // Review finding F1: the reload after New roster opened the old roster again, and the address
 // and the open roster then swapped back and forth until the page stopped answering. It runs
 // last, so a page caught in that loop does not slow the other checks.
-check('Roster: a new roster stays open, and the address names it', async ({ open }) => {
+check('Rosters: a new roster stays open, and the address names it', async ({ open }) => {
   const page = await open('#schedules?roster=nov');
   await page.waitForSelector('[data-cell="mary|2026-11-16"]', { timeout: 60000 });
   await page.waitForTimeout(500);
