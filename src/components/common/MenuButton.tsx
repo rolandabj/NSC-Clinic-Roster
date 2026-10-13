@@ -30,7 +30,7 @@ export interface MenuSection {
   start: number;
 }
 
-/** The menu's items split into sections, one for each run of items with the same group. */
+/** The menu's items split into sections, one for each block of items that share a group. */
 export function menuSections(items: MenuItem[]): MenuSection[] {
   const sections: MenuSection[] = [];
   items.forEach((item, i) => {
@@ -169,7 +169,7 @@ export const MenuButton: React.FC<MenuButtonProps> = ({ label, ariaLabel, items,
               );
             });
             if (!section.group) return <React.Fragment key={n}>{buttons}</React.Fragment>;
-            // A named group, read out with its name (the WAI-ARIA menu pattern).
+            // A named group, read out with its name (the ARIA menu pattern).
             const headingId = `${menuId}-group-${n}`;
             return (
               <div key={section.group} role="group" aria-labelledby={headingId} className={n > 0 ? 'border-t border-slate-100 mt-1 pt-1' : ''}>

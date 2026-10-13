@@ -1,5 +1,5 @@
 // The roster screen's toolbar (UI overhaul Phase 4, slice 3): one line from 1024 px, More in four
-// named groups, the keys in More, and each of More's entries opening its dialog.
+// named groups, the keyboard in More, and each of More's entries opening its dialog.
 // Run: NODE_PATH=$(npm root -g) node toolbar.cjs [--base http://localhost:5180] [--shots <folder>]
 // One line for each check; exit code 1 when one fails.
 const { chromium } = require('playwright');

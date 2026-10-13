@@ -792,9 +792,9 @@
     "semantic_hash": ""
   },
   "src/components/common/MenuButton.tsx": {
-    "mtime": 1791895920.4004927,
-    "seen": 1791896204.463884,
-    "ast_hash": "92dde5957a0fea5a4e83d9f00513fb3f",
+    "mtime": 1791896283.1057208,
+    "seen": 1791896297.2848673,
+    "ast_hash": "d8b3675089cb9a24ec0f354554cb42d2",
     "semantic_hash": ""
   },
   "src/components/views/MyRosterView.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791896196.5347683,
-    "seen": 1791896204.4643185,
-    "ast_hash": "4a23cb70a7d8508e50c14eb977f297df",
+    "mtime": 1791896290.624225,
+    "seen": 1791896297.2852798,
+    "ast_hash": "6900b48734587935a599f7aa3f47875c",
     "semantic_hash": ""
   },
   "index.html": {
@@ -2046,9 +2046,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/toolbar.cjs": {
-    "mtime": 1791896080.9699392,
-    "seen": 1791896204.463831,
-    "ast_hash": "04840215943ad9df526161d4cd4967f1",
+    "mtime": 1791896283.104947,
+    "seen": 1791896297.2848225,
+    "ast_hash": "49d79dcc0544ebadbb93957fe2688d98",
     "semantic_hash": ""
   },
   "tests/unit/rosterToolbar.test.ts": {
