@@ -1,6 +1,6 @@
 import type { HoursHistory } from '../../services/hours/hoursBalance';
 import { isWeekendDay } from '../../utils/weekend';
-import React, { useState, useEffect, useRef, useId, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useId, useMemo, useSyncExternalStore } from 'react';
 import {
   FileSpreadsheet,
   Undo2,
@@ -69,6 +69,7 @@ import { isFloatShift } from '../../services/engine/floatShift';
 import { QuickCellPopup, QuickWorkOption, QuickLeaveOption, QuickDayNote, QuickWish } from './grid/QuickCellPopup';
 import { GridCell, GridCellActions } from './grid/GridCell';
 import { CellView, cellLookupsOf, cellViewOf, reuseCellViews } from './grid/cellView';
+import { GridSelection, GridSelectionState, PopupRef, createGridSelection, moveSelection } from './grid/gridSelection';
 import { describeRequest, explainNurseDay, isPendingLeave, pendingLeaveOn, requestOn, RequestWords } from '../../services/engine/explainCell';
 
 interface WorkbookGridProps {
@@ -150,6 +151,18 @@ const isDayProblem = (f: ValidationFinding) => DAY_PROBLEM_IDS.test(f.id);
 
 const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+/**
+ * A part of the grid that shows the selection (the status bar, the popup). It follows the
+ * store by itself, so a key press draws it again without drawing the whole grid.
+ */
+const SelectionView: React.FC<{ selection: GridSelection; render: (state: GridSelectionState) => React.ReactNode }> = ({
+  selection,
+  render,
+}) => {
+  const state = useSyncExternalStore(selection.subscribe, selection.getState);
+  return <>{render(state)}</>;
+};
+
 export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   workingHoursPeriods = [],
   hoursHistory,
@@ -189,15 +202,11 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   const [groupBy, setGroupBy] = useState<'NONE' | 'SENIORITY'>('NONE');
   const [highlightViolations, setHighlightViolations] = useState(true);
 
-  // Selection & Focus
-  const [selectedCell, setSelectedCell] = useState<{ nurseId: string; date: string } | null>(null);
-  // Cell briefly flashed after "Go to cell"
-  const [flashCellKey, setFlashCellKey] = useState<string | null>(null);
+  // The selected cell, its popup and the cell flashed after "Show in grid" live in a small
+  // store, not in this component's state, so a key press draws only the cells it changes.
+  const [selection] = useState(createGridSelection);
   const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
-
-  // Small popup next to a clicked cell (one tap choices)
-  const [quickPopup, setQuickPopup] = useState<{ nurseId: string; date: string; focusOnOpen: boolean } | null>(null);
 
   // Inline Editor Popover
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -335,9 +344,6 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   ).length;
 
   // Group nurses if requested
-  // The selected cell may be on days not shown now (after paging); then the first cell takes Tab.
-  const selectedCellShown =
-    !!selectedCell && blockDates.includes(selectedCell.date) && nurses.some((n) => n.id === selectedCell.nurseId);
   const displayNurses = useMemo(
     () =>
       [...nurses].sort((a, b) => {
@@ -476,6 +482,16 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   }, [displayNurses, dayInfo, assignmentByCell, lockByCell, leaveByCell, requestsByCell, leaveEntries, availabilityRequests, cellViolationMessages, cellLookups]);
   previousViewsRef.current = cellViews;
 
+  // The Tab stop is the selected cell when it is on the days shown, else the first cell.
+  const firstCellKey = displayNurses[0] && blockDates[0] ? cellKeyOf(displayNurses[0].id, blockDates[0]) : null;
+  const shownCellKeys = useMemo(
+    () => new Set(displayNurses.flatMap((n) => blockDates.map((d) => cellKeyOf(n.id, d)))),
+    [displayNurses, blockDates]
+  );
+  selection.setLayout(firstCellKey, shownCellKeys);
+  // Cells that kept their props but gained or lost the Tab stop are told once the grid is drawn.
+  useLayoutEffect(() => selection.flushLayout());
+
   const getNurseBlockHours = (nurse: Nurse) => {
     const h = blockHoursByNurse.get(nurse.id);
     return { blockTotal: h?.totalHours ?? 0, bDuty: h?.dutyHours ?? 0, bLeave: h?.leaveHours ?? 0 };
@@ -566,9 +582,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
   // Open the big Cell Editor for Duty Shift or Leave
   const openCellEditor = (nurseId: string, date: string) => {
-    setSelectedCell({ nurseId, date });
+    selection.select({ nurseId, date });
+    selection.closePopup();
     setContextMenu(null);
-    setQuickPopup(null);
     setEditorTarget({ nurseId, date });
 
     const d = computeEditorDefaults(nurseId, date);
@@ -586,9 +602,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
   // Cell Click / Navigation: a click selects the cell and opens the small popup
   const openQuickPopup = (nurseId: string, date: string, focusOnOpen = false) => {
-    setSelectedCell({ nurseId, date });
     setContextMenu(null);
-    setQuickPopup({ nurseId, date, focusOnOpen });
+    selection.openPopup({ nurseId, date, focusOnOpen });
   };
 
   const handleCellClick = (nurseId: string, date: string) => {
@@ -599,26 +614,26 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     openCellEditor(nurseId, date);
   };
 
-  // The popup belongs to one cell: moving the selection away closes it.
-  useEffect(() => {
-    if (quickPopup && (selectedCell?.nurseId !== quickPopup.nurseId || selectedCell?.date !== quickPopup.date)) {
-      setQuickPopup(null);
-    }
-  }, [selectedCell, quickPopup]);
-
   // Keyboard focus follows the selection while it is in the grid (arrow keys).
+  // (The popup closes when the selection moves away from its cell: the store does that.)
   useEffect(() => {
-    if (!selectedCell) return;
-    const active = document.activeElement as HTMLElement | null;
-    if (!active || !tableRef.current?.contains(active) || !active.dataset.cell) return;
-    const key = cellKeyOf(selectedCell.nurseId, selectedCell.date);
-    if (active.dataset.cell === key) return;
-    const cell = findCellElement(key);
-    if (cell) {
-      cell.focus({ preventScroll: true });
-      cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-    }
-  }, [selectedCell]);
+    let last = selection.getState().selected;
+    return selection.subscribe(() => {
+      const selectedCell = selection.getState().selected;
+      if (selectedCell === last) return;
+      last = selectedCell;
+      if (!selectedCell) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || !tableRef.current?.contains(active) || !active.dataset.cell) return;
+      const key = cellKeyOf(selectedCell.nurseId, selectedCell.date);
+      if (active.dataset.cell === key) return;
+      const cell = findCellElement(key);
+      if (cell) {
+        cell.focus({ preventScroll: true });
+        cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      }
+    });
+  }, [selection]);
 
   const findCellElement = (key: string): HTMLElement | null => {
     const root = tableRef.current;
@@ -632,8 +647,8 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     if (!focusRequest) return;
     const { nurseId, date } = focusRequest;
     const key = cellKeyOf(nurseId, date);
-    setSelectedCell({ nurseId, date });
-    setQuickPopup(null);
+    selection.select({ nurseId, date });
+    selection.closePopup();
     setContextMenu(null);
 
     let tries = 0;
@@ -661,8 +676,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
         behavior: 'smooth',
       });
       cell.focus({ preventScroll: true });
-      setFlashCellKey(key);
-      flashTimer = setTimeout(() => setFlashCellKey((k) => (k === key ? null : k)), 1500);
+      selection.flash(key);
+      flashTimer = setTimeout(() => {
+        if (selection.getState().flash === key) selection.flash(null);
+      }, 1500);
     };
     frame = requestAnimationFrame(attempt);
     return () => {
@@ -672,113 +689,85 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     // Only a new request (nonce) starts this.
   }, [focusRequest?.nonce]);
 
-  // Keyboard navigation (Arrows, Enter, Esc)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isEditorOpen) return;
-      if (!selectedCell) return;
-      // A dialog (e.g. the clear cell confirmation) is open: its keys are its own.
-      if (document.querySelector('[aria-modal="true"]')) return;
+  // Keyboard navigation (arrows, Tab, Enter, Space, Delete, copy and paste). The keys are
+  // handled on the grid itself (`onKeyDown` below), and on the page only while nothing has
+  // the focus (for example after a dialog closed), as before. One listener for the life of
+  // the grid, reading the latest state through a ref, instead of one added after every render.
+  const handleGridKey = (e: KeyboardEvent | React.KeyboardEvent) => {
+    if (isEditorOpen) return;
+    const { selected: selectedCell, popup } = selection.getState();
+    if (!selectedCell) return;
+    // A dialog (e.g. the clear cell confirmation) is open: its keys are its own.
+    if (document.querySelector('[aria-modal="true"]')) return;
 
-      // Never take over keys while the user is typing somewhere else (search boxes,
-      // other sheets, dialogs) or while a button or link has keyboard focus.
-      const target = e.target as HTMLElement | null;
-      const tag = target?.tagName;
-      // Tab from the cell with the popup open goes into the popup.
-      if (e.key === 'Tab' && !e.shiftKey && quickPopup && target?.dataset?.cell) {
-        const first = document.querySelector<HTMLElement>('[data-quick-popup] button');
-        if (first) {
-          e.preventDefault();
-          first.focus();
-          return;
-        }
-      }
-      if (
-        tag === 'INPUT' ||
-        tag === 'TEXTAREA' ||
-        tag === 'SELECT' ||
-        target?.isContentEditable ||
-        (e.key === 'Tab' && target && target !== document.body) ||
-        // Enter, Space and Delete on a focused button or link belong to it, not to the grid.
-        (target && target !== document.body && !!target.closest('button, a[href], [role="button"]'))
-      ) {
+    // Never take over keys while the user is typing somewhere else (search boxes,
+    // other sheets, dialogs) or while a button or link has keyboard focus.
+    const target = e.target as HTMLElement | null;
+    const tag = target?.tagName;
+    // Tab from the cell with the popup open goes into the popup.
+    if (e.key === 'Tab' && !e.shiftKey && popup && target?.dataset?.cell) {
+      const first = document.querySelector<HTMLElement>('[data-quick-popup] button');
+      if (first) {
+        e.preventDefault();
+        first.focus();
         return;
       }
+    }
+    if (
+      tag === 'INPUT' ||
+      tag === 'TEXTAREA' ||
+      tag === 'SELECT' ||
+      target?.isContentEditable ||
+      (e.key === 'Tab' && target && target !== document.body) ||
+      // Enter, Space and Delete on a focused button or link belong to it, not to the grid.
+      (target && target !== document.body && !!target.closest('button, a[href], [role="button"]'))
+    ) {
+      return;
+    }
 
-      const currentNurseIndex = displayNurses.findIndex((n) => n.id === selectedCell.nurseId);
-      const currentDateIndex = blockDates.indexOf(selectedCell.date);
-
-      if (e.key === 'Tab' && e.shiftKey) {
-        e.preventDefault();
-        if (currentDateIndex > 0) {
-          setSelectedCell({
-            nurseId: selectedCell.nurseId,
-            date: blockDates[currentDateIndex - 1],
-          });
-        }
-      } else if (e.key === 'ArrowRight' || e.key === 'Tab') {
-        e.preventDefault();
-        if (currentDateIndex < blockDates.length - 1) {
-          setSelectedCell({
-            nurseId: selectedCell.nurseId,
-            date: blockDates[currentDateIndex + 1],
-          });
-        }
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        if (currentDateIndex > 0) {
-          setSelectedCell({
-            nurseId: selectedCell.nurseId,
-            date: blockDates[currentDateIndex - 1],
-          });
-        }
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        if (currentNurseIndex < displayNurses.length - 1) {
-          setSelectedCell({
-            nurseId: displayNurses[currentNurseIndex + 1].id,
-            date: selectedCell.date,
-          });
-        }
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        if (currentNurseIndex > 0) {
-          setSelectedCell({
-            nurseId: displayNurses[currentNurseIndex - 1].id,
-            date: selectedCell.date,
-          });
-        }
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        handleCellDoubleClick(selectedCell.nurseId, selectedCell.date);
-      } else if (e.key === ' ') {
-        // Space opens the small popup with its quick choices.
-        e.preventDefault();
-        openQuickPopup(selectedCell.nurseId, selectedCell.date, true);
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        handleDeleteCellAssignment(selectedCell.nurseId, selectedCell.date);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-        const asgn = assignments.find(
-          (a) => a.nurseId === selectedCell.nurseId && a.date === selectedCell.date
-        );
-        if (asgn) setClipboardAssignment(asgn);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-        if (clipboardAssignment) {
-          handlePasteAssignment(selectedCell.nurseId, selectedCell.date);
-        }
+    const moved = moveSelection(
+      selectedCell,
+      e,
+      displayNurses.map((n) => n.id),
+      blockDates
+    );
+    if (moved) {
+      e.preventDefault();
+      selection.select(moved);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      handleCellDoubleClick(selectedCell.nurseId, selectedCell.date);
+    } else if (e.key === ' ') {
+      // Space opens the small popup with its quick choices.
+      e.preventDefault();
+      openQuickPopup(selectedCell.nurseId, selectedCell.date, true);
+    } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      handleDeleteCellAssignment(selectedCell.nurseId, selectedCell.date);
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+      const asgn = assignmentOn(selectedCell.nurseId, selectedCell.date);
+      if (asgn) setClipboardAssignment(asgn);
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+      if (clipboardAssignment) {
+        handlePasteAssignment(selectedCell.nurseId, selectedCell.date);
       }
+    }
+  };
+  const gridKeyRef = useRef(handleGridKey);
+  gridKeyRef.current = handleGridKey;
+  useEffect(() => {
+    const onPageKey = (e: KeyboardEvent) => {
+      if (e.target === document.body) gridKeyRef.current(e);
     };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedCell, isEditorOpen, displayNurses, blockDates, assignments, clipboardAssignment, quickPopup]);
+    window.addEventListener('keydown', onPageKey);
+    return () => window.removeEventListener('keydown', onPageKey);
+  }, []);
 
   // Context Menu
   const handleContextMenu = (e: React.MouseEvent, nurseId: string, date: string) => {
     e.preventDefault();
-    setSelectedCell({ nurseId, date });
-    setQuickPopup(null);
+    selection.select({ nurseId, date });
+    selection.closePopup();
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -1140,8 +1129,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
   /** Closes the popup and puts keyboard focus back on its cell (after a choice in the popup). */
   const closePopupToCell = () => {
-    if (quickPopup) findCellElement(cellKeyOf(quickPopup.nurseId, quickPopup.date))?.focus({ preventScroll: true });
-    setQuickPopup(null);
+    const { popup } = selection.getState();
+    if (popup) findCellElement(cellKeyOf(popup.nurseId, popup.date))?.focus({ preventScroll: true });
+    selection.closePopup();
   };
 
   // The popup's one tap choices for a cell. Each makes the same change the big
@@ -1292,7 +1282,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     click: handleCellClick,
     doubleClick: handleCellDoubleClick,
     contextMenu: handleContextMenu,
-    select: (nurseId, date) => setSelectedCell({ nurseId, date }),
+    select: (nurseId, date) => selection.select({ nurseId, date }),
   };
   const cellActions = useMemo<GridCellActions>(
     () => ({
@@ -1472,7 +1462,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
       {/* 6.2 ROSTER SHEET MAIN GRID VIEWPORT */}
       <div className="flex-1 flex overflow-hidden relative">
-        <div ref={gridScrollRef} className="flex-1 overflow-auto bg-slate-200 p-px scroll-pb-16">
+        <div ref={gridScrollRef} onKeyDown={(e) => gridKeyRef.current(e)} className="flex-1 overflow-auto bg-slate-200 p-px scroll-pb-16">
           <table ref={tableRef} className="border-collapse bg-white text-xs w-max" role="grid" aria-label="Nurse roster">
             {/* Sticky Header Row 1: Week Spans */}
             <thead className="sticky top-0 z-30 bg-slate-100 border-b border-slate-300">
@@ -1564,7 +1554,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
             {/* Table Body: Nurse Rows */}
             <tbody className="divide-y divide-slate-200 font-mono">
-              {displayNurses.map((nurse, nurseIndex) => {
+              {displayNurses.map((nurse) => {
                 const seniority = seniorityMap.get(nurse.seniorityLevelId);
                 const hasPhl = nurse.capabilityIds?.includes('role-phl');
                 const { totalHours, targetHours, percent } = getNurseHoursProgress(nurse);
@@ -1652,25 +1642,17 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                     </th>
 
                     {/* Matrix Cells */}
-                    {dayInfo.map(({ dateStr }, dateIndex) => {
-                      const cellKey = cellKeyOf(nurse.id, dateStr);
-                      const isSelected = selectedCell?.nurseId === nurse.id && selectedCell?.date === dateStr;
-                      return (
+                    {dayInfo.map(({ dateStr }) => (
                         <GridCell
                           key={dateStr}
-                          view={cellViews.get(cellKey)!}
-                          isSelected={isSelected}
-                          // Without a selection the first cell is the grid's way in for the Tab key.
-                          isTabStop={selectedCellShown ? isSelected : nurseIndex === 0 && dateIndex === 0}
-                          isFlashing={flashCellKey === cellKey}
-                          isPopupCell={quickPopup?.nurseId === nurse.id && quickPopup?.date === dateStr}
+                          view={cellViews.get(cellKeyOf(nurse.id, dateStr))!}
+                          selection={selection}
                           showProblems={highlightViolations}
                           heightClass={cellHeightClass}
                           fontClass={cellFontSizeClass}
                           actions={cellActions}
                         />
-                      );
-                    })}
+                    ))}
 
                     {/* Hours inside the days shown */}
                     <td
@@ -2005,7 +1987,10 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       {/* Footer Status Bar */}
       <div className="h-7 bg-white border-t border-slate-200 px-4 flex items-center justify-between text-[11px] text-slate-600 shrink-0 select-none">
         <div className="flex items-center gap-4">
-          {selectedCell ? (
+          <SelectionView
+            selection={selection}
+            render={({ selected: selectedCell }) =>
+              selectedCell ? (
             <div className="flex items-center gap-1.5 font-mono text-slate-800">
               <span className="font-bold">
                 {nurseMap.get(selectedCell.nurseId)?.fullName}
@@ -2015,11 +2000,13 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             </div>
           ) : (
             <span className="text-slate-500">Click a cell to change it</span>
-          )}
+              )
+            }
+          />
         </div>
 
         <div className="flex items-center gap-4">
-          {(() => {
+          <SelectionView selection={selection} render={({ selected: selectedCell }) => {
             // The day of the selected cell (else the first day shown): opening hours missing a free nurse.
             const checkDate = selectedCell?.date || blockDates[0] || schedule.startDate;
             const dayMap = validationReport.hourlyCoverageMap[checkDate];
@@ -2046,7 +2033,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                 </span>
               </button>
             );
-          })()}
+          }} />
 
           <button
             onClick={() => onNavigateTab && onNavigateTab('warnings')}
@@ -2572,100 +2559,103 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
       )}
 
       {/* --- SMALL POPUP NEXT TO A CLICKED CELL --- */}
-      {quickPopup && !isEditorOpen && (() => {
-        const { nurseId, date } = quickPopup;
-        const lock = locks.find((l) => l.nurseId === nurseId && l.date === date);
-        const hasContent =
-          !!lock ||
-          assignments.some((a) => a.nurseId === nurseId && a.date === date) ||
-          leaveEntries.some((le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate);
-        const options = lock ? { work: [], leave: [] } : buildQuickOptions(nurseId, date);
-        // An empty cell says why: the nurse is off, or which shifts she is free for.
-        let dayNote: QuickDayNote | undefined;
-        if (!hasContent) {
-          const why = explainNurseDay({
-            nurseId,
-            date,
-            schedule,
-            assignments,
-            nurses,
-            dutyWindows,
-            leaveEntries,
-            locks,
-            roles,
-            rules,
-            seniorityLevels,
-            workingHoursPeriods,
-            leaveTypes,
-            sessions,
-            doctors,
-            priorAssignments,
-            hoursHistory,
-            availabilityRequests,
-          });
-          // Requests and leave waiting for approval are shown in their own line at the top.
-          const notes = why.notes.filter((n) => !/^(Asked for this day off|Has leave waiting for approval)/.test(n));
-          if (why.status === 'BLOCKED') {
-            dayNote = { tone: 'off', title: 'Why this nurse is off:', lines: why.reasons };
-          } else if (why.status === 'AVAILABLE') {
-            const h = why.hours.goal > 0 ? `${fmtHours(why.hours.worked)} / ${fmtHours(why.hours.goal)} h` : `${fmtHours(why.hours.worked)} h`;
-            dayNote = {
-              tone: 'free',
-              title: `Free to work: ${why.possibleShifts.map((p) => p.label).join(', ')} (${h})`,
-              lines: notes,
-            };
-          }
-        }
-        const wish = wishesOn(nurseId, date);
-        const wishes: QuickWish[] = [];
-        if (wish.pendingLeave) {
-          wishes.push({ text: `${wish.pendingLeaveText}${wish.pendingLeave.note ? `: ${wish.pendingLeave.note}` : ''}`, notFollowed: false });
-        }
-        if (wish.request && wish.requestWords) {
-          wishes.push({
-            text: `${wish.requestWords.text}${wish.request.note ? `: ${wish.request.note}` : ''}`,
-            notFollowed: wish.requestWords.mismatch,
-          });
-        }
-        return (
-          <QuickCellPopup
-            key={cellKeyOf(nurseId, date)}
-            cellKey={cellKeyOf(nurseId, date)}
-            nurseName={nurseMap.get(nurseId)?.fullName || 'Nurse'}
-            dateLabel={formatDate(date)}
-            currentLabel={describeCell(nurseId, date)}
-            problems={cellViolationMessages.get(`${nurseId}_${date}`) || []}
-            dayNote={dayNote}
-            wishes={wishes}
-            pinned={!!lock}
-            onUnpin={
-              lock && onOpenLockOverrideModal
-                ? () => {
-                    closePopupToCell();
-                    onOpenLockOverrideModal(lock);
-                  }
-                : undefined
-            }
-            workOptions={options.work}
-            leaveOptions={options.leave}
-            onClear={
-              hasContent
-                ? () => {
-                    closePopupToCell();
-                    void handleDeleteCellAssignment(nurseId, date);
-                  }
-                : undefined
-            }
-            onMore={() => {
-              // Focus the cell first so closing the editor brings focus back to it.
-              closePopupToCell();
-              openCellEditor(nurseId, date);
-            }}
-            onClose={() => setQuickPopup(null)}
-            focusOnOpen={quickPopup.focusOnOpen}
-          />
-        );
-      })()}
+      <SelectionView selection={selection} render={({ popup }) => popup && !isEditorOpen && renderQuickPopup(popup)} />
     </div>
   );
+
+  /** The popup next to a clicked cell, drawn by `SelectionView` whenever it opens or moves. */
+  function renderQuickPopup(quickPopup: PopupRef) {
+    const { nurseId, date } = quickPopup;
+    const lock = locks.find((l) => l.nurseId === nurseId && l.date === date);
+    const hasContent =
+      !!lock ||
+      assignments.some((a) => a.nurseId === nurseId && a.date === date) ||
+      leaveEntries.some((le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate);
+    const options = lock ? { work: [], leave: [] } : buildQuickOptions(nurseId, date);
+    // An empty cell says why: the nurse is off, or which shifts the nurse is free for.
+    let dayNote: QuickDayNote | undefined;
+    if (!hasContent) {
+      const why = explainNurseDay({
+        nurseId,
+        date,
+        schedule,
+        assignments,
+        nurses,
+        dutyWindows,
+        leaveEntries,
+        locks,
+        roles,
+        rules,
+        seniorityLevels,
+        workingHoursPeriods,
+        leaveTypes,
+        sessions,
+        doctors,
+        priorAssignments,
+        hoursHistory,
+        availabilityRequests,
+      });
+      // Requests and leave waiting for approval are shown in their own line at the top.
+      const notes = why.notes.filter((n) => !/^(Asked for this day off|Has leave waiting for approval)/.test(n));
+      if (why.status === 'BLOCKED') {
+        dayNote = { tone: 'off', title: 'Why this nurse is off:', lines: why.reasons };
+      } else if (why.status === 'AVAILABLE') {
+        const h = why.hours.goal > 0 ? `${fmtHours(why.hours.worked)} / ${fmtHours(why.hours.goal)} h` : `${fmtHours(why.hours.worked)} h`;
+        dayNote = {
+          tone: 'free',
+          title: `Free to work: ${why.possibleShifts.map((p) => p.label).join(', ')} (${h})`,
+          lines: notes,
+        };
+      }
+    }
+    const wish = wishesOn(nurseId, date);
+    const wishes: QuickWish[] = [];
+    if (wish.pendingLeave) {
+      wishes.push({ text: `${wish.pendingLeaveText}${wish.pendingLeave.note ? `: ${wish.pendingLeave.note}` : ''}`, notFollowed: false });
+    }
+    if (wish.request && wish.requestWords) {
+      wishes.push({
+        text: `${wish.requestWords.text}${wish.request.note ? `: ${wish.request.note}` : ''}`,
+        notFollowed: wish.requestWords.mismatch,
+      });
+    }
+    return (
+      <QuickCellPopup
+        key={cellKeyOf(nurseId, date)}
+        cellKey={cellKeyOf(nurseId, date)}
+        nurseName={nurseMap.get(nurseId)?.fullName || 'Nurse'}
+        dateLabel={formatDate(date)}
+        currentLabel={describeCell(nurseId, date)}
+        problems={cellViolationMessages.get(`${nurseId}_${date}`) || []}
+        dayNote={dayNote}
+        wishes={wishes}
+        pinned={!!lock}
+        onUnpin={
+          lock && onOpenLockOverrideModal
+            ? () => {
+                closePopupToCell();
+                onOpenLockOverrideModal(lock);
+              }
+            : undefined
+        }
+        workOptions={options.work}
+        leaveOptions={options.leave}
+        onClear={
+          hasContent
+            ? () => {
+                closePopupToCell();
+                void handleDeleteCellAssignment(nurseId, date);
+              }
+            : undefined
+        }
+        onMore={() => {
+          // Focus the cell first so closing the editor brings focus back to it.
+          closePopupToCell();
+          openCellEditor(nurseId, date);
+        }}
+        onClose={() => selection.closePopup()}
+        focusOnOpen={quickPopup.focusOnOpen}
+      />
+    );
+  }
 };

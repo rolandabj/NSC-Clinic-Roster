@@ -209,7 +209,7 @@ failed save.
 
 | Phase | What | Backend | Size |
 |---|---|---|---|
-| 4 | Roster screen layout, words and accessibility: the sheet tabs above the content, one problem count everywhere ("N must fix · M to check"), a regrouped toolbar, readable cells and marks, and a read only day view below 1024 px (see the open question below) | none | large |
+| 4 | Roster screen layout, words and accessibility: the sheet tabs above the content, one problem count everywhere ("N must fix · M to check"), a regrouped toolbar, readable cells and marks, and a read only day view on phones (see the owner's answer below) | none | large |
 | 5 | Nurse screens for phones (My roster as cards, My requests with a clear status, the read receipt page, the shared roster page and the viewer Dashboard), and an email to a nurse when their request is decided | a new route, `POST /api/requests/:id/notify`, with a switch in Settings | medium |
 | 6 | Planner screens: the Nurses and Doctors lists and editors, Availability split into "Leave and days off" and "Requests", and a leave grid that works without dragging | none | large |
 | 7 | Every dialog moved onto the shared dialog, one publish flow, a "Sent rosters" screen, History tidied, and resuming a publish that stopped | resuming a publish; the email log loaded in pages | large |
@@ -219,11 +219,14 @@ failed save.
 No phase is expected to change the Firestore rules. If one does, the change is reviewed and the
 owner publishes it by hand.
 
-### An open question for the owner, before Phase 4
+### The question before Phase 4, answered
 
-The plan gives the read only day view to screens narrower than 1024 px, which includes a tablet
+The plan gave the read only day view to screens narrower than 1024 px, which includes a tablet
 held upright, while the owner's decision says planners edit the roster on a laptop or a tablet.
-Should a tablet held upright edit the roster, or get the day view?
+Asked on 13-10-2026 whether a tablet held upright should edit the roster or get the day view,
+the owner chose editing. So only phones get the day view: a screen under 700 px wide or under
+500 px high, which covers a phone held either way, while the smallest iPad is 744 px wide held
+upright.
 
 ### Noticed, and waiting for their phase
 
@@ -232,6 +235,7 @@ Should a tablet held upright edit the roster, or get the day view?
   it one count.
 * The top bar shows 0 problems when the app opens on a screen other than the Dashboard or
   Rosters, until one of those two has been opened, because only they report the count. Phase 4.
+* The selected cell shows only a light tint: its ring hardly shows. Phase 4 (readable cells).
 * At 1024 px, with the menu showing, the roster toolbar's buttons wrap onto a second row and
   the day range breaks across two lines. Phase 4.
 * "ClinicRoster" still appears on the Doctors screen (Phase 6), and in the roster email and the

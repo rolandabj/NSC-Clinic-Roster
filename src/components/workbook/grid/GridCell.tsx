@@ -1,6 +1,7 @@
-import React, { memo } from 'react';
+import React, { memo, useCallback, useSyncExternalStore } from 'react';
 import { Clock, Edit2, Lock } from 'lucide-react';
 import type { CellView } from './cellView';
+import { CELL_FLASH, CELL_POPUP, CELL_SELECTED, CELL_TAB_STOP, GridSelection } from './gridSelection';
 
 /** What a cell does when it is clicked or focused. The grid passes one object that never changes. */
 export interface GridCellActions {
@@ -12,11 +13,8 @@ export interface GridCellActions {
 
 interface GridCellProps {
   view: CellView;
-  isSelected: boolean;
-  /** The one cell the Tab key reaches. */
-  isTabStop: boolean;
-  isFlashing: boolean;
-  isPopupCell: boolean;
+  /** The grid's selection, popup and flash; the cell listens for its own key only. */
+  selection: GridSelection;
   /** The Problem marks switch. */
   showProblems: boolean;
   heightClass: string;
@@ -25,21 +23,25 @@ interface GridCellProps {
 }
 
 /**
- * One roster grid cell. Its props are plain values and a view worked out in advance,
- * so it is drawn again only when what it shows changes, not on every key press.
+ * One roster grid cell. Its props are plain values and a view worked out in advance, and it
+ * reads its own part of the selection from the store, so it is drawn again only when what it
+ * shows changes or it gains or loses the selection, the popup or the flash.
  */
 export const GridCell = memo(function GridCell({
   view,
-  isSelected,
-  isTabStop,
-  isFlashing,
-  isPopupCell,
+  selection,
   showProblems,
   heightClass,
   fontClass,
   actions,
 }: GridCellProps) {
-  const { nurseId, date } = view;
+  const { nurseId, date, key } = view;
+  const subscribe = useCallback((listener: () => void) => selection.subscribeCell(key, listener), [selection, key]);
+  const flags = useSyncExternalStore(subscribe, () => selection.flagsOf(key));
+  const isSelected = (flags & CELL_SELECTED) !== 0;
+  const isTabStop = (flags & CELL_TAB_STOP) !== 0;
+  const isPopupCell = (flags & CELL_POPUP) !== 0;
+  const isFlashing = (flags & CELL_FLASH) !== 0;
   const hasViolation = showProblems && view.hasProblems;
   // Leave waiting for approval: diagonal stripes behind whatever the cell shows.
   const pendingHatch = view.hasPendingLeave

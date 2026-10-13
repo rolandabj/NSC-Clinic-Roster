@@ -234,7 +234,7 @@ Risks: the save queues, live updates, undo and shift ids. These are covered by t
   * Shorter spoken cell names that start with the visible text.
   * No extra Tab stops in the headers; the hours column and the totals row can be reached by keyboard.
   * The zoom buttons say which level is on (`aria-pressed`).
-* **Below 1024 px:** a read only day view (choose a day, see each nurse's shift) and the problems list, with a note that editing needs a laptop or tablet.
+* **On a phone** (a screen under 700 px wide or under 500 px high, so a phone held either way): a read only day view (choose a day, see each nurse's shift) and the problems list, with a note that editing needs a laptop or tablet. A tablet edits the roster, held upright or sideways (the owner's decision of 13-10-2026; the smallest iPad is 744 px wide held upright), with the grid scrolling sideways inside its box.
 
 ### Phase 5: nurse screens for phones, and request decision emails
 
@@ -423,3 +423,14 @@ This session's container is slower than the one at Checkpoint 2, so each slice i
 | One arrow key | 68 ms | 37 ms, 33 ms | under 50 ms |
 | Deleting a shift | 166 ms | 112 ms, 118 ms | under 100 ms |
 | Longest blocking task while using the grid | 102 ms | 57 ms, 62 ms | under 200 ms |
+
+After slice 2, the same machine. Since slice 2, `grid-timing.cjs` also measures inside the page, from the press or the key to the next frame drawn after the change: its older times include Playwright's own work (a click first waits for the cell to stay still), about 70 ms for the popup.
+
+| | Slice 1 | Slice 2 | Phase 3 target |
+|---|---|---|---|
+| Cells shown (7 runs) | 1,118 ms | 1,098 ms | under 1,000 ms |
+| Longest blocking task while loading (7 runs) | 307 ms | 284 ms | under 200 ms |
+| Cell popup opens, in the page | 77 ms | 53 ms, 57 ms | under 100 ms |
+| One arrow key, in the page | 43 ms | 29 ms, 30 ms | under 50 ms |
+| Deleting a shift, in the page | 108 ms | 106 ms, 100 ms | under 100 ms |
+| Popup, arrow key and deleting a shift, from the script | 146, 40, 135 ms | 129, 27, 137 ms and 142, 25, 121 ms | |

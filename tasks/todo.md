@@ -36,7 +36,7 @@ Main moves only when the owner says "push to main".
 
 ## Phase 3: roster grid speed and structure
 - [x] Memoized cells and per cell views (`grid/cellView.ts`, `grid/GridCell.tsx`, `grid-flow.cjs`)
-- [ ] Selection store, keys on the grid
+- [x] Selection store, keys on the grid (`grid/gridSelection.ts`; `grid-timing.cjs` also measures in the page)
 - [ ] Derived data once per change; compare dialog only while open
 - [ ] Only changed lists saved and fingerprinted
 - [ ] Checker off the typing path
@@ -48,7 +48,7 @@ Main moves only when the owner says "push to main".
 - [ ] Tabs above the content, one problem count, no duplicates
 - [ ] Toolbar regrouped
 - [ ] Grid cells, marks, spoken names, keyboard reach
-- [ ] Read only day view below 1024 px
+- [ ] Read only day view on phones (under 700 px wide or under 500 px high); tablets edit, held either way (owner, 13-10-2026)
 - [ ] Checkpoint 4
 
 ## Phase 5: nurse screens for phones, request decision emails
