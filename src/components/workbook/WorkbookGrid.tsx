@@ -1,6 +1,6 @@
 import type { HoursHistory } from '../../services/hours/hoursBalance';
 import { isWeekendDay } from '../../utils/weekend';
-import React, { memo, useState, useLayoutEffect, useRef, useMemo } from 'react';
+import React, { memo, useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import {
   Schedule,
   Assignment,
@@ -523,6 +523,14 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   const handleCellDoubleClick = (nurseId: string, date: string) => {
     openCellEditor(nurseId, date);
   };
+
+  // Hidden while another sheet is open: the popup and the right click menu close, so they
+  // do not take the next Esc on that sheet or come back with the grid.
+  useEffect(() => {
+    if (isActive) return;
+    selection.closePopup();
+    setContextMenu(null);
+  }, [isActive]);
 
   // Focus follows the selection, and "Show in grid" brings a cell into view (`useGridSelection`).
   const { findCellElement } = useGridSelection({ selection, tableRef, gridScrollRef, focusRequest, onRequest: () => setContextMenu(null) });

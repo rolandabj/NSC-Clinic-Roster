@@ -66,8 +66,14 @@ export function useRosterChecks(o: {
   hoursHistory: HoursHistory | undefined;
   clinicSetupRef: MutableRefObject<ClinicSetup | undefined>;
   availabilityRequestsRef: MutableRefObject<AvailabilityRequest[]>;
+  /**
+   * True for the roster that is open now. A request for another roster (an edit's delayed
+   * check, or a check after an await, when another roster was opened meanwhile) is dropped:
+   * it would show that roster's problems on this one, and replace this one's own check.
+   */
+  isOpen: (scheduleId: string) => boolean;
 }) {
-  const { inputs, activeSchedule, availabilityRequests, hoursHistory, clinicSetupRef, availabilityRequestsRef } = o;
+  const { inputs, activeSchedule, availabilityRequests, hoursHistory, clinicSetupRef, availabilityRequestsRef, isOpen } = o;
   const [validationReport, setValidationReport] = useState<ValidationReport>(EMPTY_REPORT);
   const checkInputsRef = useRef<CheckInputs>(inputs);
   checkInputsRef.current = inputs;
@@ -104,6 +110,7 @@ export function useRosterChecks(o: {
   useEffect(() => () => checks.cancel(), [checks]);
 
   const runValidation = (sched: Schedule, list: Assignment[], overrides: Partial<CheckInputs> = {}) => {
+    if (!isOpen(sched.id)) return;
     checkInputsRef.current = { ...checkInputsRef.current, ...overrides };
     checks.request({ sched, list });
   };

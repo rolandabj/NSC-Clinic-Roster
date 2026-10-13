@@ -10910,7 +10910,7 @@
       "file_type": "code",
       "norm_label": "renderquickpopup()",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1186"
+      "source_location": "L1194"
     },
     {
       "id": "src_services_engine_clinicmodel_doctorsessionson",
@@ -15971,7 +15971,7 @@
       "file_type": "code",
       "norm_label": "workbookgrid",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1286"
+      "source_location": "L1294"
     },
     {
       "id": "src_services_schedule_rebaseedit",
@@ -16853,7 +16853,7 @@
       "node_kind": "heading",
       "norm_label": "things that went wrong before",
       "source_file": ".claude/skills/browser-check/SKILL.md",
-      "source_location": "L77"
+      "source_location": "L79"
     },
     {
       "id": "src_services_navigation_address",
@@ -26166,7 +26166,7 @@
       "node_kind": "heading",
       "norm_label": "17. known quirks and ideas for later",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L684"
+      "source_location": "L686"
     },
     {
       "id": "claude_hooks_ask_before_main",
@@ -28240,7 +28240,7 @@
       "file_type": "code",
       "norm_label": "args",
       "source_file": ".claude/skills/browser-check/scripts/grid-flow.cjs",
-      "source_location": "L7"
+      "source_location": "L8"
     },
     {
       "id": "claude_skills_browser_check_scripts_grid_flow_chromium",
@@ -28251,7 +28251,7 @@
       "file_type": "code",
       "norm_label": "{ chromium }",
       "source_file": ".claude/skills/browser-check/scripts/grid-flow.cjs",
-      "source_location": "L5"
+      "source_location": "L6"
     },
     {
       "id": "claude_skills_browser_check_scripts_grid_timing",
@@ -28345,7 +28345,7 @@
       "node_kind": "heading",
       "norm_label": "5. numbers",
       "source_file": "tasks/summary.md",
-      "source_location": "L150"
+      "source_location": "L154"
     },
     {
       "id": "tasks_summary_6_how_the_work_is_done",
@@ -28357,7 +28357,7 @@
       "node_kind": "heading",
       "norm_label": "6. how the work is done",
       "source_file": "tasks/summary.md",
-      "source_location": "L190"
+      "source_location": "L194"
     },
     {
       "id": "tasks_summary_7_next_steps",
@@ -28369,7 +28369,7 @@
       "node_kind": "heading",
       "norm_label": "7. next steps",
       "source_file": "tasks/summary.md",
-      "source_location": "L203"
+      "source_location": "L207"
     },
     {
       "id": "tasks_summary_8_where_to_find_things",
@@ -28381,7 +28381,7 @@
       "node_kind": "heading",
       "norm_label": "8. where to find things",
       "source_file": "tasks/summary.md",
-      "source_location": "L260"
+      "source_location": "L264"
     },
     {
       "id": "tasks_summary_9_commits_on_main",
@@ -28393,7 +28393,7 @@
       "node_kind": "heading",
       "norm_label": "9. commits on main",
       "source_file": "tasks/summary.md",
-      "source_location": "L277"
+      "source_location": "L281"
     },
     {
       "id": "tasks_summary_not_in_the_plan",
@@ -28405,7 +28405,7 @@
       "node_kind": "heading",
       "norm_label": "not in the plan",
       "source_file": "tasks/summary.md",
-      "source_location": "L252"
+      "source_location": "L256"
     },
     {
       "id": "tasks_summary_noticed_and_waiting_for_their_phase",
@@ -28417,7 +28417,7 @@
       "node_kind": "heading",
       "norm_label": "noticed, and waiting for their phase",
       "source_file": "tasks/summary.md",
-      "source_location": "L233"
+      "source_location": "L237"
     },
     {
       "id": "tasks_summary_now",
@@ -28429,7 +28429,7 @@
       "node_kind": "heading",
       "norm_label": "now",
       "source_file": "tasks/summary.md",
-      "source_location": "L205"
+      "source_location": "L209"
     },
     {
       "id": "tasks_summary_phase_0_setup_07_10_2026",
@@ -28501,7 +28501,7 @@
       "node_kind": "heading",
       "norm_label": "the phases after that",
       "source_file": "tasks/summary.md",
-      "source_location": "L210"
+      "source_location": "L214"
     },
     {
       "id": "tasks_summary_the_question_before_phase_4_answered",
@@ -28513,7 +28513,7 @@
       "node_kind": "heading",
       "norm_label": "the question before phase 4, answered",
       "source_file": "tasks/summary.md",
-      "source_location": "L224"
+      "source_location": "L228"
     },
     {
       "id": "tasks_summary_ui_overhaul_summary_and_next_steps",
@@ -34662,7 +34662,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/roster/useRosterChecks.ts",
-      "source_location": "L77",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -34674,7 +34674,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/roster/useRosterChecks.ts",
-      "source_location": "L82",
+      "source_location": "L88",
       "weight": 1.0
     },
     {
@@ -37074,7 +37074,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1008",
+      "source_location": "L1009",
       "weight": 1.0
     },
     {
@@ -37086,7 +37086,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1186",
+      "source_location": "L1187",
       "weight": 1.0
     },
     {
@@ -37098,7 +37098,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1292",
+      "source_location": "L1293",
       "weight": 1.0
     },
     {
@@ -37110,7 +37110,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1328",
+      "source_location": "L1329",
       "weight": 1.0
     },
     {
@@ -37122,7 +37122,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1335",
+      "source_location": "L1336",
       "weight": 1.0
     },
     {
@@ -37134,7 +37134,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1414",
+      "source_location": "L1415",
       "weight": 1.0
     },
     {
@@ -37146,7 +37146,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1450",
+      "source_location": "L1451",
       "weight": 1.0
     },
     {
@@ -37170,7 +37170,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1495",
+      "source_location": "L1496",
       "weight": 1.0
     },
     {
@@ -37182,7 +37182,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1525",
+      "source_location": "L1526",
       "weight": 1.0
     },
     {
@@ -37194,7 +37194,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1540",
+      "source_location": "L1541",
       "weight": 1.0
     },
     {
@@ -37206,7 +37206,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1558",
+      "source_location": "L1559",
       "weight": 1.0
     },
     {
@@ -37218,7 +37218,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1600",
+      "source_location": "L1601",
       "weight": 1.0
     },
     {
@@ -37230,7 +37230,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1652",
+      "source_location": "L1653",
       "weight": 1.0
     },
     {
@@ -37242,7 +37242,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1695",
+      "source_location": "L1696",
       "weight": 1.0
     },
     {
@@ -37254,7 +37254,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1704",
+      "source_location": "L1705",
       "weight": 1.0
     },
     {
@@ -37266,7 +37266,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1732",
+      "source_location": "L1733",
       "weight": 1.0
     },
     {
@@ -37278,7 +37278,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1770",
+      "source_location": "L1771",
       "weight": 1.0
     },
     {
@@ -37290,7 +37290,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1786",
+      "source_location": "L1787",
       "weight": 1.0
     },
     {
@@ -37302,7 +37302,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1798",
+      "source_location": "L1799",
       "weight": 1.0
     },
     {
@@ -37314,7 +37314,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1805",
+      "source_location": "L1806",
       "weight": 1.0
     },
     {
@@ -37326,7 +37326,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1818",
+      "source_location": "L1819",
       "weight": 1.0
     },
     {
@@ -37338,7 +37338,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1885",
+      "source_location": "L1886",
       "weight": 1.0
     },
     {
@@ -37350,7 +37350,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1899",
+      "source_location": "L1900",
       "weight": 1.0
     },
     {
@@ -37362,7 +37362,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1908",
+      "source_location": "L1909",
       "weight": 1.0
     },
     {
@@ -37374,7 +37374,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L1936",
+      "source_location": "L1937",
       "weight": 1.0
     },
     {
@@ -37398,7 +37398,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2088",
+      "source_location": "L2089",
       "weight": 1.0
     },
     {
@@ -37410,7 +37410,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2109",
+      "source_location": "L2110",
       "weight": 1.0
     },
     {
@@ -37422,7 +37422,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2125",
+      "source_location": "L2126",
       "weight": 1.0
     },
     {
@@ -37434,7 +37434,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2155",
+      "source_location": "L2156",
       "weight": 1.0
     },
     {
@@ -37446,7 +37446,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2166",
+      "source_location": "L2167",
       "weight": 1.0
     },
     {
@@ -37458,7 +37458,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2199",
+      "source_location": "L2200",
       "weight": 1.0
     },
     {
@@ -37470,7 +37470,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2215",
+      "source_location": "L2216",
       "weight": 1.0
     },
     {
@@ -37482,7 +37482,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2239",
+      "source_location": "L2240",
       "weight": 1.0
     },
     {
@@ -37494,7 +37494,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2247",
+      "source_location": "L2248",
       "weight": 1.0
     },
     {
@@ -37506,7 +37506,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2267",
+      "source_location": "L2268",
       "weight": 1.0
     },
     {
@@ -37518,7 +37518,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L228",
+      "source_location": "L229",
       "weight": 1.0
     },
     {
@@ -37530,7 +37530,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2294",
+      "source_location": "L2295",
       "weight": 1.0
     },
     {
@@ -37542,7 +37542,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L2310",
+      "source_location": "L2311",
       "weight": 1.0
     },
     {
@@ -37554,7 +37554,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L270",
+      "source_location": "L271",
       "weight": 1.0
     },
     {
@@ -37566,7 +37566,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L282",
+      "source_location": "L283",
       "weight": 1.0
     },
     {
@@ -37578,7 +37578,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L315",
+      "source_location": "L316",
       "weight": 1.0
     },
     {
@@ -37590,7 +37590,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L330",
+      "source_location": "L331",
       "weight": 1.0
     },
     {
@@ -37602,7 +37602,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L337",
+      "source_location": "L338",
       "weight": 1.0
     },
     {
@@ -37614,7 +37614,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L418",
+      "source_location": "L419",
       "weight": 1.0
     },
     {
@@ -37626,7 +37626,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L463",
+      "source_location": "L464",
       "weight": 1.0
     },
     {
@@ -37638,7 +37638,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L483",
+      "source_location": "L484",
       "weight": 1.0
     },
     {
@@ -37650,7 +37650,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L506",
+      "source_location": "L507",
       "weight": 1.0
     },
     {
@@ -37662,7 +37662,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L590",
+      "source_location": "L591",
       "weight": 1.0
     },
     {
@@ -37674,7 +37674,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L602",
+      "source_location": "L603",
       "weight": 1.0
     },
     {
@@ -37686,7 +37686,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L663",
+      "source_location": "L664",
       "weight": 1.0
     },
     {
@@ -37698,7 +37698,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L717",
+      "source_location": "L718",
       "weight": 1.0
     },
     {
@@ -37710,7 +37710,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L759",
+      "source_location": "L760",
       "weight": 1.0
     },
     {
@@ -37722,7 +37722,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L792",
+      "source_location": "L793",
       "weight": 1.0
     },
     {
@@ -37734,7 +37734,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L810",
+      "source_location": "L811",
       "weight": 1.0
     },
     {
@@ -37746,7 +37746,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L845",
+      "source_location": "L846",
       "weight": 1.0
     },
     {
@@ -37758,7 +37758,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L858",
+      "source_location": "L859",
       "weight": 1.0
     },
     {
@@ -37770,7 +37770,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L960",
+      "source_location": "L961",
       "weight": 1.0
     },
     {
@@ -37782,7 +37782,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/SchedulesView.tsx",
-      "source_location": "L978",
+      "source_location": "L979",
       "weight": 1.0
     },
     {
@@ -39558,7 +39558,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1022",
+      "source_location": "L1030",
       "weight": 1.0
     },
     {
@@ -39570,7 +39570,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1038",
+      "source_location": "L1046",
       "weight": 1.0
     },
     {
@@ -39582,7 +39582,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1079",
+      "source_location": "L1087",
       "weight": 1.0
     },
     {
@@ -39594,7 +39594,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1104",
+      "source_location": "L1112",
       "weight": 1.0
     },
     {
@@ -39606,7 +39606,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1129",
+      "source_location": "L1137",
       "weight": 1.0
     },
     {
@@ -39618,7 +39618,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1133",
+      "source_location": "L1141",
       "weight": 1.0
     },
     {
@@ -39630,7 +39630,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1144",
+      "source_location": "L1152",
       "weight": 1.0
     },
     {
@@ -39642,7 +39642,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1165",
+      "source_location": "L1173",
       "weight": 1.0
     },
     {
@@ -39654,7 +39654,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1181",
+      "source_location": "L1189",
       "weight": 1.0
     },
     {
@@ -39666,7 +39666,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1197",
+      "source_location": "L1205",
       "weight": 1.0
     },
     {
@@ -39678,7 +39678,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1246",
+      "source_location": "L1254",
       "weight": 1.0
     },
     {
@@ -39870,7 +39870,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L528",
+      "source_location": "L536",
       "weight": 1.0
     },
     {
@@ -39882,7 +39882,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L531",
+      "source_location": "L539",
       "weight": 1.0
     },
     {
@@ -39894,7 +39894,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L688",
+      "source_location": "L696",
       "weight": 1.0
     },
     {
@@ -39906,7 +39906,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L743",
+      "source_location": "L751",
       "weight": 1.0
     },
     {
@@ -39918,7 +39918,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L892",
+      "source_location": "L900",
       "weight": 1.0
     },
     {
@@ -39930,7 +39930,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L895",
+      "source_location": "L903",
       "weight": 1.0
     },
     {
@@ -39942,7 +39942,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L934",
+      "source_location": "L942",
       "weight": 1.0
     },
     {
@@ -39954,7 +39954,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L941",
+      "source_location": "L949",
       "weight": 1.0
     },
     {
@@ -39966,7 +39966,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1197",
+      "source_location": "L1205",
       "weight": 1.0
     },
     {
@@ -39978,7 +39978,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1222",
+      "source_location": "L1230",
       "weight": 1.0
     },
     {
@@ -39990,7 +39990,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1242",
+      "source_location": "L1250",
       "weight": 1.0
     },
     {
@@ -40002,7 +40002,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1243",
+      "source_location": "L1251",
       "weight": 1.0
     },
     {
@@ -40014,7 +40014,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1246",
+      "source_location": "L1254",
       "weight": 1.0
     },
     {
@@ -46998,7 +46998,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1186",
+      "source_location": "L1194",
       "weight": 1.0
     },
     {
@@ -82317,7 +82317,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": ".claude/skills/browser-check/scripts/grid-flow.cjs",
-      "source_location": "L5",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -102053,7 +102053,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": ".claude/skills/browser-check/scripts/grid-flow.cjs",
-      "source_location": "L5",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -102064,7 +102064,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": ".claude/skills/browser-check/scripts/grid-flow.cjs",
-      "source_location": "L7",
+      "source_location": "L8",
       "weight": 1.0
     },
     {
@@ -102251,7 +102251,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": ".claude/skills/browser-check/SKILL.md",
-      "source_location": "L77",
+      "source_location": "L79",
       "weight": 1.0
     },
     {
@@ -106794,7 +106794,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L684",
+      "source_location": "L686",
       "weight": 1.0
     },
     {
@@ -111766,7 +111766,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1286",
+      "source_location": "L1294",
       "weight": 1.0
     },
     {
@@ -118498,7 +118498,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L205",
+      "source_location": "L209",
       "weight": 1.0
     },
     {
@@ -118509,7 +118509,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L210",
+      "source_location": "L214",
       "weight": 1.0
     },
     {
@@ -118520,7 +118520,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L224",
+      "source_location": "L228",
       "weight": 1.0
     },
     {
@@ -118531,7 +118531,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L233",
+      "source_location": "L237",
       "weight": 1.0
     },
     {
@@ -118542,7 +118542,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L252",
+      "source_location": "L256",
       "weight": 1.0
     },
     {
@@ -118564,7 +118564,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L150",
+      "source_location": "L154",
       "weight": 1.0
     },
     {
@@ -118575,7 +118575,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L190",
+      "source_location": "L194",
       "weight": 1.0
     },
     {
@@ -118586,7 +118586,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L203",
+      "source_location": "L207",
       "weight": 1.0
     },
     {
@@ -118608,7 +118608,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L260",
+      "source_location": "L264",
       "weight": 1.0
     },
     {
@@ -118619,7 +118619,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L277",
+      "source_location": "L281",
       "weight": 1.0
     },
     {
@@ -123735,7 +123735,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "src/components/workbook/WorkbookGrid.tsx",
-      "source_location": "L1286",
+      "source_location": "L1294",
       "weight": 1.0
     },
     {
@@ -124083,7 +124083,7 @@
       "confidence_score": 0.85,
       "context": "collection",
       "source_file": "src/components/roster/useRosterChecks.ts",
-      "source_location": "L78",
+      "source_location": "L84",
       "weight": 1.0
     },
     {
@@ -124155,7 +124155,7 @@
       "confidence_score": 0.95,
       "context": "AuthService",
       "source_file": ".claude/skills/browser-check/SKILL.md",
-      "source_location": "L85",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -125091,7 +125091,7 @@
       "confidence_score": 0.95,
       "context": "WalkthroughModal",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L696",
+      "source_location": "L698",
       "weight": 1.0
     },
     {
@@ -125211,7 +125211,7 @@
       "confidence_score": 0.95,
       "context": "authService",
       "source_file": ".claude/skills/browser-check/SKILL.md",
-      "source_location": "L85",
+      "source_location": "L87",
       "weight": 1.0
     },
     {
@@ -125631,7 +125631,7 @@
       "confidence_score": 0.95,
       "context": "doctorSessionsOn",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L693",
+      "source_location": "L695",
       "weight": 1.0
     },
     {
@@ -125643,7 +125643,7 @@
       "confidence_score": 0.95,
       "context": "ensureNurseLink",
       "source_file": ".claude/skills/browser-check/SKILL.md",
-      "source_location": "L92",
+      "source_location": "L94",
       "weight": 1.0
     },
     {
@@ -126579,7 +126579,7 @@
       "confidence_score": 0.95,
       "context": "syncNurseRosters",
       "source_file": ".claude/skills/browser-check/SKILL.md",
-      "source_location": "L92",
+      "source_location": "L94",
       "weight": 1.0
     },
     {
@@ -126700,6 +126700,18 @@
       "context": "useGridKeyboard",
       "source_file": "tasks/plan.md",
       "source_location": "L218",
+      "weight": 1.0
+    },
+    {
+      "source": "project_guide_16_history_of_work_for_context",
+      "target": "src_components_workbook_grid_usegridselection_usegridselection",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "context": "useGridSelection",
+      "source_file": "PROJECT_GUIDE.md",
+      "source_location": "L682",
       "weight": 1.0
     },
     {
@@ -126832,6 +126844,18 @@
       "context": "usePresence",
       "source_file": "tasks/todo.md",
       "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "project_guide_16_history_of_work_for_context",
+      "target": "src_components_roster_userosterchecks_userosterchecks",
+      "relation": "references",
+      "_origin": "ast",
+      "confidence": "INFERRED",
+      "confidence_score": 0.95,
+      "context": "useRosterChecks",
+      "source_file": "PROJECT_GUIDE.md",
+      "source_location": "L682",
       "weight": 1.0
     },
     {
@@ -126968,5 +126992,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "601b361c7b42efac6fd9bf7c7b2bd5b05367631d"
+  "built_at_commit": "0773825b2b1f7fc1e0dd3d06e3c671fcaf58139d"
 }

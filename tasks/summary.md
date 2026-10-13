@@ -55,7 +55,7 @@ the screens, the roster screen, permissions, data flow and the server.
 | Navigation | Back did nothing inside a screen; no link could open a given roster, nurse, day or tab; three screens started in October 2026 | Done for rosters, sheets, nurses, days and the Settings tabs, and the screens start from today (Phases 1 and 2); the Reports, History and Availability tabs take up links and Back in their phases |
 | Permissions | Buttons shown to people the rules refuse; exports open to viewers | Done (Phase 1) |
 | Backend | A publish stopped by closing the tab cannot be finished; the email log could pass Firestore's 1 MiB limit at about 40 nurses (an estimate); nurses are not told when a request is decided; the audit trail and email log load in full | The email log size guard is done (Phase 1); the rest follows in Phases 5, 7 and 8 |
-| Code | Two files of about 3,000 lines each; no shared app state; no ESLint | Shared app state is done (Phase 2); the two files are split (Phase 3: 2,323 and 1,286 lines now); ESLint comes in Phase 9 |
+| Code | Two files of about 3,000 lines each; no shared app state; no ESLint | Shared app state is done (Phase 2); the two files are split (Phase 3: 2,324 and 1,294 lines now); ESLint comes in Phase 9 |
 
 ## 4. What has been done
 
@@ -129,7 +129,7 @@ everyone else.
 
 * **Cells drawn only when they change:** what each cell shows is worked out in advance, once per
   change, and each cell and each nurse's row is drawn again only when what it shows changes.
-* **The selection in a small store:** an arrow key or a click draws two cells, not 1,860; the
+* **The selection kept in one small place:** an arrow key or a click draws two cells, not 1,860; the
   keys are handled on the grid itself.
 * **Less work per edit:** an edit saves only the lists it changed, the save no longer compares
   records it saved last time, the compare dialog is built only while it is open, and "Who could
@@ -139,13 +139,17 @@ everyone else.
 * **No extra redraws:** the top bar count, presence ("X is also here") and the fill progress no
   longer redraw the grid; another sheet and back keeps the zoom and the selection.
 * **Smaller files:** the roster screen's toolbar, steps, sheet tabs, fill dialog, roster picker,
-  check and edits, and the grid's toolbar, table, status bar, legend, cell editor and right click
+  the check and the edits, and the grid's toolbar, table, status bar, legend, cell editor and right click
   menu, each in their own file.
 * **Checked at every slice:** the page's and the grid's HTML in 82 states stayed byte for byte the
   same, and browser scripts for edits, undo, the popup, a fill, a swap, a failed save, the keys,
   the menus, the editor and the links pass.
-* The owner's answer before Phase 4: tablets edit the roster, held either way; only phones get the
-  read only day view.
+* The owner's answer before Phase 4: tablets can edit the roster, held upright or sideways; only
+  phones get the read only day view.
+* **Checkpoint 3:** a code review of the whole phase found nothing serious and three small
+  problems, all fixed: a "Show in grid" flash that could stay on, a roster opened just after an
+  edit on another that showed the other roster's problems, and the popup staying open in the
+  hidden grid after Back.
 
 ## 5. Numbers
 
@@ -162,8 +166,8 @@ next frame drawn):
 | Longest task that blocks the page while using the grid | 107 ms | 51 ms | under 200 ms | met |
 | Longest task that blocks the page while loading | 270 ms | 274 ms | under 200 ms | not met |
 
-The longest task while loading is the browser alone (styles, layout and paint of the grid's
-12,000 elements); Phase 4's cells, or drawing only the rows in view, can bring it down. Earlier
+The longest task while loading is the browser alone (the browser's own work to lay out and
+draw the grid's 12,000 elements); Phase 4's cells, or drawing only the rows in view, can bring it down. Earlier
 numbers in `tasks/plan.md` came from the script's own clock, which includes the test tool's work
 and a different machine, so they do not compare with these. Hospital computers slower than the
 test machine will feel these times more.
@@ -319,4 +323,4 @@ upright.
 * `a570713` Roster screen parts out of SchedulesView (slice 7, part 1)
 * `c2023dc` Roster check and edits into hooks (slice 7, part 2)
 * `31f0a7c` Roster grid split into parts (slice 8)
-* `601b361` Grid selection hook: the comment says where the cell is scrolled to
+* `601b361` Grid selection hook: the comment says where the cell is scrolled to (a comment fix, after slice 8)

@@ -89,6 +89,8 @@ export function useGridSelection(o: {
     return () => {
       cancelAnimationFrame(frame);
       if (flashTimer) clearTimeout(flashTimer);
+      // Cut short (another sheet, or a new request): the flash ends now, or it would stay on.
+      if (selection.getState().flash === key) selection.flash(null);
     };
     // Only a new request (nonce) starts this.
   }, [focusRequest?.nonce]);

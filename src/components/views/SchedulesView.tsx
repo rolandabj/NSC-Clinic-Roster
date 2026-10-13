@@ -198,6 +198,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     hoursHistory,
     clinicSetupRef,
     availabilityRequestsRef,
+    isOpen: (scheduleId) => openScheduleIdRef.current === scheduleId,
   });
 
 

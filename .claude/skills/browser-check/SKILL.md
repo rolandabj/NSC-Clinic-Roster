@@ -60,7 +60,9 @@ in `/opt/pw-browsers`; never run `playwright install`.
      Safari). One line for each check, and exit code 1 when one fails.
    - `scripts/grid-flow.cjs --base http://localhost:5180`: on the November roster, an edit from
      the popup, undo, Esc on the popup, arrow keys, Delete and Ctrl+Z, a fill, a swap and a
-     failed save with Retry now; after each step it compares the grid with what was saved. Run it
+     failed save with Retry now; after each step it compares the grid with what was saved. Also
+     three cases from the Checkpoint 3 review: a "Show in grid" flash cut short by another sheet,
+     the popup after Back, and a roster opened just after an edit on another (22 checks). Run it
      after any change to the roster grid or the roster screen. Same output as `links.cjs`.
 4. **Script other checks** in the session scratchpad, not in the repo, starting from
    `scripts/example.cjs`. Run it with `NODE_PATH=$(npm root -g) node <script> <folder>`.

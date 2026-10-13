@@ -1,5 +1,6 @@
 // Roster grid flow (UI overhaul Phase 3): an edit, undo, the popup, deleting a shift, a fill,
-// a swap and a failed save, each checked against what the in memory database saved.
+// a swap and a failed save, each checked against what the in memory database saved; and three
+// cases from the Checkpoint 3 review (a flash, the popup after Back, a roster opened after an edit).
 // Run: NODE_PATH=$(npm root -g) node grid-flow.cjs [--base http://localhost:5180]
 // One line for each check; exit code 1 when one fails.
 const { chromium } = require('playwright');
@@ -128,6 +129,66 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   check('Retry now saves the change', (await saved()).some((s) => s.startsWith(`${emptyCell}|`)));
   const retryWrong = await gridMatchesSaved();
   check('after the retry the grid shows what is saved', retryWrong.length === 0, retryWrong.slice(0, 3).join('; '));
+
+  // 8. "Show in grid", then another sheet within 1.5 s: the flash still ends (Checkpoint 3 review).
+  await page.getByRole('button', { name: /Fix problems/ }).first().click();
+  await page.waitForTimeout(400);
+  await page.getByRole('button', { name: /Show in grid/ }).first().click();
+  await page.waitForTimeout(200);
+  await page.locator('button', { hasText: /^Doctors/ }).last().click();
+  await page.waitForTimeout(300);
+  await page.locator('button', { hasText: /^Roster/ }).last().click();
+  await page.waitForTimeout(2500);
+  check('a flash left for another sheet still ends', (await page.evaluate(() => document.querySelectorAll('td.ring-amber-400').length)) === 0);
+
+  // The next checks need the whole app (its address, Back and Forward).
+  const app = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  app.on('pageerror', (e) => errors.push(String(e)));
+  const appState = () =>
+    app.evaluate(() => ({
+      roster: document.querySelector('button[title^="Open another roster"]')?.textContent.replace('▾', ''),
+      problems: [...document.querySelectorAll('button')].find((x) => /^Problems \(/.test(x.textContent))?.textContent,
+    }));
+
+  // 9. The popup open, then Back to another sheet: the hidden grid's popup closes.
+  await app.goto(`${base}/?view=app#schedules?roster=nov&sheet=doctors`);
+  await app.waitForTimeout(1500);
+  await app.locator('button', { hasText: /^Roster/ }).last().click();
+  await app.waitForSelector('[data-cell="mary|2026-11-16"]');
+  await app.waitForTimeout(500);
+  await app.click('[data-cell="mary|2026-11-16"]');
+  await app.waitForSelector('[data-quick-popup]');
+  await app.evaluate(() => history.back());
+  await app.waitForTimeout(800);
+  check('Back to another sheet closes the popup', (await app.locator('[data-quick-popup]').count()) === 0);
+
+  // 10. An edit on November, then December opened at once: December shows its own problems.
+  await app.evaluate(() => history.forward());
+  await app.waitForTimeout(800);
+  await app.evaluate(() => {
+    const nov = [...window.__repo.col('schedules').values()].find((x) => x.id === 'nov');
+    window.__repo.col('schedules').set('dec', { ...nov, id: 'dec', name: 'December', startDate: '2026-12-07', endDate: '2026-12-13', blockWeeks: 1, status: 'DRAFT' });
+  });
+  // Opening the roster picker loads the list again, so December can be opened by its address.
+  await app.locator('button[title^="Open another roster"]').click();
+  await app.waitForTimeout(500);
+  await app.keyboard.press('Escape');
+  await app.evaluate(() => { location.hash = '#schedules?roster=dec'; });
+  await app.waitForTimeout(2000);
+  const decAlone = await appState();
+  await app.evaluate(() => { location.hash = '#schedules?roster=nov'; });
+  await app.waitForSelector('[data-cell="mary|2026-11-16"]');
+  await app.waitForTimeout(1500);
+  await app.focus('[data-cell="mary|2026-11-16"]');
+  await app.keyboard.press('Delete');
+  await app.evaluate(() => { location.hash = '#schedules?roster=dec'; });
+  await app.waitForTimeout(2000);
+  const decAfter = await appState();
+  check(
+    'a roster opened just after an edit on another shows its own problems',
+    decAlone.roster === 'December' && decAfter.roster === 'December' && decAlone.problems === decAfter.problems,
+    `${decAlone.problems} alone, ${decAfter.problems} after the edit`
+  );
 
   // The failed save is expected to log its error; anything else is a problem.
   const unexpected = errors.filter((e) => !/quota|failWrites|RESOURCE_EXHAUSTED|Could not save|fake write failure/i.test(e));
