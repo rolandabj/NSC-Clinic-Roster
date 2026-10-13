@@ -1,6 +1,6 @@
 import { HoursHistory, hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
 import { loadHoursHistory } from '../../services/hours/hoursHistoryService';
-import React, { useState, useEffect, useRef, useId, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useId, useCallback, useMemo } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import {
@@ -159,6 +159,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [leaveEntries, setLeaveEntries] = useState<LeaveEntry[]>([]);
   const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [roles, setClinicalRoles] = useState<ClinicalRole[]>([]);
+  // The nurses who can be the free nurse. The list is kept between renders, so "Who could
+  // cover?" does not work its answer out again on each render; the list changes only when
+  // the nurses or the clinical roles change.
+  const freeNurseCandidates = useMemo(() => nurses.filter((n) => canBeFreeNurse(n, roles)), [nurses, roles]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [seniorityLevels, setSeniorityLevels] = useState<SeniorityLevel[]>([]);
   const [dutyWindows, setDutyWindows] = useState<DutyWindow[]>([]);
@@ -2302,7 +2306,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   hour={f.hour}
                   schedule={activeSchedule}
                   assignments={assignments}
-                  nurses={f.id.startsWith('cov-gap-') ? nurses.filter((n) => canBeFreeNurse(n, roles)) : nurses}
+                  nurses={f.id.startsWith('cov-gap-') ? freeNurseCandidates : nurses}
                   dutyWindows={dutyWindows}
                   leaveEntries={leaveEntries}
                   locks={locks}
@@ -2744,7 +2748,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       })()}
 
       {/* --- VERSION COMPARE & DIFF MODAL (Phase 10) --- */}
-      {activeSchedule && (
+      {/* Built only while open: it works out every difference again whenever the roster changes. */}
+      {activeSchedule && isCompareModalOpen && (
         <VersionCompareModal
           schedule={activeSchedule}
           versions={versions}

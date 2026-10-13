@@ -434,3 +434,13 @@ After slice 2, the same machine. Since slice 2, `grid-timing.cjs` also measures 
 | One arrow key, in the page | 43 ms | 29 ms, 30 ms | under 50 ms |
 | Deleting a shift, in the page | 108 ms | 106 ms, 100 ms | under 100 ms |
 | Popup, arrow key and deleting a shift, from the script | 146, 40, 135 ms | 129, 27, 137 ms and 142, 25, 121 ms | |
+
+After slice 3, the same machine, 7 runs, times in the page:
+
+| | Slice 2 | Slice 3 | Phase 3 target |
+|---|---|---|---|
+| Cells shown | 1,098 ms | 1,107 ms | under 1,000 ms |
+| Longest blocking task while loading | 284 ms | 298 ms | under 200 ms |
+| Cell popup opens | 53 ms, 57 ms | 51 ms | under 100 ms |
+| One arrow key | 29 ms, 30 ms | 31 ms | under 50 ms |
+| Deleting a shift | 106 ms, 100 ms | 86 ms | under 100 ms |

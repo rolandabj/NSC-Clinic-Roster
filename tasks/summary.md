@@ -240,6 +240,8 @@ upright.
   the day range breaks across two lines. Phase 4.
 * "ClinicRoster" still appears on the Doctors screen (Phase 6), and in the roster email and the
   footer of the test email (Phase 7).
+* When the compare dialog closes, the focus goes to the page rather than back to More (the menu
+  item that opened it is gone by then). Phase 7.
 * The New roster dialog suggests a name with the month first, in US style and with dashes in it,
   and falls back to names that start with "Schedule". Phase 7.
 * The Time periods form in Settings starts at 19-01-2026. Phase 8.

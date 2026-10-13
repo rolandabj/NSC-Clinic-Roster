@@ -37,7 +37,7 @@ Main moves only when the owner says "push to main".
 ## Phase 3: roster grid speed and structure
 - [x] Memoized cells and per cell views (`grid/cellView.ts`, `grid/GridCell.tsx`, `grid-flow.cjs`)
 - [x] Selection store, keys on the grid (`grid/gridSelection.ts`; `grid-timing.cjs` also measures in the page)
-- [ ] Derived data once per change; compare dialog only while open
+- [x] Derived data once per change; compare dialog only while open (`grid/GridRow.tsx`, `grid/dayTotals.ts`)
 - [ ] Only changed lists saved and fingerprinted
 - [ ] Checker off the typing path
 - [ ] No extra renders; grid kept mounted

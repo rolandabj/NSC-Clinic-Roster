@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791878011.1638653,
-    "seen": 1791878701.9118054,
-    "ast_hash": "943b81a0b2d0210de8871ef3bcca959f",
+    "mtime": 1791880357.086703,
+    "seen": 1791880378.3678606,
+    "ast_hash": "72f1c2eb1333a918bfc045065f7ee4c7",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -426,9 +426,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/WorkbookGrid.tsx": {
-    "mtime": 1791879840.166912,
-    "seen": 1791879860.5388784,
-    "ast_hash": "fcfe8ece0823157b103ec457c34d7371",
+    "mtime": 1791880236.3283174,
+    "seen": 1791880298.3225572,
+    "ast_hash": "908b36fae3b09dfb400c791788293b80",
     "semantic_hash": ""
   },
   "src/main.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791879753.1024897,
-    "seen": 1791879761.1154017,
-    "ast_hash": "99ad3a82b9fb39a40c30b888db4df1b1",
+    "mtime": 1791880290.2583613,
+    "seen": 1791880298.3227727,
+    "ast_hash": "b6a3972f7769083a4c2c446b1fcd5643",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1578,15 +1578,15 @@
     "semantic_hash": ""
   },
   "tasks/plan.md": {
-    "mtime": 1791879753.103463,
-    "seen": 1791879761.1154068,
-    "ast_hash": "0e82a6337cb71c437bf1803c913f285b",
+    "mtime": 1791880290.2618344,
+    "seen": 1791880298.3227773,
+    "ast_hash": "56c09d5469572ec2f8de0bfb36d354b3",
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791879753.1030476,
-    "seen": 1791879761.115409,
-    "ast_hash": "db10c759101d2917d9479a619099b285",
+    "mtime": 1791880290.2609797,
+    "seen": 1791880298.3227794,
+    "ast_hash": "32fafb2e6257298aceb798c2b9d1f967",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1806,9 +1806,9 @@
     "semantic_hash": ""
   },
   "tasks/summary.md": {
-    "mtime": 1791879720.9952216,
-    "seen": 1791879761.115408,
-    "ast_hash": "96bc6b91992a6e5f0c3651ddf854b869",
+    "mtime": 1791880290.262415,
+    "seen": 1791880298.3227785,
+    "ast_hash": "e7d6ba4a4aaa51a3d895352207681067",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/grid-flow.cjs": {
@@ -1845,6 +1845,24 @@
     "mtime": 1791879066.999928,
     "seen": 1791879761.115318,
     "ast_hash": "a35e5723fc46a3014747ffd209a93d8f",
+    "semantic_hash": ""
+  },
+  "src/components/workbook/grid/GridRow.tsx": {
+    "mtime": 1791880357.085273,
+    "seen": 1791880378.3678932,
+    "ast_hash": "c6c4795779885ea8091b3482798d4d9f",
+    "semantic_hash": ""
+  },
+  "src/components/workbook/grid/dayTotals.ts": {
+    "mtime": 1791880236.3358355,
+    "seen": 1791880298.3225658,
+    "ast_hash": "c130c3758fd30ca3a10b6aaae6ab664a",
+    "semantic_hash": ""
+  },
+  "tests/unit/gridRow.test.ts": {
+    "mtime": 1791880236.3358355,
+    "seen": 1791880298.3227022,
+    "ast_hash": "dd4da04bb0e2f717eeeeb5a0f9b8f6b9",
     "semantic_hash": ""
   }
 }

@@ -67,7 +67,8 @@ import { confirmDialog, notify } from '../common/dialogs';
 import { coveredMinutes, doctorSessionsOn, nurseClinicRoleOf, toMinutes } from '../../services/engine/clinicModel';
 import { isFloatShift } from '../../services/engine/floatShift';
 import { QuickCellPopup, QuickWorkOption, QuickLeaveOption, QuickDayNote, QuickWish } from './grid/QuickCellPopup';
-import { GridCell, GridCellActions } from './grid/GridCell';
+import { GridRow, GridRowActions, PROBLEM_SEPARATOR, rowViewsOf } from './grid/GridRow';
+import { dayTotalsOf } from './grid/dayTotals';
 import { CellView, cellLookupsOf, cellViewOf, reuseCellViews } from './grid/cellView';
 import { GridSelection, GridSelectionState, PopupRef, createGridSelection, moveSelection } from './grid/gridSelection';
 import { describeRequest, explainNurseDay, isPendingLeave, pendingLeaveOn, requestOn, RequestWords } from '../../services/engine/explainCell';
@@ -367,11 +368,6 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     return map;
   }, [nurses, schedule, assignments, dutyMap, leaveEntries, leaveTypeMap, workingHoursPeriods, hoursHistory]);
 
-  const getNurseHoursProgress = (nurse: Nurse) => {
-    const h = hoursByNurse.get(nurse.id)!;
-    return { totalHours: h.totalHours, targetHours: h.targetHours, percent: h.percent, dutyHours: h.dutyHours, leaveHours: h.leaveHours };
-  };
-
   // Hours inside the page of days shown
   const blockStart = blockDates[0];
   const blockEnd = blockDates[blockDates.length - 1];
@@ -489,34 +485,22 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     [displayNurses, blockDates]
   );
   selection.setLayout(firstCellKey, shownCellKeys);
+
+  // Each nurse's cells as one list, kept while none of them changed (so the row is not drawn again).
+  const previousRowsRef = useRef<Map<string, CellView[]> | undefined>(undefined);
+  const rowViews = useMemo(
+    () => rowViewsOf(cellViews, displayNurses.map((n) => n.id), blockDates, previousRowsRef.current),
+    [cellViews, displayNurses, blockDates]
+  );
+  previousRowsRef.current = rowViews;
   // Cells that kept their props but gained or lost the Tab stop are told once the grid is drawn.
   useLayoutEffect(() => selection.flushLayout());
 
-  const getNurseBlockHours = (nurse: Nurse) => {
-    const h = blockHoursByNurse.get(nurse.id);
-    return { blockTotal: h?.totalHours ?? 0, bDuty: h?.dutyHours ?? 0, bLeave: h?.leaveHours ?? 0 };
-  };
-
   // Day totals under the grid: doctors in session, nurses on duty, hours without a free nurse, senior on duty.
-  const dayTotals = useMemo(() => {
-    const seniorIds = new Set(seniorityLevels.filter((s) => s.isSenior).map((s) => s.id));
-    const levelById = new Map(nurses.map((n) => [n.id, n.seniorityLevelId]));
-    return new Map(
-      blockDates.map((date) => {
-        const onDuty = new Set(assignments.filter((a) => a.date === date).map((a) => a.nurseId));
-        const hours = validationReport.hourlyCoverageMap?.[date];
-        return [
-          date,
-          {
-            doctors: doctorSessionsOn(sessions, date).length,
-            nurses: onDuty.size,
-            gapHours: hours ? Object.values(hours).filter((h) => h.deficit > 0).length : undefined,
-            hasSenior: seniorIds.size === 0 ? undefined : [...onDuty].some((id) => seniorIds.has(levelById.get(id) || '')),
-          },
-        ] as const;
-      })
-    );
-  }, [blockDates.join(','), assignments, sessions, nurses, seniorityLevels, validationReport]);
+  const dayTotals = useMemo(
+    () => dayTotalsOf(blockDates, assignments, sessions, nurses, seniorityLevels, validationReport.hourlyCoverageMap),
+    [blockDates, assignments, sessions, nurses, seniorityLevels, validationReport]
+  );
 
   // What the big editor starts with for a cell (also the base of every one tap choice)
   const computeEditorDefaults = (nurseId: string, date: string): CellChoice => {
@@ -1277,19 +1261,21 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
 
   // The cells' actions: one object for the life of the grid, calling the latest handlers,
   // so a memoized cell is not drawn again because a handler was made anew.
-  const cellHandlersRef = useRef<GridCellActions | null>(null);
+  const cellHandlersRef = useRef<GridRowActions | null>(null);
   cellHandlersRef.current = {
     click: handleCellClick,
     doubleClick: handleCellDoubleClick,
     contextMenu: handleContextMenu,
     select: (nurseId, date) => selection.select({ nurseId, date }),
+    openProblems: () => onNavigateTab && onNavigateTab('warnings'),
   };
-  const cellActions = useMemo<GridCellActions>(
+  const cellActions = useMemo<GridRowActions>(
     () => ({
       click: (nurseId, date) => cellHandlersRef.current!.click(nurseId, date),
       doubleClick: (nurseId, date) => cellHandlersRef.current!.doubleClick(nurseId, date),
       contextMenu: (e, nurseId, date) => cellHandlersRef.current!.contextMenu(e, nurseId, date),
       select: (nurseId, date) => cellHandlersRef.current!.select(nurseId, date),
+      openProblems: () => cellHandlersRef.current!.openProblems(),
     }),
     []
   );
@@ -1555,116 +1541,29 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
             {/* Table Body: Nurse Rows */}
             <tbody className="divide-y divide-slate-200 font-mono">
               {displayNurses.map((nurse) => {
-                const seniority = seniorityMap.get(nurse.seniorityLevelId);
-                const hasPhl = nurse.capabilityIds?.includes('role-phl');
-                const { totalHours, targetHours, percent } = getNurseHoursProgress(nurse);
-                const blockHours = getNurseBlockHours(nurse);
-
-                // Hours line: over in red, within about 2 h of the goal in green, short in amber.
-                const diff = Math.round((totalHours - targetHours) * 10) / 10;
-                const hoursTone = targetHours <= 0 ? 'none' : diff > 2 ? 'over' : diff < -2 ? 'short' : 'ok';
-                const hoursNote =
-                  targetHours <= 0
-                    ? ''
-                    : diff > 0
-                    ? `${fmtHours(diff)} h over`
-                    : diff < 0
-                    ? `${fmtHours(-diff)} h short`
-                    : 'on goal';
-                const hoursLine =
-                  targetHours > 0
-                    ? `${fmtHours(totalHours)} / ${fmtHours(targetHours)} h · ${hoursNote}`
-                    : `${fmtHours(totalHours)} h`;
-                const toneText =
-                  hoursTone === 'over' ? 'text-rose-700 font-semibold' : hoursTone === 'ok' ? 'text-emerald-700' : hoursTone === 'short' ? 'text-amber-700' : 'text-slate-600';
-                // Bar: when over the goal, the whole bar is the hours worked, the goal
-                // part is green and the hours over show as a red segment.
-                const overShare = totalHours > targetHours && totalHours > 0 ? (totalHours - targetHours) / totalHours : 0;
-                const fillPercent = overShare > 0 ? 100 - overShare * 100 : Math.min(100, Math.max(0, percent));
-                const barColor = hoursTone === 'short' ? 'bg-amber-500' : 'bg-emerald-500';
-
+                const hours = hoursByNurse.get(nurse.id)!;
+                const block = blockHoursByNurse.get(nurse.id);
+                const np = nurseProblems.get(nurse.id);
                 return (
-                  <tr key={nurse.id} className="hover:bg-slate-50/60">
-                    {/* Sticky Left Column: Nurse, seniority and hours */}
-                    <th
-                      scope="row"
-                      className="sticky left-0 bg-white z-20 border-r-2 border-slate-300 py-1 px-2.5 text-left font-normal w-60 min-w-60 max-w-60 shadow-xs"
-                      title={`${nurse.fullName}${seniority ? ` · ${seniority.name}` : ''} · ${nurse.contractPercent}% of full time · Whole roster: ${hoursLine}`}
-                    >
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="font-semibold text-slate-900 truncate text-xs font-sans">{nurse.fullName}</span>
-                        {seniority && (
-                          <span
-                            className="text-[10px] font-medium px-1 rounded shrink-0 font-sans"
-                            style={{ backgroundColor: `${seniority.color}15`, color: seniority.color }}
-                          >
-                            {seniority.name}
-                          </span>
-                        )}
-                        {nurse.contractPercent !== 100 && (
-                          <span className="text-[10px] text-slate-500 shrink-0 font-sans">{nurse.contractPercent}% time</span>
-                        )}
-                        {highlightViolations && nurseProblems.has(nurse.id) && (() => {
-                          const np = nurseProblems.get(nurse.id)!;
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => onNavigateTab && onNavigateTab('warnings')}
-                              title={np.messages.join('\n')}
-                              aria-label={`${np.messages.length} problem${np.messages.length === 1 ? '' : 's'} for ${nurse.fullName}: ${np.messages.join('. ')}`}
-                              className={`shrink-0 flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold font-sans cursor-pointer ${
-                                np.mustFix ? 'bg-rose-600 text-white' : 'bg-amber-400 text-amber-950'
-                              }`}
-                            >
-                              {np.messages.length}
-                            </button>
-                          );
-                        })()}
-                        {hasPhl && (
-                          <span title="Blood collection and IV nurse" className="text-rose-600 text-xs font-bold shrink-0 ml-auto">
-                            🩸
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-[11px] font-sans whitespace-nowrap ${toneText}`}>{hoursLine}</span>
-                        {targetHours > 0 && (
-                          <div
-                            className="flex-1 min-w-8 h-1.5 rounded bg-slate-100 overflow-hidden flex"
-                            role="img"
-                            aria-label={`${fmtHours(totalHours)} of ${fmtHours(targetHours)} hours, ${hoursNote}`}
-                          >
-                            <div className={`h-full ${barColor}`} style={{ width: `${fillPercent}%` }} />
-                            {overShare > 0 && <div className="h-full bg-rose-500" style={{ width: `${overShare * 100}%` }} />}
-                          </div>
-                        )}
-                      </div>
-                    </th>
-
-                    {/* Matrix Cells */}
-                    {dayInfo.map(({ dateStr }) => (
-                        <GridCell
-                          key={dateStr}
-                          view={cellViews.get(cellKeyOf(nurse.id, dateStr))!}
-                          selection={selection}
-                          showProblems={highlightViolations}
-                          heightClass={cellHeightClass}
-                          fontClass={cellFontSizeClass}
-                          actions={cellActions}
-                        />
-                    ))}
-
-                    {/* Hours inside the days shown */}
-                    <td
-                      className="py-1 px-2 text-center text-xs font-bold text-slate-800 bg-slate-50 border-b border-slate-200"
-                      title={`These days: ${fmtHours(blockHours.bDuty)} h shifts + ${fmtHours(blockHours.bLeave)} h leave. Whole roster: ${hoursLine}`}
-                    >
-                      <span>{fmtHours(blockHours.blockTotal)} h</span>
-                      <span className="block text-[10px] font-normal text-slate-500">
-                        {fmtHours(totalHours)} h in all
-                      </span>
-                    </td>
-                  </tr>
+                  <GridRow
+                    key={nurse.id}
+                    nurse={nurse}
+                    seniority={seniorityMap.get(nurse.seniorityLevelId)}
+                    views={rowViews.get(nurse.id)!}
+                    totalHours={hours.totalHours}
+                    targetHours={hours.targetHours}
+                    percent={hours.percent}
+                    blockTotal={block?.totalHours ?? 0}
+                    blockDuty={block?.dutyHours ?? 0}
+                    blockLeave={block?.leaveHours ?? 0}
+                    problems={np ? np.messages.join(PROBLEM_SEPARATOR) : ''}
+                    problemMustFix={!!np?.mustFix}
+                    showProblems={highlightViolations}
+                    heightClass={cellHeightClass}
+                    fontClass={cellFontSizeClass}
+                    selection={selection}
+                    actions={cellActions}
+                  />
                 );
               })}
             </tbody>
