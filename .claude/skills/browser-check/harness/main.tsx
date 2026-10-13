@@ -92,7 +92,13 @@ async function start() {
     history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);
   }
   if (view === 'app' || view === 'me' || view === 'published' || view === 'ack') {
-    root.render(<App />);
+    // As in the app's own main.tsx: the host for notify() and confirmDialog() sits beside the app.
+    root.render(
+      <>
+        <App />
+        <DialogHost />
+      </>
+    );
     return;
   }
   root.render(<Single view={view} />);

@@ -66,6 +66,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   // Planners and managers approve requests and see every request, decided or not
   // (canApprove() in firestore.rules); the owner is a planner.
   const canManageRequests = canApproveRequests(currentUser);
+  // A nurse (no planner or manager rights) has only the tab with their own requests.
+  const onlyOwnRequests = !canEdit && !canManageRequests;
   const [activeTab, setActiveTab] = useState<'calendar' | 'self-service' | 'approvals' | 'requests'>(canEdit ? 'calendar' : 'self-service');
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
 
@@ -678,7 +680,10 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 select-none">
+    <div className={onlyOwnRequests ? 'px-4 py-5' : 'p-6 max-w-7xl mx-auto space-y-6 select-none'}>
+      {/* A nurse sees only their own requests (Phase 5): no planner heading and no tabs. */}
+      {!onlyOwnRequests && (
+      <>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
@@ -823,6 +828,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           </button>
         )}
       </div>
+      </>
+      )}
 
       {/* VIEW PANEL: EVERY REQUEST, DECIDED OR NOT */}
       {activeTab === 'requests' && canManageRequests && (
@@ -837,6 +844,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       {/* VIEW PANEL 2: NURSE SELF-SERVICE PORTAL */}
       {activeTab === 'self-service' && (
         <NurseSelfServicePanel
+          headingLevel={onlyOwnRequests ? 1 : 2}
           currentUser={currentUser || undefined}
           nurses={nurses}
           leaveTypes={leaveTypes}
