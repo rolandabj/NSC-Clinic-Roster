@@ -51,7 +51,12 @@ export function planSync<T extends { id: string }>(
   const removeIds = [...known.entries()]
     .filter(([id, k]) => !desiredIds.has(id) && inScope(k.item))
     .map(([id]) => id);
-  const upserts = desired.filter((d) => known.get(d.id)?.print !== fingerprint(d));
+  // A record that is the very object saved last time has not changed (records are never
+  // changed in place), so only copies of saved records are compared, by their saved text (`fingerprint`), as before.
+  const upserts = desired.filter((d) => {
+    const k = known.get(d.id);
+    return !(k && k.item === d) && k?.print !== fingerprint(d);
+  });
   return { removeIds, upserts };
 }
 

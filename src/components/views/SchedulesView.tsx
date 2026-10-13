@@ -40,6 +40,7 @@ import { usePresence } from '../../services/presence/usePresence';
 import { countChangedCells } from '../../services/dashboard/dashboardSummary';
 import { useAppContext } from '../common/AppContext';
 import { WhoCanCover } from '../workbook/WhoCanCover';
+import { changedLists } from '../../services/schedule/changedLists';
 import { HolidayDayOffPicker } from '../workbook/HolidayDayOffPicker';
 import { nurseClinicRoleOf, canBeFreeNurse } from '../../services/engine/clinicModel';
 import { AddressChange, ClinicContextState } from '../../types/navigation';
@@ -705,12 +706,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       return;
     }
     const sched = activeSchedule;
+    const now = liveRef.current;
+    // Only the lists this edit really changes are set and saved (a cell edit sends all three).
+    const changed = changedLists(edit, now);
+    if (!changed.assignments && !changed.locks && !changed.leaveEntries) return;
+    edit = changed;
     if (options.recordUndo !== false) {
       const before = snapshotNow();
       if (before) setUndoStack((prev) => [before, ...prev].slice(0, 50));
       setRedoStack([]);
     }
-    const now = liveRef.current;
     const nextAssignments = edit.assignments ?? now.assignments;
     const nextLocks = edit.locks ?? now.locks;
     const nextLeave = edit.leaveEntries ?? now.leaveEntries;

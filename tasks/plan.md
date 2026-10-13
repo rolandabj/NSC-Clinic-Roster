@@ -444,3 +444,5 @@ After slice 3, the same machine, 7 runs, times in the page:
 | Cell popup opens | 53 ms, 57 ms | 51 ms | under 100 ms |
 | One arrow key | 29 ms, 30 ms | 31 ms | under 50 ms |
 | Deleting a shift | 106 ms, 100 ms | 86 ms | under 100 ms |
+
+After slice 4 (7 runs, in the page): cells shown 1,097 ms, longest blocking task while loading 281 ms, popup 62 ms, arrow key 30 ms, deleting a shift 88 ms. The screen times stay as after slice 3: this slice takes work out of the save that runs after each edit.

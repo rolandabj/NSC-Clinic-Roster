@@ -38,7 +38,7 @@ Main moves only when the owner says "push to main".
 - [x] Memoized cells and per cell views (`grid/cellView.ts`, `grid/GridCell.tsx`, `grid-flow.cjs`)
 - [x] Selection store, keys on the grid (`grid/gridSelection.ts`; `grid-timing.cjs` also measures in the page)
 - [x] Derived data once per change; compare dialog only while open (`grid/GridRow.tsx`, `grid/dayTotals.ts`)
-- [ ] Only changed lists saved and fingerprinted
+- [x] Only changed lists saved and fingerprinted (`changedLists`, `planSync`)
 - [ ] Checker off the typing path
 - [ ] No extra renders; grid kept mounted
 - [ ] Split SchedulesView and WorkbookGrid
