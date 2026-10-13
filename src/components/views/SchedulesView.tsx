@@ -7,33 +7,12 @@ import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import {
   CalendarRange,
   Plus,
-  Sparkles,
-  Download,
-  Share2,
   Send,
-  Clock,
-  Layers,
-  AlertTriangle,
-  ChevronRight,
-  Check,
   X,
-  Trash2,
   Shield,
   Save,
-  History,
-  Diff,
-  FolderOpen,
-  Scale,
-  ArrowLeftRight,
-  Maximize2,
-  Minimize2,
   Star,
-  Undo2,
-  Redo2,
-  RotateCcw,
-  MoreHorizontal,
 } from 'lucide-react';
-import { MenuButton } from '../common/MenuButton';
 import { PageLoading } from '../common/PageLoading';
 import { ProblemsPanel } from '../workbook/ProblemsPanel';
 import { withoutBackups } from '../../services/history/versionList';
@@ -43,6 +22,12 @@ import { useAppContext } from '../common/AppContext';
 import { WhoCanCover } from '../workbook/WhoCanCover';
 import { changedLists } from '../../services/schedule/changedLists';
 import { useLatestCallback } from '../common/useLatestCallback';
+import { RosterSteps } from '../roster/RosterSteps';
+import { FillDialog } from '../roster/FillDialog';
+import { RosterPicker } from '../roster/RosterPicker';
+import { RosterToolbar } from '../roster/RosterToolbar';
+import { RosterSheetTabs, type RosterSheet } from '../roster/RosterSheetTabs';
+import { rosterSteps, type RosterStepAction } from '../roster/rosterSteps';
 import { HolidayDayOffPicker } from '../workbook/HolidayDayOffPicker';
 import { nurseClinicRoleOf, canBeFreeNurse } from '../../services/engine/clinicModel';
 import { AddressChange, ClinicContextState } from '../../types/navigation';
@@ -229,7 +214,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   // Active Block & Tab selection in Workbook View
   const [selectedBlockIndex, setSelectedBlockIndex] = useState(0);
-  type Sheet = 'roster' | 'doctors' | 'coverage' | 'warnings' | 'leave' | 'hours' | 'legend';
+  type Sheet = RosterSheet;
   const [activeTab, setActiveTab] = useState<Sheet>(() => (rosterSheetFromAddress(address?.sheet) as Sheet) || 'roster');
   // The grid stays mounted (hidden) once it has been shown, so coming back to it does not
   // build the grid again, and keeps its zoom and selection.
@@ -320,17 +305,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // Dialog keyboard and screen reader support
   const saveTitleId = useId();
   const overrideTitleId = useId();
-  const preflightTitleId = useId();
-  const pickerTitleId = useId();
   const saveDialogRef = useDialogA11y<HTMLDivElement>(isSaveModalOpen, () => setIsSaveModalOpen(false));
   const overrideDialogRef = useDialogA11y<HTMLDivElement>(isOverrideModalOpen && !!activeLockToOverride, () =>
     setIsOverrideModalOpen(false)
   );
-  const preflightDialogRef = useDialogA11y<HTMLDivElement>(isPreflightModalOpen && !!preflightSummary, () => {
-    // Can't be closed while a generation run is in progress (same as the Cancel button)
-    if (!isGenerating) setIsPreflightModalOpen(false);
-  });
-  const pickerDialogRef = useDialogA11y<HTMLDivElement>(isSchedulePickerOpen, () => setIsSchedulePickerOpen(false));
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1777,35 +1755,22 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     setIsPublishModalOpen(true);
   };
 
-  // The step bar: create, fill, fix problems, publish. The first step not done is the current one.
-  const mustFix = validationReport.errorCount;
-  const stepState = [
-    !!activeSchedule,
-    assignments.length > 0,
-    assignments.length > 0 && mustFix === 0,
-    activeSchedule?.status === 'PUBLISHED' && changedSincePublish === 0,
-  ];
-  const currentStep = stepState.findIndex((done) => !done);
-  const steps: { label: string; done: boolean; current: boolean; onClick?: () => void }[] = [
-    { label: 'Create', onClick: undefined },
-    { label: assignments.length > 0 ? 'Filled' : 'Fill', onClick: () => handleOpenPreflight(assignments.length > 0 ? 'EMPTY_ONLY' : 'GENERATE_ALL') },
-    {
-      label: assignments.length === 0 ? 'Fix problems' : mustFix > 0 ? `Fix problems (${mustFix})` : 'No problems to fix',
-      onClick: () => {
-        setActiveTab('roster');
-        setIsProblemsOpen(true);
-      },
-    },
-    {
-      label:
-        hasPublished && changedSincePublish > 0
-          ? `Send changes (${changedSincePublish})`
-          : activeSchedule?.status === 'PUBLISHED'
-          ? 'Published'
-          : 'Publish',
-      onClick: () => openPublish(hasPublished ? 'CHANGE' : 'PUBLISH'),
-    },
-  ].map((step, i) => ({ ...step, done: stepState[i], current: i === currentStep }));
+  // The step bar: create, fill, fix problems, publish (`rosterSteps`).
+  const steps = rosterSteps({
+    hasRoster: !!activeSchedule,
+    shiftCount: assignments.length,
+    mustFix: validationReport.errorCount,
+    published: activeSchedule?.status === 'PUBLISHED',
+    hasPublished,
+    changedSincePublish,
+  });
+  const onStep = (action: RosterStepAction) => {
+    if (action === 'fillAll' || action === 'fillEmpty') handleOpenPreflight(action === 'fillAll' ? 'GENERATE_ALL' : 'EMPTY_ONLY');
+    else if (action === 'problems') {
+      setActiveTab('roster');
+      setIsProblemsOpen(true);
+    } else openPublish(action === 'change' ? 'CHANGE' : 'PUBLISH');
+  };
 
   const nurseName = (id: string) => nurses.find((n) => n.id === id)?.fullName || 'Unknown nurse';
 
@@ -1833,285 +1798,59 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       }`}
     >
       {/* Toolbar: the roster, save status, and the few main actions (the rest under More) */}
-      <div className="relative bg-white border-b border-slate-200 px-3 sm:px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0 z-[45]">
-        <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <button
-            onClick={() => {
-              repo.list('schedules').then((schedList) => {
-                const unique = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
-                setSchedules(unique);
-              });
-              setIsSchedulePickerOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-300 hover:border-indigo-400 hover:bg-slate-50 rounded text-slate-800 font-bold transition-colors cursor-pointer min-w-0"
-            title="Open another roster, or create a new one"
-          >
-            <FolderOpen className="w-3.5 h-3.5 text-indigo-600 shrink-0" aria-hidden="true" />
-            <span className="truncate max-w-[160px] sm:max-w-[220px]">{activeSchedule ? activeSchedule.name : 'Choose a roster'}</span>
-            <span className="text-[10px] text-slate-500 font-normal" aria-hidden="true">▾</span>
-          </button>
-
-          {activeSchedule && (
-            <>
-              <span className="text-slate-600 tabular-nums hidden md:inline">
-                {formatDate(activeSchedule.startDate)} to {formatDate(activeSchedule.endDate)}
-              </span>
-              <span
-                className={`text-[11px] px-1.5 py-0.5 rounded font-semibold ${
-                  activeSchedule.status === 'PUBLISHED' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                }`}
-                title={`Saved copy number ${activeSchedule.activeVersionNumber || 1}`}
-              >
-                {activeSchedule.status === 'PUBLISHED' ? 'Published' : 'Draft'} · v{activeSchedule.activeVersionNumber || 1}
-              </span>
-              {(() => {
-                const chip = getSchedulePeriodChip(activeSchedule);
-                return (
-                  <span
-                    className="text-[11px] px-1.5 py-0.5 rounded inline-flex items-center gap-1 border bg-slate-50 text-slate-700 border-slate-200 hidden lg:inline-flex"
-                    title={chip.tooltip}
-                  >
-                    <Clock className="w-3 h-3 text-indigo-600" aria-hidden="true" />
-                    <span>{chip.label}</span>
-                  </span>
-                );
-              })()}
-            </>
-          )}
-
-          {/* Save status (changes save by themselves; this says whether they did) */}
-          {loadError ? (
-            <span role="alert" className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1">
-              <span>Could not load the roster ({loadError}). Changes will not be saved.</span>
-              <button onClick={() => loadData()} className="underline cursor-pointer">
-                Reload
-              </button>
-            </span>
-          ) : saveError ? (
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded px-2 py-1 max-w-md" role="alert">
-              <span className="truncate" title={saveError}>{saveError}</span>
-              {hasUnsavedChanges() && (
-                <button
-                  onClick={() => {
-                    quotaTracker.reset();
-                    for (const [what, syncer] of [
-                      ['Shifts', syncers.assignments],
-                      ['Pinned days', syncers.locks],
-                      ['Leave', syncers.leaveEntries],
-                    ] as const) {
-                      const retry = syncer.retry();
-                      if (retry) void trackSave(retry, what);
-                    }
-                  }}
-                  className="underline cursor-pointer shrink-0"
-                >
-                  Retry now
-                </button>
-              )}
-            </span>
-          ) : isSaving ? (
-            <span className="text-[11px] text-slate-500" role="status">Saving…</span>
-          ) : (
-            lastAutosavedAt && (
-              <span className="text-[11px] text-slate-500 inline-flex items-center gap-1" title={`Last saved at ${lastAutosavedAt}. Every change is saved as you make it.`}>
-                <Check className="w-3 h-3 text-emerald-600" aria-hidden="true" />
-                All changes saved
-              </span>
-            )
-          )}
-
-          {othersHere.length > 0 && (
-            <span
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-800 bg-sky-50 border border-sky-200 rounded px-2 py-0.5"
-              title={othersHere.map((p) => `${p.name} (${p.email})`).join(', ')}
-              role="status"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-sky-500" aria-hidden="true" />
-              {othersHere.length === 1 ? `${othersHere[0].name} is also here` : `${othersHere.length} others are also here`}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5">
-          <button
-            disabled={undoStack.length === 0}
-            onClick={handleUndo}
-            className="inline-flex items-center gap-1 px-2 py-1.5 border border-slate-200 rounded disabled:opacity-40 hover:bg-slate-50 text-slate-700 cursor-pointer disabled:cursor-not-allowed"
-            title="Undo the last change (Ctrl+Z)"
-            aria-label="Undo"
-          >
-            <Undo2 className="w-3.5 h-3.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Undo</span>
-          </button>
-          <button
-            disabled={redoStack.length === 0}
-            onClick={handleRedo}
-            className="inline-flex items-center gap-1 px-2 py-1.5 border border-slate-200 rounded disabled:opacity-40 hover:bg-slate-50 text-slate-700 cursor-pointer disabled:cursor-not-allowed"
-            title="Redo the change you undid (Ctrl+Y)"
-            aria-label="Redo"
-          >
-            <Redo2 className="w-3.5 h-3.5" aria-hidden="true" />
-            <span className="hidden sm:inline">Redo</span>
-          </button>
-
-          <MenuButton
-            align="right"
-            disabled={!activeSchedule}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold transition-colors shadow-xs cursor-pointer disabled:opacity-50"
-            title="Fill the roster with shifts"
-            label={
-              <>
-                <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Fill roster</span>
-                <span aria-hidden="true">▾</span>
-              </>
-            }
-            items={[
-              {
-                label: 'Fill the whole roster',
-                hint: 'Pinned days, leave and your hand changes are kept',
-                icon: <Sparkles className="w-3.5 h-3.5 text-indigo-600" />,
-                onSelect: () => handleOpenPreflight('GENERATE_ALL'),
-              },
-              {
-                label: 'Fill empty cells only',
-                hint: 'Every shift already on the roster stays',
-                icon: <Plus className="w-3.5 h-3.5 text-indigo-600" />,
-                onSelect: () => handleOpenPreflight('EMPTY_ONLY'),
-              },
-              {
-                label: 'Clear filled shifts…',
-                hint: 'Removes the shifts the app filled in',
-                icon: <Trash2 className="w-3.5 h-3.5 text-rose-600" />,
-                danger: true,
-                separatorBefore: true,
-                onSelect: () => handleOpenPreflight('CLEAR_GENERATED'),
-              },
-            ]}
-          />
-
-          <MenuButton
-            align="right"
-            disabled={!activeSchedule}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-semibold transition-colors shadow-xs cursor-pointer disabled:opacity-50"
-            title="Send the roster to the nurses"
-            label={
-              <>
-                <Send className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Publish</span>
-                <span aria-hidden="true">▾</span>
-              </>
-            }
-            items={[
-              {
-                label: 'Publish the roster',
-                hint: 'Email every nurse their shifts',
-                icon: <Send className="w-3.5 h-3.5 text-emerald-600" />,
-                onSelect: () => openPublish('PUBLISH'),
-              },
-              {
-                label: 'Send changes only',
-                hint: hasPublished
-                  ? changedSincePublish > 0
-                    ? `${changedSincePublish} cell${changedSincePublish === 1 ? '' : 's'} changed since the last publish`
-                    : 'Nothing has changed since the last publish'
-                  : 'Publish the roster once first',
-                icon: <History className="w-3.5 h-3.5 text-amber-600" />,
-                disabled: !hasPublished,
-                onSelect: () => openPublish('CHANGE'),
-              },
-            ]}
-          />
-
-          <MenuButton
-            align="right"
-            ariaLabel="More actions"
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-semibold cursor-pointer"
-            title="More actions"
-            label={
-              <>
-                <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
-                <span className="hidden sm:inline">More</span>
-              </>
-            }
-            items={[
-              { label: 'New roster…', icon: <Plus className="w-3.5 h-3.5 text-indigo-600" />, onSelect: () => setIsNewModalOpen(true) },
-              {
-                label: 'Keep a copy…',
-                hint: 'Changes save by themselves; this keeps a named copy to go back to',
-                icon: <Save className="w-3.5 h-3.5 text-indigo-600" />,
-                disabled: !activeSchedule,
-                onSelect: () => setIsSaveModalOpen(true),
-              },
-              {
-                label: 'Backup copies…',
-                hint: 'Kept by themselves before each fill or clear',
-                icon: <RotateCcw className="w-3.5 h-3.5 text-indigo-600" />,
-                disabled: !activeSchedule,
-                onSelect: () => setIsBackupsOpen(true),
-              },
-              { label: 'Compare saved copies', icon: <Diff className="w-3.5 h-3.5 text-indigo-600" />, disabled: !activeSchedule, onSelect: () => setIsCompareModalOpen(true) },
-              { label: 'Export or print…', icon: <Download className="w-3.5 h-3.5 text-indigo-600" />, disabled: !activeSchedule, onSelect: () => setIsExportModalOpen(true) },
-              { label: 'Share links…', icon: <Share2 className="w-3.5 h-3.5 text-indigo-600" />, disabled: !activeSchedule, onSelect: () => setIsShareModalOpen(true) },
-              {
-                label: 'Fairness…',
-                hint: 'Weekends, late shifts and holidays per nurse',
-                icon: <Scale className="w-3.5 h-3.5 text-amber-700" />,
-                separatorBefore: true,
-                disabled: !activeSchedule,
-                onSelect: () => setIsFairnessModalOpen(true),
-              },
-              {
-                label: 'Templates and copy last roster…',
-                icon: <Layers className="w-3.5 h-3.5 text-indigo-600" />,
-                disabled: !activeSchedule,
-                onSelect: () => setIsTemplateModalOpen(true),
-              },
-              { label: 'Swap two nurses’ shifts…', icon: <ArrowLeftRight className="w-3.5 h-3.5 text-slate-600" />, disabled: !activeSchedule, onSelect: () => setIsSwapModalOpen(true) },
-              {
-                label: isExpandedView ? 'Leave full screen' : 'Full screen',
-                hint: isExpandedView ? 'Or press Esc' : undefined,
-                icon: isExpandedView ? <Minimize2 className="w-3.5 h-3.5 text-indigo-600" /> : <Maximize2 className="w-3.5 h-3.5 text-indigo-600" />,
-                separatorBefore: true,
-                onSelect: () => setIsExpandedView(!isExpandedView),
-              },
-            ]}
-          />
-        </div>
-      </div>
+      <RosterToolbar
+        activeSchedule={activeSchedule}
+        periodChip={activeSchedule ? getSchedulePeriodChip(activeSchedule) : undefined}
+        loadError={loadError}
+        saveError={saveError}
+        canRetry={hasUnsavedChanges()}
+        isSaving={isSaving}
+        lastAutosavedAt={lastAutosavedAt}
+        othersHere={othersHere}
+        canUndo={undoStack.length > 0}
+        canRedo={redoStack.length > 0}
+        hasPublished={hasPublished}
+        changedSincePublish={changedSincePublish}
+        isExpandedView={isExpandedView}
+        onOpenPicker={() => {
+          repo.list('schedules').then((schedList) => {
+            const unique = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
+            setSchedules(unique);
+          });
+          setIsSchedulePickerOpen(true);
+        }}
+        onReload={() => loadData()}
+        onRetry={() => {
+          quotaTracker.reset();
+          for (const [what, syncer] of [
+            ['Shifts', syncers.assignments],
+            ['Pinned days', syncers.locks],
+            ['Leave', syncers.leaveEntries],
+          ] as const) {
+            const retry = syncer.retry();
+            if (retry) void trackSave(retry, what);
+          }
+        }}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onFill={(mode) => handleOpenPreflight(mode)}
+        onPublish={openPublish}
+        onMenu={(item) => {
+          if (item === 'new') setIsNewModalOpen(true);
+          else if (item === 'copy') setIsSaveModalOpen(true);
+          else if (item === 'backups') setIsBackupsOpen(true);
+          else if (item === 'compare') setIsCompareModalOpen(true);
+          else if (item === 'export') setIsExportModalOpen(true);
+          else if (item === 'share') setIsShareModalOpen(true);
+          else if (item === 'fairness') setIsFairnessModalOpen(true);
+          else if (item === 'templates') setIsTemplateModalOpen(true);
+          else if (item === 'swap') setIsSwapModalOpen(true);
+          else setIsExpandedView(!isExpandedView);
+        }}
+      />
 
       {/* Steps: where this roster is, and the next thing to do */}
-      {activeSchedule && (
-        <nav aria-label="Roster steps" className="bg-slate-50 border-b border-slate-200 px-3 sm:px-4 py-1.5 shrink-0 overflow-x-auto">
-          <ol className="flex items-center gap-1 text-[11px] whitespace-nowrap">
-            {steps.map((step, i) => (
-              <li key={step.label} className="flex items-center gap-1">
-                {i > 0 && <ChevronRight className="w-3 h-3 text-slate-400" aria-hidden="true" />}
-                <button
-                  type="button"
-                  onClick={step.onClick}
-                  disabled={!step.onClick}
-                  aria-current={step.current ? 'step' : undefined}
-                  className={`inline-flex items-center gap-1.5 px-2 py-1 rounded font-semibold transition-colors ${
-                    step.onClick ? 'cursor-pointer hover:bg-white' : 'cursor-default'
-                  } ${step.current ? 'bg-white text-indigo-800 ring-1 ring-indigo-300' : step.done ? 'text-emerald-800' : 'text-slate-600'}`}
-                >
-                  <span
-                    className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
-                      step.done ? 'bg-emerald-600 text-white' : step.current ? 'bg-indigo-600 text-white' : 'bg-slate-300 text-slate-700'
-                    }`}
-                    aria-hidden="true"
-                  >
-                    {step.done ? <Check className="w-2.5 h-2.5" /> : i + 1}
-                  </span>
-                  <span>{step.label}</span>
-                  <span className="sr-only">{step.done ? '(done)' : ''}</span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        </nav>
-      )}
+      {activeSchedule && <RosterSteps steps={steps} onStep={onStep} />}
 
       {remoteChange && (
         <div role="status" className="mx-4 mt-2 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 flex flex-wrap items-center justify-between gap-2">
@@ -2395,34 +2134,15 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       </div>
 
       {/* Sheet tabs along the bottom */}
-      <div className="h-9 bg-slate-200 border-t border-slate-300 px-2 flex items-center gap-1 shrink-0 overflow-x-auto select-none">
-        {[
-          { id: 'roster', label: 'Roster' },
-          { id: 'doctors', label: 'Doctors' },
-          { id: 'coverage', label: 'Coverage by hour' },
-          { id: 'warnings', label: `Problems (${validationReport.errorCount + validationReport.warnCount})` },
-          { id: 'leave', label: 'Leave and pinned days' },
-          { id: 'hours', label: 'Hours' },
-          { id: 'legend', label: 'Key' },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => {
-              // A new sheet is a step Back returns from.
-              if (tab.id !== activeTab) onAddressChange?.({ roster: activeSchedule?.id, sheet: rosterSheetToAddress(tab.id) }, 'push');
-              setActiveTab(tab.id as Sheet);
-            }}
-            aria-current={activeTab === tab.id ? 'page' : undefined}
-            className={`px-3 py-1 text-xs font-medium rounded-t transition-colors cursor-pointer border-t border-x ${
-              activeTab === tab.id
-                ? 'bg-white text-indigo-700 border-slate-300 shadow-xs font-bold'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-50 border-transparent hover:text-slate-900'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <RosterSheetTabs
+        active={activeTab}
+        problemCount={validationReport.errorCount + validationReport.warnCount}
+        onOpen={(sheet) => {
+          // A new sheet is a step Back returns from.
+          if (sheet !== activeTab) onAddressChange?.({ roster: activeSchedule?.id, sheet: rosterSheetToAddress(sheet) }, 'push');
+          setActiveTab(sheet);
+        }}
+      />
 
       {/* --- SAVE VERSION WITH NOTE MODAL --- */}
       {isSaveModalOpen && (
@@ -2565,254 +2285,24 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       )}
 
       {/* --- FILL ROSTER DIALOG --- */}
-      {isPreflightModalOpen && preflightSummary && (() => {
-        const isClear = activeGenerationMode === 'CLEAR_GENERATED';
-        // With "Only fill some dates", the counts are for those dates only.
-        const ranged = !isClear && fillRange.enabled && !!fillRange.start && !!fillRange.end;
-        const touched = assignments.filter((a) => !ranged || (a.date >= fillRange.start && a.date <= fillRange.end));
-        const filledCount = touched.filter((a) => a.source === 'GENERATED').length;
-        const manualCount = touched.filter((a) => a.source === 'MANUAL').length;
-        const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-        const title = isClear
-          ? 'Clear filled shifts'
-          : activeGenerationMode === 'EMPTY_ONLY'
-          ? 'Fill empty cells only'
-          : 'Fill the whole roster';
-        const kept = [
-          plural(preflightSummary.existingLocksCount, 'pinned day'),
-          plural(preflightSummary.existingLeaveDaysCount, 'leave day'),
-        ];
-        if (activeGenerationMode === 'GENERATE_ALL' && keepManualOnGenerate && manualCount > 0) kept.push(plural(manualCount, 'hand change'));
-        const nurseClinicChoice = !preflightSummary.nurseClinicRuleEnabled
-          ? 'OFF'
-          : preflightSummary.nurseClinicRuleSeverity === 'HARD'
-          ? 'HARD'
-          : 'SOFT';
-        return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
-          <div
-            ref={preflightDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={preflightTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col text-xs animate-in zoom-in-95 duration-150"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 shrink-0">
-              <div className="flex items-center gap-2 min-w-0">
-                {isClear ? (
-                  <Trash2 className="w-4 h-4 text-rose-600 shrink-0" aria-hidden="true" />
-                ) : (
-                  <Sparkles className="w-4 h-4 text-indigo-600 shrink-0" aria-hidden="true" />
-                )}
-                <h3 id={preflightTitleId} className="text-sm font-bold text-slate-900 truncate">
-                  {title}: {preflightSummary.scheduleName}
-                </h3>
-              </div>
-              {!isGenerating && (
-                <button
-                  onClick={() => setIsPreflightModalOpen(false)}
-                  className="p-1 text-slate-500 hover:text-slate-700 cursor-pointer"
-                  aria-label="Close"
-                  title="Close"
-                >
-                  <X className="w-4 h-4" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-              {isClear ? (
-                <>
-                  <p className="text-slate-800 leading-relaxed text-[13px]">
-                    This removes the {plural(filledCount, 'shift')} the app filled in.{' '}
-                    {clearIncludeManual
-                      ? `Your ${plural(manualCount, 'hand change')} are removed too.`
-                      : manualCount > 0
-                      ? `Your ${plural(manualCount, 'hand change')} stay.`
-                      : ''}{' '}
-                    Pinned days and leave always stay. You can undo this.
-                  </p>
-                  {manualCount > 0 && (
-                    <label className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded cursor-pointer text-slate-800 font-medium">
-                      <input
-                        type="checkbox"
-                        checked={clearIncludeManual}
-                        onChange={(e) => setClearIncludeManual(e.target.checked)}
-                        className="rounded border-slate-300 cursor-pointer"
-                      />
-                      <span>Also remove the {plural(manualCount, 'shift')} I changed by hand</span>
-                    </label>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="text-slate-800 leading-relaxed text-[13px]">
-                    <strong>Kept:</strong> {kept.join(', ')}
-                    {activeGenerationMode === 'EMPTY_ONLY' ? `, and every shift already on the roster (${assignments.length})` : ''}
-                    {ranged ? `, and everything outside ${formatDate(fillRange.start)} to ${formatDate(fillRange.end)}` : ''}.{' '}
-                    {activeGenerationMode === 'GENERATE_ALL' && (
-                      <>
-                        <strong>Replaced:</strong>{' '}
-                        {plural(filledCount + (keepManualOnGenerate ? 0 : manualCount), 'shift')}
-                        {keepManualOnGenerate || manualCount === 0 ? ' the app filled in before' : ', including your hand changes'}.
-                      </>
-                    )}
-                  </p>
-                  {activeGenerationMode === 'GENERATE_ALL' && manualCount > 0 && (
-                    <label className="flex items-center gap-2 p-2 bg-slate-50 border border-slate-200 rounded cursor-pointer text-slate-800 font-medium">
-                      <input
-                        type="checkbox"
-                        checked={keepManualOnGenerate}
-                        onChange={(e) => setKeepManualOnGenerate(e.target.checked)}
-                        className="rounded border-slate-300 cursor-pointer"
-                      />
-                      <span>Keep the {plural(manualCount, 'shift')} I changed by hand</span>
-                    </label>
-                  )}
-                  <fieldset className="p-2 bg-slate-50 border border-slate-200 rounded space-y-2" disabled={isGenerating}>
-                    <label className="flex items-center gap-2 cursor-pointer text-slate-800 font-medium">
-                      <input
-                        type="checkbox"
-                        checked={fillRange.enabled}
-                        onChange={(e) => setFillRange((r) => ({ ...r, enabled: e.target.checked }))}
-                        className="rounded border-slate-300 cursor-pointer"
-                      />
-                      <span>Only fill some dates</span>
-                    </label>
-                    {fillRange.enabled && (
-                      <div className="flex flex-wrap items-center gap-2 pl-6">
-                        <label className="flex items-center gap-1.5">
-                          <span className="text-slate-600">From</span>
-                          <input
-                            type="date"
-                            value={fillRange.start}
-                            min={preflightSummary.startDate}
-                            max={preflightSummary.endDate}
-                            onChange={(e) => setFillRange((r) => ({ ...r, start: e.target.value }))}
-                            className="px-2 py-1 border border-slate-300 rounded bg-white"
-                          />
-                        </label>
-                        <label className="flex items-center gap-1.5">
-                          <span className="text-slate-600">to</span>
-                          <input
-                            type="date"
-                            value={fillRange.end}
-                            min={fillRange.start || preflightSummary.startDate}
-                            max={preflightSummary.endDate}
-                            onChange={(e) => setFillRange((r) => ({ ...r, end: e.target.value }))}
-                            className="px-2 py-1 border border-slate-300 rounded bg-white"
-                          />
-                        </label>
-                        <span className="text-[11px] text-slate-500 basis-full">Every shift outside these dates stays as it is.</span>
-                      </div>
-                    )}
-                  </fieldset>
-
-                  <p className="text-slate-600 leading-relaxed">
-                    {plural(preflightSummary.activeNursesCount, 'nurse')} ({preflightSummary.bloodCollectionNursesCount} can take blood) and{' '}
-                    {plural(preflightSummary.doctorSessionsCount, 'doctor session')} over {plural(preflightSummary.totalDays, 'day')}. Doctors get
-                    their nurses first, then Nurse Clinic and the other jobs are filled.
-                    {preflightSummary.targetWorkingHoursFullTime
-                      ? ` A full time nurse aims for ${preflightSummary.targetWorkingHoursFullTime} h${
-                          preflightSummary.detectedPeriodName ? ` (${preflightSummary.detectedPeriodName})` : ''
-                        }.`
-                      : ''}
-                  </p>
-
-                  <fieldset className="p-3 bg-slate-50 border border-slate-200 rounded space-y-2" disabled={isGenerating}>
-                    <legend className="font-semibold text-slate-900 px-1">A free nurse for Nurse Clinic every opening hour</legend>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                      {(
-                        [
-                          { id: 'HARD', label: 'Never broken', hint: 'Filled before the doctors’ second nurses', run: () => handleUpdateNurseClinicRule('HARD', true) },
-                          { id: 'SOFT', label: 'When possible', hint: 'Doctors first, then Nurse Clinic', run: () => handleUpdateNurseClinicRule('SOFT', true) },
-                          { id: 'OFF', label: 'Off', hint: 'No Nurse Clinic shifts', run: () => handleUpdateNurseClinicRule('SOFT', false) },
-                        ] as const
-                      ).map((opt) => (
-                        <label
-                          key={opt.id}
-                          className={`p-2 rounded border cursor-pointer ${
-                            nurseClinicChoice === opt.id ? 'bg-white border-indigo-500 ring-1 ring-indigo-500' : 'bg-white border-slate-200 hover:bg-slate-100'
-                          }`}
-                        >
-                          <span className="flex items-center gap-1.5 font-semibold text-slate-900">
-                            <input
-                              type="radio"
-                              name="nurse-clinic-rule"
-                              checked={nurseClinicChoice === opt.id}
-                              onChange={opt.run}
-                            />
-                            {opt.label}
-                          </span>
-                          <span className="block text-[11px] text-slate-500 mt-0.5 leading-tight">{opt.hint}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </fieldset>
-
-                  {preflightSummary.eveningCoverageAlert && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 text-[11px] flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
-                      <span>{preflightSummary.eveningCoverageAlert}</span>
-                    </div>
-                  )}
-                  {preflightSummary.staffingScaleWarning && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 text-[11px] flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
-                      <span>{preflightSummary.staffingScaleWarning}</span>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {isGenerating && generationProgress && (
-                <div className="space-y-2 p-3 bg-slate-50 border border-slate-200 rounded" role="status">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-slate-700 font-semibold">{generationProgress.statusText}</span>
-                    <span className="text-indigo-600 font-bold">{generationProgress.percent}%</span>
-                  </div>
-                  <div className="w-full h-2 rounded bg-slate-200 overflow-hidden">
-                    <div className="h-full bg-indigo-600 transition-all duration-100" style={{ width: `${generationProgress.percent}%` }} />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="px-5 py-3 flex items-center justify-end gap-2 border-t border-slate-100 shrink-0">
-              <button
-                type="button"
-                disabled={isGenerating}
-                onClick={() => setIsPreflightModalOpen(false)}
-                className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer disabled:opacity-40"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isGenerating || (!isClear && fillRange.enabled && (!fillRange.start || !fillRange.end || fillRange.start > fillRange.end))}
-                onClick={handleExecuteGeneration}
-                className={`inline-flex items-center gap-1.5 px-4 py-1.5 ${
-                  isClear ? 'bg-rose-600 hover:bg-rose-700' : 'bg-indigo-600 hover:bg-indigo-700'
-                } text-white rounded font-semibold cursor-pointer shadow-xs disabled:opacity-50 transition-colors`}
-              >
-                {isClear ? <Trash2 className="w-3.5 h-3.5" aria-hidden="true" /> : <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />}
-                <span>
-                  {isGenerating
-                    ? isClear
-                      ? 'Clearing…'
-                      : 'Filling…'
-                    : isClear
-                    ? 'Clear shifts'
-                    : activeGenerationMode === 'EMPTY_ONLY'
-                    ? 'Fill empty cells'
-                    : 'Fill roster'}
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-        );
-      })()}
+      {isPreflightModalOpen && preflightSummary && (
+        <FillDialog
+          mode={activeGenerationMode}
+          summary={preflightSummary}
+          assignments={assignments}
+          fillRange={fillRange}
+          setFillRange={setFillRange}
+          keepManual={keepManualOnGenerate}
+          setKeepManual={setKeepManualOnGenerate}
+          clearIncludeManual={clearIncludeManual}
+          setClearIncludeManual={setClearIncludeManual}
+          isGenerating={isGenerating}
+          progress={generationProgress}
+          onClose={() => setIsPreflightModalOpen(false)}
+          onRun={handleExecuteGeneration}
+          onNurseClinicRule={handleUpdateNurseClinicRule}
+        />
+      )}
 
       {/* --- VERSION COMPARE & DIFF MODAL (Phase 10) --- */}
       {/* Built only while open: it works out every difference again whenever the roster changes. */}
@@ -2907,142 +2397,18 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
       {/* --- SCHEDULE PICKER --- */}
       {isSchedulePickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none animate-in fade-in duration-150">
-          <div
-            ref={pickerDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={pickerTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-lg w-full p-5 space-y-4 text-xs"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                <h3 id={pickerTitleId} className="text-sm font-bold text-slate-900">Open a roster</h3>
-              </div>
-              <button
-                onClick={() => setIsSchedulePickerOpen(false)}
-                className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
-                aria-label="Close"
-                title="Close"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            {/* My Schedules Section */}
-            <div className="space-y-2">
-              <span className="font-bold text-slate-800 text-xs block">Rosters</span>
-              <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                {[...schedules].sort((a, b) => b.startDate.localeCompare(a.startDate)).map((s) => {
-                  const isActive = s.id === activeSchedule?.id;
-                  const pickSchedule = () => {
-                    setIsSchedulePickerOpen(false);
-                    if (s.id !== activeSchedule?.id) {
-                      openSchedule(s).catch((err) => notify(`Could not open "${s.name}": ${err?.message || err}`, 'error'));
-                    }
-                  };
-                  return (
-                    // Not a <button>: it holds the delete button
-                    <div
-                      key={s.id}
-                      onClick={pickSchedule}
-                      role="button"
-                      tabIndex={0}
-                      aria-current={isActive ? 'true' : undefined}
-                      onKeyDown={(e) => {
-                        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-                          e.preventDefault();
-                          pickSchedule();
-                        }
-                      }}
-                      className={`p-3 rounded border cursor-pointer transition-colors flex items-center justify-between ${
-                        isActive
-                          ? 'border-indigo-600 bg-indigo-50/80 text-indigo-950'
-                          : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-800'
-                      }`}
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold">{s.name}</span>
-                          {isActive && (
-                            <span className="px-1.5 py-0.5 rounded bg-indigo-600 text-white font-bold text-[10px]">
-                              Open now
-                            </span>
-                          )}
-                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[10px]">
-                            {s.status === 'PUBLISHED' ? 'Published' : 'Draft'} · v{s.activeVersionNumber || 1}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                          {formatDate(s.startDate)} to {formatDate(s.endDate)} · full time goal {s.hoursTargetFullTime} h
-                        </p>
-                        {(() => {
-                          const chip = getSchedulePeriodChip(s);
-                          return (
-                            <div className="flex items-center gap-1.5 mt-1">
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-medium border ${
-                                  chip.isExact
-                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                    : 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                }`}
-                                title={chip.tooltip}
-                              >
-                                {chip.label}
-                              </span>
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setScheduleToDelete(s);
-                            setIsDeleteScheduleModalOpen(true);
-                          }}
-                          className="p-1.5 rounded hover:bg-rose-100 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
-                          title={`Delete roster "${s.name}"`}
-                          aria-label={`Delete roster "${s.name}"`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5 text-rose-500" aria-hidden="true" />
-                        </button>
-                        <ChevronRight className="w-4 h-4 text-slate-400" aria-hidden="true" />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-
-            {/* Modal Actions */}
-            <div className="pt-2 flex items-center justify-between border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSchedulePickerOpen(false);
-                  setIsNewModalOpen(true);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>New roster</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsSchedulePickerOpen(false)}
-                className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <RosterPicker
+          schedules={schedules}
+          activeScheduleId={activeSchedule?.id}
+          periodChipOf={getSchedulePeriodChip}
+          onClose={() => setIsSchedulePickerOpen(false)}
+          onPick={(s) => openSchedule(s).catch((err) => notify(`Could not open "${s.name}": ${err?.message || err}`, 'error'))}
+          onDelete={(s) => {
+            setScheduleToDelete(s);
+            setIsDeleteScheduleModalOpen(true);
+          }}
+          onNew={() => setIsNewModalOpen(true)}
+        />
       )}
 
       {/* --- FAIRNESS & PARITY MODAL (Phase 14.1) --- */}

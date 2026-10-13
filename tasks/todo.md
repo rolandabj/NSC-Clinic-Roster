@@ -41,7 +41,7 @@ Main moves only when the owner says "push to main".
 - [x] Only changed lists saved and fingerprinted (`changedLists`, `planSync`)
 - [x] Checker off the typing path (`checkScheduler.ts`; about 60 ms a check, so no worker)
 - [x] No extra renders; grid kept mounted (`withProblemCount`, `usePresence`, memoized grid, `useLatestCallback`)
-- [ ] Split SchedulesView and WorkbookGrid
+- [ ] Split SchedulesView and WorkbookGrid (SchedulesView's toolbar, steps, sheet tabs, fill dialog and roster picker done)
 - [ ] Checkpoint 3 with timings against the targets
 
 ## Phase 4: roster screen layout, words and accessibility

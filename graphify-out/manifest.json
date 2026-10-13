@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791882983.8038173,
-    "seen": 1791883005.6363103,
-    "ast_hash": "2d86abdaaef6b2b1dde880efcb4af034",
+    "mtime": 1791883573.352359,
+    "seen": 1791883630.3387742,
+    "ast_hash": "f570588e2a287f07c397b59b417c4455",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791882915.177816,
-    "seen": 1791882923.1802232,
-    "ast_hash": "515ead6439f64cca6d55f0f803ff26f7",
+    "mtime": 1791883614.1968606,
+    "seen": 1791883630.3390822,
+    "ast_hash": "070aaa29991df1b0cf614c87f36c5c82",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791882915.1785676,
-    "seen": 1791882923.18023,
-    "ast_hash": "aa6b030cceac046820d94b3b99a1aec3",
+    "mtime": 1791883610.0622857,
+    "seen": 1791883630.339089,
+    "ast_hash": "dc9cad41acc2e72dddc631d1c26f5d6b",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1917,6 +1917,48 @@
     "mtime": 1791882652.9579008,
     "seen": 1791882923.1801386,
     "ast_hash": "69177b6692588013494dbac5678f09dd",
+    "semantic_hash": ""
+  },
+  "src/components/roster/FillDialog.tsx": {
+    "mtime": 1791883235.932124,
+    "seen": 1791883630.338722,
+    "ast_hash": "88b1270fb2597de80270adf4eecdeaae",
+    "semantic_hash": ""
+  },
+  "src/components/roster/RosterPicker.tsx": {
+    "mtime": 1791883273.875374,
+    "seen": 1791883630.3387272,
+    "ast_hash": "e84526ed0732d2269629ba40e4db2d78",
+    "semantic_hash": ""
+  },
+  "src/components/roster/RosterSheetTabs.tsx": {
+    "mtime": 1791883195.5961735,
+    "seen": 1791883630.3387284,
+    "ast_hash": "bfff7e41571600199d7c9f3c63dae70d",
+    "semantic_hash": ""
+  },
+  "src/components/roster/RosterSteps.tsx": {
+    "mtime": 1791883171.8525715,
+    "seen": 1791883630.3387296,
+    "ast_hash": "fb1f658ef267e464bcb571ccc22f63f4",
+    "semantic_hash": ""
+  },
+  "src/components/roster/RosterToolbar.tsx": {
+    "mtime": 1791883356.5023048,
+    "seen": 1791883630.3387308,
+    "ast_hash": "036e384ca0a4d995474dda1352b64fcf",
+    "semantic_hash": ""
+  },
+  "src/components/roster/rosterSteps.ts": {
+    "mtime": 1791883171.8509834,
+    "seen": 1791883630.3387318,
+    "ast_hash": "4b302ede7ab5c6f0f458a2f80b6347ba",
+    "semantic_hash": ""
+  },
+  "tests/unit/rosterSteps.test.ts": {
+    "mtime": 1791883156.988171,
+    "seen": 1791883630.339026,
+    "ast_hash": "0cac03bbc632c5884ab9edd167278b27",
     "semantic_hash": ""
   }
 }
