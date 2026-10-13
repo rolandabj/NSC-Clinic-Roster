@@ -1,7 +1,6 @@
 import { HoursHistory, hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
 import { loadHoursHistory, sameHoursHistory } from '../../services/hours/hoursHistoryService';
-import { afterNextFrame, createCheckScheduler } from '../../services/validation/checkScheduler';
-import React, { useState, useEffect, useRef, useId, useCallback, useMemo, startTransition } from 'react';
+import React, { useState, useEffect, useRef, useId, useMemo } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import {
@@ -20,12 +19,13 @@ import { usePresence } from '../../services/presence/usePresence';
 import { countChangedCells } from '../../services/dashboard/dashboardSummary';
 import { useAppContext } from '../common/AppContext';
 import { WhoCanCover } from '../workbook/WhoCanCover';
-import { changedLists } from '../../services/schedule/changedLists';
 import { useLatestCallback } from '../common/useLatestCallback';
 import { RosterSteps } from '../roster/RosterSteps';
 import { FillDialog } from '../roster/FillDialog';
 import { RosterPicker } from '../roster/RosterPicker';
 import { RosterToolbar } from '../roster/RosterToolbar';
+import { useRosterChecks, type CheckInputs } from '../roster/useRosterChecks';
+import { useRosterEdits } from '../roster/useRosterEdits';
 import { RosterSheetTabs, type RosterSheet } from '../roster/RosterSheetTabs';
 import { rosterSteps, type RosterStepAction } from '../roster/rosterSteps';
 import { HolidayDayOffPicker } from '../workbook/HolidayDayOffPicker';
@@ -69,7 +69,7 @@ import {
   GenerationProgress,
   RegenerateMode,
 } from '../../services/engine/types';
-import { ScheduleValidator, ValidationReport } from '../../services/validation/ScheduleValidator';
+import { ScheduleValidator } from '../../services/validation/ScheduleValidator';
 import { WorkbookGrid } from '../workbook/WorkbookGrid';
 import { DoctorsScheduleSheet } from '../workbook/DoctorsScheduleSheet';
 import { CoverageSheet } from '../workbook/CoverageSheet';
@@ -90,13 +90,6 @@ import { populateRecurringDoctorSessionsForSchedule } from '../../services/sched
 import { BACKUPS_KEPT, saveRosterBackup } from '../../services/history/rosterBackup';
 import { formatDate } from '../../utils/dateUtils';
 
-/** One undo step: the roster's shifts, pinned days and leave at that moment. */
-interface RosterSnapshot {
-  scheduleId: string;
-  assignments: Assignment[];
-  locks: LockEntry[];
-  leaveEntries: LeaveEntry[];
-}
 
 const OPEN_SCHEDULE_KEY = 'clinic_roster_active_schedule_id';
 
@@ -180,16 +173,33 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const availabilityRequestsRef = useRef<AvailabilityRequest[]>([]);
   availabilityRequestsRef.current = availabilityRequests;
 
-  // Validation Report state
-  const [validationReport, setValidationReport] = useState<ValidationReport>({
-    scheduleId: '',
-    timestamp: '',
-    errorCount: 0,
-    warnCount: 0,
-    infoCount: 0,
-    findings: [],
-    hourlyCoverageMap: {},
+  const [workingHoursPeriods, setWorkingHoursPeriods] = useState<WorkingHoursPeriod[]>([]);
+
+  /** Everything the checker needs, taken from the current state. */
+  const currentCheckInputs = (): CheckInputs => ({
+    nurses,
+    seniorityLevels,
+    dutyWindows,
+    sessions,
+    leaveEntries,
+    locks,
+    roles,
+    rules,
+    workingHoursPeriods,
+    specialties,
+    doctors,
+    leaveTypes,
   });
+  // The problem report and the check that keeps it up to date (`useRosterChecks`).
+  const { validationReport, setValidationReport, checks, runValidation, checkRoster, lastCheckedHistoryRef } = useRosterChecks({
+    inputs: currentCheckInputs(),
+    activeSchedule,
+    availabilityRequests,
+    hoursHistory,
+    clinicSetupRef,
+    availabilityRequestsRef,
+  });
+
 
   // Create Schedule Modal
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -263,12 +273,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // True while a roster (or the page data) is loading: edits wait, so nothing is
   // edited on a list that is about to be replaced.
   const loadingRef = useRef(true);
-  const [workingHoursPeriods, setWorkingHoursPeriods] = useState<WorkingHoursPeriod[]>([]);
 
   // Undo/Redo (50 steps). Each step holds the shifts, pinned days and leave
   // together, and the roster it belongs to, so it can never be applied to another roster.
-  const [undoStack, setUndoStack] = useState<RosterSnapshot[]>([]);
-  const [redoStack, setRedoStack] = useState<RosterSnapshot[]>([]);
 
 
   // The top bar shows this roster's problem count (through the app context).
@@ -338,8 +345,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       await Promise.all([syncers.assignments.idle(), syncers.locks.idle(), syncers.leaveEntries.idle()]);
       // Undo steps hold whole lists from before the reload; applying one now could
       // remove or revert changes other people made meanwhile.
-      setUndoStack([]);
-      setRedoStack([]);
+      clearUndo();
       const [
         schedList,
         nList,
@@ -443,111 +449,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     }
   };
 
-  /** Everything the checker needs, taken from the current state unless given. */
-  type CheckInputs = {
-    nurses: Nurse[];
-    seniorityLevels: SeniorityLevel[];
-    dutyWindows: DutyWindow[];
-    sessions: DoctorSession[];
-    leaveEntries: LeaveEntry[];
-    locks: LockEntry[];
-    roles: ClinicalRole[];
-    rules: Rule[];
-    workingHoursPeriods: WorkingHoursPeriod[];
-    specialties: Specialty[];
-    doctors: Doctor[];
-    leaveTypes: LeaveType[];
-  };
-  const currentCheckInputs = (): CheckInputs => ({
-    nurses,
-    seniorityLevels,
-    dutyWindows,
-    sessions,
-    leaveEntries,
-    locks,
-    roles,
-    rules,
-    workingHoursPeriods,
-    specialties,
-    doctors,
-    leaveTypes,
-  });
 
-  // The roster check is kept out of the way: a request waits until the screen has drawn
-  // (`afterNextFrame`), requests made meanwhile run it once with the newest list, and its
-  // result is drawn as a transition, which a key press can interrupt. Opening a full size
-  // roster asked for it four times in a row (about 60 ms each).
-  // What the check reads: the screen's lists as last drawn, plus lists set since then and
-  // not drawn yet (a request passes them as `overrides`).
-  const checkInputsRef = useRef<CheckInputs>(currentCheckInputs());
-  checkInputsRef.current = currentCheckInputs();
-  // The hours history the last check used (a history loaded again unchanged needs no check).
-  const lastCheckedHistoryRef = useRef<HoursHistory | undefined>(undefined);
-  const [checks] = useState(() =>
-    createCheckScheduler<{ sched: Schedule; list: Assignment[] }>({
-      later: afterNextFrame,
-      run: ({ sched, list }) => {
-        const x = checkInputsRef.current;
-        lastCheckedHistoryRef.current = clinicSetupRef.current?.hoursHistory;
-        const report = ScheduleValidator.validate(
-          sched,
-          list,
-          x.nurses,
-          x.seniorityLevels,
-          x.dutyWindows,
-          x.sessions,
-          x.leaveEntries,
-          x.locks,
-          x.roles,
-          x.rules,
-          x.workingHoursPeriods,
-          x.specialties,
-          x.doctors,
-          x.leaveTypes,
-          clinicSetupRef.current,
-          availabilityRequestsRef.current
-        );
-        startTransition(() => setValidationReport(report));
-      },
-    })
-  );
-  useEffect(() => () => checks.cancel(), [checks]);
-
-  const runValidation = (sched: Schedule, list: Assignment[], overrides: Partial<CheckInputs> = {}) => {
-    checkInputsRef.current = { ...checkInputsRef.current, ...overrides };
-    checks.request({ sched, list });
-  };
-
-  /**
-   * The roster check on another list of shifts, with everything else as now: the swap
-   * and fairness dialogs compare it with the roster as it is, so a move they allow
-   * never leaves a new Must fix. A new function only when what the check reads changes
-   * (the clinic setup changes with the hours history).
-   */
-  const checkRoster = useCallback(
-    (list: Assignment[]) =>
-      activeSchedule
-        ? ScheduleValidator.validate(
-            activeSchedule,
-            list,
-            nurses,
-            seniorityLevels,
-            dutyWindows,
-            sessions,
-            leaveEntries,
-            locks,
-            roles,
-            rules,
-            workingHoursPeriods,
-            specialties,
-            doctors,
-            leaveTypes,
-            clinicSetupRef.current,
-            availabilityRequests
-          ).findings
-        : [],
-    [activeSchedule, nurses, seniorityLevels, dutyWindows, sessions, leaveEntries, locks, roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes, availabilityRequests, hoursHistory]
-  );
 
   /**
    * Opens one roster: loads its shifts and versions, resets undo and the
@@ -562,8 +464,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     setActiveSchedule(sched);
     if (switching) {
       // Undo steps and the problem list belong to the roster they were made on.
-      setUndoStack([]);
-      setRedoStack([]);
+      clearUndo();
       setSelectedBlockIndex(0);
       setAssignments([]); // never show (or edit) the old roster's shifts under the new one
       checks.cancel(); // a check of the old roster that has not run yet
@@ -688,61 +589,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
-  // Debounce timer ref for live validation
-  const validationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // The latest lists, not this render's: an edit can come from a dialog that waited for a
-  // confirmation (or a fill that waited for the database) while a change arrived.
-  const snapshotNow = (): RosterSnapshot | null => {
-    const now = liveRef.current;
-    return activeSchedule ? { scheduleId: activeSchedule.id, assignments: now.assignments, locks: now.locks, leaveEntries: now.leaveEntries } : null;
-  };
 
-  /**
-   * Applies one edit (shifts, pinned days and leave together): one undo step,
-   * one save per changed list, and one check with all three.
-   */
-  const applyEdit = (
-    edit: { assignments?: Assignment[]; locks?: LockEntry[]; leaveEntries?: LeaveEntry[] },
-    options: { recordUndo?: boolean } = {}
-  ) => {
-    if (!activeSchedule) return;
-    if (loadingRef.current) {
-      triggerToast('The roster is still loading. Try again in a moment.', 'warning');
-      return;
-    }
-    const sched = activeSchedule;
-    const now = liveRef.current;
-    // Only the lists this edit really changes are set and saved (a cell edit sends all three).
-    const changed = changedLists(edit, now);
-    if (!changed.assignments && !changed.locks && !changed.leaveEntries) return;
-    edit = changed;
-    if (options.recordUndo !== false) {
-      const before = snapshotNow();
-      if (before) setUndoStack((prev) => [before, ...prev].slice(0, 50));
-      setRedoStack([]);
-    }
-    const nextAssignments = edit.assignments ?? now.assignments;
-    const nextLocks = edit.locks ?? now.locks;
-    const nextLeave = edit.leaveEntries ?? now.leaveEntries;
-    if (edit.assignments) {
-      setAssignments(nextAssignments);
-      void persistAssignments(sched.id, nextAssignments);
-    }
-    if (edit.locks) {
-      setLocks(nextLocks);
-      void persistLocks(nextLocks);
-    }
-    if (edit.leaveEntries) {
-      setLeaveEntries(nextLeave);
-      void persistLeave(nextLeave);
-    }
-    if (validationTimerRef.current) clearTimeout(validationTimerRef.current);
-    validationTimerRef.current = setTimeout(
-      () => runValidation(sched, nextAssignments, { locks: nextLocks, leaveEntries: nextLeave }),
-      300
-    );
-  };
 
   const handleAssignmentsChange = (next: Assignment[]) => applyEdit({ assignments: next });
   const handleLocksChange = (next: LockEntry[]) => applyEdit({ locks: next });
@@ -887,8 +735,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           setAssignments([]);
           setVersions([]);
           setBackupVersions([]);
-          setUndoStack([]);
-          setRedoStack([]);
+          clearUndo();
         }
       }
     } catch (err: any) {
@@ -1496,8 +1343,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         setAssignments(list);
         setRemoteChange(false);
         // Undo steps hold the whole list from before; using one now would undo their change.
-        setUndoStack([]);
-        setRedoStack([]);
+        clearUndo();
         liveRef.current.runValidation(activeScheduleRef.current || sched, list);
         liveRef.current.triggerToast('Updated with a change made by someone else.');
       },
@@ -1524,8 +1370,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     const isCurrent = () => workspaceLoadedRef.current;
     const afterChange = (change: { locks?: LockEntry[]; leaveEntries?: LeaveEntry[] }) => {
       // Undo steps hold whole lists of pinned days and leave; using one now would undo their change.
-      setUndoStack([]);
-      setRedoStack([]);
+      clearUndo();
       const sched = activeScheduleRef.current;
       if (sched) liveRef.current.runValidation(sched, liveRef.current.assignments, change);
       liveRef.current.triggerToast(change.locks ? 'Pinned days were updated by someone else.' : 'Leave was updated.');
@@ -1565,66 +1410,20 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     };
   }, []);
 
-  // Undo / Redo: a step restores shifts, pinned days and leave together, and
-  // only ever on the roster it was recorded for.
-  const restoreSnapshot = (target: RosterSnapshot) => {
-    applyEdit(
-      { assignments: target.assignments, locks: target.locks, leaveEntries: target.leaveEntries },
-      { recordUndo: false }
-    );
-  };
-
-  const handleUndo = () => {
-    const previous = undoStack[0];
-    const now = snapshotNow();
-    if (!previous || !now) return;
-    if (previous.scheduleId !== now.scheduleId) {
-      setUndoStack([]);
-      setRedoStack([]);
-      return;
-    }
-    setRedoStack((prev) => [now, ...prev].slice(0, 50));
-    setUndoStack(undoStack.slice(1));
-    restoreSnapshot(previous);
-    triggerToast('Undone.');
-  };
-
-  const handleRedo = () => {
-    const next = redoStack[0];
-    const now = snapshotNow();
-    if (!next || !now) return;
-    if (next.scheduleId !== now.scheduleId) {
-      setUndoStack([]);
-      setRedoStack([]);
-      return;
-    }
-    setUndoStack((prev) => [now, ...prev].slice(0, 50));
-    setRedoStack(redoStack.slice(1));
-    restoreSnapshot(next);
-    triggerToast('Redone.');
-  };
-
-  // Ctrl/Cmd+Z undoes, Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z redoes (not while typing in a box).
-  const undoRedoRef = useRef({ handleUndo, handleRedo });
-  undoRedoRef.current = { handleUndo, handleRedo };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      const target = e.target as HTMLElement | null;
-      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
-      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
-      const key = e.key.toLowerCase();
-      if (key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        undoRedoRef.current.handleUndo();
-      } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
-        e.preventDefault();
-        undoRedoRef.current.handleRedo();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  // Edits, Undo and Redo (`useRosterEdits`): every change goes through `applyEdit`.
+  const { undoStack, redoStack, setUndoStack, setRedoStack, clearUndo, snapshotNow, applyEdit, handleUndo, handleRedo } = useRosterEdits({
+    activeSchedule,
+    loadingRef,
+    liveRef,
+    setAssignments,
+    setLocks,
+    setLeaveEntries,
+    persistAssignments,
+    persistLocks,
+    persistLeave,
+    runValidation,
+    toast: triggerToast,
+  });
 
   // "Show in grid": open the roster tab on the right days, then the grid scrolls
   // to the cell, selects it and flashes it.

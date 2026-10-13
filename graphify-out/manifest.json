@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791883573.352359,
-    "seen": 1791883630.3387742,
-    "ast_hash": "f570588e2a287f07c397b59b417c4455",
+    "mtime": 1791883830.4863188,
+    "seen": 1791884029.771237,
+    "ast_hash": "e1d81098c87e24c8e3122fdf90402195",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791883614.1968606,
-    "seen": 1791883630.3390822,
-    "ast_hash": "070aaa29991df1b0cf614c87f36c5c82",
+    "mtime": 1791884078.6018703,
+    "seen": 1791884085.2545116,
+    "ast_hash": "413cdc6e9fc0a844d7c4e904d0874281",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791883610.0622857,
-    "seen": 1791883630.339089,
-    "ast_hash": "dc9cad41acc2e72dddc631d1c26f5d6b",
+    "mtime": 1791884021.7329104,
+    "seen": 1791884029.7715058,
+    "ast_hash": "bb26794000ae80a391e005f70117805b",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1959,6 +1959,18 @@
     "mtime": 1791883156.988171,
     "seen": 1791883630.339026,
     "ast_hash": "0cac03bbc632c5884ab9edd167278b27",
+    "semantic_hash": ""
+  },
+  "src/components/roster/useRosterChecks.ts": {
+    "mtime": 1791883728.6328816,
+    "seen": 1791884029.7711713,
+    "ast_hash": "94730fde78c0718c4c944cbc516bb4af",
+    "semantic_hash": ""
+  },
+  "src/components/roster/useRosterEdits.ts": {
+    "mtime": 1791883802.3347974,
+    "seen": 1791884029.7711742,
+    "ast_hash": "5b5456b131efe5315530a139c7f2a2da",
     "semantic_hash": ""
   }
 }
