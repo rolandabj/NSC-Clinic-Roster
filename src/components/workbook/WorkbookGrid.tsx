@@ -1,42 +1,6 @@
 import type { HoursHistory } from '../../services/hours/hoursBalance';
 import { isWeekendDay } from '../../utils/weekend';
-import React, { memo, useState, useEffect, useLayoutEffect, useRef, useId, useMemo, useSyncExternalStore } from 'react';
-import {
-  FileSpreadsheet,
-  Undo2,
-  Redo2,
-  Copy,
-  ClipboardPaste,
-  Sparkles,
-  Lock,
-  Unlock,
-  AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Minimize2,
-  Eye,
-  Layers,
-  Shield,
-  ShieldAlert,
-  Clock,
-  Droplets,
-  Calendar,
-  X,
-  Check,
-  Search,
-  Filter,
-  Users,
-  Stethoscope,
-  Info,
-  Sliders,
-  ChevronDown,
-  Edit2,
-  Trash2,
-  Star,
-} from 'lucide-react';
+import React, { memo, useState, useLayoutEffect, useRef, useMemo } from 'react';
 import {
   Schedule,
   Assignment,
@@ -52,7 +16,6 @@ import {
   Specialty,
   Rule,
   PublicHoliday,
-  AssignmentKind,
   AssignmentSource,
   WorkingHoursPeriod,
   AvailabilityRequest,
@@ -62,15 +25,23 @@ import { calculateDutyDurationHours, summarizeNurseHours, NurseHoursSummary } fr
 import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import { applyPreferenceFocus } from '../../services/engine/preferenceOrder';
-import { useDialogA11y } from '../common/useDialogA11y';
 import { confirmDialog, notify } from '../common/dialogs';
 import { coveredMinutes, doctorSessionsOn, nurseClinicRoleOf, toMinutes } from '../../services/engine/clinicModel';
 import { isFloatShift } from '../../services/engine/floatShift';
 import { QuickCellPopup, QuickWorkOption, QuickLeaveOption, QuickDayNote, QuickWish } from './grid/QuickCellPopup';
-import { GridRow, GridRowActions, PROBLEM_SEPARATOR, rowViewsOf } from './grid/GridRow';
+import { GridRowActions, rowViewsOf } from './grid/GridRow';
 import { dayTotalsOf } from './grid/dayTotals';
+import { SelectionView } from './grid/SelectionView';
+import { GridStatusBar } from './grid/GridStatusBar';
+import { GridLegend } from './grid/GridLegend';
+import { GridToolbar } from './grid/GridToolbar';
+import { GridTable } from './grid/GridTable';
+import { CellEditorDialog, type CellChoice } from './grid/CellEditorDialog';
+import { useGridSelection } from './grid/useGridSelection';
+import { useGridKeyboard } from './grid/useGridKeyboard';
+import { CellContextMenu } from './grid/CellContextMenu';
 import { CellView, cellLookupsOf, cellViewOf, reuseCellViews } from './grid/cellView';
-import { GridSelection, GridSelectionState, PopupRef, createGridSelection, moveSelection } from './grid/gridSelection';
+import { PopupRef, createGridSelection } from './grid/gridSelection';
 import { describeRequest, explainNurseDay, isPendingLeave, pendingLeaveOn, requestOn, RequestWords } from '../../services/engine/explainCell';
 
 interface WorkbookGridProps {
@@ -123,20 +94,6 @@ interface WorkbookGridProps {
   isActive?: boolean;
 }
 
-/** Everything one cell edit needs, as the big editor collects it. */
-interface CellChoice {
-  category: 'DUTY' | 'LEAVE';
-  dutyId: string;
-  kind: AssignmentKind;
-  targetRefId: string;
-  note: string;
-  leaveTypeId: string;
-  /** false = kept (pinned) when the roster is filled again. */
-  allowOverwrite: boolean;
-  /** Hours this leave day counts ('' = the leave type's default). */
-  leaveHours: string;
-}
-
 /** Hours rounded for reading: whole hours, or one decimal when needed. */
 const fmtHours = (n: number): string => String(Math.round(n * 10) / 10);
 
@@ -148,26 +105,9 @@ const localTodayIso = (): string => {
 
 const cellKeyOf = (nurseId: string, date: string) => `${nurseId}|${date}`;
 
-/** A doctor's name with "Dr" in front, unless it already has it. */
-const withDr = (name: string) => (/^dr\.?\s/i.test(name) ? name : `Dr ${name}`);
-
 /** Problems about a whole day (not one nurse's shift), shown on the day's heading. */
 const DAY_PROBLEM_IDS = /^(cov-gap-|h1-senior-|evening-tail-|holiday-|nc-coverage-|role-quota-|session-partial-|unassigned-session-)/;
 const isDayProblem = (f: ValidationFinding) => DAY_PROBLEM_IDS.test(f.id);
-
-const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-/**
- * A part of the grid that shows the selection (the status bar, the popup). It follows the
- * store by itself, so a key press draws it again without drawing the whole grid.
- */
-const SelectionView: React.FC<{ selection: GridSelection; render: (state: GridSelectionState) => React.ReactNode }> = ({
-  selection,
-  render,
-}) => {
-  const state = useSyncExternalStore(selection.subscribe, selection.getState);
-  return <>{render(state)}</>;
-};
 
 const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   workingHoursPeriods = [],
@@ -218,15 +158,8 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   // Inline Editor Popover
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editorTarget, setEditorTarget] = useState<{ nurseId: string; date: string } | null>(null);
-  const [editorCategory, setEditorCategory] = useState<'DUTY' | 'LEAVE'>('DUTY');
-  const [editorDutyId, setEditorDutyId] = useState<string>(dutyWindows[0]?.id || '');
-  const [editorKind, setEditorKind] = useState<AssignmentKind>('DOCTOR');
-  const [editorTargetRefId, setEditorTargetRefId] = useState<string>('');
-  const [editorNote, setEditorNote] = useState<string>('');
-  const [editorLeaveTypeId, setEditorLeaveTypeId] = useState<string>(leaveTypes[0]?.id || '');
-  const [editorAllowOverwrite, setEditorAllowOverwrite] = useState<boolean>(false);
-  // Hours this leave day counts for this nurse ('' = the leave type's default from Settings).
-  const [editorLeaveHours, setEditorLeaveHours] = useState<string>('');
+  // What the editor starts with (`CellEditorDialog` keeps the choice while it is open).
+  const [editorDefaults, setEditorDefaults] = useState<CellChoice | null>(null);
 
   // Right-Click Context Menu
   const [contextMenu, setContextMenu] = useState<{
@@ -241,10 +174,6 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
 
   // Clipboard buffer
   const [clipboardAssignment, setClipboardAssignment] = useState<Assignment | null>(null);
-
-  // Cell editor dialog: Esc, focus trap and focus restore
-  const editorTitleId = useId();
-  const editorDialogRef = useDialogA11y<HTMLDivElement>(isEditorOpen && !!editorTarget, () => setIsEditorOpen(false));
 
   // Latest roster data, read after an awaited confirmation so a clear never
   // writes back data that changed while the dialog was open.
@@ -577,16 +506,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     setContextMenu(null);
     setEditorTarget({ nurseId, date });
 
-    const d = computeEditorDefaults(nurseId, date);
-    setEditorCategory(d.category);
-    setEditorDutyId(d.dutyId);
-    setEditorKind(d.kind);
-    setEditorTargetRefId(d.targetRefId);
-    setEditorNote(d.note);
-    setEditorLeaveTypeId(d.leaveTypeId);
-    setEditorAllowOverwrite(d.allowOverwrite);
-    setEditorLeaveHours(d.leaveHours);
-
+    setEditorDefaults(computeEditorDefaults(nurseId, date));
     setIsEditorOpen(true);
   };
 
@@ -604,154 +524,26 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     openCellEditor(nurseId, date);
   };
 
-  // Keyboard focus follows the selection while it is in the grid (arrow keys).
-  // (The popup closes when the selection moves away from its cell: the store does that.)
-  useEffect(() => {
-    let last = selection.getState().selected;
-    return selection.subscribe(() => {
-      const selectedCell = selection.getState().selected;
-      if (selectedCell === last) return;
-      last = selectedCell;
-      if (!selectedCell) return;
-      const active = document.activeElement as HTMLElement | null;
-      if (!active || !tableRef.current?.contains(active) || !active.dataset.cell) return;
-      const key = cellKeyOf(selectedCell.nurseId, selectedCell.date);
-      if (active.dataset.cell === key) return;
-      const cell = findCellElement(key);
-      if (cell) {
-        cell.focus({ preventScroll: true });
-        cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      }
-    });
-  }, [selection]);
+  // Focus follows the selection, and "Show in grid" brings a cell into view (`useGridSelection`).
+  const { findCellElement } = useGridSelection({ selection, tableRef, gridScrollRef, focusRequest, onRequest: () => setContextMenu(null) });
 
-  const findCellElement = (key: string): HTMLElement | null => {
-    const root = tableRef.current;
-    if (!root) return null;
-    const sel = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(key) : key.replace(/"/g, '\\"');
-    return root.querySelector<HTMLElement>(`[data-cell="${sel}"]`);
-  };
-
-  // "Go to cell" from outside: select, scroll to the middle, focus and flash.
-  useEffect(() => {
-    if (!focusRequest) return;
-    const { nurseId, date } = focusRequest;
-    const key = cellKeyOf(nurseId, date);
-    selection.select({ nurseId, date });
-    selection.closePopup();
-    setContextMenu(null);
-
-    let tries = 0;
-    let frame = 0;
-    let flashTimer: ReturnType<typeof setTimeout> | undefined;
-    const attempt = () => {
-      const cell = findCellElement(key);
-      const box = gridScrollRef.current;
-      if (!cell || !box) {
-        // The days may still be changing: try again on the next frames.
-        if (tries++ < 10) frame = requestAnimationFrame(attempt);
-        return;
-      }
-      // Centre the cell in the part of the grid not covered by the sticky name column and headers.
-      const boxRect = box.getBoundingClientRect();
-      const cellRect = cell.getBoundingClientRect();
-      const stickyLeft = (tableRef.current?.querySelector('tbody th') as HTMLElement | null)?.offsetWidth || 0;
-      const stickyTop = (tableRef.current?.querySelector('thead') as HTMLElement | null)?.offsetHeight || 0;
-      const visibleW = boxRect.width - stickyLeft;
-      const stickyBottom = (tableRef.current?.querySelector('tfoot') as HTMLElement | null)?.offsetHeight || 0;
-      const visibleH = boxRect.height - stickyTop - stickyBottom;
-      box.scrollTo({
-        left: box.scrollLeft + (cellRect.left - boxRect.left - stickyLeft) - (visibleW - cellRect.width) / 2,
-        top: box.scrollTop + (cellRect.top - boxRect.top - stickyTop) - (visibleH - cellRect.height) / 2,
-        behavior: 'smooth',
-      });
-      cell.focus({ preventScroll: true });
-      selection.flash(key);
-      flashTimer = setTimeout(() => {
-        if (selection.getState().flash === key) selection.flash(null);
-      }, 1500);
-    };
-    frame = requestAnimationFrame(attempt);
-    return () => {
-      cancelAnimationFrame(frame);
-      if (flashTimer) clearTimeout(flashTimer);
-    };
-    // Only a new request (nonce) starts this.
-  }, [focusRequest?.nonce]);
-
-  // Keyboard navigation (arrows, Tab, Enter, Space, Delete, copy and paste). The keys are
-  // handled on the grid itself (`onKeyDown` below), and on the page only while nothing has
-  // the focus (for example after a dialog closed), as before. One listener for the life of
-  // the grid, reading the latest state through a ref, instead of one added after every render.
-  const handleGridKey = (e: KeyboardEvent | React.KeyboardEvent) => {
-    if (!isActive || isEditorOpen) return;
-    const { selected: selectedCell, popup } = selection.getState();
-    if (!selectedCell) return;
-    // A dialog (e.g. the clear cell confirmation) is open: its keys are its own.
-    if (document.querySelector('[aria-modal="true"]')) return;
-
-    // Never take over keys while the user is typing somewhere else (search boxes,
-    // other sheets, dialogs) or while a button or link has keyboard focus.
-    const target = e.target as HTMLElement | null;
-    const tag = target?.tagName;
-    // Tab from the cell with the popup open goes into the popup.
-    if (e.key === 'Tab' && !e.shiftKey && popup && target?.dataset?.cell) {
-      const first = document.querySelector<HTMLElement>('[data-quick-popup] button');
-      if (first) {
-        e.preventDefault();
-        first.focus();
-        return;
-      }
-    }
-    if (
-      tag === 'INPUT' ||
-      tag === 'TEXTAREA' ||
-      tag === 'SELECT' ||
-      target?.isContentEditable ||
-      (e.key === 'Tab' && target && target !== document.body) ||
-      // Enter, Space and Delete on a focused button or link belong to it, not to the grid.
-      (target && target !== document.body && !!target.closest('button, a[href], [role="button"]'))
-    ) {
-      return;
-    }
-
-    const moved = moveSelection(
-      selectedCell,
-      e,
-      displayNurses.map((n) => n.id),
-      blockDates
-    );
-    if (moved) {
-      e.preventDefault();
-      selection.select(moved);
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      handleCellDoubleClick(selectedCell.nurseId, selectedCell.date);
-    } else if (e.key === ' ') {
-      // Space opens the small popup with its quick choices.
-      e.preventDefault();
-      openQuickPopup(selectedCell.nurseId, selectedCell.date, true);
-    } else if (e.key === 'Delete' || e.key === 'Backspace') {
-      e.preventDefault();
-      handleDeleteCellAssignment(selectedCell.nurseId, selectedCell.date);
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-      const asgn = assignmentOn(selectedCell.nurseId, selectedCell.date);
+  // Keys on the grid: arrows and Tab move, Enter, Space, Delete, copy and paste (`useGridKeyboard`).
+  const onGridKeyDown = useGridKeyboard({
+    selection,
+    enabled: isActive && !isEditorOpen,
+    nurseIds: displayNurses.map((n) => n.id),
+    dates: blockDates,
+    onEnter: handleCellDoubleClick,
+    onSpace: (nurseId, date) => openQuickPopup(nurseId, date, true),
+    onDelete: (nurseId, date) => handleDeleteCellAssignment(nurseId, date),
+    onCopy: (nurseId, date) => {
+      const asgn = assignmentOn(nurseId, date);
       if (asgn) setClipboardAssignment(asgn);
-    } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
-      if (clipboardAssignment) {
-        handlePasteAssignment(selectedCell.nurseId, selectedCell.date);
-      }
-    }
-  };
-  const gridKeyRef = useRef(handleGridKey);
-  gridKeyRef.current = handleGridKey;
-  useEffect(() => {
-    const onPageKey = (e: KeyboardEvent) => {
-      if (e.target === document.body) gridKeyRef.current(e);
-    };
-    window.addEventListener('keydown', onPageKey);
-    return () => window.removeEventListener('keydown', onPageKey);
-  }, []);
+    },
+    onPaste: (nurseId, date) => {
+      if (clipboardAssignment) handlePasteAssignment(nurseId, date);
+    },
+  });
 
   // Context Menu
   const handleContextMenu = (e: React.MouseEvent, nurseId: string, date: string) => {
@@ -1020,18 +812,9 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   };
 
   // Big editor Save
-  const handleSaveEditorAssignment = async () => {
+  const handleSaveEditorAssignment = async (choice: CellChoice) => {
     if (!editorTarget) return;
-    const saved = await saveCellChoice(editorTarget, {
-      category: editorCategory,
-      dutyId: editorDutyId,
-      kind: editorKind,
-      targetRefId: editorTargetRefId,
-      note: editorNote,
-      leaveTypeId: editorLeaveTypeId,
-      allowOverwrite: editorAllowOverwrite,
-      leaveHours: editorLeaveHours,
-    });
+    const saved = await saveCellChoice(editorTarget, choice);
     if (saved) setIsEditorOpen(false);
   };
 
@@ -1293,1174 +1076,105 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   return (
     <div className={`flex flex-col h-full overflow-hidden bg-slate-100 font-sans select-none ${isActive ? '' : 'hidden'}`}>
       {/* 6.1 Shared Toolbar ("Ribbon-Lite", Row 2: Edit Ops & Block Nav) */}
-      <div className="bg-white border-b border-slate-200 px-4 py-1.5 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0 z-20">
-        <div className="flex items-center gap-2">
-          {/* Block Navigation */}
-          <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded border border-slate-200">
-            <button
-              disabled={isAllDaysExpanded || currentBlockIndex === 0}
-              onClick={() => onBlockChange(currentBlockIndex - 1)}
-              className="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 cursor-pointer"
-              title="Show the earlier days"
-              aria-label="Show the earlier days"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
-            </button>
-            <span className="font-mono font-bold text-slate-800 px-2 tabular-nums">
-              {isAllDaysExpanded
-                ? `All ${totalDays} days, ${formatDate(blockDates[0] || '')} to ${formatDate(blockDates[blockDates.length - 1] || '')}`
-                : `Days ${formatDate(blockDates[0] || '')} to ${formatDate(blockDates[blockDates.length - 1] || '')}`}
-            </span>
-            <button
-              disabled={isAllDaysExpanded || currentBlockIndex >= numBlocks - 1}
-              onClick={() => onBlockChange(currentBlockIndex + 1)}
-              className="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 cursor-pointer"
-              title="Show the later days"
-              aria-label="Show the later days"
-            >
-              <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
-            </button>
-          </div>
-
-          {onToggleExpandDays && (
-            <button
-              onClick={onToggleExpandDays}
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded border text-xs font-semibold cursor-pointer transition-colors ${
-                isAllDaysExpanded
-                  ? 'bg-indigo-600 text-white border-indigo-700 shadow-2xs'
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-              }`}
-              title={isAllDaysExpanded ? `Show ${(schedule.blockWeeks || 2) * 7} days at a time` : 'Show every day of the roster'}
-            >
-              <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>{isAllDaysExpanded ? `All ${blockDates.length} days ✓` : 'Show all days'}</span>
-            </button>
-          )}
-
-          <div className="h-4 w-px bg-slate-200" />
-
-          <div className="flex items-center gap-1 text-slate-600">
-            <span className="text-[11px] text-slate-400">Group:</span>
-            <select
-              aria-label="Group nurses"
-              value={groupBy}
-              onChange={(e) => setGroupBy(e.target.value as any)}
-              className="px-1.5 py-1 border border-slate-200 rounded bg-white text-xs"
-            >
-              <option value="NONE">None</option>
-              <option value="SENIORITY">By seniority</option>
-            </select>
-          </div>
-
-          <button
-            type="button"
-            role="switch"
-            onClick={() => setHighlightViolations(!highlightViolations)}
-            aria-checked={highlightViolations}
-            title={
-              highlightViolations
-                ? 'Problem marks are on: a red corner on a cell, a badge on a day, a mark by a nurse. Click to hide them.'
-                : 'Problem marks are off. Click to show them.'
-            }
-            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs cursor-pointer ${
-              highlightViolations
-                ? 'bg-amber-50 border-amber-300 text-amber-900 font-medium'
-                : 'border-slate-200 text-slate-600'
-            }`}
-          >
-            <span
-              aria-hidden="true"
-              className={`relative inline-block w-6 h-3.5 rounded-full transition-colors ${highlightViolations ? 'bg-amber-500' : 'bg-slate-300'}`}
-            >
-              <span
-                className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all ${highlightViolations ? 'left-3' : 'left-0.5'}`}
-              />
-            </span>
-            Problem marks ({shownProblemCount} on these days)
-          </button>
-        </div>
-
-        {/* Right Side Tools: Zoom, Legend Drawer, & Expand View */}
-        <div className="flex items-center gap-2">
-          <div className="inline-flex rounded border border-slate-200 p-0.5 bg-slate-50">
-            <button
-              onClick={() => setZoomLevel(75)}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
-                zoomLevel === 75 ? 'bg-indigo-600 text-white font-bold' : 'text-slate-600'
-              }`}
-              title="Smaller, to fit more days"
-            >
-              75%
-            </button>
-            <button
-              onClick={() => setZoomLevel(90)}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
-                zoomLevel === 90 ? 'bg-indigo-600 text-white font-bold' : 'text-slate-600'
-              }`}
-            >
-              90%
-            </button>
-            <button
-              onClick={() => setZoomLevel(100)}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
-                zoomLevel === 100 ? 'bg-indigo-600 text-white font-bold' : 'text-slate-600'
-              }`}
-            >
-              100%
-            </button>
-            <button
-              onClick={() => setZoomLevel(115)}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
-                zoomLevel === 115 ? 'bg-indigo-600 text-white font-bold' : 'text-slate-600'
-              }`}
-            >
-              115%
-            </button>
-          </div>
-
-          <button
-            onClick={() => setIsLegendDrawerOpen(!isLegendDrawerOpen)}
-            aria-expanded={isLegendDrawerOpen}
-            className="px-2.5 py-1 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium cursor-pointer"
-          >
-            Legend ▾
-          </button>
-
-          {onToggleExpandView && (
-            <button
-              onClick={onToggleExpandView}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold cursor-pointer transition-colors shadow-2xs ${
-                isExpandedView
-                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                  : 'bg-white border border-slate-300 hover:bg-slate-50 text-slate-700'
-              }`}
-              title={isExpandedView ? 'Exit expanded screen view (Esc)' : 'Expand schedule view to full screen'}
-            >
-              {isExpandedView ? (
-                <>
-                  <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Leave full screen</span>
-                </>
-              ) : (
-                <>
-                  <Maximize2 className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-                  <span>Full screen</span>
-                </>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
+      <GridToolbar
+        isAllDaysExpanded={isAllDaysExpanded}
+        currentBlockIndex={currentBlockIndex}
+        numBlocks={numBlocks}
+        totalDays={totalDays}
+        blockDates={blockDates}
+        blockWeeks={schedule.blockWeeks}
+        onBlockChange={onBlockChange}
+        onToggleExpandDays={onToggleExpandDays}
+        groupBy={groupBy}
+        onGroupBy={setGroupBy}
+        showProblems={highlightViolations}
+        onToggleMarks={() => setHighlightViolations(!highlightViolations)}
+        shownProblemCount={shownProblemCount}
+        zoomLevel={zoomLevel}
+        onZoom={setZoomLevel}
+        isLegendOpen={isLegendDrawerOpen}
+        onToggleLegend={() => setIsLegendDrawerOpen(!isLegendDrawerOpen)}
+        isExpandedView={isExpandedView}
+        onToggleExpandView={onToggleExpandView}
+      />
 
       {/* 6.2 ROSTER SHEET MAIN GRID VIEWPORT */}
       <div className="flex-1 flex overflow-hidden relative">
-        <div ref={gridScrollRef} onKeyDown={(e) => gridKeyRef.current(e)} className="flex-1 overflow-auto bg-slate-200 p-px scroll-pb-16">
-          <table ref={tableRef} className="border-collapse bg-white text-xs w-max" role="grid" aria-label="Nurse roster">
-            {/* Sticky Header Row 1: Week Spans */}
-            <thead className="sticky top-0 z-30 bg-slate-100 border-b border-slate-300">
-              <tr className="border-b border-slate-200">
-                <th
-                  className="sticky left-0 bg-slate-100 z-40 border-r-2 border-slate-300 py-1 px-3 text-left font-semibold text-slate-700 text-xs shadow-xs"
-                >
-                  Nurses
-                </th>
-                <th
-                  colSpan={blockDates.length}
-                  className="py-1 px-2 text-center font-mono text-[11px] text-slate-600 bg-slate-100 border-r border-slate-300"
-                >
-                  {isAllDaysExpanded ? (
-                    <span className="font-bold text-indigo-700">All {totalDays} days of the roster</span>
-                  ) : (
-                    <span>
-                      Weeks {currentBlockIndex * schedule.blockWeeks + 1} to{' '}
-                      {Math.min((currentBlockIndex + 1) * schedule.blockWeeks, Math.ceil(totalDays / 7))}
-                    </span>
-                  )}
-                </th>
-                <th className="py-1 px-2 text-center font-mono text-[11px] text-slate-600 bg-slate-100">
-                  These days
-                </th>
-              </tr>
-
-              {/* Sticky Header Row 2: Day-name + Date */}
-              <tr className="bg-slate-50 text-slate-700">
-                {/* Sticky Left Column: Nurse, seniority and hours */}
-                <th className="sticky left-0 bg-slate-50 z-40 border-r-2 border-slate-300 py-1.5 px-3 text-left font-semibold text-slate-800 w-60 min-w-60 max-w-60 shadow-xs">
-                  <span className="block">Nurse</span>
-                  <span className="block text-[10px] font-normal text-slate-500">Hours worked / goal for the whole roster</span>
-                </th>
-
-                {/* Date Columns */}
-                {dayInfo.map(({ dateStr, day, weekday, isWeekend, holiday, isToday }) => (
-                  <th
-                    key={dateStr}
-                    scope="col"
-                    title={`${WEEKDAY_ABBR[weekday]} ${formatDate(dateStr)}${isToday ? ' · Today' : ''}${holiday ? ` · Public holiday: ${holiday.name}` : isWeekend ? ' · Weekend' : ''}`}
-                    aria-label={`${WEEKDAY_ABBR[weekday]} ${formatDate(dateStr)}${isToday ? ', today' : ''}${holiday ? `, public holiday: ${holiday.name}` : isWeekend ? ', weekend' : ''}`}
-                    className={`py-1 px-1 text-center font-mono border-r border-slate-200 min-w-[50px] ${
-                      isToday
-                        ? 'bg-indigo-600 text-white'
-                        : holiday
-                        ? 'bg-cyan-100 text-cyan-900 font-bold'
-                        : isWeekend
-                        ? 'bg-slate-200 text-slate-800'
-                        : 'bg-slate-50 text-slate-700'
-                    }`}
-                  >
-                    <div className="text-[10px] font-normal leading-tight">
-                      {isToday ? 'Today' : WEEKDAY_ABBR[weekday]}
-                    </div>
-                    <div className="flex items-center justify-center gap-0.5 text-xs font-bold">
-                      <span>{day}</span>
-                      {holiday && (
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full inline-block ${isToday ? 'bg-white' : 'bg-cyan-600'}`}
-                          aria-hidden="true"
-                        />
-                      )}
-                    </div>
-                    {highlightViolations && dayProblems.has(dateStr) && (() => {
-                      const dp = dayProblems.get(dateStr)!;
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => onNavigateTab && onNavigateTab('warnings')}
-                          title={dp.messages.join('\n')}
-                          aria-label={`${dp.messages.length} problem${dp.messages.length === 1 ? '' : 's'} on ${formatDate(dateStr)}: ${dp.messages.join('. ')}`}
-                          className={`mt-0.5 mx-auto flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold font-sans cursor-pointer ${
-                            dp.mustFix ? 'bg-rose-600 text-white' : 'bg-amber-400 text-amber-950'
-                          }`}
-                        >
-                          {dp.messages.length}
-                        </button>
-                      );
-                    })()}
-                  </th>
-                ))}
-
-                <th className="py-1 px-2 text-center font-mono text-[11px] text-slate-600 bg-slate-50">
-                  Hours
-                </th>
-              </tr>
-            </thead>
-
-            {/* Table Body: Nurse Rows */}
-            <tbody className="divide-y divide-slate-200 font-mono">
-              {displayNurses.map((nurse) => {
-                const hours = hoursByNurse.get(nurse.id)!;
-                const block = blockHoursByNurse.get(nurse.id);
-                const np = nurseProblems.get(nurse.id);
-                return (
-                  <GridRow
-                    key={nurse.id}
-                    nurse={nurse}
-                    seniority={seniorityMap.get(nurse.seniorityLevelId)}
-                    views={rowViews.get(nurse.id)!}
-                    totalHours={hours.totalHours}
-                    targetHours={hours.targetHours}
-                    percent={hours.percent}
-                    blockTotal={block?.totalHours ?? 0}
-                    blockDuty={block?.dutyHours ?? 0}
-                    blockLeave={block?.leaveHours ?? 0}
-                    problems={np ? np.messages.join(PROBLEM_SEPARATOR) : ''}
-                    problemMustFix={!!np?.mustFix}
-                    showProblems={highlightViolations}
-                    heightClass={cellHeightClass}
-                    fontClass={cellFontSizeClass}
-                    selection={selection}
-                    actions={cellActions}
-                  />
-                );
-              })}
-            </tbody>
-
-            {/* Day totals: stays at the bottom while the nurse rows scroll */}
-            <tfoot className="sticky bottom-0 z-30 bg-slate-50 border-t-2 border-slate-300 font-sans">
-              <tr>
-                <th
-                  scope="row"
-                  className="sticky left-0 bg-slate-100 z-40 border-r-2 border-slate-300 py-1 px-2.5 text-left font-normal w-60 min-w-60 max-w-60 shadow-xs"
-                >
-                  <span className="block text-xs font-semibold text-slate-800">Day totals</span>
-                  <span className="block text-[10px] text-slate-500 leading-tight">
-                    Doctors · nurses · hours without a free nurse · senior
-                  </span>
-                </th>
-                {dayInfo.map(({ dateStr, isWeekend, holiday }) => {
-                  const t = dayTotals.get(dateStr);
-                  if (!t) return <td key={dateStr} />;
-                  const gapWords =
-                    t.gapHours === undefined
-                      ? ''
-                      : t.gapHours === 0
-                      ? 'a free nurse every opening hour'
-                      : `${t.gapHours} ${t.gapHours === 1 ? 'hour' : 'hours'} without a free nurse`;
-                  const seniorWords = t.hasSenior === undefined ? '' : t.hasSenior ? 'a senior nurse on duty' : 'no senior nurse on duty';
-                  const summary = [
-                    `${formatDate(dateStr)}: ${t.doctors} ${t.doctors === 1 ? 'doctor' : 'doctors'} in session`,
-                    `${t.nurses} ${t.nurses === 1 ? 'nurse' : 'nurses'} on duty`,
-                    gapWords,
-                    seniorWords,
-                  ]
-                    .filter(Boolean)
-                    .join(', ');
-                  return (
-                    <td
-                      key={dateStr}
-                      title={summary}
-                      className={`py-0.5 px-0.5 text-center border-r border-slate-200 text-[10px] leading-tight align-top ${
-                        holiday ? 'bg-cyan-50' : isWeekend ? 'bg-slate-100' : 'bg-slate-50'
-                      }`}
-                    >
-                      <span className="sr-only">{summary}</span>
-                      <span aria-hidden="true" className="flex flex-col items-center gap-px">
-                        <span className="flex items-center gap-1 text-slate-700 font-mono">
-                          <span className="inline-flex items-center gap-px">
-                            <Stethoscope className="w-2.5 h-2.5 text-slate-400" />
-                            {t.doctors}
-                          </span>
-                          <span className="inline-flex items-center gap-px">
-                            <Users className="w-2.5 h-2.5 text-slate-400" />
-                            {t.nurses}
-                          </span>
-                        </span>
-                        {t.gapHours !== undefined &&
-                          (t.gapHours === 0 ? (
-                            <Check className="w-3 h-3 text-emerald-600" />
-                          ) : (
-                            <span className="inline-flex items-center gap-px font-bold text-rose-700">
-                              <Clock className="w-2.5 h-2.5" />
-                              {t.gapHours} h
-                            </span>
-                          ))}
-                        {t.hasSenior !== undefined &&
-                          (t.hasSenior ? (
-                            <span className="text-emerald-700 font-semibold">✓ Senior</span>
-                          ) : (
-                            <span className="text-rose-700 font-bold whitespace-nowrap">No senior</span>
-                          ))}
-                      </span>
-                    </td>
-                  );
-                })}
-                <td className="bg-slate-50" />
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-
-        {/* 6.6 Collapsible Right Drawer: the one Legend */}
-        {isLegendDrawerOpen && (
-          <div className="w-72 bg-white border-l border-slate-200 flex flex-col shrink-0 text-xs shadow-lg animate-in slide-in-from-right duration-150 z-30" role="region" aria-label="Legend">
-            <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <span className="font-bold text-slate-800">Legend</span>
-              <button
-                onClick={() => setIsLegendDrawerOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
-                aria-label="Close legend"
-                title="Close legend"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div>
-                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
-                  Shifts
-                </h4>
-                <div className="space-y-1">
-                  {dutyWindows.map((dw) => (
-                    <div key={dw.id} className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className="min-w-5 h-5 px-0.5 rounded text-white font-mono font-bold text-[10px] flex items-center justify-center"
-                          style={{ backgroundColor: dw.color }}
-                        >
-                          {dw.acronym}
-                        </span>
-                        <span className="text-slate-800 font-medium">{dw.name}</span>
-                        {dw.isPriority && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">
-                            <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" aria-hidden="true" />
-                            Used first
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-mono text-slate-500 text-[10px]">
-                        {dw.startTime} to {dw.endTime}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
-                  Leave and days off
-                </h4>
-                <div className="space-y-1">
-                  {leaveTypes.map((lt) => (
-                    <div key={lt.id} className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className="min-w-5 h-5 px-0.5 rounded text-white font-mono font-bold text-[10px] flex items-center justify-center"
-                          style={{ backgroundColor: lt.color }}
-                        >
-                          {lt.acronym}
-                        </span>
-                        <span className="text-slate-800">{lt.name}</span>
-                      </div>
-                      <span className="font-mono text-slate-500 text-[10px]">
-                        {typeof lt.creditedHours === 'number' ? `${lt.creditedHours} h a day` : '8 h a day'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
-                  Marks in a cell
-                </h4>
-                <div className="space-y-1.5 text-[11px] text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" aria-hidden="true" />
-                    <span>Pinned: kept when the roster is filled again</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-5 rounded border border-dashed border-amber-400 bg-amber-50 text-amber-900 font-bold text-[10px] flex items-center justify-center shrink-0">
-                      OFF
-                    </span>
-                    <span>Pinned day off</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Edit2 className="w-3.5 h-3.5 text-slate-500 shrink-0" aria-hidden="true" />
-                    <span>Hand change (not pinned)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="relative w-6 h-5 rounded border border-slate-300 bg-white shrink-0" aria-hidden="true">
-                      <span className="absolute top-0 right-0 w-0 h-0 border-t-8 border-l-8 border-t-red-600 border-l-transparent" />
-                    </span>
-                    <span>Problem with this shift: tap or point at the cell to read it</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-5 flex items-center justify-center shrink-0" aria-hidden="true">
-                      <span className="min-w-4 h-4 px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center">2</span>
-                    </span>
-                    <span>Problems about a whole day (on the day's heading) or a nurse (by the name); red must be fixed, amber to check</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-6 h-5 rounded border border-dashed border-amber-500 text-amber-600 font-bold text-[10px] flex items-center justify-center shrink-0"
-                      style={{ backgroundImage: 'repeating-linear-gradient(135deg, #f59e0b40 0 3px, transparent 3px 7px)' }}
-                      aria-hidden="true"
-                    >
-                      AL
-                    </span>
-                    <span>Leave asked for, waiting for approval</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-3.5 h-3.5 text-slate-600 shrink-0" aria-hidden="true" />
-                    <span>Leave waiting for approval on a day with a shift</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3.5 flex items-center justify-center gap-0.5 shrink-0" aria-hidden="true">
-                      <span className="w-1.5 h-1.5 rounded-full border border-sky-600 bg-sky-600" />
-                      <span className="w-1.5 h-1.5 rounded-full border border-sky-600 bg-white" />
-                    </span>
-                    <span>Asked for this day off (hollow: waiting for approval)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3.5 flex items-center justify-center gap-0.5 shrink-0" aria-hidden="true">
-                      <span className="w-1.5 h-1.5 rounded-[1px] border border-sky-600 bg-sky-600" />
-                      <span className="w-1.5 h-1.5 rounded-[1px] border border-sky-600 bg-white" />
-                    </span>
-                    <span>Asked for a shift (point at the cell to see which)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3.5 flex items-center justify-center gap-0.5 shrink-0" aria-hidden="true">
-                      <span className="w-1.5 h-1.5 rounded-full border border-amber-500 bg-amber-500" />
-                      <span className="w-1.5 h-1.5 rounded-[1px] border border-amber-500 bg-amber-500" />
-                    </span>
-                    <span>Request not followed: a shift on a day asked off, or another shift than the one asked for</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-amber-500 font-bold w-3.5 text-center shrink-0" aria-hidden="true">★</span>
-                    <span>Shift used first when filling</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-5 rounded text-teal-900 font-mono font-bold text-[10px] flex items-center justify-center bg-teal-100 border border-teal-300 shrink-0">
-                      NC
-                    </span>
-                    <span>Nurse Clinic (no doctor)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold px-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">#1</span>
-                    <span>One of the nurse’s usual doctors (1 = first choice)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold px-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300 shrink-0">Pool</span>
-                    <span>Doctor shared by any nurse</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-extrabold px-1 rounded bg-rose-100 text-rose-800 border border-rose-300 shrink-0">!</span>
-                    <span>Not one of the nurse’s usual doctors</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-rose-600 font-bold" aria-hidden="true">🩸</span>
-                    <span>Blood collection and IV nurse</span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
-                  Days
-                </h4>
-                <div className="space-y-1.5 text-[11px] text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-5 rounded bg-slate-200 border border-slate-300 shrink-0" aria-hidden="true" />
-                    <span>Weekend</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-5 rounded bg-cyan-100 border border-cyan-300 shrink-0" aria-hidden="true" />
-                    <span>Public holiday (point at the date for its name)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-5 rounded bg-indigo-600 shrink-0" aria-hidden="true" />
-                    <span>Today</span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
-                  Day totals (under the grid)
-                </h4>
-                <div className="space-y-1.5 text-[11px] text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <Stethoscope className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
-                    <span>Doctors in session that day</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
-                    <span>Nurses on duty</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-px text-[10px] font-bold text-rose-700 shrink-0">
-                      <Clock className="w-2.5 h-2.5" aria-hidden="true" />2 h
-                    </span>
-                    <span>
-                      Opening hours without a free nurse (<Check className="inline w-3 h-3 text-emerald-600" aria-label="check mark" /> when every hour has one)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-rose-700 whitespace-nowrap shrink-0">No senior</span>
-                    <span>No senior nurse on duty that day</span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
-                  Hours
-                </h4>
-                <div className="space-y-1.5 text-[11px] text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-1.5 rounded bg-emerald-500 shrink-0" aria-hidden="true" />
-                    <span>Within about 2 h of the goal</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-1.5 rounded bg-amber-500 shrink-0" aria-hidden="true" />
-                    <span>Short of the goal</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-6 h-1.5 rounded overflow-hidden flex shrink-0" aria-hidden="true">
-                      <span className="w-4 bg-emerald-500" />
-                      <span className="w-2 bg-rose-500" />
-                    </span>
-                    <span>Over the goal (red part = hours over)</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Footer Status Bar */}
-      <div className="h-7 bg-white border-t border-slate-200 px-4 flex items-center justify-between text-[11px] text-slate-600 shrink-0 select-none">
-        <div className="flex items-center gap-4">
-          <SelectionView
+        <div ref={gridScrollRef} onKeyDown={onGridKeyDown} className="flex-1 overflow-auto bg-slate-200 p-px scroll-pb-16">
+          <GridTable
+            tableRef={tableRef}
+            dayInfo={dayInfo}
+            blockDates={blockDates}
+            isAllDaysExpanded={isAllDaysExpanded}
+            totalDays={totalDays}
+            currentBlockIndex={currentBlockIndex}
+            blockWeeks={schedule.blockWeeks}
+            displayNurses={displayNurses}
+            seniorityMap={seniorityMap}
+            rowViews={rowViews}
+            hoursByNurse={hoursByNurse}
+            blockHoursByNurse={blockHoursByNurse}
+            dayProblems={dayProblems}
+            nurseProblems={nurseProblems}
+            dayTotals={dayTotals}
+            showProblems={highlightViolations}
+            heightClass={cellHeightClass}
+            fontClass={cellFontSizeClass}
             selection={selection}
-            render={({ selected: selectedCell }) =>
-              selectedCell ? (
-            <div className="flex items-center gap-1.5 font-mono text-slate-800">
-              <span className="font-bold">
-                {nurseMap.get(selectedCell.nurseId)?.fullName}
-              </span>
-              <span>·</span>
-              <span>{formatDate(selectedCell.date)}</span>
-            </div>
-          ) : (
-            <span className="text-slate-500">Click a cell to change it</span>
-              )
-            }
+            actions={cellActions}
           />
         </div>
 
-        <div className="flex items-center gap-4">
-          <SelectionView selection={selection} render={({ selected: selectedCell }) => {
-            // The day of the selected cell (else the first day shown): opening hours missing a free nurse.
-            const checkDate = selectedCell?.date || blockDates[0] || schedule.startDate;
-            const dayMap = validationReport.hourlyCoverageMap[checkDate];
-            if (!dayMap || Object.keys(dayMap).length === 0) {
-              return <span className="text-slate-500">Coverage: not checked yet</span>;
-            }
-            const shortHours = Object.keys(dayMap).filter((h) => dayMap[h].deficit > 0).sort();
-            return (
-              <button
-                type="button"
-                onClick={() => onNavigateTab && onNavigateTab('coverage')}
-                className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded ${
-                  shortHours.length > 0
-                    ? 'bg-rose-50 text-rose-700 font-bold border border-rose-200'
-                    : 'text-slate-600 hover:bg-slate-100'
-                }`}
-                title="Open the Coverage tab"
-              >
-                <span className="text-slate-500">Coverage {formatDate(checkDate)}:</span>
-                <span>
-                  {shortHours.length === 0
-                    ? 'every hour covered'
-                    : `${shortHours.length} hour${shortHours.length === 1 ? '' : 's'} without a free nurse (from ${shortHours[0]})`}
-                </span>
-              </button>
-            );
-          }} />
-
-          <button
-            onClick={() => onNavigateTab && onNavigateTab('warnings')}
-            className={`flex items-center gap-1 font-mono px-2 py-0.5 rounded cursor-pointer transition-colors ${
-              validationReport.errorCount > 0
-                ? 'bg-rose-50 text-rose-700 font-bold hover:bg-rose-100 border border-rose-200'
-                : validationReport.warnCount > 0
-                ? 'bg-amber-50 text-amber-800 font-bold hover:bg-amber-100 border border-amber-200'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-            title="Open the Problems tab"
-          >
-            <span className="text-slate-500">Problems:</span>
-            <span>
-              {validationReport.errorCount + validationReport.warnCount === 0
-                ? 'none'
-                : `${validationReport.errorCount} must fix · ${validationReport.warnCount} to check`}
-            </span>
-          </button>
-        </div>
+        {/* 6.6 Collapsible Right Drawer: the one Legend */}
+        {isLegendDrawerOpen && <GridLegend dutyWindows={dutyWindows} leaveTypes={leaveTypes} onClose={() => setIsLegendDrawerOpen(false)} />}
       </div>
 
+      {/* Footer Status Bar */}
+      <GridStatusBar
+        selection={selection}
+        nurseMap={nurseMap}
+        firstDate={blockDates[0] || schedule.startDate}
+        validationReport={validationReport}
+        onOpenCoverage={() => onNavigateTab && onNavigateTab('coverage')}
+        onOpenProblems={() => onNavigateTab && onNavigateTab('warnings')}
+      />
+
       {/* --- INLINE CELL SHIFT & LEAVE EDITOR MODAL --- */}
-      {isEditorOpen && editorTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-2xs animate-in fade-in duration-100">
-          <div
-            ref={editorDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={editorTitleId}
-            className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-lg w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-100 max-h-[90vh] overflow-y-auto"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span id={editorTitleId} className="font-bold text-slate-900 text-sm">
-                    {nurseMap.get(editorTarget.nurseId)?.fullName}
-                  </span>
-                  <span className="text-[10px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-medium">
-                    {formatDate(editorTarget.date)}
-                  </span>
-                </div>
-                <span className="text-[11px] text-slate-500 block mt-0.5">
-                  Choose a shift or leave for this day.
-                </span>
-              </div>
-              <button
-                onClick={() => setIsEditorOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-100 cursor-pointer"
-                aria-label="Close editor"
-                title="Close editor"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            {/* Category Segmented Tabs: Duty Shift vs Leave / Day Off */}
-            <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-lg">
-              <button
-                type="button"
-                onClick={() => setEditorCategory('DUTY')}
-                className={`py-2 px-3 rounded-md font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                  editorCategory === 'DUTY'
-                    ? 'bg-white text-indigo-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Stethoscope className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Shift</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditorCategory('LEAVE')}
-                className={`py-2 px-3 rounded-md font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all ${
-                  editorCategory === 'LEAVE'
-                    ? 'bg-white text-indigo-700 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Leave or day off</span>
-              </button>
-            </div>
-
-            {/* DUTY SHIFT CONFIGURATION */}
-            {editorCategory === 'DUTY' && (
-              <div className="space-y-3.5 animate-in fade-in duration-100">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1.5">
-                    1. Choose the shift
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {dutyWindows.map((dw) => {
-                      const isSelected = editorDutyId === dw.id;
-                      return (
-                        <button
-                          key={dw.id}
-                          type="button"
-                          onClick={() => setEditorDutyId(dw.id)}
-                          className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all ${
-                            isSelected
-                              ? 'border-indigo-600 bg-indigo-50/70 ring-1 ring-indigo-600'
-                              : 'border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span
-                              className="font-bold text-xs"
-                              style={{ color: dw.color || '#1e40af' }}
-                            >
-                              {dw.name} ({dw.acronym})
-                            </span>
-                            {dw.isPriority ? (
-                              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100/80 border border-amber-200 px-1.5 py-0.2 rounded">
-                                <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" aria-hidden="true" />
-                                Used first
-                              </span>
-                            ) : null}
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-mono block mt-0.5">
-                            {dw.startTime} to {dw.endTime}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1.5">
-                    2. Who or what the nurse works with
-                  </label>
-                  {(() => {
-                    const activeNurse = editorTarget ? nurseMap.get(editorTarget.nurseId) : undefined;
-                    const isTargetExclusiveNC = activeNurse ? isExclusiveNurseClinic(activeNurse, roles) : false;
-
-                    return (
-                      <>
-                        {isTargetExclusiveNC && (editorKind === 'DOCTOR' || editorKind === 'SPECIALTY') && (
-                          <div className="p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-amber-900 text-xs flex items-start gap-2 mb-2 animate-in fade-in duration-100">
-                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                            <div>
-                              <span className="font-semibold block text-[11px]">
-                                Works in Nurse Clinic only
-                              </span>
-                              <span className="text-[10px] text-amber-800 leading-tight block">
-                                {activeNurse?.fullName} works in Nurse Clinic only, with no doctor. Putting them with a doctor or a department will show as a problem.
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                        {(() => {
-                          const nurseSpecificPrefs = activeNurse?.preferences?.filter(
-                            (p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY'
-                          ) || [];
-
-                          if (!isTargetExclusiveNC && nurseSpecificPrefs.length > 0) {
-                            let isMismatch = false;
-                            let warnText = '';
-
-                            if (editorKind === 'DOCTOR') {
-                              const selDoc = doctors.find((d) => d.id === editorTargetRefId);
-                              const selDocSpecIds = selDoc?.specialtyIds || [];
-                              const matchesDoc = nurseSpecificPrefs.some((p) => p.kind === 'DOCTOR' && p.refId === editorTargetRefId);
-                              const matchesSpec = nurseSpecificPrefs.some((p) => {
-                                if (p.kind !== 'SPECIALTY') return false;
-                                if (selDocSpecIds.includes(p.refId)) return true;
-                                const pRefLower = p.refId.toLowerCase();
-                                for (const sid of selDocSpecIds) {
-                                  const sObj = specialtyMap.get(sid);
-                                  if (sObj) {
-                                    if (
-                                      pRefLower === sObj.code.toLowerCase() ||
-                                      pRefLower === sObj.name.toLowerCase() ||
-                                      (sObj.code.toLowerCase() === 'pcc' && pRefLower.includes('pcc')) ||
-                                      (sObj.code.toLowerCase() === 'ped' && (pRefLower.includes('ped') || pRefLower.includes('pedia')))
-                                    ) {
-                                      return true;
-                                    }
-                                  }
-                                }
-                                return false;
-                              });
-
-                              if (!matchesDoc && !matchesSpec) {
-                                isMismatch = true;
-                                warnText = `${selDoc ? withDr(selDoc.fullName) : 'This doctor'} is not one of ${activeNurse?.fullName}'s usual doctors or departments. This will show as a problem.`;
-                              }
-                            } else if (editorKind === 'SPECIALTY') {
-                              const selSpec = specialties.find((s) => s.id === editorTargetRefId);
-                              const matchesSpec = nurseSpecificPrefs.some((p) => {
-                                if (p.kind !== 'SPECIALTY') return false;
-                                if (p.refId === editorTargetRefId) return true;
-                                if (selSpec) {
-                                  const pRefLower = p.refId.toLowerCase();
-                                  if (
-                                    pRefLower === selSpec.code.toLowerCase() ||
-                                    pRefLower === selSpec.name.toLowerCase() ||
-                                    (selSpec.code.toLowerCase() === 'pcc' && pRefLower.includes('pcc')) ||
-                                    (selSpec.code.toLowerCase() === 'ped' && (pRefLower.includes('ped') || pRefLower.includes('pedia')))
-                                  ) {
-                                    return true;
-                                  }
-                                }
-                                return false;
-                              });
-
-                              if (!matchesSpec) {
-                                isMismatch = true;
-                                warnText = `${selSpec?.name || 'This department'} is not one of ${activeNurse?.fullName}'s usual departments. This will show as a problem.`;
-                              }
-                            }
-
-                            if (isMismatch) {
-                              return (
-                                <div className="p-2.5 bg-rose-50 border border-rose-300 rounded-lg text-rose-900 text-xs flex items-start gap-2 mb-2 animate-in fade-in duration-100">
-                                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                                  <div>
-                                    <span className="font-semibold block text-[11px]">
-                                      Not one of this nurse’s usual doctors
-                                    </span>
-                                    <span className="text-[10px] text-rose-800 leading-tight block">
-                                      {warnText}
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            }
-                          }
-                          return null;
-                        })()}
-                        <div className="grid grid-cols-3 gap-1.5 mb-2">
-                          {(['DOCTOR', 'CLINICAL_ROLE', 'SPECIALTY'] as AssignmentKind[]).map((k) => (
-                            <button
-                              key={k}
-                              type="button"
-                              onClick={() => {
-                                setEditorKind(k);
-                                if (k === 'DOCTOR') setEditorTargetRefId(doctors[0]?.id || '');
-                                if (k === 'CLINICAL_ROLE') setEditorTargetRefId(roles[0]?.id || '');
-                                if (k === 'SPECIALTY') setEditorTargetRefId(specialties[0]?.id || '');
-                              }}
-                              className={`py-1.5 rounded-md border text-xs font-semibold cursor-pointer text-center transition-all ${
-                                editorKind === k
-                                  ? 'bg-indigo-50 border-indigo-400 text-indigo-700 shadow-2xs'
-                                  : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                              }`}
-                            >
-                              {k === 'CLINICAL_ROLE' ? (isTargetExclusiveNC ? 'Clinic task (Nurse Clinic)' : 'Clinic task') : k === 'DOCTOR' ? 'With a doctor' : 'Department (any doctor)'}
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    );
-                  })()}
-
-                  <select
-                    aria-label="Who or what the nurse works with"
-                    value={editorTargetRefId}
-                    onChange={(e) => setEditorTargetRefId(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs font-medium text-slate-800"
-                  >
-                    {editorKind === 'DOCTOR' &&
-                      doctors.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.fullName} ({specialties.find((s) => s.id === d.specialtyIds[0])?.name || 'Clinic'})
-                        </option>
-                      ))}
-                    {editorKind === 'CLINICAL_ROLE' &&
-                      roles.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name} ({r.acronym}) · {r.defaultStartTime || '09:00'} to {r.defaultEndTime || '13:00'}
-                        </option>
-                      ))}
-                    {editorKind === 'SPECIALTY' &&
-                      specialties.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name} ({s.code}), any doctor
-                        </option>
-                      ))}
-                  </select>
-                  {(() => {
-                    const activeNurse = editorTarget ? nurseMap.get(editorTarget.nurseId) : undefined;
-                    const nurseSpecificPrefs = activeNurse?.preferences?.filter(
-                      (p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY'
-                    ) || [];
-                    if (nurseSpecificPrefs.length > 0) {
-                      const tags = nurseSpecificPrefs.map((p) => {
-                        if (p.kind === 'DOCTOR') {
-                          const doc = doctorMap.get(p.refId);
-                          return `${doc ? withDr(doc.fullName) : 'A doctor'} (#${p.rank})`;
-                        } else {
-                          const sp = specialtyMap.get(p.refId);
-                          return `${sp ? sp.name : 'Specialty'} (#${p.rank})`;
-                        }
-                      }).join(', ');
-                      return (
-                        <div className="mt-1 text-[10px] text-indigo-700 bg-indigo-50/60 rounded px-2 py-0.5 border border-indigo-100">
-                          <strong>Usually works with:</strong> {tags}
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                </div>
-              </div>
-            )}
-
-            {/* LEAVE / DAY OFF CONFIGURATION */}
-            {editorCategory === 'LEAVE' && (
-              <div className="space-y-3.5 animate-in fade-in duration-100">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1.5">
-                    1. Choose the leave or day off
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {leaveTypes.map((lt) => {
-                      const isSelected = editorLeaveTypeId === lt.id;
-                      return (
-                        <button
-                          key={lt.id}
-                          type="button"
-                          onClick={() => setEditorLeaveTypeId(lt.id)}
-                          className={`p-2.5 rounded-lg border text-left cursor-pointer transition-all ${
-                            isSelected
-                              ? 'border-indigo-600 bg-indigo-50/70 ring-1 ring-indigo-600'
-                              : 'border-slate-200 hover:bg-slate-50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <span
-                              className="font-bold text-[10px] px-1.5 py-0.5 rounded text-white"
-                              style={{ backgroundColor: lt.color || '#f59e0b' }}
-                            >
-                              {lt.acronym}
-                            </span>
-                            <span className="font-bold text-slate-800 text-xs truncate">
-                              {lt.name}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-slate-500 block">
-                            {typeof lt.creditedHours === 'number' ? `${lt.creditedHours} h a day` : '8 h a day'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                {(() => {
-                  const lt = leaveTypes.find((l) => l.id === editorLeaveTypeId);
-                  if (lt && lt.countsTowardHoursTarget === false) {
-                    return <p className="text-[11px] text-slate-500">This leave doesn't count toward the hours goal.</p>;
-                  }
-                  const typeHours = typeof lt?.creditedHours === 'number' ? lt.creditedHours : 8;
-                  const holiday = editorTarget ? holidayByDate.get(editorTarget.date) : undefined;
-                  // A public holiday counts 0 h: the period hours already leave it out.
-                  const def = holiday ? 0 : typeHours;
-                  return (
-                    <div>
-                      <label htmlFor="editor-leave-hours" className="block font-semibold text-slate-700 mb-1">
-                        Hours counted for this day
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          id="editor-leave-hours"
-                          type="number"
-                          min={0}
-                          max={24}
-                          step={0.5}
-                          value={editorLeaveHours}
-                          onChange={(e) => setEditorLeaveHours(e.target.value)}
-                          placeholder={String(def)}
-                          className="w-20 px-2 py-1 border border-slate-300 rounded font-mono text-center"
-                        />
-                        <span className="text-[11px] text-slate-500">
-                          {editorLeaveHours.trim() === ''
-                            ? holiday
-                              ? `Public holiday (${holiday.name}): 0 h, the period hours already leave it out`
-                              : `Default: ${def} h (Settings > Leave types)`
-                            : `Only this day, for this nurse. Default is ${def} h.`}
-                        </span>
-                        {editorLeaveHours.trim() !== '' && (
-                          <button
-                            type="button"
-                            onClick={() => setEditorLeaveHours('')}
-                            className="text-[11px] text-indigo-700 underline cursor-pointer"
-                          >
-                            Use default
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-
-            {/* Kept when the roster is filled again (pinned) */}
-            <div className="pt-2 border-t border-slate-100">
-              <label htmlFor="editor-keep-cell" className="flex items-center gap-2 font-semibold text-slate-800 cursor-pointer">
-                <input
-                  id="editor-keep-cell"
-                  type="checkbox"
-                  checked={!editorAllowOverwrite}
-                  onChange={(e) => setEditorAllowOverwrite(!e.target.checked)}
-                  aria-describedby="editor-keep-cell-help"
-                  className="w-4 h-4 accent-amber-600 cursor-pointer"
-                />
-                <Lock className="w-3.5 h-3.5 text-amber-600" aria-hidden="true" />
-                <span>Keep this when the roster is filled again</span>
-              </label>
-              <p id="editor-keep-cell-help" className="text-[11px] text-slate-500 mt-1 ml-6">
-                Ticked, this day is pinned and Fill roster leaves it as it is. Not ticked, Fill roster may change it.
-              </p>
-            </div>
-
-            {/* Note */}
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                Note (optional)
-              </label>
-              <input
-                type="text"
-                value={editorNote}
-                onChange={(e) => setEditorNote(e.target.value)}
-                aria-label="Note (optional)"
-                placeholder="For example: swapped with Fatma"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs"
-              />
-            </div>
-
-            {/* Footer Buttons */}
-            <div className="pt-2 flex items-center justify-between border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => {
-                  if (editorTarget) {
-                    handleDeleteCellAssignment(editorTarget.nurseId, editorTarget.date);
-                  }
-                }}
-                className="text-red-600 hover:text-red-700 font-semibold cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded hover:bg-red-50 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Clear</span>
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsEditorOpen(false)}
-                  className="px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-50 cursor-pointer font-medium text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveEditorAssignment}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer shadow-xs transition-colors"
-                >
-                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Save</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {isEditorOpen && editorTarget && editorDefaults && (
+        <CellEditorDialog
+          key={cellKeyOf(editorTarget.nurseId, editorTarget.date)}
+          editorTarget={editorTarget}
+          defaults={editorDefaults}
+          nurseMap={nurseMap}
+          doctors={doctors}
+          doctorMap={doctorMap}
+          dutyWindows={dutyWindows}
+          leaveTypes={leaveTypes}
+          roles={roles}
+          specialties={specialties}
+          specialtyMap={specialtyMap}
+          holidayByDate={holidayByDate}
+          onClose={() => setIsEditorOpen(false)}
+          onSave={handleSaveEditorAssignment}
+          onClear={() => handleDeleteCellAssignment(editorTarget.nurseId, editorTarget.date)}
+        />
       )}
 
       {/* --- RIGHT CLICK CONTEXT MENU --- */}
       {contextMenu && (
-        <div
-          className="fixed z-50 bg-white border border-slate-200 rounded shadow-xl py-1 text-xs w-44 animate-in fade-in duration-75"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          onMouseLeave={() => setContextMenu(null)}
-        >
-          <button
-            onClick={() => {
-              handleCellDoubleClick(contextMenu.nurseId, contextMenu.date);
-              setContextMenu(null);
-            }}
-            className="w-full text-left px-3 py-1.5 hover:bg-slate-100 text-slate-700 cursor-pointer flex items-center gap-2"
-          >
-            <Edit2 className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-            <span>More options…</span>
-          </button>
-          <button
-            onClick={() => {
-              const asgn = assignments.find(
-                (a) => a.nurseId === contextMenu.nurseId && a.date === contextMenu.date
-              );
-              if (asgn) setClipboardAssignment(asgn);
-              setContextMenu(null);
-            }}
-            className="w-full text-left px-3 py-1.5 hover:bg-slate-100 text-slate-700 cursor-pointer flex items-center gap-2"
-          >
-            <Copy className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-            <span>Copy</span>
-          </button>
-          <button
-            disabled={!clipboardAssignment}
-            onClick={() => {
-              handlePasteAssignment(contextMenu.nurseId, contextMenu.date);
-              setContextMenu(null);
-            }}
-            className="w-full text-left px-3 py-1.5 hover:bg-slate-100 text-slate-700 disabled:opacity-40 cursor-pointer flex items-center gap-2"
-          >
-            <ClipboardPaste className="w-3.5 h-3.5 text-slate-400" aria-hidden="true" />
-            <span>Paste</span>
-          </button>
-          <div className="h-px bg-slate-100 my-1" />
-          <button
-            onClick={() => {
-              handleDeleteCellAssignment(contextMenu.nurseId, contextMenu.date);
-              setContextMenu(null);
-            }}
-            className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 cursor-pointer flex items-center gap-2"
-          >
-            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Clear</span>
-          </button>
-        </div>
+        <CellContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          canPaste={!!clipboardAssignment}
+          onClose={() => setContextMenu(null)}
+          onMore={() => handleCellDoubleClick(contextMenu.nurseId, contextMenu.date)}
+          onCopy={() => {
+            const asgn = assignments.find((a) => a.nurseId === contextMenu.nurseId && a.date === contextMenu.date);
+            if (asgn) setClipboardAssignment(asgn);
+          }}
+          onPaste={() => handlePasteAssignment(contextMenu.nurseId, contextMenu.date)}
+          onClear={() => handleDeleteCellAssignment(contextMenu.nurseId, contextMenu.date)}
+        />
       )}
 
       {/* --- SMALL POPUP NEXT TO A CLICKED CELL --- */}
