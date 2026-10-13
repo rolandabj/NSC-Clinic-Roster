@@ -88,11 +88,12 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
           </h4>
           <div className="space-y-1.5 text-[11px] text-slate-600">
             <div className="flex items-center gap-2">
-              <span className="w-12 h-9 rounded-sm border-l-3 px-1 flex flex-col justify-center leading-tight text-ink shrink-0" style={{ backgroundColor: '#eef2ff', borderLeftColor: '#4f46e5' }} aria-hidden="true">
+              <span className="w-12 h-12 rounded-sm border-l-3 px-1 flex flex-col justify-center leading-tight text-ink shrink-0" style={{ backgroundColor: '#eef2ff', borderLeftColor: '#4f46e5' }} aria-hidden="true">
                 <span className="font-semibold text-[11px]">Lee</span>
                 <span className="text-ink-muted text-[10px]">09:00</span>
+                <span className="text-ink-muted text-[10px]">17:00</span>
               </span>
-              <span>The doctor, the role or the leave on the first line, the start time and the marks on the second; the edge has the shift's colour</span>
+              <span>The doctor's first name, the role or the leave on the first line, the start time and the marks on the second, the end time on the third; the edge has the shift's colour</span>
             </div>
             <div className="flex items-center gap-2">
               <Pin className="w-3.5 h-3.5 text-brand-strong shrink-0" aria-hidden="true" />

@@ -7,7 +7,8 @@ import type { Assignment, AvailabilityRequest, ClinicalRole, Doctor, Specialty }
 // What each roster grid cell shows, worked out once per change (UI overhaul Phase 3, slice 1),
 // so a cell is drawn again only when what it shows has changed. Phase 4, slice 4: the doctor or
 // role on the first line and the start time on the second, short doctor names, the problem's
-// kind, and a spoken name that starts with what the cell shows.
+// kind, and a spoken name that starts with what the cell shows. The owner's choice of 13-10-2026:
+// the doctor's first name on the first line, the start time on the second, the end time on the third.
 
 const LEE = { id: 'doc-lee', fullName: 'Dr Lee', specialtyIds: ['spec-card'] } as Doctor;
 const RAY = { id: 'doc-ray', fullName: 'Ray', specialtyIds: ['spec-ent'] } as Doctor;
@@ -59,19 +60,29 @@ test('an empty cell is read as "No shift", then the nurse and the day', () => {
   assert.equal(v.problemKind, 'none');
 });
 
-test('doctors get short names: the name without "Dr", or the surname when that is long', () => {
+test('doctors are shown by their first name, with the surname initial when two share it', () => {
   const names = shortDoctorNames([
     { id: 'a', fullName: 'Dr Lee' },
     { id: 'b', fullName: 'Ray' },
-    { id: 'c', fullName: 'Dr Doctor 12' },
-    { id: 'd', fullName: 'Dr Ahmed Al Hashimi' },
-    { id: 'e', fullName: 'Dr. Sara Al Hashimi' },
-    { id: 'f', fullName: 'Dr Mariam Siddiqui' },
+    { id: 'c', fullName: 'Dr Ahmed Al Hashimi' },
+    { id: 'd', fullName: 'Dr. Ahmed Khan' },
+    { id: 'e', fullName: 'Dr Mariam Siddiqui' },
+    { id: 'f', fullName: 'Dr Doctor 1' },
+    { id: 'g', fullName: 'Dr Doctor 12' },
   ] as Doctor[]);
-  assert.deepEqual(Object.fromEntries(names), { a: 'Lee', b: 'Ray', c: 'Doctor 12', d: 'A. Hashimi', e: 'S. Hashimi', f: 'Siddiqui' });
+  assert.deepEqual(Object.fromEntries(names), {
+    a: 'Lee',
+    b: 'Ray',
+    c: 'Ahmed H.',
+    d: 'Ahmed K.',
+    e: 'Mariam',
+    // The same first name and initial: the whole name without "Dr".
+    f: 'Doctor 1',
+    g: 'Doctor 12',
+  });
 });
 
-test('a shift shows the doctor and "#1" on the first line, the start time on the second, and is read in that order', () => {
+test('a shift shows the doctor and "#1", then the start time, then the end time, and is read in that order', () => {
   const v = view({ assignment: shift() });
   assert.equal(v.content, 'shift');
   assert.equal(v.dutyAcronym, 'D');
@@ -79,9 +90,10 @@ test('a shift shows the doctor and "#1" on the first line, the start time on the
   assert.equal(v.label, 'Lee');
   assert.equal(v.rankBadge, '#1');
   assert.equal(v.startTime, '09:00');
+  assert.equal(v.endTime, '17:00');
   assert.equal(v.mismatch, false);
   assert.equal(v.handChange, true);
-  assert.equal(v.ariaLabel, 'Lee #1 09:00 to 17:00, Day shift. Amy Khan, Tue 06-10-2026. With Dr Lee (usual doctor, choice 1). Changed by hand');
+  assert.equal(v.ariaLabel, 'Lee #1 09:00 17:00, Day shift. Amy Khan, Tue 06-10-2026. With Dr Lee (usual doctor, choice 1). Changed by hand');
 });
 
 test('a doctor outside the nurse\'s list is marked "!" with the reason', () => {
@@ -101,7 +113,7 @@ test('a Nurse Clinic shift shows NC', () => {
   assert.equal(v.isNurseClinic, true);
   assert.equal(v.label, 'NC');
   assert.equal(v.rankBadge, null);
-  assert.match(v.ariaLabel, /^NC 09:00 to 17:00, Day shift\. .*Nurse Clinic \(no doctor\)/);
+  assert.match(v.ariaLabel, /^NC 09:00 17:00, Day shift\. .*Nurse Clinic \(no doctor\)/);
 });
 
 test('a float shift shows Float', () => {

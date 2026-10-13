@@ -402,8 +402,13 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     return reuseCellViews(previousViewsRef.current, views);
   }, [displayNurses, dayInfo, assignmentByCell, lockByCell, leaveByCell, requestsByCell, leaveEntries, availabilityRequests, cellViolationMessages, cellMustFix, cellLookups]);
   previousViewsRef.current = cellViews;
-  // What a cell holds, for the line under the grid: the first part of its spoken name.
-  const cellWords = useCallback((nurseId: string, date: string) => previousViewsRef.current?.get(cellKeyOf(nurseId, date))?.ariaLabel.split('. ')[0] || '', []);
+  // What a cell holds, for the line under the grid: the first part of its spoken name, with "to"
+  // between the times ("09:00 to 17:00"; the spoken name has them as the cell shows them).
+  const cellWords = useCallback(
+    (nurseId: string, date: string) =>
+      (previousViewsRef.current?.get(cellKeyOf(nurseId, date))?.ariaLabel.split('. ')[0] || '').replace(/(\d\d:\d\d) (\d\d:\d\d)/, '$1 to $2'),
+    []
+  );
 
   // The Tab stop is the selected cell when it is on the days shown, else the first cell.
   const firstCellKey = displayNurses[0] && blockDates[0] ? cellKeyOf(displayNurses[0].id, blockDates[0]) : null;
@@ -1075,8 +1080,8 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   );
 
   // Zoom sizing classes
-  // Cells 44 px high and 64 px wide at 100 % (the design system asks for at least 60; 64 fits a problem's icon with the start time), smaller or larger with the zoom.
-  const cellHeightClass = zoomLevel === 75 ? 'h-8' : zoomLevel === 90 ? 'h-9' : zoomLevel === 115 ? 'h-12' : 'h-11';
+  // Cells 56 px high (three lines: the doctor, the start time, the end time; the owner's choice of 13-10-2026) and 64 px wide at 100 %, smaller or larger with the zoom.
+  const cellHeightClass = zoomLevel === 75 ? 'h-10' : zoomLevel === 90 ? 'h-12' : zoomLevel === 115 ? 'h-16' : 'h-14';
   const cellFontSizeClass = zoomLevel === 75 ? 'text-[10px]' : zoomLevel === 90 ? 'text-[11px]' : zoomLevel === 115 ? 'text-sm' : 'text-xs';
   const rowLimit = useRowsInSteps(displayNurses.length, schedule.id);
   const dayWidth = zoomLevel === 75 ? 50 : zoomLevel === 90 ? 56 : zoomLevel === 115 ? 76 : 64;

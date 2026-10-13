@@ -34,8 +34,9 @@ export interface CellView {
   pinned: boolean;
   leaveAcronym: string;
   dutyAcronym: string;
-  /** The shift's start time, on the cell's second line ('' when there is no shift). */
+  /** The shift's start and end times, on the cell's second and third lines ('' when there is no shift). */
   startTime: string;
+  endTime: string;
   /** The colour of the shift or the leave the cell shows (its edge), and the soft fill behind it; '' for none. */
   color: string;
   fill: string;
@@ -92,23 +93,27 @@ export interface CellLookups {
 const withoutDr = (name: string) => name.replace(/^dr\.?\s+/i, '').trim();
 
 /**
- * Short doctor names that fit a cell: the name without "Dr" when it is 10 letters or fewer
- * ("Lee", "Doctor 12"), otherwise the surname ("Siddiqui"), with the first initial when two
- * doctors share it ("A. Hashimi", "S. Hashimi").
+ * Doctor names for the cells (the owner's choice of 13-10-2026): the first name without "Dr"
+ * ("Ahmed"), with the surname's initial when two doctors share the first name ("Ahmed H.",
+ * "Ahmed K."), and the whole name when even that is shared.
  */
 export function shortDoctorNames(doctors: Pick<Doctor, 'id' | 'fullName'>[]): Map<string, string> {
   const parts = doctors.map((d) => {
     const name = withoutDr(d.fullName);
     const words = name.split(/\s+/);
-    return { id: d.id, name, first: words[0], surname: words[words.length - 1] };
+    const first = words[0];
+    const withInitial = words.length > 1 ? `${first} ${words[words.length - 1][0]}.` : first;
+    return { id: d.id, name, first, withInitial };
   });
-  const surnameCount = new Map<string, number>();
-  for (const p of parts) if (p.name.length > 10) surnameCount.set(p.surname, (surnameCount.get(p.surname) || 0) + 1);
+  const count = (key: 'first' | 'withInitial') => {
+    const m = new Map<string, number>();
+    for (const p of parts) m.set(p[key], (m.get(p[key]) || 0) + 1);
+    return m;
+  };
+  const firsts = count('first');
+  const initials = count('withInitial');
   return new Map(
-    parts.map((p) => [
-      p.id,
-      p.name.length <= 10 ? p.name : (surnameCount.get(p.surname) || 0) > 1 ? `${p.first[0]}. ${p.surname}` : p.surname,
-    ])
+    parts.map((p) => [p.id, firsts.get(p.first) === 1 ? p.first : initials.get(p.withInitial) === 1 ? p.withInitial : p.name])
   );
 }
 
@@ -334,7 +339,7 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
       : content === 'off'
       ? 'Day off'
       : content === 'shift'
-      ? `${[shownName, rankBadge, duty?.startTime].filter(Boolean).join(' ')}${duty ? ` to ${duty.endTime}, ${duty.name} shift` : ', shift'}${duty?.isPriority ? ', used first' : ''}`
+      ? `${[shownName, rankBadge, duty?.startTime, duty?.endTime].filter(Boolean).join(' ')}, ${duty ? `${duty.name} shift` : 'shift'}${duty?.isPriority ? ', used first' : ''}`
       : content === 'pendingLeave'
       ? `${pendingLeaveType?.acronym || 'L'}, leave asked for, waiting for approval`
       : 'No shift';
@@ -357,6 +362,7 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     leaveAcronym: leave ? leaveType?.acronym || 'L' : '',
     dutyAcronym: asgn ? duty?.acronym || 'D' : '',
     startTime: asgn && !leave && lock?.mode !== 'OFF' ? duty?.startTime || '' : '',
+    endTime: asgn && !leave && lock?.mode !== 'OFF' ? duty?.endTime || '' : '',
     color,
     fill: color ? tint(color, 0.14) : '',
     dutyPriority: !!duty?.isPriority,

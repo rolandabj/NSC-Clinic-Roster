@@ -113,7 +113,7 @@ One count everywhere: "2 must fix · 2 to check · 1 note". A cell with a Must f
 ## Sizes of controls
 
 * Laptop: buttons 36 px high (32 px for small ones in tables), text fields 36 px, menu items 36 px, tabs
-  44 px, grid cells 44 px high and at least 60 px wide.
+  44 px, grid cells 56 px high (three lines) and at least 60 px wide.
 * Touch screens (`pointer-coarse`): every button, field and menu item at least 44 px.
 * Nothing anyone can click is under 24 px anywhere.
 
@@ -131,8 +131,9 @@ One count everywhere: "2 must fix · 2 to check · 1 note". A cell with a Must f
 * **Tabs:** the ARIA tabs pattern (one Tab stop, arrow keys, Home and End), a 2 px brand line under the
   open tab, a count in a small pill; they scroll sideways on a phone.
 * **Roster grid:** names and hours stay in view while the days scroll; weekends on sunken; each cell
-  shows the doctor or role on the first line and the start time and marks on the second; one Tab stop
-  and arrow keys; a cell's spoken name starts with what it shows, then the end time, the nurse, the
+  shows the doctor's first name or the role on the first line, the start time and marks on the second
+  and the end time on the third (the owner's choice of 13-10-2026); one Tab stop
+  and arrow keys; a cell's spoken name starts with what it shows, then the shift, the nurse, the
   date and its marks. A line under the grid says what the selected cell holds and gives the count.
 * **Day view (phones):** one day at a time with Previous day and Next day, each nurse's shift, the day's
   problems, and "To change the roster, open it on a laptop or tablet."

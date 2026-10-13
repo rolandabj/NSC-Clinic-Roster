@@ -104,7 +104,7 @@ export const GridCell = memo(function GridCell({
         />
       )}
       {boxed ? (
-        // The doctor or role (or the leave) on the first line; the start time and the marks on the second.
+        // The doctor's first name or the role (or the leave) on the first line; the start time and the marks on the second; the end time on the third.
         <div
           // A small grid: the name (cut short when long) and the rank side by side, so the rank always shows; the second line under both.
           className={`${heightClass} grid grid-cols-[minmax(0,1fr)_auto] content-center items-baseline gap-x-0.5 rounded-sm px-1 leading-tight ${
@@ -129,7 +129,7 @@ export const GridCell = memo(function GridCell({
           {/* Spaces between the parts, so the text reads as the spoken name does ("Lee #1 09:00"); the grid does not show them. */}
           {view.rankBadge && ' '}
           {view.rankBadge && (
-            <span className={`rounded-sm px-0.5 text-[0.85em] font-bold ${view.rankBadge === '!' ? 'bg-danger-soft text-danger' : 'text-ink-muted'}`}>{view.rankBadge}</span>
+            <span className={`rounded-sm text-[0.75em] font-bold ${view.rankBadge === '!' ? 'px-0.5 bg-danger-soft text-danger' : 'text-ink-muted'}`}>{view.rankBadge}</span>
           )}{' '}
           {(view.startTime || view.pinned || view.handChange || view.pendingMark || ProblemIcon) && (
             // The problem's icon first, so a narrow cell (75 % zoom) cuts off the time, not the problem.
@@ -139,6 +139,13 @@ export const GridCell = memo(function GridCell({
               {view.pinned && <Pin className="size-3 shrink-0 text-brand-strong" />}
               {view.handChange && !view.pinned && <Pencil className="size-3 shrink-0" />}
               {view.pendingMark && <Clock className="size-3 shrink-0" />}
+            </span>
+          )}
+          {/* The end time on a third line (the owner's choice of 13-10-2026); a space before it, as in the spoken name ("09:00 17:00"). */}
+          {view.endTime && ' '}
+          {view.endTime && (
+            <span className="col-span-2 text-ink-muted tabular-nums" aria-hidden="true">
+              {view.endTime}
             </span>
           )}
         </div>
