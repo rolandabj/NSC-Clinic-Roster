@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791443998.8828502,
-    "seen": 1791444004.8839622,
-    "ast_hash": "2ae2ce72785c949d1f80227d4d871cef",
+    "mtime": 1791876745.495828,
+    "seen": 1791876891.750299,
+    "ast_hash": "4fd698e833d499cd17a7188a487cc525",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1809,6 +1809,12 @@
     "mtime": 1791443747.8649347,
     "seen": 1791443783.7174141,
     "ast_hash": "cc0f2e0d88dd3df3ca3de8f47c57aece",
+    "semantic_hash": ""
+  },
+  "tasks/summary.md": {
+    "mtime": 1791876730.7895172,
+    "seen": 1791876891.7503068,
+    "ast_hash": "7abd4bdbce85601d98a4308c4eaaf961",
     "semantic_hash": ""
   }
 }
