@@ -426,9 +426,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/WorkbookGrid.tsx": {
-    "mtime": 1791895309.6524792,
-    "seen": 1791895695.6181357,
-    "ast_hash": "b15a67a85a3b4fba1b118dd72f563ad3",
+    "mtime": 1791896752.795957,
+    "seen": 1791897050.8395846,
+    "ast_hash": "72d771e12361b40e6d9be4cc5586373e",
     "semantic_hash": ""
   },
   "src/main.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791896290.624225,
-    "seen": 1791896297.2852798,
-    "ast_hash": "6900b48734587935a599f7aa3f47875c",
+    "mtime": 1791897263.6188676,
+    "seen": 1791897283.5735767,
+    "ast_hash": "df98917198a17fb72a2ce985a3247c94",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1812,27 +1812,27 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/grid-flow.cjs": {
-    "mtime": 1791895350.0451577,
-    "seen": 1791895695.6179464,
-    "ast_hash": "8819c12f7be92f6a6f8e19e6cb5094db",
+    "mtime": 1791896752.7963612,
+    "seen": 1791897050.839391,
+    "ast_hash": "95d4a3105aa17e3f00134dc6e8d0b022",
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridCell.tsx": {
-    "mtime": 1791879563.541916,
-    "seen": 1791879761.115145,
-    "ast_hash": "1c0973290022e54a9f1a756c78f5869f",
+    "mtime": 1791896898.9414842,
+    "seen": 1791897050.8395886,
+    "ast_hash": "445bc33ba93b8570f64ca28099753dd7",
     "semantic_hash": ""
   },
   "src/components/workbook/grid/cellView.ts": {
-    "mtime": 1791878334.7638845,
-    "seen": 1791878701.9118414,
-    "ast_hash": "445346998044020c758038b2220cfe5b",
+    "mtime": 1791897263.6121593,
+    "seen": 1791897283.5733209,
+    "ast_hash": "ba7269b87f23cc5484cc04d025730e6a",
     "semantic_hash": ""
   },
   "tests/unit/cellView.test.ts": {
-    "mtime": 1791878762.608595,
-    "seen": 1791879761.115294,
-    "ast_hash": "ee24a9ffd1e5588019f75fe9c8d08b8a",
+    "mtime": 1791897263.6145737,
+    "seen": 1791897283.5734606,
+    "ast_hash": "2c2796fc7c6bb5758042720c414f2d67",
     "semantic_hash": ""
   },
   "src/components/workbook/grid/gridSelection.ts": {
@@ -1986,9 +1986,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridLegend.tsx": {
-    "mtime": 1791895297.7529812,
-    "seen": 1791895695.6181412,
-    "ast_hash": "688085335d71f2085a5c04bbbc276492",
+    "mtime": 1791897263.6114826,
+    "seen": 1791897283.5733092,
+    "ast_hash": "bdeef500ca427ee30743ab1e105ec706",
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridStatusBar.tsx": {
@@ -1998,9 +1998,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridTable.tsx": {
-    "mtime": 1791884642.4485033,
-    "seen": 1791884989.4047782,
-    "ast_hash": "5a24b27c08e8266aae82de11c50d6660",
+    "mtime": 1791896752.795263,
+    "seen": 1791897050.8395936,
+    "ast_hash": "10810c4efccb940afe19d39f83d9bd28",
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridToolbar.tsx": {
@@ -2034,9 +2034,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/sheet-tabs.cjs": {
-    "mtime": 1791895964.8359153,
-    "seen": 1791896204.4638233,
-    "ast_hash": "e78523414ac6b97ec3ac27d92a2c21d0",
+    "mtime": 1791897014.9565115,
+    "seen": 1791897050.839399,
+    "ast_hash": "287f15a3275e65e75fa93cd2947cf7ef",
     "semantic_hash": ""
   },
   "tests/unit/rosterSheetTabs.test.ts": {

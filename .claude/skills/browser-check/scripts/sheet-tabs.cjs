@@ -53,7 +53,7 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await key.click();
   const drawer = page.getByRole('region', { name: 'Key' });
   check('the Key opens beside the grid', (await drawer.isVisible()) && (await key.getAttribute('aria-expanded')) === 'true');
-  check('the Key shows shifts, leave and marks', /Shifts[\s\S]*Leave and days off[\s\S]*Marks in a cell/i.test(await drawer.innerText()));
+  check('the Key shows shifts, leave and marks', /Shifts[\s\S]*Leave and days off[\s\S]*A cell/i.test(await drawer.innerText()));
   if (shots) await page.screenshot({ path: `${shots}/tabs-key-1400.png` });
   await page.getByRole('button', { name: 'Close the key' }).click();
   check('Close the key closes it', (await drawer.count()) === 0);

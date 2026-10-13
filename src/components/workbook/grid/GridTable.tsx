@@ -48,6 +48,8 @@ interface GridTableProps {
   showProblems: boolean;
   heightClass: string;
   fontClass: string;
+  /** The day columns' least width, by the zoom. */
+  widthClass: string;
   selection: GridSelection;
   actions: GridRowActions;
 }
@@ -72,6 +74,7 @@ export const GridTable: React.FC<GridTableProps> = ({
   showProblems,
   heightClass,
   fontClass,
+  widthClass,
   selection,
   actions,
 }) => (
@@ -117,7 +120,7 @@ export const GridTable: React.FC<GridTableProps> = ({
               scope="col"
               title={`${WEEKDAY_ABBR[weekday]} ${formatDate(dateStr)}${isToday ? ' · Today' : ''}${holiday ? ` · Public holiday: ${holiday.name}` : isWeekend ? ' · Weekend' : ''}`}
               aria-label={`${WEEKDAY_ABBR[weekday]} ${formatDate(dateStr)}${isToday ? ', today' : ''}${holiday ? `, public holiday: ${holiday.name}` : isWeekend ? ', weekend' : ''}`}
-              className={`py-1 px-1 text-center font-mono border-r border-slate-200 min-w-[50px] ${
+              className={`py-1 px-1 text-center font-mono border-r border-slate-200 ${widthClass} ${
                 isToday
                   ? 'bg-indigo-600 text-white'
                   : holiday

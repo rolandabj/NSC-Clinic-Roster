@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Clock, Edit2, Lock, Star, Stethoscope, Users, X } from 'lucide-react';
+import { Check, Clock, OctagonAlert, Pencil, Pin, Star, Stethoscope, TriangleAlert, Users, X } from 'lucide-react';
 import type { DutyWindow, LeaveType } from '../../../types';
 
 /** The id of the Key drawer, which the Key button names. */
@@ -84,28 +84,37 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
 
         <div>
           <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
-            Marks in a cell
+            A cell
           </h4>
           <div className="space-y-1.5 text-[11px] text-slate-600">
             <div className="flex items-center gap-2">
-              <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" aria-hidden="true" />
+              <span className="w-12 h-9 rounded-sm border-l-3 px-1 flex flex-col justify-center leading-tight text-ink shrink-0" style={{ backgroundColor: '#eef2ff', borderLeftColor: '#4f46e5' }} aria-hidden="true">
+                <span className="font-semibold text-[11px]">Lee</span>
+                <span className="text-ink-muted text-[10px]">09:00</span>
+              </span>
+              <span>The doctor, the role or the leave on the first line, the start time and the marks on the second; the edge has the shift's colour</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Pin className="w-3.5 h-3.5 text-brand-strong shrink-0" aria-hidden="true" />
               <span>Pinned: kept when the roster is filled again</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-6 h-5 rounded border border-dashed border-amber-400 bg-amber-50 text-amber-900 font-bold text-[10px] flex items-center justify-center shrink-0">
-                OFF
+              <span className="w-12 h-5 rounded-sm bg-sunken text-ink-muted font-semibold text-[10px] flex items-center justify-center shrink-0" aria-hidden="true">
+                Day off
               </span>
               <span>Pinned day off</span>
             </div>
             <div className="flex items-center gap-2">
-              <Edit2 className="w-3.5 h-3.5 text-slate-500 shrink-0" aria-hidden="true" />
-              <span>Hand change (not pinned)</span>
+              <Pencil className="w-3.5 h-3.5 text-slate-500 shrink-0" aria-hidden="true" />
+              <span>Changed by hand (not pinned)</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="relative w-6 h-5 rounded border border-slate-300 bg-white shrink-0" aria-hidden="true">
-                <span className="absolute top-0 right-0 w-0 h-0 border-t-8 border-l-8 border-t-red-600 border-l-transparent" />
-              </span>
-              <span>Problem with this shift: tap or point at the cell to read it</span>
+              <OctagonAlert className="w-3.5 h-3.5 text-danger shrink-0" aria-hidden="true" />
+              <span>Must fix: a problem with this shift (the cell also has a red line); point at the cell to read it</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <TriangleAlert className="w-3.5 h-3.5 text-warning shrink-0" aria-hidden="true" />
+              <span>Check: a problem with this shift that may be fine</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-6 h-5 flex items-center justify-center shrink-0" aria-hidden="true">
@@ -115,7 +124,7 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
             </div>
             <div className="flex items-center gap-2">
               <span
-                className="w-6 h-5 rounded border border-dashed border-amber-500 text-amber-600 font-bold text-[10px] flex items-center justify-center shrink-0"
+                className="w-6 h-5 rounded border border-dashed border-amber-500 text-ink-muted font-bold text-[10px] flex items-center justify-center shrink-0"
                 style={{ backgroundImage: 'repeating-linear-gradient(135deg, #f59e0b40 0 3px, transparent 3px 7px)' }}
                 aria-hidden="true"
               >
@@ -132,14 +141,14 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
                 <span className="w-1.5 h-1.5 rounded-full border border-sky-600 bg-sky-600" />
                 <span className="w-1.5 h-1.5 rounded-full border border-sky-600 bg-white" />
               </span>
-              <span>Asked for this day off (hollow: waiting for approval)</span>
+              <span>Top right: asked for this day off (hollow: waiting for approval)</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-3.5 flex items-center justify-center gap-0.5 shrink-0" aria-hidden="true">
                 <span className="w-1.5 h-1.5 rounded-[1px] border border-sky-600 bg-sky-600" />
                 <span className="w-1.5 h-1.5 rounded-[1px] border border-sky-600 bg-white" />
               </span>
-              <span>Asked for a shift (point at the cell to see which)</span>
+              <span>Top right: asked for a shift (point at the cell to see which)</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-3.5 flex items-center justify-center gap-0.5 shrink-0" aria-hidden="true">
@@ -149,25 +158,23 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
               <span>Request not followed: a shift on a day asked off, or another shift than the one asked for</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-amber-500 font-bold w-3.5 text-center shrink-0" aria-hidden="true">★</span>
-              <span>Shift used first when filling</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-5 rounded text-teal-900 font-mono font-bold text-[10px] flex items-center justify-center bg-teal-100 border border-teal-300 shrink-0">
-                NC
-              </span>
+              <span className="w-8 text-[11px] font-semibold text-ink shrink-0">NC</span>
               <span>Nurse Clinic (no doctor)</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold px-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">#1</span>
+              <span className="w-8 text-[11px] font-semibold text-ink shrink-0">Float</span>
+              <span>Float: not with a doctor</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-8 text-[10px] font-bold text-ink-muted shrink-0">#1</span>
               <span>One of the nurse’s usual doctors (1 = first choice)</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold px-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300 shrink-0">Pool</span>
+              <span className="w-8 text-[10px] font-bold text-ink-muted shrink-0">Pool</span>
               <span>Doctor shared by any nurse</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-extrabold px-1 rounded bg-rose-100 text-rose-800 border border-rose-300 shrink-0">!</span>
+              <span className="w-8 shrink-0"><span className="text-[10px] font-bold px-0.5 rounded-sm bg-danger-soft text-danger">!</span></span>
               <span>Not one of the nurse’s usual doctors</span>
             </div>
             <div className="flex items-center gap-2">

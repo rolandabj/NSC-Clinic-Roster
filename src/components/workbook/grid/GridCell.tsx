@@ -1,5 +1,6 @@
 import React, { memo, useCallback, useSyncExternalStore } from 'react';
-import { Clock, Edit2, Lock } from 'lucide-react';
+import { Clock, Pencil, Pin } from 'lucide-react';
+import { PROBLEM_MARKS } from '../../ui';
 import type { CellView } from './cellView';
 import { CELL_FLASH, CELL_POPUP, CELL_SELECTED, CELL_TAB_STOP, GridSelection } from './gridSelection';
 
@@ -47,8 +48,10 @@ export const GridCell = memo(function GridCell({
   const pendingHatch = view.hasPendingLeave
     ? `repeating-linear-gradient(135deg, ${view.pendingLeaveColor}40 0 3px, transparent 3px 7px)`
     : undefined;
-  const flagged = hasViolation || view.mismatch;
-  const plainShift = !flagged && !view.isNurseClinic && !view.isFloatPool;
+  const flagged = (hasViolation && view.problemKind === 'must') || view.mismatch;
+
+  const ProblemIcon = hasViolation && view.problemKind !== 'none' ? PROBLEM_MARKS[view.problemKind].icon : null;
+  const boxed = view.content !== 'empty';
 
   return (
     <td
@@ -66,30 +69,21 @@ export const GridCell = memo(function GridCell({
       aria-label={view.ariaLabel}
       title={view.title}
       style={pendingHatch ? { backgroundImage: pendingHatch } : undefined}
-      className={`border-r border-b border-slate-200 p-0.5 text-center align-middle cursor-pointer relative transition-shadow duration-700 focus:outline-none ${fontClass} ${
-        view.isToday ? 'border-x-indigo-300' : ''
+      className={`border-r border-b border-line p-0.5 align-middle cursor-pointer relative ${fontClass} ${
+        boxed ? 'text-left' : 'text-center text-slate-400'
       } ${
         isFlashing
-          ? 'ring-4 ring-amber-400 z-10 bg-amber-50 duration-150'
+          ? 'outline-3 -outline-offset-3 outline-amber-400 z-10 bg-amber-50'
           : isSelected
-          ? 'ring-2 ring-indigo-600 z-10 bg-indigo-50/50'
-          : `${view.dayShade} hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-indigo-400`
+          ? 'outline-3 -outline-offset-3 outline-brand z-10 bg-brand-soft'
+          : `${view.dayShade} hover:bg-sunken focus-visible:outline-3 focus-visible:-outline-offset-3 focus-visible:outline-brand`
       }`}
     >
-      {/* Problem marker: small red corner */}
-      {hasViolation && (
-        <span
-          aria-hidden="true"
-          className="absolute top-0 right-0 w-0 h-0 border-t-8 border-l-8 border-t-red-600 border-l-transparent z-10 pointer-events-none"
-        />
-      )}
-      {/* Request mark, top left: round for a day off, square for a shift; hollow while waiting for approval; amber when not followed. */}
+      {/* Request mark, top right: round for a day off, square for a shift; hollow while waiting for approval; amber when not followed. */}
       {view.requestMark !== 'none' && (
         <span
           aria-hidden="true"
-          className={`absolute top-0.5 left-0.5 w-1.5 h-1.5 z-10 pointer-events-none border ${
-            view.requestMark === 'dayOff' ? 'rounded-full' : 'rounded-[1px]'
-          } ${
+          className={`absolute top-1 right-1 size-1.5 pointer-events-none border ${view.requestMark === 'dayOff' ? 'rounded-full' : 'rounded-[1px]'} ${
             view.requestMismatch
               ? view.requestPending
                 ? 'border-amber-500 bg-white'
@@ -100,103 +94,53 @@ export const GridCell = memo(function GridCell({
           }`}
         />
       )}
-      {/* Leave waiting for approval under a shift or a pinned day off */}
-      {view.pendingMark && (
-        <Clock aria-hidden="true" className="absolute bottom-0.5 left-0.5 w-2 h-2 z-10 pointer-events-none text-slate-600" />
-      )}
-      {view.content === 'leave' ? (
+      {boxed ? (
+        // The doctor or role (or the leave) on the first line; the start time and the marks on the second.
         <div
-          className={`w-full ${heightClass} rounded flex items-center justify-center gap-0.5 font-bold text-white shadow-2xs`}
-          style={{ backgroundColor: view.leaveColor }}
+          className={`${heightClass} flex flex-col justify-center rounded-sm px-1 leading-tight ${
+            view.content === 'off'
+              ? 'bg-sunken text-ink-muted'
+              : view.content === 'pendingLeave'
+              ? 'border border-dashed text-ink-muted'
+              : 'border-l-3 text-ink'
+          } ${flagged ? 'ring-1 ring-inset ring-danger' : ''}`}
+          style={
+            view.content === 'pendingLeave'
+              ? { borderColor: view.pendingLeaveColor }
+              : view.color
+              ? { backgroundColor: view.fill, borderLeftColor: view.color }
+              : undefined
+          }
         >
-          <span>{view.leaveAcronym}</span>
-          {view.pinned && <Lock className="w-2.5 h-2.5 text-white" aria-hidden="true" />}
-        </div>
-      ) : view.content === 'off' ? (
-        <div
-          className={`w-full ${heightClass} rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center font-bold text-amber-900 text-[10px]`}
-        >
-          <Lock className="w-2.5 h-2.5 text-amber-600 mr-0.5" aria-hidden="true" />
-          <span>OFF</span>
-        </div>
-      ) : view.content === 'shift' ? (
-        // A shift: the shift's letters and who it is with
-        <div
-          className={`w-full ${heightClass} rounded flex flex-col items-center justify-center leading-none px-0.5 border ${
-            flagged
-              ? 'ring-1.5 ring-rose-500 border-rose-400 bg-rose-50/70 shadow-xs'
-              : view.isNurseClinic
-              ? 'bg-teal-50/70 border-teal-300'
-              : view.isFloatPool
-              ? 'bg-indigo-50/40 border-indigo-200'
-              : ''
-          }`}
-          style={{
-            backgroundColor: plainShift ? `${view.dutyColor || '#3b82f6'}18` : undefined,
-            borderColor: plainShift ? view.dutyColor || '#3b82f6' : undefined,
-          }}
-        >
-          <div className="flex items-center gap-0.5">
-            <span
-              className={`font-bold text-[10px] ${view.isNurseClinic ? 'text-teal-800' : ''}`}
-              style={{ color: view.isNurseClinic ? undefined : view.dutyColor || '#1e40af' }}
-            >
-              {view.dutyAcronym}
+          <span className="flex min-w-0 items-center gap-0.5 font-semibold">
+            <span className="truncate">
+              {view.content === 'leave' ? view.leaveAcronym : view.content === 'off' ? 'Day off' : view.content === 'pendingLeave' ? view.pendingLeaveAcronym : view.label}
             </span>
-            {view.dutyPriority && (
-              <span className="text-[10px] text-amber-500 font-bold leading-none" aria-hidden="true">
-                ★
-              </span>
-            )}
-            {view.pinned && <Lock className="w-2.5 h-2.5 text-amber-600" aria-hidden="true" />}
-            {view.handChange && !view.pinned && <Edit2 className="w-2.5 h-2.5 text-slate-500" aria-hidden="true" />}
-          </div>
-          <div className="flex items-center gap-0.5 max-w-[48px] justify-center">
-            <span
-              className={`text-[10px] font-semibold truncate ${
-                view.mismatch
-                  ? 'text-rose-900 font-bold'
-                  : view.isNurseClinic
-                  ? 'text-teal-900 font-bold bg-teal-100/80 px-1 py-0.2 rounded border border-teal-300'
-                  : view.isFloatPool
-                  ? 'text-indigo-800 font-bold'
-                  : 'text-slate-700'
-              }`}
-            >
-              {view.label}
-            </span>
+            {/* Spaces between the parts, so the text reads as the spoken name does ("Lee #1 09:00"); flex does not show them. */}
+            {view.rankBadge && ' '}
             {view.rankBadge && (
-              <span
-                aria-hidden="true"
-                className={`text-[10px] font-bold px-0.5 rounded leading-none shrink-0 ${
-                  view.rankBadge === '!'
-                    ? 'bg-rose-100 text-rose-800 border border-rose-300 font-extrabold'
-                    : view.rankBadge === '#1'
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    : view.rankBadge === '#2'
-                    ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                    : 'bg-slate-100 text-slate-700 border border-slate-300'
-                }`}
-              >
+              <span className={`shrink-0 rounded-sm px-0.5 text-[0.85em] font-bold ${view.rankBadge === '!' ? 'bg-danger-soft text-danger' : 'text-ink-muted'}`}>
                 {view.rankBadge}
               </span>
             )}
-          </div>
-        </div>
-      ) : view.content === 'pendingLeave' ? (
-        // Leave waiting for approval (shown lighter, on stripes)
-        <div
-          className={`w-full ${heightClass} rounded border border-dashed flex items-center justify-center font-bold text-[10px] opacity-80`}
-          style={{ borderColor: view.pendingLeaveColor, color: view.pendingLeaveColor }}
-          aria-hidden="true"
-        >
-          <span className="bg-white/80 px-0.5 rounded">{view.pendingLeaveAcronym}</span>
+          </span>{' '}
+          {(view.startTime || view.pinned || view.handChange || view.pendingMark || ProblemIcon) && (
+            <span className="flex items-center gap-0.5 text-ink-muted tabular-nums" aria-hidden="true">
+              {view.startTime}
+              {view.pinned && <Pin className="size-3 shrink-0 text-brand-strong" />}
+              {view.handChange && !view.pinned && <Pencil className="size-3 shrink-0" />}
+              {view.pendingMark && <Clock className="size-3 shrink-0" />}
+              {ProblemIcon && <ProblemIcon className={`size-3.5 shrink-0 ${PROBLEM_MARKS[view.problemKind as 'must' | 'check'].text}`} />}
+            </span>
+          )}
         </div>
       ) : (
-        // An empty cell
-        <div className={`w-full ${heightClass} flex items-center justify-center text-slate-300`} aria-hidden="true">
-          —
-        </div>
+        // An empty cell: a dash; with a problem, its icon instead.
+        ProblemIcon ? (
+          <ProblemIcon aria-hidden="true" className={`mx-auto size-3.5 ${PROBLEM_MARKS[view.problemKind as 'must' | 'check'].text}`} />
+        ) : (
+          '—'
+        )
       )}
     </td>
   );

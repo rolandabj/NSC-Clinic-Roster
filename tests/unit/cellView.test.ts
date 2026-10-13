@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cellLookupsOf, cellViewOf, reuseCellViews, type CellDay, type CellFacts, type CellView } from '../../src/components/workbook/grid/cellView';
+import { cellLookupsOf, cellViewOf, reuseCellViews, shortDoctorNames, type CellDay, type CellFacts, type CellView } from '../../src/components/workbook/grid/cellView';
 import { ANNUAL_LEAVE, DAY_DUTY, makeLeave, makeLock, makeNurse } from './fixtures';
 import type { Assignment, AvailabilityRequest, ClinicalRole, Doctor, Specialty } from '../../src/types';
 
 // What each roster grid cell shows, worked out once per change (UI overhaul Phase 3, slice 1),
-// so a cell is drawn again only when what it shows has changed.
+// so a cell is drawn again only when what it shows has changed. Phase 4, slice 4: the doctor or
+// role on the first line and the start time on the second, short doctor names, the problem's
+// kind, and a spoken name that starts with what the cell shows.
 
 const LEE = { id: 'doc-lee', fullName: 'Dr Lee', specialtyIds: ['spec-card'] } as Doctor;
 const RAY = { id: 'doc-ray', fullName: 'Ray', specialtyIds: ['spec-ent'] } as Doctor;
@@ -47,28 +49,39 @@ function view(facts: Partial<CellFacts> = {}, day = TUESDAY, nurse = amy): CellV
   return cellViewOf({ nurse, day, problems: [], ...facts }, lookups);
 }
 
-test('an empty cell says "Nothing yet"', () => {
+test('an empty cell is read as "No shift", then the nurse and the day', () => {
   const v = view();
   assert.equal(v.key, 'n1|2026-10-06');
   assert.equal(v.content, 'empty');
   assert.equal(v.title, 'Nothing yet');
-  assert.equal(v.ariaLabel, 'Amy Khan, 06-10-2026: Nothing yet');
+  assert.equal(v.ariaLabel, 'No shift. Amy Khan, Tue 06-10-2026');
   assert.equal(v.hasProblems, false);
+  assert.equal(v.problemKind, 'none');
 });
 
-test('a shift with the nurse\'s first doctor shows the doctor and "#1"', () => {
+test('doctors get short names: the name without "Dr", or the surname when that is long', () => {
+  const names = shortDoctorNames([
+    { id: 'a', fullName: 'Dr Lee' },
+    { id: 'b', fullName: 'Ray' },
+    { id: 'c', fullName: 'Dr Doctor 12' },
+    { id: 'd', fullName: 'Dr Ahmed Al Hashimi' },
+    { id: 'e', fullName: 'Dr. Sara Al Hashimi' },
+    { id: 'f', fullName: 'Dr Mariam Siddiqui' },
+  ] as Doctor[]);
+  assert.deepEqual(Object.fromEntries(names), { a: 'Lee', b: 'Ray', c: 'Doctor 12', d: 'A. Hashimi', e: 'S. Hashimi', f: 'Siddiqui' });
+});
+
+test('a shift shows the doctor and "#1" on the first line, the start time on the second, and is read in that order', () => {
   const v = view({ assignment: shift() });
   assert.equal(v.content, 'shift');
   assert.equal(v.dutyAcronym, 'D');
-  assert.equal(v.dutyColor, DAY_DUTY.color);
+  assert.equal(v.color, DAY_DUTY.color);
   assert.equal(v.label, 'Lee');
   assert.equal(v.rankBadge, '#1');
+  assert.equal(v.startTime, '09:00');
   assert.equal(v.mismatch, false);
   assert.equal(v.handChange, true);
-  assert.equal(
-    v.ariaLabel,
-    'Amy Khan, 06-10-2026: Day shift (09:00 to 17:00) · With Dr Lee (usual doctor, choice 1) · Changed by hand'
-  );
+  assert.equal(v.ariaLabel, 'Lee #1 09:00 to 17:00, Day shift. Amy Khan, Tue 06-10-2026. With Dr Lee (usual doctor, choice 1). Changed by hand');
 });
 
 test('a doctor outside the nurse\'s list is marked "!" with the reason', () => {
@@ -88,13 +101,13 @@ test('a Nurse Clinic shift shows NC', () => {
   assert.equal(v.isNurseClinic, true);
   assert.equal(v.label, 'NC');
   assert.equal(v.rankBadge, null);
-  assert.match(v.ariaLabel, /Nurse Clinic \(no doctor\)/);
+  assert.match(v.ariaLabel, /^NC 09:00 to 17:00, Day shift\. .*Nurse Clinic \(no doctor\)/);
 });
 
-test('a float shift shows FLOAT', () => {
+test('a float shift shows Float', () => {
   const v = view({ assignment: shift({ kind: 'CLINICAL_ROLE', doctorId: undefined, clinicalRoleId: 'role-float' }) });
   assert.equal(v.isFloatPool, true);
-  assert.equal(v.label, 'FLOAT');
+  assert.equal(v.label, 'Float');
   assert.match(v.ariaLabel, /Float \(not with a doctor\)/);
 });
 
@@ -103,15 +116,17 @@ test('approved leave that is pinned shows its letters, its hours and the pin', (
   const v = view({ leave, lock: makeLock('n1', '2026-10-06') });
   assert.equal(v.content, 'leave');
   assert.equal(v.leaveAcronym, 'AL');
-  assert.equal(v.leaveColor, ANNUAL_LEAVE.color);
+  assert.equal(v.color, ANNUAL_LEAVE.color);
   assert.equal(v.pinned, true);
   assert.equal(v.title, 'Annual Leave: 8 h counted this day, pinned');
+  assert.equal(v.ariaLabel, 'AL, Annual Leave: 8 hours counted on this day. Amy Khan, Tue 06-10-2026. Pinned');
 });
 
 test('a pinned day off says so', () => {
   const v = view({ lock: makeLock('n1', '2026-10-06', { mode: 'OFF' }) });
   assert.equal(v.content, 'off');
   assert.equal(v.title, 'Day off, pinned');
+  assert.equal(v.ariaLabel, 'Day off. Amy Khan, Tue 06-10-2026. Pinned');
 });
 
 test('leave waiting for approval shows lighter on an empty cell, and as a clock under a shift', () => {
@@ -121,11 +136,13 @@ test('leave waiting for approval shows lighter on an empty cell, and as a clock 
   assert.equal(empty.pendingLeaveAcronym, 'AL');
   assert.equal(empty.pendingMark, false);
   assert.equal(empty.title, 'Nothing yet\nLeave asked for, waiting for approval: Annual Leave');
+  assert.equal(empty.ariaLabel, 'AL, leave asked for, waiting for approval. Amy Khan, Tue 06-10-2026. Leave asked for, waiting for approval: Annual Leave');
 
   const underShift = view({ pendingLeave, assignment: shift() });
   assert.equal(underShift.content, 'shift');
   assert.equal(underShift.pendingMark, true);
   assert.equal(underShift.pendingLeaveColor, ANNUAL_LEAVE.color);
+  assert.equal(underShift.color, DAY_DUTY.color);
 });
 
 test('a day off request on a day with a shift is marked as not followed', () => {
@@ -137,16 +154,19 @@ test('a day off request on a day with a shift is marked as not followed', () => 
   assert.match(v.ariaLabel, /\. Asked for this day off, has Day$/);
 });
 
-test('problems are listed in the tooltip and read out after the content', () => {
-  const v = view({ assignment: shift(), problems: ['Too little rest', 'Over the hours limit'] });
+test('problems are listed in the tooltip and read out last, with their kind', () => {
+  const v = view({ assignment: shift(), problems: ['Too little rest', 'Over the hours limit'], problemsMustFix: true });
   assert.equal(v.hasProblems, true);
+  assert.equal(v.problemKind, 'must');
   assert.match(v.title, /\nProblems:\n• Too little rest\n• Over the hours limit$/);
-  assert.match(v.ariaLabel, /\. Problems: Too little rest\. Over the hours limit$/);
-  assert.equal(view({ problems: ['One'] }).ariaLabel, 'Amy Khan, 06-10-2026: Nothing yet. Problem: One');
+  assert.match(v.ariaLabel, /\. Must fix: Too little rest\. Over the hours limit$/);
+  const check = view({ problems: ['One'] });
+  assert.equal(check.problemKind, 'check');
+  assert.equal(check.ariaLabel, 'No shift. Amy Khan, Tue 06-10-2026. Check: One');
 });
 
 test('the day is named and shaded: today, a public holiday, a weekend', () => {
-  assert.match(view({}, { ...TUESDAY, isToday: true }).ariaLabel, /06-10-2026 \(today\):/);
+  assert.match(view({}, { ...TUESDAY, isToday: true }).ariaLabel, /Tue 06-10-2026 \(today\)$/);
   const holiday = view({}, { ...TUESDAY, holiday: { name: 'National Day' } });
   assert.match(holiday.ariaLabel, /\(public holiday: National Day\)/);
   assert.equal(holiday.dayShade, 'bg-cyan-50');

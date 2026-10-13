@@ -232,8 +232,10 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   //  - about a whole day (no free nurse, no senior nurse, a doctor with no nurse...):
   //    a badge on that day's heading, not a mark on every shift of the day;
   //  - about a nurse (hours, no email): a mark by the nurse's name.
-  const { cellViolationMessages, dayProblems, nurseProblems } = useMemo(() => {
+  const { cellViolationMessages, cellMustFix, dayProblems, nurseProblems } = useMemo(() => {
     const cellViolationMessages = new Map<string, string[]>();
+    // Cells with a problem that must be fixed (the others are to check).
+    const cellMustFix = new Set<string>();
     const dayProblems = new Map<string, { messages: string[]; mustFix: boolean }>();
     const nurseProblems = new Map<string, { messages: string[]; mustFix: boolean }>();
     const addTo = (map: Map<string, { messages: string[]; mustFix: boolean }>, key: string, f: ValidationFinding) => {
@@ -259,9 +261,10 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         const list = cellViolationMessages.get(k) || [];
         if (!list.includes(f.message)) list.push(f.message);
         cellViolationMessages.set(k, list);
+        if (f.severity === 'ERROR') cellMustFix.add(k);
       });
     });
-    return { cellViolationMessages, dayProblems, nurseProblems };
+    return { cellViolationMessages, cellMustFix, dayProblems, nurseProblems };
   }, [validationReport]);
 
   // Group nurses if requested
@@ -388,6 +391,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
             pendingLeave: leave ? undefined : waitingLeaveOn(nurse.id, date),
             request: cellRequestOn(nurse.id, date),
             problems: cellViolationMessages.get(`${nurse.id}_${date}`) || [],
+            problemsMustFix: cellMustFix.has(`${nurse.id}_${date}`),
           },
           cellLookups
         );
@@ -395,7 +399,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       }
     }
     return reuseCellViews(previousViewsRef.current, views);
-  }, [displayNurses, dayInfo, assignmentByCell, lockByCell, leaveByCell, requestsByCell, leaveEntries, availabilityRequests, cellViolationMessages, cellLookups]);
+  }, [displayNurses, dayInfo, assignmentByCell, lockByCell, leaveByCell, requestsByCell, leaveEntries, availabilityRequests, cellViolationMessages, cellMustFix, cellLookups]);
   previousViewsRef.current = cellViews;
 
   // The Tab stop is the selected cell when it is on the days shown, else the first cell.
@@ -1063,8 +1067,10 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   );
 
   // Zoom sizing classes
-  const cellHeightClass = zoomLevel === 75 ? 'h-6' : zoomLevel === 90 ? 'h-7' : zoomLevel === 115 ? 'h-10' : 'h-8';
-  const cellFontSizeClass = zoomLevel === 75 ? 'text-[10px]' : zoomLevel === 90 ? 'text-[10px]' : zoomLevel === 115 ? 'text-xs' : 'text-[11px]';
+  // Cells 44 px high and 60 px wide at 100 % (the design system), smaller or larger with the zoom.
+  const cellHeightClass = zoomLevel === 75 ? 'h-8' : zoomLevel === 90 ? 'h-9' : zoomLevel === 115 ? 'h-12' : 'h-11';
+  const cellFontSizeClass = zoomLevel === 75 ? 'text-[10px]' : zoomLevel === 90 ? 'text-[11px]' : zoomLevel === 115 ? 'text-sm' : 'text-xs';
+  const cellWidthClass = zoomLevel === 75 ? 'min-w-12' : zoomLevel === 90 ? 'min-w-13' : zoomLevel === 115 ? 'min-w-18' : 'min-w-15';
 
   return (
     <div className={`flex flex-col h-full overflow-hidden bg-slate-100 font-sans select-none ${isActive ? '' : 'hidden'}`}>
@@ -1110,6 +1116,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
             showProblems={highlightViolations}
             heightClass={cellHeightClass}
             fontClass={cellFontSizeClass}
+            widthClass={cellWidthClass}
             selection={selection}
             actions={cellActions}
           />

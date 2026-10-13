@@ -14,7 +14,8 @@ import { leaveCreditOnDate } from '../../../services/hours/hoursPolicy';
 import { nurseClinicRoleOf } from '../../../services/engine/clinicModel';
 import { isFloatShift } from '../../../services/engine/floatShift';
 import { describeRequest } from '../../../services/engine/explainCell';
-import { formatDate } from '../../../utils/dateUtils';
+import { formatDayDate } from '../../../utils/dateUtils';
+import { tint } from '../../../utils/colorContrast';
 
 /**
  * What one roster grid cell shows, worked out ahead of drawing it.
@@ -32,10 +33,12 @@ export interface CellView {
   /** A pinned day (a lock) is on this cell. */
   pinned: boolean;
   leaveAcronym: string;
-  leaveColor: string;
   dutyAcronym: string;
-  /** The shift's own colour; undefined when the shift is unknown. */
-  dutyColor?: string;
+  /** The shift's start time, on the cell's second line ('' when there is no shift). */
+  startTime: string;
+  /** The colour of the shift or the leave the cell shows (its edge), and the soft fill behind it; '' for none. */
+  color: string;
+  fill: string;
   dutyPriority: boolean;
   /** The shift was changed by hand. */
   handChange: boolean;
@@ -43,7 +46,7 @@ export interface CellView {
   isFloatPool: boolean;
   /** The doctor or department is not on the nurse's list. */
   mismatch: boolean;
-  /** The doctor, department or task in short ("Lee", "NC", "FLOAT"). */
+  /** The doctor, department or task in short ("Lee", "NC", "Float"), on the cell's first line. */
   label: string;
   /** "#1", "#2"..., "Pool", "!" (not on the nurse's list), or none. */
   rankBadge: string | null;
@@ -58,12 +61,17 @@ export interface CellView {
   requestMismatch: boolean;
   requestPending: boolean;
   hasProblems: boolean;
+  /** The kind of the cell's worst problem, for its icon: must fix, to check, or none. */
+  problemKind: 'none' | 'must' | 'check';
   isToday: boolean;
   /** Column shading: today, public holiday or weekend. */
   dayShade: string;
   /** The tooltip. */
   title: string;
-  /** The spoken name. */
+  /**
+   * The spoken name: what the cell shows first (so it matches what is seen), then the end time
+   * and the shift, the nurse and the day, and its marks.
+   */
   ariaLabel: string;
 }
 
@@ -76,6 +84,32 @@ export interface CellLookups {
   specialtyMap: Map<string, Specialty>;
   leaveTypeMap: Map<string, LeaveType>;
   nurseClinicRoleId?: string;
+  /** Each doctor's short name for the cells (`shortDoctorNames`). */
+  doctorShort: Map<string, string>;
+}
+
+/** A doctor's name without "Dr" in front. */
+const withoutDr = (name: string) => name.replace(/^dr\.?\s+/i, '').trim();
+
+/**
+ * Short doctor names that fit a cell: the name without "Dr" when it is 10 letters or fewer
+ * ("Lee", "Doctor 12"), otherwise the surname ("Siddiqui"), with the first initial when two
+ * doctors share it ("A. Hashimi", "S. Hashimi").
+ */
+export function shortDoctorNames(doctors: Pick<Doctor, 'id' | 'fullName'>[]): Map<string, string> {
+  const parts = doctors.map((d) => {
+    const name = withoutDr(d.fullName);
+    const words = name.split(/\s+/);
+    return { id: d.id, name, first: words[0], surname: words[words.length - 1] };
+  });
+  const surnameCount = new Map<string, number>();
+  for (const p of parts) if (p.name.length > 10) surnameCount.set(p.surname, (surnameCount.get(p.surname) || 0) + 1);
+  return new Map(
+    parts.map((p) => [
+      p.id,
+      p.name.length <= 10 ? p.name : (surnameCount.get(p.surname) || 0) > 1 ? `${p.first[0]}. ${p.surname}` : p.surname,
+    ])
+  );
 }
 
 export function cellLookupsOf(lists: {
@@ -93,6 +127,7 @@ export function cellLookupsOf(lists: {
     specialtyMap: new Map(lists.specialties.map((s) => [s.id, s])),
     leaveTypeMap: new Map(lists.leaveTypes.map((l) => [l.id, l])),
     nurseClinicRoleId: nurseClinicRoleOf(lists.roles)?.id,
+    doctorShort: shortDoctorNames(lists.doctors),
   };
 }
 
@@ -117,9 +152,18 @@ export interface CellFacts {
   request?: AvailabilityRequest;
   /** The roster check's problems about this cell. */
   problems: string[];
+  /** One of them must be fixed (else they are to check). */
+  problemsMustFix?: boolean;
 }
 
 const SOURCE_WORDS: Record<string, string> = {
+  GENERATED: 'Filled in by Fill roster',
+  MANUAL: 'Changed by hand',
+  LOCK: 'Pinned by hand',
+};
+
+/** The shift's source, as the end of the spoken name. */
+const SOURCE_SPOKEN: Record<string, string> = {
   GENERATED: 'Filled in by Fill roster',
   MANUAL: 'Changed by hand',
   LOCK: 'Pinned by hand',
@@ -144,7 +188,7 @@ function specialtyMatches(refId: string, spec: Specialty): boolean {
 }
 
 export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
-  const { nurse, day, assignment: asgn, lock, leave, pendingLeave, request, problems } = facts;
+  const { nurse, day, assignment: asgn, lock, leave, pendingLeave, request, problems, problemsMustFix } = facts;
   const { dutyMap, doctorMap, roleMap, specialtyMap, leaveTypeMap } = lookups;
   const { dateStr, isWeekend, holiday, isToday } = day;
 
@@ -167,14 +211,14 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
 
   if (asgn && isFloatShift(asgn)) {
     // Not with a doctor: the roster says Float (not a department)
-    doctorName = 'FLOAT';
+    doctorName = 'Float';
   } else if (asgn?.doctorId) {
     const d = doctorMap.get(asgn.doctorId);
-    doctorName = d ? d.fullName.replace(/^dr\.?\s+/i, '') : '';
+    doctorName = d ? withoutDr(d.fullName) : '';
   } else if (asgn?.clinicalRoleId) {
     const r = roleMap.get(asgn.clinicalRoleId);
     if (asgn.clinicalRoleId === 'role-float') {
-      doctorName = 'FLOAT';
+      doctorName = 'Float';
     } else {
       doctorName = r ? r.acronym : isNurseClinic ? 'NC' : 'ROLE';
     }
@@ -184,8 +228,10 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
   } else if (isNurseClinic) {
     doctorName = 'NC';
   } else if (isFloatPool) {
-    doctorName = 'FLOAT';
+    doctorName = 'Float';
   }
+  // The cell shows the doctor's short name; the tooltip and the spoken name say who in full.
+  const shownName = asgn?.doctorId && !isFloatShift(asgn) ? lookups.doctorShort.get(asgn.doctorId) || doctorName : doctorName;
 
   const docObj = asgn?.doctorId ? doctorMap.get(asgn.doctorId) : undefined;
   const docPref = asgn?.doctorId ? nurse.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === asgn.doctorId) : undefined;
@@ -236,17 +282,6 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     }
   }
 
-  const rankBadge = mismatch
-    ? '!'
-    : docPref
-    ? `#${docPref.rank}`
-    : specPref
-    ? `#${specPref.rank}`
-    : isFloatPool
-    ? null
-    : asgn?.doctorId
-    ? 'Pool'
-    : null;
 
   const pairingDesc = isNurseClinic
     ? 'Nurse Clinic (no doctor)'
@@ -286,26 +321,50 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
   const title = `${contentWords}${wishWords ? `\n${wishWords}` : ''}${
     problems.length > 0 ? `\nProblems:\n${problems.map((m) => `• ${m}`).join('\n')}` : ''
   }`;
-  const ariaLabel = `${nurse.fullName}, ${formatDate(dateStr)}${dayWords}: ${contentWords.replace(/\n/g, '. ')}${
-    wishWords ? `. ${wishWords.replace(/\n/g, '. ')}` : ''
-  }${problems.length > 0 ? `. ${problems.length === 1 ? 'Problem' : 'Problems'}: ${problems.join('. ')}` : ''}`;
+  // Spoken: what the cell shows, the rest of it, whose day it is, then its marks.
+  const content = leave ? 'leave' : lock?.mode === 'OFF' ? 'off' : asgn ? 'shift' : pendingLeave ? 'pendingLeave' : 'empty';
+  const rankBadge = mismatch ? '!' : docPref ? `#${docPref.rank}` : specPref ? `#${specPref.rank}` : isFloatPool ? null : asgn?.doctorId ? 'Pool' : null;
+  const leaveCredit = leave ? leaveCreditOnDate(leave, leaveType, dateStr) : 0;
+  const leaveHours = leave
+    ? `${fmtHours(leaveCredit)} ${leaveCredit === 1 ? 'hour' : 'hours'} counted on this day${leave.dayHours?.[dateStr] !== undefined ? ' (set for this day)' : ''}`
+    : '';
+  const shown =
+    content === 'leave'
+      ? `${leaveType?.acronym || 'L'}, ${leaveType?.name || 'Leave'}: ${leaveHours}`
+      : content === 'off'
+      ? 'Day off'
+      : content === 'shift'
+      ? `${[shownName, rankBadge, duty?.startTime].filter(Boolean).join(' ')}${duty ? ` to ${duty.endTime}, ${duty.name} shift` : ', shift'}${duty?.isPriority ? ', used first' : ''}`
+      : content === 'pendingLeave'
+      ? `${pendingLeaveType?.acronym || 'L'}, leave asked for, waiting for approval`
+      : 'No shift';
+  const marks = [
+    content === 'shift' ? pairingDesc : '',
+    content === 'shift' ? `${SOURCE_SPOKEN[asgn!.source] || asgn!.source}${lock && asgn!.source !== 'LOCK' ? ', pinned' : ''}` : lock ? 'Pinned' : '',
+    mismatch ? mismatchReason.replace(/\.$/, '') : '',
+    ...wishWords.split('\n'),
+    problems.length > 0 ? `${problemsMustFix ? 'Must fix' : 'Check'}: ${problems.join('. ')}` : '',
+  ].filter(Boolean);
+  const ariaLabel = `${shown}. ${nurse.fullName}, ${formatDayDate(dateStr)}${dayWords}${marks.length ? `. ${marks.join('. ')}` : ''}`;
+  const color = leave ? leaveType?.color || '#f59e0b' : asgn ? duty?.color || '#3b82f6' : '';
 
   return {
     key: `${nurse.id}|${dateStr}`,
     nurseId: nurse.id,
     date: dateStr,
-    content: leave ? 'leave' : lock?.mode === 'OFF' ? 'off' : asgn ? 'shift' : pendingLeave ? 'pendingLeave' : 'empty',
+    content,
     pinned: !!lock,
     leaveAcronym: leave ? leaveType?.acronym || 'L' : '',
-    leaveColor: leave ? leaveType?.color || '#f59e0b' : '',
     dutyAcronym: asgn ? duty?.acronym || 'D' : '',
-    dutyColor: duty?.color,
+    startTime: asgn && !leave && lock?.mode !== 'OFF' ? duty?.startTime || '' : '',
+    color,
+    fill: color ? tint(color, 0.14) : '',
     dutyPriority: !!duty?.isPriority,
     handChange: asgn?.source === 'MANUAL',
     isNurseClinic,
     isFloatPool,
     mismatch,
-    label: doctorName,
+    label: shownName,
     rankBadge,
     pendingLeaveColor: pendingLeave ? pendingLeaveType?.color || '#f59e0b' : '',
     pendingLeaveAcronym: pendingLeave ? pendingLeaveType?.acronym || 'L' : '',
@@ -315,6 +374,7 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     requestMismatch: !!requestWords?.mismatch,
     requestPending: !!requestWords?.pending,
     hasProblems: problems.length > 0,
+    problemKind: problems.length === 0 ? 'none' : problemsMustFix ? 'must' : 'check',
     isToday,
     dayShade: isToday ? 'bg-indigo-50/70' : holiday ? 'bg-cyan-50' : isWeekend ? 'bg-slate-100' : '',
     title,

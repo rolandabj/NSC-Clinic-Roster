@@ -21,7 +21,8 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
 
   const saved = () =>
     page.evaluate(() => [...window.__repo.col('assignments').values()].map((a) => `${a.nurseId}|${a.date}|${a.dutyWindowId}|${a.doctorId || a.clinicalRoleId || a.specialtyId || ''}`).sort());
-  const cellText = (key) => page.locator(`[data-cell="${key}"]`).innerText();
+  // What a cell holds: its spoken name up to the nurse ("No shift" for an empty cell).
+  const cellText = (key) => page.locator(`[data-cell="${key}"]`).getAttribute('aria-label').then((l) => (l.startsWith('No shift') ? '—' : l));
   /** Every cell with a saved shift shows one, and every empty cell has none saved. */
   const gridMatchesSaved = () =>
     page.evaluate(() => {
@@ -29,9 +30,10 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
       const wrong = [];
       for (const td of document.querySelectorAll('td[data-cell]')) {
         const key = td.getAttribute('data-cell');
-        const empty = td.innerText.trim() === '—';
+        const label = td.getAttribute('aria-label') || '';
+        const empty = label.startsWith('No shift');
         if (empty && shifts.has(key)) wrong.push(`${key} shows nothing but has a saved shift`);
-        if (!empty && / shift /.test(td.getAttribute('aria-label') || '') && !shifts.has(key)) wrong.push(`${key} shows a shift that is not saved`);
+        if (!empty && /\bshift\b/.test(label.split('.')[0]) && !shifts.has(key)) wrong.push(`${key} shows a shift that is not saved`);
       }
       return wrong;
     });
@@ -115,7 +117,7 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   await page.evaluate(() => {
     window.__repo.failWrites = true;
   });
-  const emptyCell = await page.evaluate(() => [...document.querySelectorAll('td[data-cell]')].find((td) => td.innerText.trim() === '—')?.getAttribute('data-cell'));
+  const emptyCell = await page.evaluate(() => [...document.querySelectorAll('td[data-cell]')].find((td) => td.getAttribute('aria-label').startsWith('No shift'))?.getAttribute('data-cell'));
   await page.click(`[data-cell="${emptyCell}"]`);
   await page.getByRole('dialog', { name: /^Change / }).getByRole('group', { name: 'Work' }).getByRole('button').first().click();
   await page.getByRole('button', { name: 'Retry now' }).waitFor({ timeout: 10000 }).catch(() => {});
