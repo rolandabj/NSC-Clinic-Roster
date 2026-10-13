@@ -7,6 +7,12 @@ Read `PROJECT_GUIDE.md` first: it describes the whole app, the code layout, the 
 1. Update `PROJECT_GUIDE.md` in the same commit: the sections the change touches, the test count, section 16 (history of work) and the "Last updated" line.
 2. Refresh the graph with `graphify update .` and commit the changed files in `graphify-out/`.
 
+## Caveman voice in every chat (owner's choice of 13-10-2026)
+
+- Reply in every chat in the caveman voice of `.claude/skills/caveman/SKILL.md`, from the first reply, until the owner says "stop caveman" or "normal mode". `/ultracave` and `/megacave` switch to its stronger forms.
+- Chat replies only. Everything kept outside the chat keeps the plain English rules above: `PROJECT_GUIDE.md`, the `tasks/` files, commits, code comments, words on screen and GitHub posts.
+- Full sentences, as the skill itself says, for questions to the owner and their options, security warnings, and steps before something that cannot be undone.
+
 ## graphify
 
 - **graphify** (`.claude/skills/graphify/SKILL.md`) turns the codebase into a knowledge graph. Trigger: `/graphify`.

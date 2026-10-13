@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791880290.2583613,
-    "seen": 1791880298.3227727,
-    "ast_hash": "b6a3972f7769083a4c2c446b1fcd5643",
+    "mtime": 1791880674.0918791,
+    "seen": 1791880694.8014832,
+    "ast_hash": "30c54fdb9fba768c0578662032bc9043",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1056,9 +1056,9 @@
     "semantic_hash": ""
   },
   "CLAUDE.md": {
-    "mtime": 1791362587.9134476,
-    "seen": 1791365225.1342087,
-    "ast_hash": "8e278cdfbc6c9f969f7cadf3faa20473",
+    "mtime": 1791880658.2753658,
+    "seen": 1791880694.801482,
+    "ast_hash": "fd6a48c8fabbb0ca4295eed95d30cc61",
     "semantic_hash": ""
   },
   "src/services/engine/floatShift.ts": {
@@ -1863,6 +1863,24 @@
     "mtime": 1791880236.3358355,
     "seen": 1791880298.3227022,
     "ast_hash": "dd4da04bb0e2f717eeeeb5a0f9b8f6b9",
+    "semantic_hash": ""
+  },
+  ".claude/skills/caveman/SKILL.md": {
+    "mtime": 1791880658.2442718,
+    "seen": 1791880694.8014398,
+    "ast_hash": "56b2f9db32197569a4a53b69bd8e859d",
+    "semantic_hash": ""
+  },
+  ".claude/skills/megacave/SKILL.md": {
+    "mtime": 1791880658.2535665,
+    "seen": 1791880694.8014681,
+    "ast_hash": "cb6477c90966081d6ae7f484b5c8e096",
+    "semantic_hash": ""
+  },
+  ".claude/skills/ultracave/SKILL.md": {
+    "mtime": 1791880658.2485716,
+    "seen": 1791880694.801479,
+    "ast_hash": "498d6580573e1d7b95288cf4300349e2",
     "semantic_hash": ""
   }
 }
