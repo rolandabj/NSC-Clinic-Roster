@@ -40,7 +40,7 @@ Main moves only when the owner says "push to main".
 - [x] Derived data once per change; compare dialog only while open (`grid/GridRow.tsx`, `grid/dayTotals.ts`)
 - [x] Only changed lists saved and fingerprinted (`changedLists`, `planSync`)
 - [x] Checker off the typing path (`checkScheduler.ts`; about 60 ms a check, so no worker)
-- [ ] No extra renders; grid kept mounted
+- [x] No extra renders; grid kept mounted (`withProblemCount`, `usePresence`, memoized grid, `useLatestCallback`)
 - [ ] Split SchedulesView and WorkbookGrid
 - [ ] Checkpoint 3 with timings against the targets
 

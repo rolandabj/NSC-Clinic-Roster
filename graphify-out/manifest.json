@@ -108,9 +108,9 @@
     "semantic_hash": "5e21b5b122c895dce73f2e1445074004"
   },
   "src/components/layout/AppShell.tsx": {
-    "mtime": 1791878011.1478653,
-    "seen": 1791878701.911719,
-    "ast_hash": "1959a9ba82e0a55eafb00d94b6906fcf",
+    "mtime": 1791882652.9497964,
+    "seen": 1791882923.1798244,
+    "ast_hash": "b1ec100f085241b39dda887ca3be8eba",
     "semantic_hash": ""
   },
   "src/components/layout/LocalModeBanner.tsx": {
@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791881788.9920838,
-    "seen": 1791882001.4074812,
-    "ast_hash": "1ff89abc4f7ecd0b5acf0b0a5c1297cd",
+    "mtime": 1791882983.8038173,
+    "seen": 1791883005.6363103,
+    "ast_hash": "2d86abdaaef6b2b1dde880efcb4af034",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -426,9 +426,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/WorkbookGrid.tsx": {
-    "mtime": 1791880236.3283174,
-    "seen": 1791880298.3225572,
-    "ast_hash": "908b36fae3b09dfb400c791788293b80",
+    "mtime": 1791882983.8094876,
+    "seen": 1791883005.6363406,
+    "ast_hash": "21615177102d576928deac43adadfd02",
     "semantic_hash": ""
   },
   "src/main.tsx": {
@@ -828,9 +828,9 @@
     "semantic_hash": ""
   },
   "src/services/dashboard/problemCount.ts": {
-    "mtime": 1791878011.1678653,
-    "seen": 1791878701.9118483,
-    "ast_hash": "d51626ea399f08cb5fb528b701821d73",
+    "mtime": 1791882652.952839,
+    "seen": 1791882923.1799572,
+    "ast_hash": "425cb315911b8104f4ef5b326f5d8467",
     "semantic_hash": ""
   },
   "src/services/engine/explainCell.ts": {
@@ -870,15 +870,15 @@
     "semantic_hash": ""
   },
   "src/services/presence/presenceRules.ts": {
-    "mtime": 1791362587.9763222,
-    "seen": 1791365225.1340914,
-    "ast_hash": "6053bda37b91d491d8d96a037d932af5",
+    "mtime": 1791882983.8102832,
+    "seen": 1791883005.6364043,
+    "ast_hash": "181a05f07e57e22966e215033f226834",
     "semantic_hash": ""
   },
   "src/services/presence/usePresence.ts": {
-    "mtime": 1791362587.977055,
-    "seen": 1791365225.1340923,
-    "ast_hash": "4ad3ebd0c15f1d9121f5022c9a1ce091",
+    "mtime": 1791882652.9535866,
+    "seen": 1791882923.180043,
+    "ast_hash": "1db5aa68593cab05fc3dbc3c14a61c25",
     "semantic_hash": ""
   },
   "src/services/publish/nurseRosterService.ts": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791881993.7100196,
-    "seen": 1791882001.4078069,
-    "ast_hash": "f5c5795ccda3ceb14822c174343b1615",
+    "mtime": 1791882915.177816,
+    "seen": 1791882923.1802232,
+    "ast_hash": "515ead6439f64cca6d55f0f803ff26f7",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1578,15 +1578,15 @@
     "semantic_hash": ""
   },
   "tasks/plan.md": {
-    "mtime": 1791881993.7113843,
-    "seen": 1791882001.4078116,
-    "ast_hash": "dd33298990af0117c24a190331b990f4",
+    "mtime": 1791882915.179178,
+    "seen": 1791882923.1802275,
+    "ast_hash": "6bea46d3e291371ba5ffd459f82a523e",
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791881993.7109404,
-    "seen": 1791882001.4078138,
-    "ast_hash": "7650e1a66396e0bd42ca4ae5f75a7ff1",
+    "mtime": 1791882915.1785676,
+    "seen": 1791882923.18023,
+    "ast_hash": "aa6b030cceac046820d94b3b99a1aec3",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1905,6 +1905,18 @@
     "mtime": 1791881789.00009,
     "seen": 1791882001.4077046,
     "ast_hash": "bd98ab03a0208fce67080b36251aa1cb",
+    "semantic_hash": ""
+  },
+  "src/components/common/useLatestCallback.ts": {
+    "mtime": 1791882652.9579008,
+    "seen": 1791882923.1798177,
+    "ast_hash": "73caa7846dadf1a0fee6a796c084499c",
+    "semantic_hash": ""
+  },
+  "tests/unit/fewerRedraws.test.ts": {
+    "mtime": 1791882652.9579008,
+    "seen": 1791882923.1801386,
+    "ast_hash": "69177b6692588013494dbac5678f09dd",
     "semantic_hash": ""
   }
 }

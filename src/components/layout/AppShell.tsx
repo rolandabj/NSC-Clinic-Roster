@@ -29,7 +29,7 @@ import { LoadErrorBoundary } from '../common/LoadErrorBoundary';
 import { chooseScheduleToOpen } from '../../services/schedule/openSchedule';
 import { todayIso } from '../../services/publish/nurseRosterService';
 import { formatDateRange } from '../../utils/dateUtils';
-import type { ProblemCount } from '../../services/dashboard/problemCount';
+import { withProblemCount, type ProblemCount } from '../../services/dashboard/problemCount';
 import { AppContext, AppContextValue } from '../common/AppContext';
 
 // Screens load on demand, so the first page does not download the whole app.
@@ -184,14 +184,10 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
 
   // The open roster's problem count, for the top bar and the dashboard. The roster's name,
   // dates and count always change together.
+  // The frame stays the same object when the count did not change (the roster screen reports
+  // after every check), so the screens under it are not drawn again.
   const reportProblems = useCallback((detail: ProblemCount) => {
-    setClinicContext((prev) => ({
-      ...prev,
-      warningCount: detail.mustFix + detail.toCheck,
-      activeScheduleId: detail.scheduleId || null,
-      activeScheduleName: detail.scheduleId ? detail.name : '',
-      activeSchedulePeriod: detail.scheduleId ? formatDateRange(detail.startDate, detail.endDate) : '',
-    }));
+    setClinicContext((prev) => withProblemCount(prev, detail));
   }, []);
 
   // All clinic data was deleted: no roster is open, and screens load their data again.

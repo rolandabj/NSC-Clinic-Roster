@@ -8,21 +8,27 @@
  * this roster are listened to.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getRepository } from '../repository';
 import { authService } from '../auth/authService';
 import { PresenceRecord } from '../../types';
-import { othersOnRoster } from './presenceRules';
+import { othersOnRoster, samePeople } from './presenceRules';
 
 const BEAT_MS = 60 * 1000;
 // One id per browser tab, so two tabs don't overwrite each other's record.
 const TAB_ID = Math.random().toString(36).slice(2, 12);
 
 export function usePresence(scheduleId: string | null): PresenceRecord[] {
-  const [records, setRecords] = useState<PresenceRecord[]>([]);
-  const [now, setNow] = useState(Date.now());
+  // Only the list of people shown is state: a heartbeat (mine every minute, or another
+  // planner's) changes nothing on screen, so it does not draw the roster screen again.
+  const [others, setOthers] = useState<PresenceRecord[]>([]);
+  const recordsRef = useRef<PresenceRecord[]>([]);
   const user = authService.getCurrentUser();
   const uid = user?.uid;
+  const refresh = () => {
+    const next = othersOnRoster(recordsRef.current, uid, scheduleId, Date.now());
+    setOthers((prev) => (samePeople(prev, next) ? prev : next));
+  };
 
   // My heartbeat, while this tab is visible.
   useEffect(() => {
@@ -30,7 +36,7 @@ export function usePresence(scheduleId: string | null): PresenceRecord[] {
     const repo = getRepository();
     const id = `${uid}_${TAB_ID}`;
     const beat = () => {
-      setNow(Date.now());
+      refresh(); // records that went stale drop off the list
       if (document.hidden) return;
       const record: PresenceRecord = {
         id,
@@ -62,15 +68,19 @@ export function usePresence(scheduleId: string | null): PresenceRecord[] {
   // Everyone else's records for this roster.
   useEffect(() => {
     if (!uid || !scheduleId) {
-      setRecords([]);
+      recordsRef.current = [];
+      refresh();
       return;
     }
-    return getRepository().subscribe('presence', (items) => setRecords(items as PresenceRecord[]), {
+    return getRepository().subscribe('presence', (items) => {
+      recordsRef.current = items as PresenceRecord[];
+      refresh();
+    }, {
       field: 'scheduleId',
       operator: '==',
       value: scheduleId,
     });
   }, [uid, scheduleId]);
 
-  return othersOnRoster(records, uid, scheduleId, now);
+  return others;
 }

@@ -22,3 +22,11 @@ export function othersOnRoster(records: PresenceRecord[], myUid: string | undefi
   }
   return [...byPerson.values()];
 }
+
+/**
+ * True when two "also here" lists show the same people (same user ids, names and emails, in
+ * order). A heartbeat only refreshes a record's time, which nobody sees, so it changes nothing.
+ */
+export function samePeople(a: PresenceRecord[], b: PresenceRecord[]): boolean {
+  return a.length === b.length && a.every((p, i) => p.uid === b[i].uid && p.name === b[i].name && p.email === b[i].email);
+}

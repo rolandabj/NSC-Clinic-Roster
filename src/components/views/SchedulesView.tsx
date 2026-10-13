@@ -42,6 +42,7 @@ import { countChangedCells } from '../../services/dashboard/dashboardSummary';
 import { useAppContext } from '../common/AppContext';
 import { WhoCanCover } from '../workbook/WhoCanCover';
 import { changedLists } from '../../services/schedule/changedLists';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { HolidayDayOffPicker } from '../workbook/HolidayDayOffPicker';
 import { nurseClinicRoleOf, canBeFreeNurse } from '../../services/engine/clinicModel';
 import { AddressChange, ClinicContextState } from '../../types/navigation';
@@ -230,6 +231,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [selectedBlockIndex, setSelectedBlockIndex] = useState(0);
   type Sheet = 'roster' | 'doctors' | 'coverage' | 'warnings' | 'leave' | 'hours' | 'legend';
   const [activeTab, setActiveTab] = useState<Sheet>(() => (rosterSheetFromAddress(address?.sheet) as Sheet) || 'roster');
+  // The grid stays mounted (hidden) once it has been shown, so coming back to it does not
+  // build the grid again, and keeps its zoom and selection.
+  const gridShownRef = useRef(false);
+  if (activeTab === 'roster') gridShownRef.current = true;
 
   // Unpin a day dialog
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
@@ -764,6 +769,40 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const handleAssignmentsChange = (next: Assignment[]) => applyEdit({ assignments: next });
   const handleLocksChange = (next: LockEntry[]) => applyEdit({ locks: next });
   const handleLeaveEntriesChange = (next: LeaveEntry[]) => applyEdit({ leaveEntries: next });
+
+  // The grid's handlers stay the same functions for the life of the screen, so the memoized
+  // grid is not drawn again when this screen draws for something else (saving, presence,
+  // fill progress, the problems panel).
+  const onGridBlockChange = useLatestCallback((idx: number) => setSelectedBlockIndex(idx));
+  const onGridAssignmentsChange = useLatestCallback(handleAssignmentsChange);
+  const onGridLocksChange = useLatestCallback(handleLocksChange);
+  const onGridLeaveEntriesChange = useLatestCallback(handleLeaveEntriesChange);
+  const onGridCellEdit = useLatestCallback((edit: { assignments: Assignment[]; locks: LockEntry[]; leaveEntries: LeaveEntry[] }) => applyEdit(edit));
+  const onGridNavigateTab = useLatestCallback((tab: 'roster' | 'doctors' | 'coverage' | 'warnings' | 'leave' | 'legend') => {
+    // The grid's problem links open the side panel instead of leaving the grid.
+    if (tab === 'warnings') setIsProblemsOpen(true);
+    else setActiveTab(tab);
+  });
+  const onGridToggleExpandDays = useLatestCallback(() => setIsAllDaysExpanded(!isAllDaysExpanded));
+  const onGridToggleExpandView = useLatestCallback(() => setIsExpandedView(!isExpandedView));
+  const onGridOpenLockOverride = useLatestCallback((lock: LockEntry) => {
+    setActiveLockToOverride(lock);
+    setIsOverrideModalOpen(true);
+  });
+  const gridHandlers = useMemo(
+    () => ({
+      onBlockChange: onGridBlockChange,
+      onAssignmentsChange: onGridAssignmentsChange,
+      onLocksChange: onGridLocksChange,
+      onLeaveEntriesChange: onGridLeaveEntriesChange,
+      onCellEdit: onGridCellEdit,
+      onNavigateTab: onGridNavigateTab,
+      onToggleExpandDays: onGridToggleExpandDays,
+      onToggleExpandView: onGridToggleExpandView,
+      onOpenLockOverrideModal: onGridOpenLockOverride,
+    }),
+    []
+  );
 
   const handleSessionsChange = (nextSessions: DoctorSession[]) => {
     setSessions(nextSessions);
@@ -2150,7 +2189,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           </div>
         ) : (
           <>
-            {activeTab === 'roster' && (
+            {/* Kept mounted (hidden) once shown, so zoom, selection and scroll are kept while another sheet is open. */}
+            {(activeTab === 'roster' || gridShownRef.current) && (
               <WorkbookGrid
                 hoursHistory={hoursHistory}
                 workingHoursPeriods={workingHoursPeriods}
@@ -2169,28 +2209,22 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 holidays={holidays}
                 validationReport={validationReport}
                 currentBlockIndex={selectedBlockIndex}
-                onBlockChange={(idx) => setSelectedBlockIndex(idx)}
-                onAssignmentsChange={handleAssignmentsChange}
-                onLocksChange={handleLocksChange}
-                onLeaveEntriesChange={handleLeaveEntriesChange}
-                onCellEdit={(edit) => applyEdit(edit)}
+                onBlockChange={gridHandlers.onBlockChange}
+                onAssignmentsChange={gridHandlers.onAssignmentsChange}
+                onLocksChange={gridHandlers.onLocksChange}
+                onLeaveEntriesChange={gridHandlers.onLeaveEntriesChange}
+                onCellEdit={gridHandlers.onCellEdit}
                 rules={rules}
                 priorAssignments={clinicSetupRef.current?.priorAssignments}
                 availabilityRequests={availabilityRequests}
                 focusRequest={focusRequest}
-                onNavigateTab={(tab) => {
-                  // The grid's problem links open the side panel instead of leaving the grid.
-                  if (tab === 'warnings') setIsProblemsOpen(true);
-                  else setActiveTab(tab);
-                }}
+                onNavigateTab={gridHandlers.onNavigateTab}
+                onOpenLockOverrideModal={gridHandlers.onOpenLockOverrideModal}
+                isActive={activeTab === 'roster'}
                 isAllDaysExpanded={isAllDaysExpanded}
-                onToggleExpandDays={() => setIsAllDaysExpanded(!isAllDaysExpanded)}
+                onToggleExpandDays={gridHandlers.onToggleExpandDays}
                 isExpandedView={isExpandedView}
-                onToggleExpandView={() => setIsExpandedView(!isExpandedView)}
-                onOpenLockOverrideModal={(lock) => {
-                  setActiveLockToOverride(lock);
-                  setIsOverrideModalOpen(true);
-                }}
+                onToggleExpandView={gridHandlers.onToggleExpandView}
               />
             )}
 

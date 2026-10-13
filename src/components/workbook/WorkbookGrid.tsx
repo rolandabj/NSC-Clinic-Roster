@@ -1,6 +1,6 @@
 import type { HoursHistory } from '../../services/hours/hoursBalance';
 import { isWeekendDay } from '../../utils/weekend';
-import React, { useState, useEffect, useLayoutEffect, useRef, useId, useMemo, useSyncExternalStore } from 'react';
+import React, { memo, useState, useEffect, useLayoutEffect, useRef, useId, useMemo, useSyncExternalStore } from 'react';
 import {
   FileSpreadsheet,
   Undo2,
@@ -116,6 +116,11 @@ interface WorkbookGridProps {
   focusRequest?: { nurseId: string; date: string; nonce: number };
   /** The nurses' requests for this roster (a day off or a shift), shown as small marks in the cells. */
   availabilityRequests?: AvailabilityRequest[];
+  /**
+   * False while another sheet is open: the grid stays mounted (zoom, selection and scroll are
+   * kept, and coming back does not build it again) but is hidden and takes no keys.
+   */
+  isActive?: boolean;
 }
 
 /** Everything one cell edit needs, as the big editor collects it. */
@@ -164,7 +169,7 @@ const SelectionView: React.FC<{ selection: GridSelection; render: (state: GridSe
   return <>{render(state)}</>;
 };
 
-export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
+const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   workingHoursPeriods = [],
   hoursHistory,
   schedule,
@@ -197,6 +202,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   onToggleExpandView,
   focusRequest,
   availabilityRequests = [],
+  isActive = true,
 }) => {
   // Navigation & Zoom (Supports 75% compact fit, 90%, 100%, 115%)
   const [zoomLevel, setZoomLevel] = useState<75 | 90 | 100 | 115>(100);
@@ -678,7 +684,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   // the focus (for example after a dialog closed), as before. One listener for the life of
   // the grid, reading the latest state through a ref, instead of one added after every render.
   const handleGridKey = (e: KeyboardEvent | React.KeyboardEvent) => {
-    if (isEditorOpen) return;
+    if (!isActive || isEditorOpen) return;
     const { selected: selectedCell, popup } = selection.getState();
     if (!selectedCell) return;
     // A dialog (e.g. the clear cell confirmation) is open: its keys are its own.
@@ -1285,7 +1291,7 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   const cellFontSizeClass = zoomLevel === 75 ? 'text-[10px]' : zoomLevel === 90 ? 'text-[10px]' : zoomLevel === 115 ? 'text-xs' : 'text-[11px]';
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-slate-100 font-sans select-none">
+    <div className={`flex flex-col h-full overflow-hidden bg-slate-100 font-sans select-none ${isActive ? '' : 'hidden'}`}>
       {/* 6.1 Shared Toolbar ("Ribbon-Lite", Row 2: Edit Ops & Block Nav) */}
       <div className="bg-white border-b border-slate-200 px-4 py-1.5 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0 z-20">
         <div className="flex items-center gap-2">
@@ -2558,3 +2564,9 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     );
   }
 };
+
+/**
+ * The roster grid, drawn again only when its own props change: the roster screen passes
+ * stable handlers, so its other updates (saving, presence, fill progress) leave the grid alone.
+ */
+export const WorkbookGrid = memo(WorkbookGridView);

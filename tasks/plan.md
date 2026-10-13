@@ -460,3 +460,5 @@ After slice 5 (7 runs). `grid-timing.cjs` now also measures the first cells in t
 | Deleting a shift, in the page | 88 ms | 88 ms | under 100 ms |
 
 The longest task while loading is the grid's first drawing of its 60 rows, not the check.
+
+After slice 6 (7 runs, in the page): first cells 482 ms, longest blocking task while loading 281 ms, popup 47 ms, arrow key 28 ms, deleting a shift 93 ms. Grid redraws: one edit 4 to 2, a fill 8 to 2, 65 seconds idle 2 to 0. Back to the grid from another sheet: about 280 ms (300 to 390 ms before), with the zoom and the selection now kept; about 35 ms of it is the app's own work and the rest is the browser laying out and painting the grid's 12,000 elements, which fewer elements (Phase 4) would cut.
