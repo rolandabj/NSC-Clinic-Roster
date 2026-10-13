@@ -19,6 +19,8 @@ export interface TabItem {
   /** A number in a small pill after the label, such as the number of problems. */
   count?: number;
   countTone?: Tone;
+  /** Anything else shown after the label, such as the problem count with its icons. */
+  badge?: React.ReactNode;
 }
 
 /** Where a key moves from tab `index` of `count`, or null for keys the tabs do not use. */
@@ -45,8 +47,13 @@ export const Tabs: React.FC<{
   onChange: (id: string) => void;
   /** Keeps the ids of the tabs and panels apart when a screen has more than one row of tabs. */
   idPrefix: string;
+  /**
+   * For tabs that share one panel showing only the open sheet (the roster screen): the open
+   * tab names this panel, and the others name none, as their panels are not on the page.
+   */
+  panelId?: string;
   className?: string;
-}> = ({ label, tabs, value, onChange, idPrefix, className }) => {
+}> = ({ label, tabs, value, onChange, idPrefix, panelId, className }) => {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const index = Math.max(0, tabs.findIndex((t) => t.id === value));
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -70,7 +77,7 @@ export const Tabs: React.FC<{
             role="tab"
             id={`${idPrefix}-tab-${tab.id}`}
             aria-selected={selected}
-            aria-controls={`${idPrefix}-panel-${tab.id}`}
+            aria-controls={panelId ? (selected ? panelId : undefined) : `${idPrefix}-panel-${tab.id}`}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(tab.id)}
             className={cx(
@@ -79,6 +86,9 @@ export const Tabs: React.FC<{
             )}
           >
             {tab.label}
+            {/* A pause before the badge for screen readers ("Problems, 28 must fix"). */}
+            {tab.badge != null && <span className="sr-only">, </span>}
+            {tab.badge}
             {tab.count != null && (
               <span className={cx('rounded-full px-1.5 text-xs font-semibold tabular-nums', TONE_CLASSES[tab.countTone || 'neutral'])}>{tab.count}</span>
             )}

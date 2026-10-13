@@ -10,7 +10,6 @@ import {
   X,
   Shield,
   Save,
-  Star,
 } from 'lucide-react';
 import { PageLoading } from '../common/PageLoading';
 import { ProblemsPanel } from '../workbook/ProblemsPanel';
@@ -21,13 +20,12 @@ import { useAppContext } from '../common/AppContext';
 import { WhoCanCover } from '../workbook/WhoCanCover';
 import { useLatestCallback } from '../common/useLatestCallback';
 import { RosterSteps } from '../roster/RosterSteps';
-import { problemCountWords } from '../../services/dashboard/problemCount';
 import { FillDialog } from '../roster/FillDialog';
 import { RosterPicker } from '../roster/RosterPicker';
 import { RosterToolbar } from '../roster/RosterToolbar';
 import { useRosterChecks, type CheckInputs } from '../roster/useRosterChecks';
 import { useRosterEdits } from '../roster/useRosterEdits';
-import { RosterSheetTabs, type RosterSheet } from '../roster/RosterSheetTabs';
+import { RosterSheetTabs, ROSTER_SHEET_PANEL_ID, type RosterSheet } from '../roster/RosterSheetTabs';
 import { rosterSteps, type RosterStepAction } from '../roster/rosterSteps';
 import { HolidayDayOffPicker } from '../workbook/HolidayDayOffPicker';
 import { nurseClinicRoleOf, canBeFreeNurse } from '../../services/engine/clinicModel';
@@ -607,13 +605,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const onGridLocksChange = useLatestCallback(handleLocksChange);
   const onGridLeaveEntriesChange = useLatestCallback(handleLeaveEntriesChange);
   const onGridCellEdit = useLatestCallback((edit: { assignments: Assignment[]; locks: LockEntry[]; leaveEntries: LeaveEntry[] }) => applyEdit(edit));
-  const onGridNavigateTab = useLatestCallback((tab: 'roster' | 'doctors' | 'coverage' | 'warnings' | 'leave' | 'legend') => {
+  const onGridNavigateTab = useLatestCallback((tab: 'roster' | 'doctors' | 'coverage' | 'warnings' | 'leave') => {
     // The grid's problem links open the side panel instead of leaving the grid.
     if (tab === 'warnings') setIsProblemsOpen(true);
     else setActiveTab(tab);
   });
   const onGridToggleExpandDays = useLatestCallback(() => setIsAllDaysExpanded(!isAllDaysExpanded));
-  const onGridToggleExpandView = useLatestCallback(() => setIsExpandedView(!isExpandedView));
   const onGridOpenLockOverride = useLatestCallback((lock: LockEntry) => {
     setActiveLockToOverride(lock);
     setIsOverrideModalOpen(true);
@@ -627,7 +624,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       onCellEdit: onGridCellEdit,
       onNavigateTab: onGridNavigateTab,
       onToggleExpandDays: onGridToggleExpandDays,
-      onToggleExpandView: onGridToggleExpandView,
       onOpenLockOverrideModal: onGridOpenLockOverride,
     }),
     []
@@ -1613,7 +1609,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         canRedo={redoStack.length > 0}
         hasPublished={hasPublished}
         changedSincePublish={changedSincePublish}
-        isExpandedView={isExpandedView}
         onOpenPicker={() => {
           repo.list('schedules').then((schedList) => {
             const unique = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
@@ -1646,8 +1641,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           else if (item === 'share') setIsShareModalOpen(true);
           else if (item === 'fairness') setIsFairnessModalOpen(true);
           else if (item === 'templates') setIsTemplateModalOpen(true);
-          else if (item === 'swap') setIsSwapModalOpen(true);
-          else setIsExpandedView(!isExpandedView);
+          else setIsSwapModalOpen(true);
         }}
       />
 
@@ -1700,9 +1694,27 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           Hours balances are unavailable because saved rosters overlap. Resolve the rosters listed in Problems before filling or publishing. Current roster totals remain visible.
         </div>
       )}
-      {/* Main Viewport: Swappable Workbook Sheets */}
+      {/* Sheet tabs above the open sheet */}
+      {activeSchedule && (
+        <RosterSheetTabs
+          active={activeTab}
+          problems={{ mustFix: validationReport.errorCount, toCheck: validationReport.warnCount, notes: validationReport.infoCount }}
+          isFullScreen={isExpandedView}
+          onOpen={(sheet) => {
+            // A new sheet is a step Back returns from.
+            if (sheet !== activeTab) onAddressChange?.({ roster: activeSchedule.id, sheet: rosterSheetToAddress(sheet) }, 'push');
+            setActiveTab(sheet);
+          }}
+          onToggleFullScreen={() => setIsExpandedView(!isExpandedView)}
+        />
+      )}
+
+      {/* The open sheet, with the Problems panel beside it */}
       <div className="flex-1 overflow-hidden relative flex">
-        <div className="flex-1 min-w-0 overflow-hidden relative">
+        <div
+          {...(activeSchedule ? { id: ROSTER_SHEET_PANEL_ID, role: 'tabpanel', 'aria-labelledby': `sheet-tab-${activeTab}` } : {})}
+          className="flex-1 min-w-0 overflow-hidden relative"
+        >
         {!activeSchedule && isFirstLoad && !loadError ? (
           <PageLoading label="Loading the roster…" />
         ) : !activeSchedule ? (
@@ -1764,8 +1776,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 isActive={activeTab === 'roster'}
                 isAllDaysExpanded={isAllDaysExpanded}
                 onToggleExpandDays={gridHandlers.onToggleExpandDays}
-                isExpandedView={isExpandedView}
-                onToggleExpandView={gridHandlers.onToggleExpandView}
               />
             )}
 
@@ -1835,52 +1845,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
               />
             )}
 
-            {activeTab === 'legend' && (
-              <div className="p-6 max-w-4xl mx-auto space-y-4 text-xs">
-                <h2 className="text-base font-bold text-slate-800">
-                  Key: shift and leave codes
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-white border border-slate-200 rounded space-y-2">
-                    <span className="font-semibold text-slate-700 block">Shifts</span>
-                    {dutyWindows.map((dw) => (
-                      <div key={dw.id} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-white px-2 py-0.5 rounded font-mono" style={{ backgroundColor: dw.color }}>
-                            {dw.acronym}
-                          </span>
-                          <span className="font-medium text-slate-800">{dw.name}</span>
-                          {dw.isPriority ? (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                              <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
-                              Filled first
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-slate-500 bg-slate-100 px-1 py-0.5 rounded border border-slate-200">
-                              Standard
-                            </span>
-                          )}
-                        </div>
-                        <span className="font-mono text-slate-500">{dw.startTime}–{dw.endTime}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="p-4 bg-white border border-slate-200 rounded space-y-2">
-                    <span className="font-semibold text-slate-700 block">Leave types (hours counted per day)</span>
-                    {leaveTypes.map((lt) => (
-                      <div key={lt.id} className="flex items-center justify-between">
-                        <span className="font-bold text-white px-2 py-0.5 rounded font-mono" style={{ backgroundColor: lt.color }}>
-                          {lt.acronym}
-                        </span>
-                        <span className="font-medium text-slate-800">{lt.name}</span>
-                        <span className="font-mono text-slate-500">{typeof lt.creditedHours === 'number' ? `${lt.creditedHours} h` : '8 h'}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
           </>
         )}
         </div>
@@ -1934,17 +1898,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           />
         )}
       </div>
-
-      {/* Sheet tabs along the bottom */}
-      <RosterSheetTabs
-        active={activeTab}
-        problemWords={problemCountWords({ mustFix: validationReport.errorCount, toCheck: validationReport.warnCount, notes: validationReport.infoCount })}
-        onOpen={(sheet) => {
-          // A new sheet is a step Back returns from.
-          if (sheet !== activeTab) onAddressChange?.({ roster: activeSchedule?.id, sheet: rosterSheetToAddress(sheet) }, 'push');
-          setActiveTab(sheet);
-        }}
-      />
 
       {/* --- SAVE VERSION WITH NOTE MODAL --- */}
       {isSaveModalOpen && (

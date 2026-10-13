@@ -8,8 +8,6 @@ import {
   FolderOpen,
   History,
   Layers,
-  Maximize2,
-  Minimize2,
   MoreHorizontal,
   Plus,
   Redo2,
@@ -28,7 +26,7 @@ import { MenuButton } from '../common/MenuButton';
 import { formatDate } from '../../utils/dateUtils';
 
 /** The entries of the toolbar's More menu. */
-export type RosterMenuItem = 'new' | 'copy' | 'backups' | 'compare' | 'export' | 'share' | 'fairness' | 'templates' | 'swap' | 'fullscreen';
+export type RosterMenuItem = 'new' | 'copy' | 'backups' | 'compare' | 'export' | 'share' | 'fairness' | 'templates' | 'swap';
 
 interface RosterToolbarProps {
   activeSchedule: Schedule | null;
@@ -48,7 +46,6 @@ interface RosterToolbarProps {
   hasPublished: boolean;
   /** Cells that differ from the last published version. */
   changedSincePublish: number;
-  isExpandedView: boolean;
   onOpenPicker: () => void;
   onReload: () => void;
   onRetry: () => void;
@@ -73,7 +70,6 @@ export const RosterToolbar: React.FC<RosterToolbarProps> = ({
   canRedo,
   hasPublished,
   changedSincePublish,
-  isExpandedView,
   onOpenPicker,
   onReload,
   onRetry,
@@ -302,13 +298,6 @@ export const RosterToolbar: React.FC<RosterToolbarProps> = ({
             onSelect: () => onMenu('templates'),
           },
           { label: 'Swap two nurses’ shifts…', icon: <ArrowLeftRight className="w-3.5 h-3.5 text-slate-600" />, disabled: !activeSchedule, onSelect: () => onMenu('swap') },
-          {
-            label: isExpandedView ? 'Leave full screen' : 'Full screen',
-            hint: isExpandedView ? 'Or press Esc' : undefined,
-            icon: isExpandedView ? <Minimize2 className="w-3.5 h-3.5 text-indigo-600" /> : <Maximize2 className="w-3.5 h-3.5 text-indigo-600" />,
-            separatorBefore: true,
-            onSelect: () => onMenu('fullscreen'),
-          },
         ]}
       />
     </div>

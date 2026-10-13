@@ -50,7 +50,6 @@ const ROSTER_SHEETS: Record<string, string> = {
   warnings: 'problems',
   leave: 'leave',
   hours: 'hours',
-  legend: 'key',
 };
 
 export function rosterSheetToAddress(sheet: string): string | undefined {

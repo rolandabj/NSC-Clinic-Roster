@@ -2,20 +2,26 @@ import React from 'react';
 import { Check, Clock, Edit2, Lock, Star, Stethoscope, Users, X } from 'lucide-react';
 import type { DutyWindow, LeaveType } from '../../../types';
 
-/** The grid's legend drawer: what the shifts, leave, marks and totals in the grid mean. */
+/** The id of the Key drawer, which the Key button names. */
+export const GRID_KEY_ID = 'grid-key';
+
+/**
+ * The Key drawer beside the grid: what the shifts, leave, marks, days, totals and hours in the grid
+ * mean. It is the only key: the Key sheet it replaced (Phase 4, slice 2) showed the shifts and leave again.
+ */
 export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: LeaveType[]; onClose: () => void }> = ({
   dutyWindows,
   leaveTypes,
   onClose,
 }) => (
-    <div className="w-72 bg-white border-l border-slate-200 flex flex-col shrink-0 text-xs shadow-lg animate-in slide-in-from-right duration-150 z-30" role="region" aria-label="Legend">
+    <div className="w-72 bg-white border-l border-slate-200 flex flex-col shrink-0 text-xs shadow-lg animate-in slide-in-from-right duration-150 z-30" id={GRID_KEY_ID} role="region" aria-label="Key">
       <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-        <span className="font-bold text-slate-800">Legend</span>
+        <h2 className="font-bold text-slate-800 text-sm">Key</h2>
         <button
           onClick={onClose}
           className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
-          aria-label="Close legend"
-          title="Close legend"
+          aria-label="Close the key"
+          title="Close the key"
         >
           <X className="w-4 h-4" aria-hidden="true" />
         </button>

@@ -135,9 +135,9 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   await page.waitForTimeout(400);
   await page.getByRole('button', { name: /Show in grid/ }).first().click();
   await page.waitForTimeout(200);
-  await page.locator('button', { hasText: /^Doctors/ }).last().click();
+  await page.getByRole('tab', { name: 'Doctors' }).click();
   await page.waitForTimeout(300);
-  await page.locator('button', { hasText: /^Roster/ }).last().click();
+  await page.getByRole('tab', { name: 'Roster' }).click();
   await page.waitForTimeout(2500);
   check('a flash left for another sheet still ends', (await page.evaluate(() => document.querySelectorAll('td.ring-amber-400').length)) === 0);
 
@@ -147,13 +147,13 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   const appState = () =>
     app.evaluate(() => ({
       roster: document.querySelector('button[title^="Open another roster"]')?.textContent.replace('▾', ''),
-      problems: [...document.querySelectorAll('button')].find((x) => /^Problems · /.test(x.textContent))?.textContent,
+      problems: document.querySelector('#sheet-tab-warnings')?.textContent,
     }));
 
   // 9. The popup open, then Back to another sheet: the hidden grid's popup closes.
   await app.goto(`${base}/?view=app#schedules?roster=nov&sheet=doctors`);
   await app.waitForTimeout(1500);
-  await app.locator('button', { hasText: /^Roster/ }).last().click();
+  await app.getByRole('tab', { name: 'Roster' }).click();
   await app.waitForSelector('[data-cell="mary|2026-11-16"]');
   await app.waitForTimeout(500);
   await app.click('[data-cell="mary|2026-11-16"]');

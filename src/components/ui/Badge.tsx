@@ -56,9 +56,9 @@ export const ProblemBadge: React.FC<{ kind: ProblemKind; children?: React.ReactN
 /**
  * The one problem count: each kind with its icon, number and word ("28 must fix", "6 to check",
  * "3 notes"), kinds with none left out. `wordsFrom: 'md'` shows only the icons and numbers
- * below 768 px; screen readers always hear the words. `none` is shown when there are no problems.
+ * below 768 px (`'xl'`: below 1280 px); screen readers always hear the words. `none` is shown when there are no problems.
  */
-export const ProblemCounts: React.FC<{ mustFix: number; toCheck: number; notes: number; wordsFrom?: 'md'; none?: string; className?: string }> = ({
+export const ProblemCounts: React.FC<{ mustFix: number; toCheck: number; notes: number; wordsFrom?: 'md' | 'xl'; none?: string; className?: string }> = ({
   mustFix,
   toCheck,
   notes,
@@ -84,7 +84,7 @@ export const ProblemCounts: React.FC<{ mustFix: number; toCheck: number; notes: 
             {wordsFrom ? (
               <span>
                 {n}
-                <span className="sr-only md:not-sr-only"> {word}</span>
+                <span className={wordsFrom === 'xl' ? 'sr-only xl:not-sr-only' : 'sr-only md:not-sr-only'}> {word}</span>
               </span>
             ) : (
               <span>{`${n} ${word}`}</span>

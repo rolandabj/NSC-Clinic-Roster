@@ -1,6 +1,7 @@
 import React from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from 'lucide-react';
+import { BookOpen, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatDate } from '../../../utils/dateUtils';
+import { GRID_KEY_ID } from './GridLegend';
 
 export type GridZoom = 75 | 90 | 100 | 115;
 
@@ -22,13 +23,12 @@ interface GridToolbarProps {
   onToggleMarks: () => void;
   zoomLevel: GridZoom;
   onZoom: (zoom: GridZoom) => void;
-  isLegendOpen: boolean;
-  onToggleLegend: () => void;
-  isExpandedView: boolean;
-  onToggleExpandView?: () => void;
+  /** The Key drawer: what the codes, marks and colors in the grid mean. */
+  isKeyOpen: boolean;
+  onToggleKey: () => void;
 }
 
-/** The grid's toolbar: the days shown, show all days, grouping, Problem marks, zoom, legend and full screen. */
+/** The grid's toolbar: the days shown, show all days, grouping, Problem marks, zoom and the Key. */
 export const GridToolbar: React.FC<GridToolbarProps> = ({
   isAllDaysExpanded,
   currentBlockIndex,
@@ -44,10 +44,8 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
   onToggleMarks,
   zoomLevel,
   onZoom,
-  isLegendOpen,
-  onToggleLegend,
-  isExpandedView,
-  onToggleExpandView,
+  isKeyOpen,
+  onToggleKey,
 }) => (
   <div className="bg-white border-b border-slate-200 px-4 py-1.5 flex flex-wrap items-center justify-between gap-3 text-xs shrink-0 z-20">
     <div className="flex items-center gap-2">
@@ -136,7 +134,7 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
       </button>
     </div>
 
-    {/* Right Side Tools: Zoom, Legend Drawer, & Expand View */}
+    {/* Right side: zoom and the Key */}
     <div className="flex items-center gap-2">
       <div className="inline-flex rounded border border-slate-200 p-0.5 bg-slate-50">
         <button
@@ -175,36 +173,18 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
       </div>
 
       <button
-        onClick={() => onToggleLegend()}
-        aria-expanded={isLegendOpen}
-        className="px-2.5 py-1 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium cursor-pointer"
+        type="button"
+        onClick={onToggleKey}
+        aria-expanded={isKeyOpen}
+        aria-controls={GRID_KEY_ID}
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 border rounded font-medium cursor-pointer ${
+          isKeyOpen ? 'border-indigo-300 bg-indigo-50 text-indigo-800' : 'border-slate-300 hover:bg-slate-50 text-slate-700'
+        }`}
       >
-        Legend ▾
+        <BookOpen className="w-3.5 h-3.5" aria-hidden="true" />
+        Key
       </button>
 
-      {onToggleExpandView && (
-        <button
-          onClick={onToggleExpandView}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold cursor-pointer transition-colors shadow-2xs ${
-            isExpandedView
-              ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-              : 'bg-white border border-slate-300 hover:bg-slate-50 text-slate-700'
-          }`}
-          title={isExpandedView ? 'Exit expanded screen view (Esc)' : 'Expand schedule view to full screen'}
-        >
-          {isExpandedView ? (
-            <>
-              <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Leave full screen</span>
-            </>
-          ) : (
-            <>
-              <Maximize2 className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-              <span>Full screen</span>
-            </>
-          )}
-        </button>
-      )}
     </div>
   </div>
 );

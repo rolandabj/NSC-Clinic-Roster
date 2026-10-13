@@ -30,10 +30,10 @@ test('reading what was written gives the same address back', () => {
 
 test("the roster's sheets have plain names in the address", () => {
   assert.equal(rosterSheetToAddress('warnings'), 'problems');
-  assert.equal(rosterSheetToAddress('legend'), 'key');
   assert.equal(rosterSheetToAddress('roster'), undefined);
   assert.equal(rosterSheetFromAddress('problems'), 'warnings');
-  assert.equal(rosterSheetFromAddress('key'), 'legend');
+  // The Key is no longer a sheet (Phase 4, slice 2): an old link to it opens the grid.
+  assert.equal(rosterSheetFromAddress('key'), undefined);
   assert.equal(rosterSheetFromAddress('hours'), 'hours');
   assert.equal(rosterSheetFromAddress('nonsense'), undefined);
   assert.equal(rosterSheetFromAddress(undefined), undefined);

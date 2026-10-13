@@ -56,12 +56,12 @@ check('Nurses: a link opens their details; closing them clears the address', asy
 check('Rosters: a link opens a sheet; a click on another adds a step to Back; Back returns', async ({ open }) => {
   const page = await open('#schedules?roster=nov&sheet=problems');
   await page.waitForFunction(() => location.hash.startsWith('#schedules?roster=nov&sheet=problems'), null, { timeout: 60000 });
-  await page.getByRole('button', { name: 'Hours', exact: true }).last().click();
+  await page.getByRole('tab', { name: 'Hours', exact: true }).click();
   await page.waitForFunction(() => location.hash === '#schedules?roster=nov&sheet=hours');
   await page.goBack();
   await page.waitForFunction(() => location.hash === '#schedules?roster=nov&sheet=problems');
   await page.waitForTimeout(300);
-  assert.equal(await page.getByRole('button', { name: /^Problems · / }).last().getAttribute('aria-current'), 'page');
+  assert.equal(await page.getByRole('tab', { name: /^Problems\b/ }).getAttribute('aria-selected'), 'true');
 });
 
 check("Rosters: a link to a nurse's day puts the focus on that cell", async ({ open }) => {

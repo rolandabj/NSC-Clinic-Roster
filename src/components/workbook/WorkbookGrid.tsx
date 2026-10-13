@@ -74,11 +74,9 @@ interface WorkbookGridProps {
   onCellEdit?: (edit: { assignments: Assignment[]; locks: LockEntry[]; leaveEntries: LeaveEntry[] }) => void;
   onJumpToCell?: (nurseId: string, date: string) => void;
   onOpenLockOverrideModal?: (lock: LockEntry) => void;
-  onNavigateTab?: (tab: 'roster' | 'doctors' | 'coverage' | 'warnings' | 'leave' | 'legend') => void;
+  onNavigateTab?: (tab: 'roster' | 'doctors' | 'coverage' | 'warnings' | 'leave') => void;
   isAllDaysExpanded?: boolean;
   onToggleExpandDays?: () => void;
-  isExpandedView?: boolean;
-  onToggleExpandView?: () => void;
   /**
    * Go to a cell from outside the grid: select it, scroll it into view and flash it.
    * Change the nonce to ask again for the same cell. The page showing the grid makes
@@ -138,8 +136,6 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   onNavigateTab,
   isAllDaysExpanded = false,
   onToggleExpandDays,
-  isExpandedView = false,
-  onToggleExpandView,
   focusRequest,
   availabilityRequests = [],
   isActive = true,
@@ -1088,10 +1084,8 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         onToggleMarks={() => setHighlightViolations(!highlightViolations)}
         zoomLevel={zoomLevel}
         onZoom={setZoomLevel}
-        isLegendOpen={isLegendDrawerOpen}
-        onToggleLegend={() => setIsLegendDrawerOpen(!isLegendDrawerOpen)}
-        isExpandedView={isExpandedView}
-        onToggleExpandView={onToggleExpandView}
+        isKeyOpen={isLegendDrawerOpen}
+        onToggleKey={() => setIsLegendDrawerOpen(!isLegendDrawerOpen)}
       />
 
       {/* 6.2 ROSTER SHEET MAIN GRID VIEWPORT */}
@@ -1121,7 +1115,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
           />
         </div>
 
-        {/* 6.6 Collapsible Right Drawer: the one Legend */}
+        {/* The Key drawer beside the grid */}
         {isLegendDrawerOpen && <GridLegend dutyWindows={dutyWindows} leaveTypes={leaveTypes} onClose={() => setIsLegendDrawerOpen(false)} />}
       </div>
 
