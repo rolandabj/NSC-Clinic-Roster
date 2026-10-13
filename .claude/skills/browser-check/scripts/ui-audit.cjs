@@ -57,7 +57,11 @@ const isRoster = (page) => /view=schedules|#schedules/.test(page);
       page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 300)); });
       const [query, hash = ''] = target.split('#');
       await page.goto(`${base}/?${query}${hash ? '#' + hash : ''}`);
-      if (isRoster(target)) await page.waitForSelector('[data-cell]', { timeout: 60000 }).catch(() => errors.push('no grid cell'));
+      // The roster shows its grid, or on a phone (under 700 px wide or 500 px high, since Phase 4 slice 5) its day view.
+      if (isRoster(target))
+        await page
+          .waitForFunction(() => document.querySelector('[data-cell]') || /laptop or tablet/.test(document.body.innerText), null, { timeout: 60000 })
+          .catch(() => errors.push('no grid cell and no day view'));
       await page.waitForTimeout(2500);
       const name = `${nameOf(target)}-${width}`;
       await page.screenshot({ path: path.join(out, `${name}.png`) });

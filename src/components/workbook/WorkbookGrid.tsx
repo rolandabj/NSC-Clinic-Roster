@@ -41,7 +41,7 @@ import { useGridSelection } from './grid/useGridSelection';
 import { useGridKeyboard } from './grid/useGridKeyboard';
 import { useRowsInSteps } from './grid/rowsInSteps';
 import { CellContextMenu } from './grid/CellContextMenu';
-import { CellView, cellLookupsOf, cellViewOf, reuseCellViews } from './grid/cellView';
+import { CellView, cellLookupsOf, cellSummary, cellViewOf, reuseCellViews } from './grid/cellView';
 import { HOURS_COLUMN, PopupRef, TOTALS_ROW, createGridSelection } from './grid/gridSelection';
 import { describeRequest, explainNurseDay, isPendingLeave, pendingLeaveOn, requestOn, RequestWords } from '../../services/engine/explainCell';
 
@@ -402,13 +402,11 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     return reuseCellViews(previousViewsRef.current, views);
   }, [displayNurses, dayInfo, assignmentByCell, lockByCell, leaveByCell, requestsByCell, leaveEntries, availabilityRequests, cellViolationMessages, cellMustFix, cellLookups]);
   previousViewsRef.current = cellViews;
-  // What a cell holds, for the line under the grid: the first part of its spoken name, with "to"
-  // between the times ("09:00 to 17:00"; the spoken name has them as the cell shows them).
-  const cellWords = useCallback(
-    (nurseId: string, date: string) =>
-      (previousViewsRef.current?.get(cellKeyOf(nurseId, date))?.ariaLabel.split('. ')[0] || '').replace(/(\d\d:\d\d) (\d\d:\d\d)/, '$1 to $2'),
-    []
-  );
+  // What a cell holds, for the line under the grid (`cellSummary`).
+  const cellWords = useCallback((nurseId: string, date: string) => {
+    const view = previousViewsRef.current?.get(cellKeyOf(nurseId, date));
+    return view ? cellSummary(view) : '';
+  }, []);
 
   // The Tab stop is the selected cell when it is on the days shown, else the first cell.
   const firstCellKey = displayNurses[0] && blockDates[0] ? cellKeyOf(displayNurses[0].id, blockDates[0]) : null;

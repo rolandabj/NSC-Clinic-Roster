@@ -46,6 +46,8 @@ interface RosterToolbarProps {
   hasPublished: boolean;
   /** Cells that differ from the last published version. */
   changedSincePublish: number;
+  /** On a phone: the roster is only read, so Undo, Redo, Fill roster, Publish and More are left out. */
+  readOnly?: boolean;
   onOpenPicker: () => void;
   onReload: () => void;
   onRetry: () => void;
@@ -117,6 +119,7 @@ export const RosterToolbar: React.FC<RosterToolbarProps> = ({
   canRedo,
   hasPublished,
   changedSincePublish,
+  readOnly,
   onOpenPicker,
   onReload,
   onRetry,
@@ -209,6 +212,7 @@ export const RosterToolbar: React.FC<RosterToolbarProps> = ({
       )}
     </div>
 
+    {!readOnly && (
     <div className="flex items-center gap-1.5">
       <button
         disabled={!canUndo}
@@ -314,5 +318,6 @@ export const RosterToolbar: React.FC<RosterToolbarProps> = ({
         items={moreMenuItems({ hasRoster: !!activeSchedule, onMenu })}
       />
     </div>
+    )}
   </div>
 );

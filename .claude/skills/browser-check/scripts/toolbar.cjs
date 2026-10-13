@@ -33,7 +33,8 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
       const top = (el) => Math.round(el.getBoundingClientRect().top);
       const picker = document.querySelector('button[title^="Open another roster"]');
       const more = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === 'More actions');
-      return { picker: top(picker), more: top(more), scroll: document.documentElement.scrollWidth > window.innerWidth + 1 };
+      // On a phone there is no More (the roster is only read there).
+      return { picker: top(picker), more: more ? top(more) : null, scroll: document.documentElement.scrollWidth > window.innerWidth + 1 };
     });
   for (const width of [1024, 1280, 1366, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });

@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791898385.9707265,
-    "seen": 1791899950.2464318,
-    "ast_hash": "ed051706148629f94664c5220a02947e",
+    "mtime": 1791901073.5918226,
+    "seen": 1791901464.653108,
+    "ast_hash": "e21d9220d4f3adb97122014c0d57958b",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -426,9 +426,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/WorkbookGrid.tsx": {
-    "mtime": 1791900372.0160918,
-    "seen": 1791900396.0811527,
-    "ast_hash": "c987ea7296a30043a22d880c833191dd",
+    "mtime": 1791901008.6838028,
+    "seen": 1791901464.6531377,
+    "ast_hash": "b695025dac087395a6ec1de315adbc74",
     "semantic_hash": ""
   },
   "src/main.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791900372.0192797,
-    "seen": 1791900396.081462,
-    "ast_hash": "f977458cfa07a73409d25922b2d7ed60",
+    "mtime": 1791901448.4602003,
+    "seen": 1791901464.653409,
+    "ast_hash": "d541120978ab25a819597152fa598ad0",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1548,9 +1548,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/ui-audit.cjs": {
-    "mtime": 1791878010.769552,
-    "seen": 1791878701.9116216,
-    "ast_hash": "54fb067a9a0ce9f19c5c21b0bd76e575",
+    "mtime": 1791901403.108581,
+    "seen": 1791901464.6529598,
+    "ast_hash": "354c1db1a6e1e58b99f4b3a36b853dac",
     "semantic_hash": ""
   },
   "server/routes/gemini.ts": {
@@ -1824,9 +1824,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/grid/cellView.ts": {
-    "mtime": 1791900040.4831672,
-    "seen": 1791900319.8019376,
-    "ast_hash": "f5d4823fffdf5968ce875be06d494d67",
+    "mtime": 1791901008.6829777,
+    "seen": 1791901464.653153,
+    "ast_hash": "19ef0bc5f753bc9aa2b2007cf4b1cda9",
     "semantic_hash": ""
   },
   "tests/unit/cellView.test.ts": {
@@ -1944,9 +1944,9 @@
     "semantic_hash": ""
   },
   "src/components/roster/RosterToolbar.tsx": {
-    "mtime": 1791898461.9112637,
-    "seen": 1791899950.2463288,
-    "ast_hash": "dee5591e44a48e823c91ff79bf768dd9",
+    "mtime": 1791901073.5923257,
+    "seen": 1791901464.6530612,
+    "ast_hash": "b163198e39ba85c3b5841866f4732c3a",
     "semantic_hash": ""
   },
   "src/components/roster/rosterSteps.ts": {
@@ -2034,9 +2034,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/sheet-tabs.cjs": {
-    "mtime": 1791898539.4952683,
-    "seen": 1791899950.246215,
-    "ast_hash": "287f15a3275e65e75fa93cd2947cf7ef",
+    "mtime": 1791901403.1091325,
+    "seen": 1791901464.6529527,
+    "ast_hash": "258378bf8854ddde00c6e576d552c7ae",
     "semantic_hash": ""
   },
   "tests/unit/rosterSheetTabs.test.ts": {
@@ -2046,9 +2046,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/toolbar.cjs": {
-    "mtime": 1791898539.4952683,
-    "seen": 1791899950.246222,
-    "ast_hash": "49d79dcc0544ebadbb93957fe2688d98",
+    "mtime": 1791901403.109629,
+    "seen": 1791901464.6529582,
+    "ast_hash": "4af5a76fe974178d7bae9ce4f248be65",
     "semantic_hash": ""
   },
   "tests/unit/rosterToolbar.test.ts": {
@@ -2085,6 +2085,36 @@
     "mtime": 1791898940.687292,
     "seen": 1791899950.2467127,
     "ast_hash": "59061d4bc852ce268ea9e102b9e4d20a",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/phone.cjs": {
+    "mtime": 1791901096.7162204,
+    "seen": 1791901464.6529493,
+    "ast_hash": "69025ee975812e1fb34869ffd7f5ffba",
+    "semantic_hash": ""
+  },
+  "src/components/roster/RosterDayView.tsx": {
+    "mtime": 1791901126.3016798,
+    "seen": 1791901464.653054,
+    "ast_hash": "b1805264f0c077db21dcf3f083ab9936",
+    "semantic_hash": ""
+  },
+  "src/components/roster/dayView.ts": {
+    "mtime": 1791901008.6885114,
+    "seen": 1791901464.653062,
+    "ast_hash": "2f768e9205a40844a5041c38906c1f48",
+    "semantic_hash": ""
+  },
+  "src/components/roster/usePhoneLayout.ts": {
+    "mtime": 1791901047.0962174,
+    "seen": 1791901464.6530654,
+    "ast_hash": "2abd8abd6c4061701b145bc08563d35f",
+    "semantic_hash": ""
+  },
+  "tests/unit/dayView.test.ts": {
+    "mtime": 1791900985.7345147,
+    "seen": 1791901464.6532817,
+    "ast_hash": "46c8781d72435334b9990c090a751040",
     "semantic_hash": ""
   }
 }

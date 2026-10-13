@@ -388,6 +388,15 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
   };
 }
 
+/**
+ * What a cell holds in a few words, for the line under the grid and the phone's day view: the
+ * first part of its spoken name, with "to" between the times ("Lee #1 09:00 to 17:00, Day shift";
+ * the spoken name has the times as the cell shows them).
+ */
+export function cellSummary(view: CellView): string {
+  return view.ariaLabel.split('. ')[0].replace(/(\d\d:\d\d) (\d\d:\d\d)/, '$1 to $2');
+}
+
 function sameView(a: CellView, b: CellView): boolean {
   for (const k of Object.keys(b) as (keyof CellView)[]) {
     if (a[k] !== b[k]) return false;

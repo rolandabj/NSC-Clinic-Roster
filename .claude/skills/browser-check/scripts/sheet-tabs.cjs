@@ -73,10 +73,10 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await page.waitForTimeout(300);
   check('Esc leaves full screen', (await full.getAttribute('aria-pressed')) === 'false');
 
-  // 5. Narrower screens: the tabs scroll sideways, the page does not.
+  // 5. Narrower screens: the tabs scroll sideways, the page does not (on a phone the day view has no tabs).
   for (const width of [1024, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.getByRole('tab', { name: 'Roster' }).click();
+    if (width >= 700) await page.getByRole('tab', { name: 'Roster' }).click();
     await page.waitForTimeout(400);
     const wide = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
     check(`no sideways page scroll at ${width} px`, !wide);

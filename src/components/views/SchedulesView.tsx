@@ -88,6 +88,9 @@ import { deleteEntireSchedule } from '../../services/schedule/scheduleDeletionSe
 import { populateRecurringDoctorSessionsForSchedule } from '../../services/schedule/doctorScheduleService';
 import { BACKUPS_KEPT, saveRosterBackup } from '../../services/history/rosterBackup';
 import { formatDate } from '../../utils/dateUtils';
+import { usePhoneLayout } from '../roster/usePhoneLayout';
+import { RosterDayView } from '../roster/RosterDayView';
+import { cellLookupsOf } from '../workbook/grid/cellView';
 
 
 const OPEN_SCHEDULE_KEY = 'clinic_roster_active_schedule_id';
@@ -308,6 +311,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   // Expanded View & All Days Mode
   const [isExpandedView, setIsExpandedView] = useState(false);
+  // A phone (under 700 px wide or under 500 px high) reads the roster one day at a time and does not change it.
+  const isPhone = usePhoneLayout();
+  const dayViewLookups = useMemo(
+    () => cellLookupsOf({ dutyWindows, doctors, roles, specialties, leaveTypes }),
+    [dutyWindows, doctors, roles, specialties, leaveTypes]
+  );
   const [isAllDaysExpanded, setIsAllDaysExpanded] = useState(false);
 
   // Dialog keyboard and screen reader support
@@ -1586,6 +1595,13 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       blockDates.push(d.toISOString().split('T')[0]);
     }
   }
+  // Every day of the roster, for the phone's day view.
+  const rosterDates: string[] = [];
+  if (activeSchedule && isPhone) {
+    for (let d = new Date(`${activeSchedule.startDate}T00:00:00Z`); d.toISOString().slice(0, 10) <= activeSchedule.endDate; d.setUTCDate(d.getUTCDate() + 1)) {
+      rosterDates.push(d.toISOString().slice(0, 10));
+    }
+  }
 
   return (
     <div
@@ -1609,6 +1625,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         canRedo={redoStack.length > 0}
         hasPublished={hasPublished}
         changedSincePublish={changedSincePublish}
+        readOnly={isPhone}
         onOpenPicker={() => {
           repo.list('schedules').then((schedList) => {
             const unique = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
@@ -1646,7 +1663,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       />
 
       {/* Steps: where this roster is, and the next thing to do */}
-      {activeSchedule && <RosterSteps steps={steps} onStep={onStep} />}
+      {activeSchedule && !isPhone && <RosterSteps steps={steps} onStep={onStep} />}
 
       {remoteChange && (
         <div role="status" className="mx-4 mt-2 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 flex flex-wrap items-center justify-between gap-2">
@@ -1695,7 +1712,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         </div>
       )}
       {/* Sheet tabs above the open sheet */}
-      {activeSchedule && (
+      {activeSchedule && !isPhone && (
         <RosterSheetTabs
           active={activeTab}
           problems={{ mustFix: validationReport.errorCount, toCheck: validationReport.warnCount, notes: validationReport.infoCount }}
@@ -1712,7 +1729,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       {/* The open sheet, with the Problems panel beside it */}
       <div className="flex-1 overflow-hidden relative flex">
         <div
-          {...(activeSchedule ? { id: ROSTER_SHEET_PANEL_ID, role: 'tabpanel', 'aria-labelledby': `sheet-tab-${activeTab}` } : {})}
+          {...(activeSchedule && !isPhone ? { id: ROSTER_SHEET_PANEL_ID, role: 'tabpanel', 'aria-labelledby': `sheet-tab-${activeTab}` } : {})}
           className="flex-1 min-w-0 overflow-hidden relative"
         >
         {!activeSchedule && isFirstLoad && !loadError ? (
@@ -1739,6 +1756,23 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 </button>
               </div>
             </div>
+          </div>
+        ) : isPhone ? (
+          <div className="h-full overflow-y-auto">
+            <RosterDayView
+              dates={rosterDates}
+              linkedDate={address?.date}
+              nurses={nurses}
+              assignments={assignments}
+              leaveEntries={leaveEntries}
+              locks={locks}
+              availabilityRequests={availabilityRequests}
+              holidays={holidays}
+              sessions={sessions}
+              seniorityLevels={seniorityLevels}
+              lookups={dayViewLookups}
+              validationReport={validationReport}
+            />
           </div>
         ) : (
           <>
@@ -1848,7 +1882,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           </>
         )}
         </div>
-        {isProblemsOpen && activeSchedule && (
+        {isProblemsOpen && activeSchedule && !isPhone && (
           <ProblemsPanel
             validationReport={validationReport}
             nurseName={nurseName}
