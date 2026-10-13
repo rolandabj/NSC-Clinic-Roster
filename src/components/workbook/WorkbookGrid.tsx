@@ -1,6 +1,5 @@
 import type { HoursHistory } from '../../services/hours/hoursBalance';
 import { isWeekendDay } from '../../utils/weekend';
-import { leaveCreditOnDate } from '../../services/hours/hoursPolicy';
 import React, { useState, useEffect, useRef, useId, useMemo } from 'react';
 import {
   FileSpreadsheet,
@@ -68,6 +67,8 @@ import { confirmDialog, notify } from '../common/dialogs';
 import { coveredMinutes, doctorSessionsOn, nurseClinicRoleOf, toMinutes } from '../../services/engine/clinicModel';
 import { isFloatShift } from '../../services/engine/floatShift';
 import { QuickCellPopup, QuickWorkOption, QuickLeaveOption, QuickDayNote, QuickWish } from './grid/QuickCellPopup';
+import { GridCell, GridCellActions } from './grid/GridCell';
+import { CellView, cellLookupsOf, cellViewOf, reuseCellViews } from './grid/cellView';
 import { describeRequest, explainNurseDay, isPendingLeave, pendingLeaveOn, requestOn, RequestWords } from '../../services/engine/explainCell';
 
 interface WorkbookGridProps {
@@ -139,12 +140,6 @@ const localTodayIso = (): string => {
 };
 
 const cellKeyOf = (nurseId: string, date: string) => `${nurseId}|${date}`;
-
-const SOURCE_WORDS: Record<string, string> = {
-  GENERATED: 'Filled in by Fill roster',
-  MANUAL: 'Changed by hand',
-  LOCK: 'Pinned by hand',
-};
 
 /** A doctor's name with "Dr" in front, unless it already has it. */
 const withDr = (name: string) => (/^dr\.?\s/i.test(name) ? name : `Dr ${name}`);
@@ -251,70 +246,82 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   const blockStartDay = isAllDaysExpanded ? 1 : currentBlockIndex * blockSizeDays + 1;
   const blockEndDay = isAllDaysExpanded ? totalDays : Math.min((currentBlockIndex + 1) * blockSizeDays, totalDays);
 
-  const blockDates: string[] = [];
-  for (let day = blockStartDay; day <= blockEndDay; day++) {
-    const d = new Date(start);
-    d.setUTCDate(start.getUTCDate() + (day - 1));
-    blockDates.push(d.toISOString().split('T')[0]);
-  }
+  // The days shown, the same arrays from one render to the next while they do not change.
+  const scheduleStart = schedule.startDate;
+  const blockDates = useMemo(() => {
+    const first = new Date(scheduleStart);
+    const dates: string[] = [];
+    for (let day = blockStartDay; day <= blockEndDay; day++) {
+      const d = new Date(first);
+      d.setUTCDate(first.getUTCDate() + (day - 1));
+      dates.push(d.toISOString().split('T')[0]);
+    }
+    return dates;
+  }, [scheduleStart, blockStartDay, blockEndDay]);
 
   // Day columns: weekend (clinic setting), public holiday and today
   const todayIso = localTodayIso();
-  const holidayByDate = new Map(holidays.map((h) => [h.date, h]));
-  const dayInfo = blockDates.map((dateStr) => {
-    const dateObj = new Date(dateStr);
-    const weekday = dateObj.getUTCDay();
-    return {
-      dateStr,
-      day: dateObj.getUTCDate(),
-      weekday,
-      isWeekend: isWeekendDay(weekday),
-      holiday: holidayByDate.get(dateStr),
-      isToday: dateStr === todayIso,
-    };
-  });
+  const holidayByDate = useMemo(() => new Map(holidays.map((h) => [h.date, h])), [holidays]);
+  const dayInfo = useMemo(() => {
+    return blockDates.map((dateStr) => {
+      const dateObj = new Date(dateStr);
+      const weekday = dateObj.getUTCDay();
+      return {
+        dateStr,
+        day: dateObj.getUTCDate(),
+        weekday,
+        isWeekend: isWeekendDay(weekday),
+        holiday: holidayByDate.get(dateStr),
+        isToday: dateStr === todayIso,
+      };
+    });
+  }, [blockDates, holidayByDate, todayIso]);
 
   // Lookup maps
-  const dutyMap = useMemo(() => new Map(dutyWindows.map((d) => [d.id, d])), [dutyWindows]);
-  const nurseMap = new Map(nurses.map((n) => [n.id, n]));
-  const doctorMap = new Map(doctors.map((d) => [d.id, d]));
-  const specialtyMap = new Map(specialties.map((s) => [s.id, s]));
-  const roleMap = new Map(roles.map((r) => [r.id, r]));
-  const seniorityMap = new Map(seniorityLevels.map((s) => [s.id, s]));
+  const cellLookups = useMemo(
+    () => cellLookupsOf({ dutyWindows, doctors, roles, specialties, leaveTypes }),
+    [dutyWindows, doctors, roles, specialties, leaveTypes]
+  );
+  const { dutyMap, doctorMap, specialtyMap, roleMap } = cellLookups;
+  const nurseMap = useMemo(() => new Map(nurses.map((n) => [n.id, n])), [nurses]);
+  const seniorityMap = useMemo(() => new Map(seniorityLevels.map((s) => [s.id, s])), [seniorityLevels]);
 
   // Problems from the roster check, by where they show on the grid:
   //  - about one cell (a shift on leave, too little rest...): a red corner on that cell;
   //  - about a whole day (no free nurse, no senior nurse, a doctor with no nurse...):
   //    a badge on that day's heading, not a mark on every shift of the day;
   //  - about a nurse (hours, no email): a mark by the nurse's name.
-  const cellViolationMessages = new Map<string, string[]>();
-  const dayProblems = new Map<string, { messages: string[]; mustFix: boolean }>();
-  const nurseProblems = new Map<string, { messages: string[]; mustFix: boolean }>();
-  const addTo = (map: Map<string, { messages: string[]; mustFix: boolean }>, key: string, f: ValidationFinding) => {
-    const entry = map.get(key) || { messages: [], mustFix: false };
-    if (!entry.messages.includes(f.message)) entry.messages.push(f.message);
-    entry.mustFix = entry.mustFix || f.severity === 'ERROR';
-    map.set(key, entry);
-  };
-  validationReport.findings.forEach((f) => {
-    // Notes (requests not followed, leave waiting for approval) have their own marks, not the red one.
-    if (f.severity === 'INFO') return;
-    if (isDayProblem(f)) {
-      const date = f.date || f.id.match(/\d{4}-\d{2}-\d{2}/)?.[0];
-      if (date) addTo(dayProblems, date, f);
-      return;
-    }
-    if (f.cellRefs.length === 0) {
-      f.affectedNurseIds.forEach((id) => addTo(nurseProblems, id, f));
-      return;
-    }
-    f.cellRefs.forEach((r) => {
-      const k = `${r.nurseId}_${r.date}`;
-      const list = cellViolationMessages.get(k) || [];
-      if (!list.includes(f.message)) list.push(f.message);
-      cellViolationMessages.set(k, list);
+  const { cellViolationMessages, dayProblems, nurseProblems } = useMemo(() => {
+    const cellViolationMessages = new Map<string, string[]>();
+    const dayProblems = new Map<string, { messages: string[]; mustFix: boolean }>();
+    const nurseProblems = new Map<string, { messages: string[]; mustFix: boolean }>();
+    const addTo = (map: Map<string, { messages: string[]; mustFix: boolean }>, key: string, f: ValidationFinding) => {
+      const entry = map.get(key) || { messages: [], mustFix: false };
+      if (!entry.messages.includes(f.message)) entry.messages.push(f.message);
+      entry.mustFix = entry.mustFix || f.severity === 'ERROR';
+      map.set(key, entry);
+    };
+    validationReport.findings.forEach((f) => {
+      // Notes (requests not followed, leave waiting for approval) have their own marks, not the red one.
+      if (f.severity === 'INFO') return;
+      if (isDayProblem(f)) {
+        const date = f.date || f.id.match(/\d{4}-\d{2}-\d{2}/)?.[0];
+        if (date) addTo(dayProblems, date, f);
+        return;
+      }
+      if (f.cellRefs.length === 0) {
+        f.affectedNurseIds.forEach((id) => addTo(nurseProblems, id, f));
+        return;
+      }
+      f.cellRefs.forEach((r) => {
+        const k = `${r.nurseId}_${r.date}`;
+        const list = cellViolationMessages.get(k) || [];
+        if (!list.includes(f.message)) list.push(f.message);
+        cellViolationMessages.set(k, list);
+      });
     });
-  });
+    return { cellViolationMessages, dayProblems, nurseProblems };
+  }, [validationReport]);
   // How many problems the marks show on the days on screen (for the switch's label).
   const shownDates = new Set(blockDates);
   const shownProblemCount = validationReport.findings.filter(
@@ -331,14 +338,18 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
   // The selected cell may be on days not shown now (after paging); then the first cell takes Tab.
   const selectedCellShown =
     !!selectedCell && blockDates.includes(selectedCell.date) && nurses.some((n) => n.id === selectedCell.nurseId);
-  const displayNurses = [...nurses].sort((a, b) => {
-    if (groupBy === 'SENIORITY') {
-      const rankA = seniorityMap.get(a.seniorityLevelId)?.rank || 99;
-      const rankB = seniorityMap.get(b.seniorityLevelId)?.rank || 99;
-      if (rankA !== rankB) return rankA - rankB;
-    }
-    return a.fullName.localeCompare(b.fullName);
-  });
+  const displayNurses = useMemo(
+    () =>
+      [...nurses].sort((a, b) => {
+        if (groupBy === 'SENIORITY') {
+          const rankA = seniorityMap.get(a.seniorityLevelId)?.rank || 99;
+          const rankB = seniorityMap.get(b.seniorityLevelId)?.rank || 99;
+          if (rankA !== rankB) return rankA - rankB;
+        }
+        return a.fullName.localeCompare(b.fullName);
+      }),
+    [nurses, groupBy, seniorityMap]
+  );
 
   // Hours per nurse, counted by the shared rule (same as the Hours tab, emails and PDF).
   const leaveTypeMap = useMemo(() => new Map(leaveTypes.map((l) => [l.id, l])), [leaveTypes]);
@@ -435,6 +446,35 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     inRosterDates(date) ? leaveByCell.pending.get(`${nurseId}_${date}`) : pendingLeaveOn(leaveEntries, nurseId, date);
   const cellRequestOn = (nurseId: string, date: string) =>
     requestOn(inRosterDates(date) ? requestsByCell.get(`${nurseId}_${date}`) : availabilityRequests, nurseId, date);
+
+  // What each cell shows, worked out once per change of the roster, its problems or the days
+  // shown. A view that did not change stays the same object, so its cell is not drawn again.
+  const previousViewsRef = useRef<Map<string, CellView> | undefined>(undefined);
+  const cellViews = useMemo(() => {
+    const views = new Map<string, CellView>();
+    for (const nurse of displayNurses) {
+      for (const day of dayInfo) {
+        const date = day.dateStr;
+        const leave = approvedLeaveOn(nurse.id, date);
+        const view = cellViewOf(
+          {
+            nurse,
+            day,
+            assignment: assignmentOn(nurse.id, date),
+            lock: lockOn(nurse.id, date),
+            leave,
+            pendingLeave: leave ? undefined : waitingLeaveOn(nurse.id, date),
+            request: cellRequestOn(nurse.id, date),
+            problems: cellViolationMessages.get(`${nurse.id}_${date}`) || [],
+          },
+          cellLookups
+        );
+        views.set(view.key, view);
+      }
+    }
+    return reuseCellViews(previousViewsRef.current, views);
+  }, [displayNurses, dayInfo, assignmentByCell, lockByCell, leaveByCell, requestsByCell, leaveEntries, availabilityRequests, cellViolationMessages, cellLookups]);
+  previousViewsRef.current = cellViews;
 
   const getNurseBlockHours = (nurse: Nurse) => {
     const h = blockHoursByNurse.get(nurse.id);
@@ -1245,6 +1285,25 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
     return `${duty ? `${duty.name} shift` : 'Shift'}${what ? ` with ${what}` : ''}${pinned}`;
   };
 
+  // The cells' actions: one object for the life of the grid, calling the latest handlers,
+  // so a memoized cell is not drawn again because a handler was made anew.
+  const cellHandlersRef = useRef<GridCellActions | null>(null);
+  cellHandlersRef.current = {
+    click: handleCellClick,
+    doubleClick: handleCellDoubleClick,
+    contextMenu: handleContextMenu,
+    select: (nurseId, date) => setSelectedCell({ nurseId, date }),
+  };
+  const cellActions = useMemo<GridCellActions>(
+    () => ({
+      click: (nurseId, date) => cellHandlersRef.current!.click(nurseId, date),
+      doubleClick: (nurseId, date) => cellHandlersRef.current!.doubleClick(nurseId, date),
+      contextMenu: (e, nurseId, date) => cellHandlersRef.current!.contextMenu(e, nurseId, date),
+      select: (nurseId, date) => cellHandlersRef.current!.select(nurseId, date),
+    }),
+    []
+  );
+
   // Zoom sizing classes
   const cellHeightClass = zoomLevel === 75 ? 'h-6' : zoomLevel === 90 ? 'h-7' : zoomLevel === 115 ? 'h-10' : 'h-8';
   const cellFontSizeClass = zoomLevel === 75 ? 'text-[10px]' : zoomLevel === 90 ? 'text-[10px]' : zoomLevel === 115 ? 'text-xs' : 'text-[11px]';
@@ -1593,381 +1652,23 @@ export const WorkbookGrid: React.FC<WorkbookGridProps> = ({
                     </th>
 
                     {/* Matrix Cells */}
-                    {dayInfo.map(({ dateStr, isWeekend, holiday, isToday }, dateIndex) => {
-                      const asgn = assignmentOn(nurse.id, dateStr);
-                      const lock = lockOn(nurse.id, dateStr);
-                      const leave = approvedLeaveOn(nurse.id, dateStr);
-
+                    {dayInfo.map(({ dateStr }, dateIndex) => {
                       const cellKey = cellKeyOf(nurse.id, dateStr);
-                      const isSelected =
-                        selectedCell?.nurseId === nurse.id && selectedCell?.date === dateStr;
-                      // Without a selection the first cell is the grid's way in for the Tab key.
-                      const isTabStop = selectedCellShown ? isSelected : nurseIndex === 0 && dateIndex === 0;
-                      const problemMessages = cellViolationMessages.get(`${nurse.id}_${dateStr}`) || [];
-                      const hasViolation = highlightViolations && problemMessages.length > 0;
-                      const isFlashing = flashCellKey === cellKey;
-                      const isPopupCell = quickPopup?.nurseId === nurse.id && quickPopup?.date === dateStr;
-
-                      const duty = asgn ? dutyMap.get(asgn.dutyWindowId) : undefined;
-                      const leaveType = leave ? leaveTypes.find((l) => l.id === leave.leaveTypeId) : undefined;
-                      const { pendingLeave, pendingLeaveType, pendingLeaveText, requestWords } = wishesOn(nurse.id, dateStr, asgn);
-                      const pendingLeaveColor = pendingLeaveType?.color || '#f59e0b';
-                      // Leave waiting for approval: diagonal stripes behind whatever the cell shows.
-                      const pendingHatch = pendingLeave
-                        ? `repeating-linear-gradient(135deg, ${pendingLeaveColor}40 0 3px, transparent 3px 7px)`
-                        : undefined;
-
-                      let doctorName = '';
-                      const isNurseClinic =
-                        asgn?.clinicalRoleId === 'role-nurse-clinic' ||
-                        (!!asgn?.clinicalRoleId && asgn.clinicalRoleId === nurseClinicRoleOf(roles)?.id) ||
-                        asgn?.note?.toLowerCase().includes('nurse clinic');
-
-                      const isFloatPool =
-                        (!!asgn && isFloatShift(asgn)) ||
-                        asgn?.note?.toLowerCase().includes('float pool') ||
-                        asgn?.note?.toLowerCase().includes('general clinic');
-
-                      if (asgn && isFloatShift(asgn)) {
-                        // Not with a doctor: the roster says Float (not a department)
-                        doctorName = 'FLOAT';
-                      } else if (asgn?.doctorId) {
-                        const d = doctorMap.get(asgn.doctorId);
-                        doctorName = d ? d.fullName.replace(/^dr\.?\s+/i, '') : '';
-                      } else if (asgn?.clinicalRoleId) {
-                        const r = roleMap.get(asgn.clinicalRoleId);
-                        if (asgn.clinicalRoleId === 'role-float') {
-                          doctorName = 'FLOAT';
-                        } else {
-                          doctorName = r ? r.acronym : (isNurseClinic ? 'NC' : 'ROLE');
-                        }
-                      } else if (asgn?.specialtyId) {
-                        const s = specialtyMap.get(asgn.specialtyId);
-                        doctorName = s ? s.code : 'POOL';
-                      } else if (isNurseClinic) {
-                        doctorName = 'NC';
-                      } else if (isFloatPool) {
-                        doctorName = 'FLOAT';
-                      }
-
-                      const docObj = asgn?.doctorId ? doctorMap.get(asgn.doctorId) : null;
-                      const docPref = asgn?.doctorId ? nurse.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === asgn.doctorId) : null;
-                      const specPref = !docPref && docObj && docObj.specialtyIds
-                        ? nurse.preferences?.find(
-                            (p) =>
-                              p.kind === 'SPECIALTY' &&
-                              (docObj.specialtyIds.includes(p.refId) ||
-                                docObj.specialtyIds.some((sid) => {
-                                  const sCode = specialtyMap.get(sid)?.code?.toLowerCase();
-                                  return sCode && p.refId.toLowerCase().includes(sCode);
-                                }))
-                          )
-                        : null;
-
-                      // Check strict allocation match vs profile
-                      const hasSpecificAllocations = nurse.preferences?.some(
-                        (p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY'
-                      );
-                      let isAllocationMismatch = false;
-                      let mismatchReason = '';
-
-                      if (asgn && hasSpecificAllocations) {
-                        if (asgn.kind === 'DOCTOR' && asgn.doctorId) {
-                          const docSpecIds = docObj?.specialtyIds || [];
-                          const matchesDoc = nurse.preferences?.some(
-                            (p) => p.kind === 'DOCTOR' && p.refId === asgn.doctorId
-                          );
-                          const matchesSpec = nurse.preferences?.some((p) => {
-                            if (p.kind !== 'SPECIALTY') return false;
-                            if (docSpecIds.includes(p.refId)) return true;
-                            const pRefLower = p.refId.toLowerCase();
-                            for (const sid of docSpecIds) {
-                              const sObj = specialtyMap.get(sid);
-                              if (sObj) {
-                                if (
-                                  pRefLower === sObj.code.toLowerCase() ||
-                                  pRefLower === sObj.name.toLowerCase() ||
-                                  (sObj.code.toLowerCase() === 'pcc' && pRefLower.includes('pcc')) ||
-                                  (sObj.code.toLowerCase() === 'ped' && (pRefLower.includes('ped') || pRefLower.includes('pedia')))
-                                ) {
-                                  return true;
-                                }
-                              }
-                            }
-                            return false;
-                          });
-
-                          if (!matchesDoc && !matchesSpec) {
-                            isAllocationMismatch = true;
-                            mismatchReason = `${docObj ? withDr(docObj.fullName) : 'This doctor'} is not one of ${nurse.fullName}'s usual doctors or departments.`;
-                          }
-                        } else if (asgn.kind === 'SPECIALTY' && asgn.specialtyId && !isFloatShift(asgn)) {
-                          const specObj = specialtyMap.get(asgn.specialtyId);
-                          const matchesSpec = nurse.preferences?.some((p) => {
-                            if (p.kind !== 'SPECIALTY') return false;
-                            if (p.refId === asgn.specialtyId) return true;
-                            if (specObj) {
-                              const pRefLower = p.refId.toLowerCase();
-                              if (
-                                pRefLower === specObj.code.toLowerCase() ||
-                                pRefLower === specObj.name.toLowerCase() ||
-                                (specObj.code.toLowerCase() === 'pcc' && pRefLower.includes('pcc')) ||
-                                (specObj.code.toLowerCase() === 'ped' && (pRefLower.includes('ped') || pRefLower.includes('pedia')))
-                              ) {
-                                return true;
-                              }
-                            }
-                            return false;
-                          });
-
-                          if (!matchesSpec) {
-                            isAllocationMismatch = true;
-                            mismatchReason = `${specObj?.name || 'This department'} is not one of ${nurse.fullName}'s usual departments.`;
-                          }
-                        }
-                      }
-
-                      const docRankBadge = isAllocationMismatch
-                        ? '!'
-                        : docPref
-                        ? `#${docPref.rank}`
-                        : specPref
-                        ? `#${specPref.rank}`
-                        : isFloatPool
-                        ? null
-                        : asgn?.doctorId
-                        ? 'Pool'
-                        : null;
-
-                      const pairingDesc = isNurseClinic
-                        ? 'Nurse Clinic (no doctor)'
-                        : isFloatPool
-                        ? 'Float (not with a doctor)'
-                        : asgn?.clinicalRoleId
-                        ? `Clinic task: ${roleMap.get(asgn.clinicalRoleId)?.name || doctorName}`
-                        : asgn?.doctorId
-                        ? `With Dr ${doctorName}${
-                            docPref
-                              ? ` (usual doctor, choice ${docPref.rank})`
-                              : specPref
-                              ? ` (usual department, choice ${specPref.rank})`
-                              : isAllocationMismatch
-                              ? ' (not one of this nurse’s usual doctors)'
-                              : ' (any nurse)'
-                          }`
-                        : asgn?.specialtyId
-                        ? `Department: ${specialtyMap.get(asgn.specialtyId)?.name || doctorName}${
-                            specPref
-                              ? ` (usual department, choice ${specPref.rank})`
-                              : isAllocationMismatch
-                              ? ' (not one of this nurse’s usual departments)'
-                              : ''
-                          }`
-                        : doctorName;
-
-                      const isHandChange = asgn?.source === 'MANUAL';
-                      const contentWords = leave
-                        ? `${leaveType?.name || 'Leave'}: ${fmtHours(leaveCreditOnDate(leave, leaveType, dateStr))} h counted this day${
-                            leave.dayHours?.[dateStr] !== undefined ? ' (set for this day)' : ''
-                          }${lock ? ', pinned' : ''}`
-                        : lock?.mode === 'OFF'
-                        ? 'Day off, pinned'
-                        : asgn
-                        ? `${duty?.name || 'Shift'} shift${duty ? ` (${duty.startTime} to ${duty.endTime})` : ''}${
-                            duty?.isPriority ? ', used first' : ''
-                          } · ${pairingDesc} · ${SOURCE_WORDS[asgn.source] || asgn.source}${lock && asgn.source !== 'LOCK' ? ', pinned' : ''}${
-                            isAllocationMismatch ? `\n${mismatchReason}` : ''
-                          }`
-                        : 'Nothing yet';
-                      const wishWords = [pendingLeaveText, requestWords?.text].filter(Boolean).join('\n');
-                      const dayWords = `${holiday ? ` (public holiday: ${holiday.name})` : isWeekend ? ' (weekend)' : ''}${isToday ? ' (today)' : ''}`;
-                      const cellTitle = `${contentWords}${wishWords ? `\n${wishWords}` : ''}${
-                        problemMessages.length > 0 ? `\nProblems:\n${problemMessages.map((m) => `• ${m}`).join('\n')}` : ''
-                      }`;
-                      const cellAria = `${nurse.fullName}, ${formatDate(dateStr)}${dayWords}: ${contentWords.replace(/\n/g, '. ')}${
-                        wishWords ? `. ${wishWords.replace(/\n/g, '. ')}` : ''
-                      }${
-                        problemMessages.length > 0 ? `. ${problemMessages.length === 1 ? 'Problem' : 'Problems'}: ${problemMessages.join('. ')}` : ''
-                      }`;
-
-                      // Column shading: today, public holiday, weekend.
-                      const dayShade = isToday
-                        ? 'bg-indigo-50/70'
-                        : holiday
-                        ? 'bg-cyan-50'
-                        : isWeekend
-                        ? 'bg-slate-100'
-                        : '';
-
+                      const isSelected = selectedCell?.nurseId === nurse.id && selectedCell?.date === dateStr;
                       return (
-                        <td
+                        <GridCell
                           key={dateStr}
-                          data-cell={cellKey}
-                          tabIndex={isTabStop ? 0 : -1}
-                          onClick={() => handleCellClick(nurse.id, dateStr)}
-                          onDoubleClick={() => handleCellDoubleClick(nurse.id, dateStr)}
-                          onContextMenu={(e) => handleContextMenu(e, nurse.id, dateStr)}
-                          onFocus={() => {
-                            if (!isSelected) setSelectedCell({ nurseId: nurse.id, date: dateStr });
-                          }}
-                          aria-selected={isSelected}
-                          aria-haspopup="dialog"
-                          aria-expanded={isPopupCell}
-                          aria-label={cellAria}
-                          title={cellTitle}
-                          style={pendingHatch ? { backgroundImage: pendingHatch } : undefined}
-                          className={`border-r border-b border-slate-200 p-0.5 text-center align-middle cursor-pointer relative transition-shadow duration-700 focus:outline-none ${cellFontSizeClass} ${
-                            isToday ? 'border-x-indigo-300' : ''
-                          } ${
-                            isFlashing
-                              ? 'ring-4 ring-amber-400 z-10 bg-amber-50 duration-150'
-                              : isSelected
-                              ? 'ring-2 ring-indigo-600 z-10 bg-indigo-50/50'
-                              : `${dayShade} hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-indigo-400`
-                          }`}
-                        >
-                          {/* Problem marker: small red corner */}
-                          {hasViolation && (
-                            <span
-                              aria-hidden="true"
-                              className="absolute top-0 right-0 w-0 h-0 border-t-8 border-l-8 border-t-red-600 border-l-transparent z-10 pointer-events-none"
-                            />
-                          )}
-                          {/* Request mark, top left: round for a day off, square for a shift; hollow while waiting for approval; amber when not followed. */}
-                          {requestWords && (
-                            <span
-                              aria-hidden="true"
-                              className={`absolute top-0.5 left-0.5 w-1.5 h-1.5 z-10 pointer-events-none border ${
-                                requestWords.dayOff ? 'rounded-full' : 'rounded-[1px]'
-                              } ${
-                                requestWords.mismatch
-                                  ? requestWords.pending
-                                    ? 'border-amber-500 bg-white'
-                                    : 'border-amber-500 bg-amber-500'
-                                  : requestWords.pending
-                                  ? 'border-sky-600 bg-white'
-                                  : 'border-sky-600 bg-sky-600'
-                              }`}
-                            />
-                          )}
-                          {/* Leave waiting for approval under a shift or a pinned day off */}
-                          {pendingLeave && (asgn || lock?.mode === 'OFF' || leave) && (
-                            <Clock
-                              aria-hidden="true"
-                              className="absolute bottom-0.5 left-0.5 w-2 h-2 z-10 pointer-events-none text-slate-600"
-                            />
-                          )}
-                          {/* 1. Leave Cell Rendering */}
-                          {leave ? (
-                            <div
-                              className={`w-full ${cellHeightClass} rounded flex items-center justify-center gap-0.5 font-bold text-white shadow-2xs`}
-                              style={{ backgroundColor: leaveType?.color || '#f59e0b' }}
-                            >
-                              <span>{leaveType?.acronym || 'L'}</span>
-                              {lock && <Lock className="w-2.5 h-2.5 text-white" aria-hidden="true" />}
-                            </div>
-                          ) : lock?.mode === 'OFF' ? (
-                            // 2. Lock Off
-                            <div className={`w-full ${cellHeightClass} rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center font-bold text-amber-900 text-[10px]`}>
-                              <Lock className="w-2.5 h-2.5 text-amber-600 mr-0.5" aria-hidden="true" />
-                              <span>OFF</span>
-                            </div>
-                          ) : asgn ? (
-                            // 3. Assignment Cell (Duty + Pairing Label)
-                            <div
-                              className={`w-full ${cellHeightClass} rounded flex flex-col items-center justify-center leading-none px-0.5 border ${
-                                hasViolation || isAllocationMismatch
-                                  ? 'ring-1.5 ring-rose-500 border-rose-400 bg-rose-50/70 shadow-xs'
-                                  : isNurseClinic
-                                  ? 'bg-teal-50/70 border-teal-300'
-                                  : isFloatPool
-                                  ? 'bg-indigo-50/40 border-indigo-200'
-                                  : ''
-                              }`}
-                              style={{
-                                backgroundColor: (hasViolation || isAllocationMismatch)
-                                  ? undefined
-                                  : isNurseClinic
-                                  ? undefined
-                                  : isFloatPool
-                                  ? undefined
-                                  : `${duty?.color || '#3b82f6'}18`,
-                                borderColor: (hasViolation || isAllocationMismatch)
-                                  ? undefined
-                                  : isNurseClinic
-                                  ? undefined
-                                  : isFloatPool
-                                  ? undefined
-                                  : duty?.color || '#3b82f6',
-                              }}
-                            >
-                              <div className="flex items-center gap-0.5">
-                                <span
-                                  className={`font-bold text-[10px] ${
-                                    isNurseClinic ? 'text-teal-800' : ''
-                                  }`}
-                                  style={{
-                                    color: isNurseClinic ? undefined : duty?.color || '#1e40af',
-                                  }}
-                                >
-                                  {duty?.acronym || 'D'}
-                                </span>
-                                {duty?.isPriority && (
-                                  <span className="text-[10px] text-amber-500 font-bold leading-none" aria-hidden="true">
-                                    ★
-                                  </span>
-                                )}
-                                {lock && <Lock className="w-2.5 h-2.5 text-amber-600" aria-hidden="true" />}
-                                {isHandChange && !lock && <Edit2 className="w-2.5 h-2.5 text-slate-500" aria-hidden="true" />}
-                              </div>
-                              <div className="flex items-center gap-0.5 max-w-[48px] justify-center">
-                                <span
-                                  className={`text-[10px] font-semibold truncate ${
-                                    isAllocationMismatch
-                                      ? 'text-rose-900 font-bold'
-                                      : isNurseClinic
-                                      ? 'text-teal-900 font-bold bg-teal-100/80 px-1 py-0.2 rounded border border-teal-300'
-                                      : isFloatPool
-                                      ? 'text-indigo-800 font-bold'
-                                      : 'text-slate-700'
-                                  }`}
-                                >
-                                  {doctorName}
-                                </span>
-                                {docRankBadge && (
-                                  <span
-                                    aria-hidden="true"
-                                    className={`text-[10px] font-bold px-0.5 rounded leading-none shrink-0 ${
-                                      docRankBadge === '!'
-                                        ? 'bg-rose-100 text-rose-800 border border-rose-300 font-extrabold'
-                                        : docRankBadge === '#1'
-                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                        : docRankBadge === '#2'
-                                        ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                                        : 'bg-slate-100 text-slate-700 border border-slate-300'
-                                    }`}
-                                  >
-                                    {docRankBadge}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ) : pendingLeave ? (
-                            // 4. Leave waiting for approval (shown lighter, on stripes)
-                            <div
-                              className={`w-full ${cellHeightClass} rounded border border-dashed flex items-center justify-center font-bold text-[10px] opacity-80`}
-                              style={{ borderColor: pendingLeaveColor, color: pendingLeaveColor }}
-                              aria-hidden="true"
-                            >
-                              <span className="bg-white/80 px-0.5 rounded">{pendingLeaveType?.acronym || 'L'}</span>
-                            </div>
-                          ) : (
-                            // 5. Empty Cell
-                            <div className={`w-full ${cellHeightClass} flex items-center justify-center text-slate-300`} aria-hidden="true">
-                              —
-                            </div>
-                          )}
-                        </td>
+                          view={cellViews.get(cellKey)!}
+                          isSelected={isSelected}
+                          // Without a selection the first cell is the grid's way in for the Tab key.
+                          isTabStop={selectedCellShown ? isSelected : nurseIndex === 0 && dateIndex === 0}
+                          isFlashing={flashCellKey === cellKey}
+                          isPopupCell={quickPopup?.nurseId === nurse.id && quickPopup?.date === dateStr}
+                          showProblems={highlightViolations}
+                          heightClass={cellHeightClass}
+                          fontClass={cellFontSizeClass}
+                          actions={cellActions}
+                        />
                       );
                     })}
 

@@ -35,7 +35,7 @@ Main moves only when the owner says "push to main".
 - [x] Checkpoint 2 (08-10-2026): the review's two fixes, `links.cjs`, the numbers in `tasks/plan.md`; pushed to main on 08-10-2026
 
 ## Phase 3: roster grid speed and structure
-- [ ] Memoized cells and per cell views
+- [x] Memoized cells and per cell views (`grid/cellView.ts`, `grid/GridCell.tsx`, `grid-flow.cjs`)
 - [ ] Selection store, keys on the grid
 - [ ] Derived data once per change; compare dialog only while open
 - [ ] Only changed lists saved and fingerprinted

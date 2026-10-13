@@ -409,3 +409,17 @@ Phase 2 did not change the grid, so these stay close to the baseline; Phase 3 wo
 **Screens** (`ui-audit.cjs`, 1366 px): no page has more serious axe problems than the baseline. History has 26 serious axe problems, down from 28. The whole app's dashboard has no serious axe problems for the owner or the nurse (1 each before the new app frame), and its text under 12 px went from 11 to 7. The single screens keep their numbers until their own phases.
 
 **Links and Back** (`links.cjs`, 9 checks): all pass. Before the review's fixes, creating a roster while another was open made the page stop answering, and a click in the account panel was lost when the browser did not focus the button (as in Safari).
+
+
+## Phase 3 progress, 13-10-2026
+
+This session's container is slower than the one at Checkpoint 2, so each slice is compared with the code before it, timed on the same machine (`grid-timing.cjs`, production build, median of 3 runs).
+
+| | Before slice 1 | After slice 1 (two runs) | Phase 3 target |
+|---|---|---|---|
+| Cells shown | 1,329 ms | 1,062 ms, 981 ms | under 1,000 ms |
+| Longest blocking task while loading | 422 ms | 291 ms, 281 ms | under 200 ms |
+| Cell popup opens | 216 ms | 119 ms, 140 ms | under 100 ms |
+| One arrow key | 68 ms | 37 ms, 33 ms | under 50 ms |
+| Deleting a shift | 166 ms | 112 ms, 118 ms | under 100 ms |
+| Longest blocking task while using the grid | 102 ms | 57 ms, 62 ms | under 200 ms |

@@ -53,6 +53,10 @@ in `/opt/pw-browsers`; never run `playwright install`.
      sheet and a nurse's day; Back and Forward between tabs; a screen opened from the menu; a new
      roster staying open; and the account panel when a click does not focus its buttons (as in
      Safari). One line for each check, and exit code 1 when one fails.
+   - `scripts/grid-flow.cjs --base http://localhost:5180`: on the November roster, an edit from
+     the popup, undo, Esc on the popup, arrow keys, Delete and Ctrl+Z, a fill, a swap and a
+     failed save with Retry now; after each step it compares the grid with what was saved. Run it
+     after any change to the roster grid or the roster screen. Same output as `links.cjs`.
 4. **Script other checks** in the session scratchpad, not in the repo, starting from
    `scripts/example.cjs`. Run it with `NODE_PATH=$(npm root -g) node <script> <folder>`.
    - Wait for the grid with a cell: `[data-cell="<nurse id>|<YYYY-MM-DD>"]`.
