@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791880971.0440412,
-    "seen": 1791881231.3222172,
-    "ast_hash": "cdf85bf4e560888e7620b5a612bbfcd1",
+    "mtime": 1791881788.9920838,
+    "seen": 1791882001.4074812,
+    "ast_hash": "1ff89abc4f7ecd0b5acf0b0a5c1297cd",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791881268.4314015,
-    "seen": 1791881289.1191916,
-    "ast_hash": "96dc3583ace973258753aa8fc849571b",
+    "mtime": 1791881993.7100196,
+    "seen": 1791882001.4078069,
+    "ast_hash": "f5c5795ccda3ceb14822c174343b1615",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1218,9 +1218,9 @@
     "semantic_hash": ""
   },
   "src/services/hours/hoursHistoryService.ts": {
-    "mtime": 1791362587.9763222,
-    "seen": 1791365225.134087,
-    "ast_hash": "5aaf7e66ccbb6995e18b2385d2ad2c0d",
+    "mtime": 1791882074.986089,
+    "seen": 1791882096.7297695,
+    "ast_hash": "024d40b873344081b0d3af6fe6bf29bf",
     "semantic_hash": ""
   },
   "src/components/common/signOut.ts": {
@@ -1488,9 +1488,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/SKILL.md": {
-    "mtime": 1791879840.1674023,
-    "seen": 1791879860.539065,
-    "ast_hash": "0109c90ce41388103e936008c399f3d8",
+    "mtime": 1791881863.1908617,
+    "seen": 1791882001.407772,
+    "ast_hash": "bbb7b4d2bdf5d27d8d21e2d3adfa455b",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/harness/index.html": {
@@ -1542,9 +1542,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/grid-timing.cjs": {
-    "mtime": 1791879563.5401828,
-    "seen": 1791879761.1149757,
-    "ast_hash": "bbd531ab96f49ed801c8beff5f244ef9",
+    "mtime": 1791881863.1902652,
+    "seen": 1791882001.407346,
+    "ast_hash": "9f6b1646671782a70f9c4b5f3a017dfa",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/ui-audit.cjs": {
@@ -1578,15 +1578,15 @@
     "semantic_hash": ""
   },
   "tasks/plan.md": {
-    "mtime": 1791881218.7426226,
-    "seen": 1791881231.322489,
-    "ast_hash": "9603b779d0b62fd9d012e75363f63386",
+    "mtime": 1791881993.7113843,
+    "seen": 1791882001.4078116,
+    "ast_hash": "dd33298990af0117c24a190331b990f4",
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791881218.7420046,
-    "seen": 1791881231.3224916,
-    "ast_hash": "13b3a7eb1697d0447a4037a5a4e153a9",
+    "mtime": 1791881993.7109404,
+    "seen": 1791882001.4078138,
+    "ast_hash": "7650e1a66396e0bd42ca4ae5f75a7ff1",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1893,6 +1893,18 @@
     "mtime": 1791881268.4320114,
     "seen": 1791881289.1190739,
     "ast_hash": "0f77327e25598d00bcaaa296e1c03b52",
+    "semantic_hash": ""
+  },
+  "src/services/validation/checkScheduler.ts": {
+    "mtime": 1791882074.9864388,
+    "seen": 1791882096.729819,
+    "ast_hash": "261711494f16ed53c04061a6c02a2dc3",
+    "semantic_hash": ""
+  },
+  "tests/unit/checkScheduler.test.ts": {
+    "mtime": 1791881789.00009,
+    "seen": 1791882001.4077046,
+    "ast_hash": "bd98ab03a0208fce67080b36251aa1cb",
     "semantic_hash": ""
   }
 }

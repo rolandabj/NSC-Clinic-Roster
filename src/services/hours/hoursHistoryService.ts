@@ -36,3 +36,15 @@ export async function loadHoursHistory(
     contractPercents: Object.fromEntries(published.filter((r) => r.contractPercents).map((r) => [r.schedule.id, r.contractPercents!])),
   };
 }
+
+/**
+ * True when two hours histories hold the same content (compared as JSON text, so the same
+ * keys in the same order; a different order only costs one more check). The history is loaded again several
+ * times while a roster opens (and after saves elsewhere), as a new copy each time, usually
+ * unchanged; the roster check only needs to run again when it changed.
+ */
+export function sameHoursHistory(a: HoursHistory | undefined, b: HoursHistory | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}

@@ -446,3 +446,17 @@ After slice 3, the same machine, 7 runs, times in the page:
 | Deleting a shift | 106 ms, 100 ms | 86 ms | under 100 ms |
 
 After slice 4 (7 runs, in the page): cells shown 1,097 ms, longest blocking task while loading 281 ms, popup 62 ms, arrow key 30 ms, deleting a shift 88 ms. The screen times stay as after slice 3: this slice takes work out of the save that runs after each edit.
+
+After slice 5 (7 runs). `grid-timing.cjs` now also measures the first cells in the page, from the start of the page load (`firstCellsInPage`); its older `firstCells` includes the test tool's navigation.
+
+| | Slice 4 | Slice 5 | Phase 3 target |
+|---|---|---|---|
+| Cells shown, in the page | about 545 ms (5 loads) | 464 ms | under 1,000 ms |
+| Cells shown, from the script | 1,097 ms | 1,097 ms | |
+| Roster checks while opening the roster | 4 | 1 | |
+| Longest blocking task while loading | 281 ms | 278 ms | under 200 ms |
+| Popup, in the page | 62 ms | 64 ms | under 100 ms |
+| One arrow key, in the page | 30 ms | 31 ms | under 50 ms |
+| Deleting a shift, in the page | 88 ms | 88 ms | under 100 ms |
+
+The longest task while loading is the grid's first drawing of its 60 rows, not the check.

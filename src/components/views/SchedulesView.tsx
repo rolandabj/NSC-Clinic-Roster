@@ -1,6 +1,7 @@
 import { HoursHistory, hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
-import { loadHoursHistory } from '../../services/hours/hoursHistoryService';
-import React, { useState, useEffect, useRef, useId, useCallback, useMemo } from 'react';
+import { loadHoursHistory, sameHoursHistory } from '../../services/hours/hoursHistoryService';
+import { afterNextFrame, createCheckScheduler } from '../../services/validation/checkScheduler';
+import React, { useState, useEffect, useRef, useId, useCallback, useMemo, startTransition } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import {
@@ -489,28 +490,49 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     leaveTypes,
   });
 
+  // The roster check is kept out of the way: a request waits until the screen has drawn
+  // (`afterNextFrame`), requests made meanwhile run it once with the newest list, and its
+  // result is drawn as a transition, which a key press can interrupt. Opening a full size
+  // roster asked for it four times in a row (about 60 ms each).
+  // What the check reads: the screen's lists as last drawn, plus lists set since then and
+  // not drawn yet (a request passes them as `overrides`).
+  const checkInputsRef = useRef<CheckInputs>(currentCheckInputs());
+  checkInputsRef.current = currentCheckInputs();
+  // The hours history the last check used (a history loaded again unchanged needs no check).
+  const lastCheckedHistoryRef = useRef<HoursHistory | undefined>(undefined);
+  const [checks] = useState(() =>
+    createCheckScheduler<{ sched: Schedule; list: Assignment[] }>({
+      later: afterNextFrame,
+      run: ({ sched, list }) => {
+        const x = checkInputsRef.current;
+        lastCheckedHistoryRef.current = clinicSetupRef.current?.hoursHistory;
+        const report = ScheduleValidator.validate(
+          sched,
+          list,
+          x.nurses,
+          x.seniorityLevels,
+          x.dutyWindows,
+          x.sessions,
+          x.leaveEntries,
+          x.locks,
+          x.roles,
+          x.rules,
+          x.workingHoursPeriods,
+          x.specialties,
+          x.doctors,
+          x.leaveTypes,
+          clinicSetupRef.current,
+          availabilityRequestsRef.current
+        );
+        startTransition(() => setValidationReport(report));
+      },
+    })
+  );
+  useEffect(() => () => checks.cancel(), [checks]);
+
   const runValidation = (sched: Schedule, list: Assignment[], overrides: Partial<CheckInputs> = {}) => {
-    const x = { ...currentCheckInputs(), ...overrides };
-    setValidationReport(
-      ScheduleValidator.validate(
-        sched,
-        list,
-        x.nurses,
-        x.seniorityLevels,
-        x.dutyWindows,
-        x.sessions,
-        x.leaveEntries,
-        x.locks,
-        x.roles,
-        x.rules,
-        x.workingHoursPeriods,
-        x.specialties,
-        x.doctors,
-        x.leaveTypes,
-        clinicSetupRef.current,
-        availabilityRequestsRef.current
-      )
-    );
+    checkInputsRef.current = { ...checkInputsRef.current, ...overrides };
+    checks.request({ sched, list });
   };
 
   /**
@@ -561,6 +583,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setRedoStack([]);
       setSelectedBlockIndex(0);
       setAssignments([]); // never show (or edit) the old roster's shifts under the new one
+      checks.cancel(); // a check of the old roster that has not run yet
       setValidationReport((prev) => ({ ...prev, scheduleId: sched.id, findings: [], errorCount: 0, warnCount: 0, infoCount: 0 }));
     }
     // Let edits that are still being saved finish first, so the reload includes them.
@@ -918,6 +941,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   useEffect(() => {
     if (!hoursHistory || !clinicSetupRef.current || !activeSchedule) return;
     clinicSetupRef.current = { ...clinicSetupRef.current, hoursHistory };
+    // The history is loaded again several times while a roster opens, as a new copy that is
+    // usually unchanged: check again only when it changed since the last check (or one waits).
+    if (!checks.waiting && sameHoursHistory(lastCheckedHistoryRef.current, hoursHistory)) return;
     runValidation(activeSchedule, assignments);
   }, [hoursHistory]);
 
@@ -1133,6 +1159,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           clinicSetupRef.current,
           availabilityRequestsRef.current
         );
+        checks.cancel();
         setValidationReport(report);
 
         const clearedCount = assignments.length - finalAssignments.length;
@@ -1258,6 +1285,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           clinicSetupRef.current,
           availabilityRequestsRef.current
       );
+      checks.cancel();
       setValidationReport(report);
 
       const overtimeCount = report.findings.filter(

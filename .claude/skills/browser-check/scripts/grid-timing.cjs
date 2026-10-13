@@ -7,6 +7,8 @@
 // change, so they include Playwright's own work (a click first waits for the cell to stay still
 // and checks what is under the pointer); the `...InPage` times run inside the page, from the
 // press or the key to the next frame drawn after the change, which is what a person feels.
+// `firstCellsInPage` counts from the start of the page load to the first cell on screen;
+// `firstCells` runs from the script's command and includes the navigation itself.
 const { chromium } = require('playwright');
 
 function arg(name, fallback) {
@@ -23,6 +25,15 @@ async function once(browser, base) {
     window.__long = [];
     new PerformanceObserver((list) => { for (const e of list.getEntries()) window.__long.push(Math.round(e.duration)); })
       .observe({ type: 'longtask', buffered: true });
+  });
+  // In the page: when the first cell appears, counted from the start of the page load.
+  await page.addInitScript(() => {
+    new MutationObserver((_m, o) => {
+      if (document.querySelector('[data-cell]')) {
+        window.__cellsAt = Math.round(performance.now());
+        o.disconnect();
+      }
+    }).observe(document, { subtree: true, childList: true });
   });
   // In the page: from the next event of this type to the next frame drawn once `check` is true.
   await page.addInitScript(() => {
@@ -57,6 +68,7 @@ async function once(browser, base) {
   await page.goto(`${base}/?view=schedules&seed=big`);
   await page.waitForSelector('[data-cell="n1|2026-11-02"]', { timeout: 60000 });
   const firstCells = Date.now() - t;
+  const firstCellsInPage = await page.evaluate(() => window.__cellsAt);
   await page.waitForTimeout(4000);
   const loadLongest = await longest();
 
@@ -102,7 +114,7 @@ async function once(browser, base) {
   const deleteLongest = await longest();
   const dom = await page.evaluate(() => document.querySelectorAll('*').length);
   await page.close();
-  return { firstCells, loadLongest, popup, popupInPage, popupLongest, arrowKey, arrowKeyInPage, arrowLongest, deleteShift, deleteShiftInPage, deleteLongest, dom, errors };
+  return { firstCells, firstCellsInPage, loadLongest, popup, popupInPage, popupLongest, arrowKey, arrowKeyInPage, arrowLongest, deleteShift, deleteShiftInPage, deleteLongest, dom, errors };
 }
 
 (async () => {

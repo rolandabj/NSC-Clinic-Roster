@@ -52,7 +52,8 @@ in `/opt/pw-browsers`; never run `playwright install`.
      inside the page, from the press or the key to the next frame drawn after the change. The
      popup, arrow key and delete times without `InPage` run from the script's command and
      include Playwright's own work (a click first waits for the cell to stay still), about
-     70 ms more for the popup.
+     70 ms more for the popup. `firstCellsInPage` counts from the start of the page load to the first cell on
+     screen (`firstCells` includes the navigation itself).
    - `scripts/links.cjs --base http://localhost:5180`: links to a settings tab, a nurse, a roster
      sheet and a nurse's day; Back and Forward between tabs; a screen opened from the menu; a new
      roster staying open; and the account panel when a click does not focus its buttons (as in
