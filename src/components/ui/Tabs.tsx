@@ -64,7 +64,9 @@ export const Tabs: React.FC<{
     refs.current[next]?.focus();
   };
   return (
-    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className={cx('flex gap-1 overflow-x-auto border-b border-line px-2', className)}>
+    // relative: text kept for screen readers only (sr-only, placed absolutely) stays inside the
+    // row's sideways scroll; otherwise a tab scrolled out of view widened the whole page.
+    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className={cx('relative flex gap-1 overflow-x-auto border-b border-line px-2', className)}>
       {tabs.map((tab, i) => {
         const selected = tab.id === value;
         return (

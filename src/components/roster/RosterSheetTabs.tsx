@@ -44,7 +44,7 @@ export const RosterSheetTabs: React.FC<{
         onClick={onToggleFullScreen}
         aria-pressed={isFullScreen}
         title={isFullScreen ? 'Leave full screen (Esc)' : 'Full screen'}
-        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-ink-muted hover:bg-sunken hover:text-ink pointer-coarse:h-11"
+        className="relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-ink-muted hover:bg-sunken hover:text-ink pointer-coarse:h-11"
       >
         {isFullScreen ? <Minimize2 className="size-4" aria-hidden="true" /> : <Maximize2 className="size-4" aria-hidden="true" />}
         {/* Only the icon below 1280 px, so the tabs fit a 1024 px laptop. */}

@@ -19,6 +19,26 @@ export interface MenuItem {
   danger?: boolean;
   /** Draws a line above this item. */
   separatorBefore?: boolean;
+  /** The named group the item belongs to; items of a group sit together under its name. */
+  group?: string;
+}
+
+export interface MenuSection {
+  group?: string;
+  items: MenuItem[];
+  /** The index of the section's first item in the whole menu. */
+  start: number;
+}
+
+/** The menu's items split into sections, one for each run of items with the same group. */
+export function menuSections(items: MenuItem[]): MenuSection[] {
+  const sections: MenuSection[] = [];
+  items.forEach((item, i) => {
+    const last = sections[sections.length - 1];
+    if (last && last.group === item.group) last.items.push(item);
+    else sections.push({ group: item.group, items: [item], start: i });
+  });
+  return sections;
 }
 
 interface MenuButtonProps {
@@ -120,30 +140,46 @@ export const MenuButton: React.FC<MenuButtonProps> = ({ label, ariaLabel, items,
           }}
           className={`absolute ${align === 'right' ? 'right-0' : 'left-0'} mt-1 w-64 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-lg shadow-xl py-1 z-40 text-xs`}
         >
-          {items.map((item, i) => (
-            <button
-              key={item.label}
-              ref={(el) => {
-                itemRefs.current[i] = el;
-              }}
-              type="button"
-              role="menuitem"
-              disabled={item.disabled}
-              onClick={() => {
-                close(false);
-                item.onSelect();
-              }}
-              className={`w-full text-left px-3 py-2 flex items-start gap-2.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:bg-indigo-50 hover:bg-indigo-50 ${
-                item.separatorBefore ? 'border-t border-slate-100' : ''
-              } ${item.danger ? 'text-rose-700' : 'text-slate-800'}`}
-            >
-              {item.icon && <span className="mt-0.5 shrink-0" aria-hidden="true">{item.icon}</span>}
-              <span>
-                <span className="block font-semibold">{item.label}</span>
-                {item.hint && <span className="block text-[11px] text-slate-500 font-normal">{item.hint}</span>}
-              </span>
-            </button>
-          ))}
+          {menuSections(items).map((section, n) => {
+            const buttons = section.items.map((item, j) => {
+              const i = section.start + j;
+              return (
+                <button
+                  key={item.label}
+                  ref={(el) => {
+                    itemRefs.current[i] = el;
+                  }}
+                  type="button"
+                  role="menuitem"
+                  disabled={item.disabled}
+                  onClick={() => {
+                    close(false);
+                    item.onSelect();
+                  }}
+                  className={`w-full text-left px-3 py-2 flex items-start gap-2.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:bg-indigo-50 hover:bg-indigo-50 ${
+                    item.separatorBefore ? 'border-t border-slate-100' : ''
+                  } ${item.danger ? 'text-rose-700' : 'text-slate-800'}`}
+                >
+                  {item.icon && <span className="mt-0.5 shrink-0" aria-hidden="true">{item.icon}</span>}
+                  <span>
+                    <span className="block font-semibold">{item.label}</span>
+                    {item.hint && <span className="block text-xs text-slate-500 font-normal">{item.hint}</span>}
+                  </span>
+                </button>
+              );
+            });
+            if (!section.group) return <React.Fragment key={n}>{buttons}</React.Fragment>;
+            // A named group, read out with its name (the WAI-ARIA menu pattern).
+            const headingId = `${menuId}-group-${n}`;
+            return (
+              <div key={section.group} role="group" aria-labelledby={headingId} className={n > 0 ? 'border-t border-slate-100 mt-1 pt-1' : ''}>
+                <div id={headingId} role="presentation" className="px-3 pt-1.5 pb-1 text-xs font-semibold text-slate-600">
+                  {section.group}
+                </div>
+                {buttons}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

@@ -4,7 +4,7 @@ import type { RosterStep, RosterStepAction } from './rosterSteps';
 
 /** The roster screen's step bar: where this roster is, and the next thing to do. */
 export const RosterSteps: React.FC<{ steps: RosterStep[]; onStep: (action: RosterStepAction) => void }> = ({ steps, onStep }) => (
-  <nav aria-label="Roster steps" className="bg-slate-50 border-b border-slate-200 px-3 sm:px-4 py-1.5 shrink-0 overflow-x-auto">
+  <nav aria-label="Roster steps" className="relative bg-slate-50 border-b border-slate-200 px-3 sm:px-4 py-1.5 shrink-0 overflow-x-auto">
     <ol className="flex items-center gap-1 text-[11px] whitespace-nowrap">
       {steps.map((step, i) => (
         <li key={step.label} className="flex items-center gap-1">

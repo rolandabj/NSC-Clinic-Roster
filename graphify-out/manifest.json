@@ -792,9 +792,9 @@
     "semantic_hash": ""
   },
   "src/components/common/MenuButton.tsx": {
-    "mtime": 1791362587.9539049,
-    "seen": 1791365225.1339571,
-    "ast_hash": "a61d73a6fa2fcb8e60c30ba26cda68bc",
+    "mtime": 1791895920.4004927,
+    "seen": 1791896204.463884,
+    "ast_hash": "92dde5957a0fea5a4e83d9f00513fb3f",
     "semantic_hash": ""
   },
   "src/components/views/MyRosterView.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791895672.6642225,
-    "seen": 1791895695.6184137,
-    "ast_hash": "fbba08a88d2b6204aaa33fee7a1a8efa",
+    "mtime": 1791896196.5347683,
+    "seen": 1791896204.4643185,
+    "ast_hash": "4a23cb70a7d8508e50c14eb977f297df",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1356,9 +1356,9 @@
     "semantic_hash": ""
   },
   "skills-lock.json": {
-    "mtime": 1791878011.1478653,
-    "seen": 1791878701.9116652,
-    "ast_hash": "5353362848ffd7c3a99888ad5a93be5a",
+    "mtime": 1791895920.4004927,
+    "seen": 1791896204.463875,
+    "ast_hash": "37dbadf0871de4a99f09d0ac9300f992",
     "semantic_hash": ""
   },
   ".claude/skills/find-skills/SKILL.md": {
@@ -1740,9 +1740,9 @@
     "semantic_hash": ""
   },
   "src/components/ui/Tabs.tsx": {
-    "mtime": 1791895350.0442638,
-    "seen": 1791895695.6180823,
-    "ast_hash": "e6b8186fe147247d96fd5da409524668",
+    "mtime": 1791895958.6899767,
+    "seen": 1791896204.4640028,
+    "ast_hash": "a8ef13dd7b5bd4a81cb41a9168bfadec",
     "semantic_hash": ""
   },
   "src/components/ui/cx.ts": {
@@ -1932,21 +1932,21 @@
     "semantic_hash": ""
   },
   "src/components/roster/RosterSheetTabs.tsx": {
-    "mtime": 1791895535.7837431,
-    "seen": 1791895695.618062,
-    "ast_hash": "302443ce79a7c677cbd6f66870bbeab8",
+    "mtime": 1791895958.6904526,
+    "seen": 1791896204.4639833,
+    "ast_hash": "53e0c33a99b96415c9a0819a459ae104",
     "semantic_hash": ""
   },
   "src/components/roster/RosterSteps.tsx": {
-    "mtime": 1791883171.8525715,
-    "seen": 1791883630.3387296,
-    "ast_hash": "fb1f658ef267e464bcb571ccc22f63f4",
+    "mtime": 1791896010.5757937,
+    "seen": 1791896204.4639852,
+    "ast_hash": "a33f1a66273354ec97d659b0f39ec5b2",
     "semantic_hash": ""
   },
   "src/components/roster/RosterToolbar.tsx": {
-    "mtime": 1791895269.3602552,
-    "seen": 1791895695.618065,
-    "ast_hash": "ec914a677c779e5482121002485ea9d2",
+    "mtime": 1791895920.4022815,
+    "seen": 1791896204.4639862,
+    "ast_hash": "dee5591e44a48e823c91ff79bf768dd9",
     "semantic_hash": ""
   },
   "src/components/roster/rosterSteps.ts": {
@@ -2034,15 +2034,33 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/sheet-tabs.cjs": {
-    "mtime": 1791895485.3790867,
-    "seen": 1791895695.6179543,
-    "ast_hash": "96c3cac577f7f3c4a195cffd4c977446",
+    "mtime": 1791895964.8359153,
+    "seen": 1791896204.4638233,
+    "ast_hash": "e78523414ac6b97ec3ac27d92a2c21d0",
     "semantic_hash": ""
   },
   "tests/unit/rosterSheetTabs.test.ts": {
     "mtime": 1791895521.366522,
     "seen": 1791895695.6183114,
     "ast_hash": "d3c2dad204566e76474e89654ec1762a",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/toolbar.cjs": {
+    "mtime": 1791896080.9699392,
+    "seen": 1791896204.463831,
+    "ast_hash": "04840215943ad9df526161d4cd4967f1",
+    "semantic_hash": ""
+  },
+  "tests/unit/rosterToolbar.test.ts": {
+    "mtime": 1791895795.2357514,
+    "seen": 1791896204.4642587,
+    "ast_hash": "9451649213b5c82b846da880553eeb08",
+    "semantic_hash": ""
+  },
+  ".claude/skills/fixing-accessibility/SKILL.md": {
+    "mtime": 1791895753.290116,
+    "seen": 1791896204.4642913,
+    "ast_hash": "77daa4885d82365292fa8c1ca23b90f4",
     "semantic_hash": ""
   }
 }

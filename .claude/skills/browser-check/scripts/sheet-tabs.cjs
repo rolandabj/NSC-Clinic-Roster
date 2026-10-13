@@ -74,7 +74,7 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   check('Esc leaves full screen', (await full.getAttribute('aria-pressed')) === 'false');
 
   // 5. Narrower screens: the tabs scroll sideways, the page does not.
-  for (const width of [1024, 768]) {
+  for (const width of [1024, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.getByRole('tab', { name: 'Roster' }).click();
     await page.waitForTimeout(400);
