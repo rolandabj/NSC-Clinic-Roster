@@ -7,6 +7,7 @@
  * browser, protected by the Firestore security rules. This server only:
  *   - sends email through Google SMTP (credentials from AI Studio Secrets)
  *   - serves each nurse's private calendar feed (/calendar/TOKEN.ics)
+ *   - emails a nurse when their leave or day request is decided
  */
 
 import express, { Request, Response } from 'express';
@@ -17,6 +18,7 @@ import { authRouter } from './routes/auth';
 import { emailRouter } from './routes/email';
 import { calendarRouter } from './routes/calendar';
 import { geminiRouter } from './routes/gemini';
+import { requestsRouter } from './routes/requests';
 
 export function createApiApp() {
   const app = express();
@@ -117,6 +119,7 @@ export function createApiApp() {
   app.use('/api/auth', authRouter);
   app.use('/api', emailRouter);
   app.use('/api/gemini', geminiRouter);
+  app.use('/api/requests', requestsRouter);
 
   // Unknown API routes
   app.use('/api', (_req: Request, res: Response) => {

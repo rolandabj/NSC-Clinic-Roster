@@ -18,7 +18,7 @@ import {
 } from '../../types';
 import { getRepository } from '../repository';
 import { withHolidaysAtZero } from '../hours/holidayLeave';
-import { UserProfile } from '../auth/authService';
+import { UserProfile, authorizedFetch } from '../auth/authService';
 import { canApproveRequests } from '../auth/access';
 
 const DAY_MS = 1000 * 60 * 60 * 24;
@@ -236,6 +236,23 @@ export async function countPendingApprovals(): Promise<number> {
 }
 
 /**
+ * Asks the server to email the nurse about a decision (UI overhaul Phase 5, slice 4). The server
+ * checks the Settings switch, reads the request itself and writes the email; a failure here never
+ * undoes or holds up the decision.
+ */
+export function emailDecision(kind: 'leave' | 'day', requestId: string): Promise<void> {
+  return authorizedFetch(`/api/requests/${encodeURIComponent(requestId)}/notify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kind }),
+  })
+    .then((res) => {
+      if (!res.ok) console.warn(`[Requests] The decision email was not sent (HTTP ${res.status}).`);
+    })
+    .catch((err) => console.warn('[Requests] The decision email could not be asked for:', err?.message || err));
+}
+
+/**
  * Approves or rejects a request. An approved day off also creates an OFF
  * lock; rejecting a previously approved day off removes that lock again.
  */
@@ -278,6 +295,7 @@ export async function decideRequest(
       note: `Leave request for nurse ${existing.nurseId} (${existing.startDate} to ${existing.endDate}) was ${decision} by ${reviewerName}`,
       timestamp: now,
     });
+    void emailDecision('leave', requestId);
     return;
   }
 
@@ -303,6 +321,7 @@ export async function decideRequest(
     note: `Availability request for nurse ${existing.nurseId} on ${existing.date} was ${decision} by ${reviewerName}`,
     timestamp: now,
   });
+  void emailDecision('day', requestId);
 }
 
 /** The pinned day off that goes with an approved day off request. */

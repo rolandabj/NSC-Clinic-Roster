@@ -41,7 +41,7 @@ for (const mode of ['dev', 'start', 'vite', 'preview']) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     assert.equal(ready, true, `${mode} did not mount the API: ${output}`);
-    for (const [path, method] of [['/api/email/test', 'POST'], ['/api/email/check', 'POST'], ['/api/email/status', 'GET']]) {
+    for (const [path, method] of [['/api/email/test', 'POST'], ['/api/email/check', 'POST'], ['/api/email/status', 'GET'], ['/api/requests/r1/notify', 'POST']]) {
       const response = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json' }, ...(method === 'POST' ? { body: '{}' } : {}) });
       assert.equal(response.status, 401, `${mode} ${path} requires sign in`);
       assert.match(response.headers.get('content-type') || '', /application\/json/);

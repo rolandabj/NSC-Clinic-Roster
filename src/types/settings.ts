@@ -13,10 +13,13 @@ export interface EmailSettingsConfig {
   mockMode: boolean;
   /** The name shown as the sender. The address is the server's Gmail account. */
   senderName: string;
+  /** Email a nurse when a planner or manager approves or declines their request. Starts off. */
+  requestDecisionEmails?: boolean;
 }
 
 export const DEFAULT_EMAIL_SETTINGS: EmailSettingsConfig = {
   provider: 'GOOGLE',
   mockMode: true,
   senderName: 'Dr. Roland / Clinical Director',
+  requestDecisionEmails: false,
 };

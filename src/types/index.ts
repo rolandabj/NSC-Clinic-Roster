@@ -482,6 +482,8 @@ export interface SystemMetadata {
   emailMockMode?: boolean;
   /** On 'email_settings': the name shown as the sender of roster emails. */
   emailSenderName?: string;
+  /** On 'email_settings': email nurses when their request is decided (the server reads it). */
+  emailRequestDecisions?: boolean;
   updatedAt?: string;
   updatedBy?: string;
   clearedAt?: string;

@@ -348,9 +348,9 @@
     "semantic_hash": "059a218642c5e63e9c622d75567cdd02"
   },
   "src/components/views/settings/EmailTab.tsx": {
-    "mtime": 1791362587.9670062,
-    "seen": 1791365225.134025,
-    "ast_hash": "49d251fa9d7c4782d0f09acc55ac0d74",
+    "mtime": 1791915840.9242115,
+    "seen": 1791915963.876006,
+    "ast_hash": "4d3c6b50b5759acf4fabb8cb42cad165",
     "semantic_hash": ""
   },
   "src/components/views/settings/HolidaysTab.tsx": {
@@ -588,9 +588,9 @@
     "semantic_hash": "0dffc6200bbc63a11dc6ae5d2a04366c"
   },
   "src/services/requests/staffRequestService.ts": {
-    "mtime": 1791878011.1718652,
-    "seen": 1791878701.9119148,
-    "ast_hash": "99bf107bb13ba10805fb1f6c3e6f240e",
+    "mtime": 1791915750.8765821,
+    "seen": 1791915963.8761706,
+    "ast_hash": "e8e044b492484c3e7305f4e29ab7d43f",
     "semantic_hash": ""
   },
   "src/services/rules/ruleSyncService.ts": {
@@ -630,9 +630,9 @@
     "semantic_hash": ""
   },
   "src/services/settings/emailSettingsStore.ts": {
-    "mtime": 1791362587.9802833,
-    "seen": 1791365225.1341178,
-    "ast_hash": "10f6fa8b973e45237df0c9bb5db72973",
+    "mtime": 1791915708.9685209,
+    "seen": 1791915963.8761926,
+    "ast_hash": "a94f2a68206c3f99a076ddab072c92d5",
     "semantic_hash": ""
   },
   "src/services/validation/ScheduleValidator.ts": {
@@ -642,9 +642,9 @@
     "semantic_hash": ""
   },
   "src/types/index.ts": {
-    "mtime": 1791878011.1718652,
-    "seen": 1791878701.9119298,
-    "ast_hash": "ca6b1e8b702763c5b024cfa289ddf328",
+    "mtime": 1791915719.2033865,
+    "seen": 1791915963.8761973,
+    "ast_hash": "be52a597206a80b04a80c965eeb079a2",
     "semantic_hash": ""
   },
   "src/types/navigation.ts": {
@@ -654,10 +654,10 @@
     "semantic_hash": ""
   },
   "src/types/settings.ts": {
-    "mtime": 1791362587.9814951,
-    "seen": 1791365225.134122,
-    "ast_hash": "3da1f771b79aaceb8d56fe151c365799",
-    "semantic_hash": "3da1f771b79aaceb8d56fe151c365799"
+    "mtime": 1791915714.5432966,
+    "seen": 1791915963.8762,
+    "ast_hash": "7b92ba15f4fd7fb71370cf81f0403c25",
+    "semantic_hash": ""
   },
   "src/utils/csv.ts": {
     "mtime": 1791362587.9814951,
@@ -786,9 +786,9 @@
     "semantic_hash": ""
   },
   "server/services/firestore/firestoreRest.ts": {
-    "mtime": 1791362587.953462,
-    "seen": 1791365225.133948,
-    "ast_hash": "86a11cde791d48eff193547819b47f0b",
+    "mtime": 1791915675.9294436,
+    "seen": 1791915963.8758726,
+    "ast_hash": "6fbf959402d45fa03433941258f56d3f",
     "semantic_hash": ""
   },
   "src/components/common/MenuButton.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791912594.995708,
-    "seen": 1791912615.9701986,
-    "ast_hash": "dce8a16b1dbec9b0206dac8b66f91279",
+    "mtime": 1791915913.144426,
+    "seen": 1791915963.8763483,
+    "ast_hash": "1751b075fe2b81e77c6592492618ea17",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1182,9 +1182,9 @@
     "semantic_hash": ""
   },
   "server/apiApp.ts": {
-    "mtime": 1791878011.1438653,
-    "seen": 1791878701.9116428,
-    "ast_hash": "34a748eff53e6d7215bcb2879324aa8f",
+    "mtime": 1791915701.287902,
+    "seen": 1791915963.8758507,
+    "ast_hash": "0335878170c9ed972e7362836534a3f9",
     "semantic_hash": ""
   },
   "src/services/email/emailResponse.ts": {
@@ -1194,9 +1194,9 @@
     "semantic_hash": ""
   },
   "tests/integration/emailServer.test.ts": {
-    "mtime": 1791362587.9822257,
-    "seen": 1791365225.1341307,
-    "ast_hash": "0eb423eb1fb4db25ea6c6eeac8eb0087",
+    "mtime": 1791915812.9718363,
+    "seen": 1791915963.8762128,
+    "ast_hash": "86dc4f4a5077209bbc3fcd08b91344a1",
     "semantic_hash": ""
   },
   "README.md": {
@@ -2169,6 +2169,24 @@
     "mtime": 1791912271.407265,
     "seen": 1791912475.5494816,
     "ast_hash": "d57c8f10b63f542b4aee1aaf51120161",
+    "semantic_hash": ""
+  },
+  "server/routes/requests.ts": {
+    "mtime": 1791915840.9231958,
+    "seen": 1791915963.8758664,
+    "ast_hash": "807255182daa603a3dd80560eca1ef0a",
+    "semantic_hash": ""
+  },
+  "src/services/requests/decisionEmail.ts": {
+    "mtime": 1791915840.921802,
+    "seen": 1791915963.876134,
+    "ast_hash": "50187b21ed98e2f1ef284478bcfda747",
+    "semantic_hash": ""
+  },
+  "tests/unit/decisionEmail.test.ts": {
+    "mtime": 1791915840.9470813,
+    "seen": 1791915963.876238,
+    "ast_hash": "ae9c67c66be23195d8c5feaa7778f065",
     "semantic_hash": ""
   }
 }

@@ -44,6 +44,7 @@ export async function loadEmailSettings(repo: IRepository, strict = false): Prom
       provider: 'GOOGLE',
       mockMode: shared.emailMockMode !== false,
       senderName: shared.emailSenderName || local.senderName,
+      requestDecisionEmails: shared.emailRequestDecisions === true,
     };
     cache(config);
     return config;
@@ -60,6 +61,7 @@ export async function saveEmailSettings(repo: IRepository, config: EmailSettings
   const data = {
     emailMockMode: config.mockMode !== false,
     emailSenderName: config.senderName || DEFAULT_EMAIL_SETTINGS.senderName,
+    emailRequestDecisions: config.requestDecisionEmails === true,
     updatedAt: new Date().toISOString(),
     updatedBy: byEmail || '',
   };

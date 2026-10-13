@@ -234,6 +234,25 @@ export const EmailTab: React.FC<EmailTabProps> = ({
         )}
       </div>
 
+      {/* Request decision emails (UI overhaul Phase 5, slice 4): the server reads this switch. */}
+      <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-1 shadow-2xs">
+        <label htmlFor="email-request-decisions" className="flex min-h-11 cursor-pointer items-center gap-3 font-semibold text-slate-800 text-sm">
+          <input
+            id="email-request-decisions"
+            type="checkbox"
+            checked={emailConfig.requestDecisionEmails === true}
+            onChange={(e) => updateEmailConfigField({ requestDecisionEmails: e.target.checked }, true)}
+            aria-describedby="email-request-decisions-help"
+            className="size-5 shrink-0 accent-rose-600"
+          />
+          Email nurses when their request is approved or declined
+        </label>
+        <p id="email-request-decisions-help" className="text-xs text-slate-600">
+          When a planner or manager approves or declines a request for leave, a day off or a shift, the nurse gets a short email
+          that says so, with any note. It follows the Dispatch Mode above: in Safe Sandbox the email is logged but not sent.
+        </p>
+      </div>
+
       {/* Action Bar */}
       <div className="pt-2 flex flex-wrap items-center gap-3">
         <button
