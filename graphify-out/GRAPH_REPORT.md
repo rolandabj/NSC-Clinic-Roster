@@ -1,51 +1,51 @@
 # Graph Report - NSC-Clinic-Roster  (2026-10-13)
 
 ## Corpus Check
-- 298 files · ~351,467 words
+- 298 files · ~351,982 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 10 file(s) not represented in the graph (top: .css 4, (none) 3, .example 1)
 
 ## Summary
-- 2357 nodes · 7528 edges · 128 communities (116 shown, 12 thin omitted)
+- 2358 nodes · 7529 edges · 117 communities (107 shown, 10 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 276 edges (avg confidence: 0.9)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `39ae8d83`
+- Built from commit: `747eb5ac`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- SchedulesView.tsx
+- Assignment
 - DashboardView.tsx
-- ExportModal.tsx
+- ScheduleValidator.ts
 - clinicModel.test.ts
-- quotaTracker
-- ClinicContextState
-- getRepository
+- IRepository.ts
+- authService.ts
+- notify
 - authService
 - ui-audit.cjs
 - package.json
 - AppShell.tsx
 - dependencies
 - Test-Driven Development
-- AvailabilityView.tsx
+- getRepository
 - App.tsx
 - CollectionSyncer
-- NurseTimesheetModal.tsx
+- SchedulingEngine.ts
 - makeNurse
 - firebaseIdentityService.ts
-- SchedulesView
+- SchedulesView.tsx
 - compilerOptions
 - savingSafety.test.ts
-- publicRosterService.ts
+- ShareModal.tsx
 - icsExportService.ts
 - devDependencies
 - nurseRosterService.ts
 - seedRunner.ts
 - IRepository
 - scripts
-- SchedulingEngine.ts
+- analysisExportService.ts
 - PlannerSample.tsx
 - engineRules.test.ts
 - Hardening Controls
@@ -53,20 +53,20 @@
 - MemoryRepo
 - Code Review and Quality
 - What You Must Do When Invoked
-- scheduleTransactions.test.ts
+- LiveCollectionCache
 - WorkbookGrid.tsx
 - hoursTopUp.test.ts
 - Optimization Patterns
-- routes/auth.ts
+- analysisExport.test.ts
 - continuousHours.test.ts
 - rules.test.mjs
 - Frontend UI Engineering
-- FirestoreRepository
+- EntityForCollection
 - ui.tsx
 - firestore-rules/package.json
 - yearToDate.ts
 - NSC Clinic Roster: complete project guide
-- nurseClinicFloat.test.ts
+- dialogs.tsx
 - Debugging and Error Recovery
 - graphify reference: extra exports and benchmark
 - handMoves.test.ts
@@ -88,14 +88,14 @@
 - NSC Clinic Roster: UI review and overhaul in phases
 - Source-Driven Development
 - emailService.ts
-- guide-with-code.mjs
-- apiApp.ts
+- published-rules.mjs
+- createApiApp
 - PublishModal.tsx
 - Design system: NSC Clinic Roster
 - README.md
-- sharing.test.ts
-- 16. History of work (for context)
-- published-rules.mjs
+- lastResort.test.ts
+- weekHours.ts
+- holidayLeave.ts
 - Sidebar.tsx
 - links.cjs
 - Button.tsx
@@ -104,46 +104,35 @@
 - ui/index.ts
 - grid-timing.cjs
 - UI overhaul: summary and next steps
-- authService.ts
+- preferenceOrder.ts
 - access.ts
-- geminiApi.test.ts
-- lastResort.test.ts
+- apiApp.ts
+- middleware/auth.ts
 - harness/main.tsx
-- DoctorsView.tsx
-- EmailTab.tsx
+- doctorScheduleService.ts
+- address.ts
 - Finish a change
 - weekHours.test.ts
-- hoursRules.test.ts
-- FirestoreRepository.ts
+- dateDefaults.ts
+- preferenceFocus.test.ts
 - context7
-- colorContrast.ts
 - firestore-rules-reviewer.md
 - ref_node_assert
 - firebase-mcp.sh
 - react
 - start.sh
 - stop.sh
-- WorkingHoursPeriodsPanel.tsx
-- nurseRoster.test.ts
 - index.tsx
-- newRosterDates.ts
+- CreateScheduleModal.tsx
 - ddmmyyyy
 - UI overhaul: checklist
 - devDependencies
-- handMoveChecks.ts
-- uiComponents.test.ts
-- WarningsSheet.tsx
 - PublishedRosterView.tsx
-- authorizedFetch
-- QuickCellPopup.tsx
+- EmailTab.tsx
 - emailLogSize.ts
-- createLiveReconciler
-- dateUtils.ts
 - teamRoster.test.ts
-- fakeAuth.ts
-- plain-english-reviewer.md
-- MenuButton.tsx
-- shiftMoves.ts
+- ensureNurseLink
+- uuid
 
 ## God Nodes (most connected - your core abstractions)
 1. `Assignment` - 98 edges
@@ -164,59 +153,59 @@
   tasks/plan.md → src/components/common/usePermissions.ts
 - `Phase 1: quick fixes and safety` --references--> `usePermissions()`  [INFERRED]
   tasks/todo.md → src/components/common/usePermissions.ts
+- `Phase 6: Nurses, Doctors, Availability and Requests (planner screens)` --references--> `DataTable()`  [INFERRED]
+  tasks/plan.md → src/components/ui/DataTable.tsx
 - `Phase 8: Settings, Reports, Audit` --references--> `IRepository`  [INFERRED]
   tasks/plan.md → src/services/repository/IRepository.ts
-- `9. Checking a roster (`src/services/validation/ScheduleValidator.ts`)` --references--> `recordHolidayDayOff()`  [INFERRED]
-  PROJECT_GUIDE.md → src/services/requests/staffRequestService.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (128 total, 12 thin omitted)
+## Communities (117 total, 10 thin omitted)
 
-### Community 0 - "SchedulesView.tsx"
-Cohesion: 0.14
-Nodes (71): 5. Data model (Firestore collections), BulkImportModalProps, EditDoctorShiftModalProps, ExportModalProps, FairnessModalProps, NONE, NurseFairnessMetrics, ProposedSwap (+63 more)
+### Community 0 - "Assignment"
+Cohesion: 0.05
+Nodes (139): 5. Data model (Firestore collections), jspdf, jspdf-autotable, xlsx, usePermissions(), BulkImportModalProps, EditDoctorShiftModalProps, ExportModal() (+131 more)
 
 ### Community 1 - "DashboardView.tsx"
 Cohesion: 0.20
 Nodes (21): Card(), DashboardView(), loadPlannerData(), loadViewerData(), longDate(), PlannerData, readStoredId(), TodayList() (+13 more)
 
-### Community 2 - "ExportModal.tsx"
-Cohesion: 0.07
-Nodes (59): jspdf, jspdf-autotable, xlsx, DeleteScheduleModal(), DeleteScheduleModalProps, ExportModal(), ExportTab, fmtHours() (+51 more)
+### Community 2 - "ScheduleValidator.ts"
+Cohesion: 0.20
+Nodes (19): 7. Rules, BlockedShift, explainDay(), explainNurseDay(), ExplainNurseDayInput, plainReason(), PossibleShift, RequestWords (+11 more)
 
 ### Community 3 - "clinicModel.test.ts"
 Cohesion: 0.09
 Nodes (20): D, DOCTORS, DR_X, DUTIES, E, freeNurse, generate(), HOURS (+12 more)
 
-### Community 4 - "quotaTracker"
-Cohesion: 0.20
-Nodes (4): nextQuotaResetMs(), QuotaExceededError, QuotaListener, quotaTracker
+### Community 4 - "IRepository.ts"
+Cohesion: 0.11
+Nodes (12): nextQuotaResetMs(), QuotaExceededError, QuotaListener, quotaTracker, FirebaseClientConfig, SubscribeCallback, Unsubscribe, CacheEntry (+4 more)
 
-### Community 5 - "ClinicContextState"
-Cohesion: 0.14
-Nodes (18): AppContext, AppContextValue, TopBarProps, AvailabilityViewProps, DoctorsViewProps, HistoryViewProps, NursesViewProps, PublishViewProps (+10 more)
+### Community 5 - "authService.ts"
+Cohesion: 0.10
+Nodes (26): LoginPageProps, signOutSafely(), AppShellProps, TopBarProps, AuthModal(), AuthModalProps, AccessManagementPanelProps, ApprovalsQueuePanelProps (+18 more)
 
-### Community 6 - "getRepository"
-Cohesion: 0.13
-Nodes (46): useAppContext(), confirmDialog(), notify(), ShareModal(), TemplateModal(), AccessManagementPanel(), ClinicTab(), ClinicTabProps (+38 more)
+### Community 6 - "notify"
+Cohesion: 0.11
+Nodes (49): useAppContext(), confirmDialog(), notify(), TemplateModal(), AccessManagementPanel(), ClinicTab(), ClinicTabProps, DatabaseTab() (+41 more)
 
 ### Community 7 - "authService"
-Cohesion: 0.15
-Nodes (3): authService, computePrivileges(), getAppAuth()
+Cohesion: 0.12
+Nodes (7): authService, computePrivileges(), FirebaseConfig, getAppAuth(), getAppFirestore(), getFirebaseApp(), googleAuthProvider
 
 ### Community 8 - "ui-audit.cjs"
 Cohesion: 0.15
 Nodes (6): { chromium }, DEFAULT_PAGES, { execSync }, fs, os, path
 
 ### Community 9 - "package.json"
-Cohesion: 0.10
-Nodes (20): firebase, name, private, type, version, autoprefixer, cors, date-fns (+12 more)
+Cohesion: 0.09
+Nodes (22): firebase, name, private, type, version, autoprefixer, cors, date-fns (+14 more)
 
 ### Community 10 - "AppShell.tsx"
-Cohesion: 0.12
-Nodes (27): AppShell(), bootstrap(), AuditTrailView, AvailabilityView, DoctorsView, HistoryView, MyRosterView, NursesView (+19 more)
+Cohesion: 0.15
+Nodes (22): AppContext, AppContextValue, AppShell(), bootstrap(), AuditTrailView, AvailabilityView, DoctorsView, HistoryView (+14 more)
 
 ### Community 11 - "dependencies"
 Cohesion: 0.09
@@ -226,81 +215,81 @@ Nodes (22): dependencies, cors, date-fns, dotenv, express, express-rate-limit, f
 Cohesion: 0.07
 Nodes (29): Browser Testing with DevTools, Common Rationalizations, DAMP Over DRY in Tests, Decision Guide, Discover the Stack First, Name Tests Descriptively, One Assertion Per Concept, Overview (+21 more)
 
-### Community 13 - "AvailabilityView.tsx"
-Cohesion: 0.10
-Nodes (46): 10. Hours, 13. Screens in detail, AllRequestsPanel(), Draft, KindFilter, STATUS_LABEL, STATUS_STYLE, StatusFilter (+38 more)
+### Community 13 - "getRepository"
+Cohesion: 0.15
+Nodes (34): NoticeTone, AllRequestsPanel(), Draft, KindFilter, STATUS_LABEL, STATUS_STYLE, StatusFilter, weekdayOf() (+26 more)
 
 ### Community 14 - "App.tsx"
 Cohesion: 0.14
 Nodes (13): App(), AppShell, cachedClinicName(), MyRosterView, parsePublicLink(), PublishedRosterView, LoginPage(), LoadErrorBoundary (+5 more)
 
 ### Community 15 - "CollectionSyncer"
-Cohesion: 0.14
-Nodes (4): 11. Saving, live updates, versions, forgetCachedRoster(), CollectionSyncer, EntityForCollection
+Cohesion: 0.12
+Nodes (7): 11. Saving, live updates, versions, CollectionSyncer, Desired, fingerprint(), Known, planSync(), SyncPlan
 
-### Community 16 - "NurseTimesheetModal.tsx"
-Cohesion: 0.24
-Nodes (13): fmtHours(), NurseTimesheetModal(), SOURCE_LABELS, STATUS_LABELS, AuditTrailView(), AuditTrailViewProps, ReportsView(), AuditAction (+5 more)
+### Community 16 - "SchedulingEngine.ts"
+Cohesion: 0.21
+Nodes (18): 6. Clinic model (the business rules in plain English), checkAssignment(), hardRule(), minutes(), restHoursBetween(), shiftDate(), bloodCollectionRole(), canBeFreeNurse() (+10 more)
 
 ### Community 17 - "makeNurse"
-Cohesion: 0.10
-Nodes (31): 15. Tests, ANALYSIS_FORMAT, problemRule(), CARD, input(), KHAN, LATE, SCHEDULE (+23 more)
+Cohesion: 0.09
+Nodes (27): ctx(), EARLY, LATE, hoursOnlyRules(), makeNurse(), makeSchedule(), LATE, run() (+19 more)
 
 ### Community 18 - "firebaseIdentityService.ts"
-Cohesion: 0.11
-Nodes (23): jose, AuthUser, Express, Request, requireOwner, ROLE_HIERARCHY, verifyToken(), AccessRecordFields (+15 more)
+Cohesion: 0.15
+Nodes (18): jose, AuthUser, AccessRecordFields, cacheKey(), fetchAccessRecord(), fetchStaffEmails(), FirebaseProjectConfig, getFirebaseProjectConfig() (+10 more)
 
-### Community 19 - "SchedulesView"
-Cohesion: 0.27
-Nodes (11): SwapManagerModal(), readStoredScheduleId(), SchedulesView(), storeScheduleId(), CoverageSheet(), HolidayDayOffPicker(), HolidayDayOffPickerProps, LeaveAndLocksSheet() (+3 more)
+### Community 19 - "SchedulesView.tsx"
+Cohesion: 0.05
+Nodes (60): Report, What to check, What to look at, MenuButton(), MenuButtonProps, MenuItem, FairnessModal(), SwapManagerModal() (+52 more)
 
 ### Community 20 - "compilerOptions"
 Cohesion: 0.11
 Nodes (17): compilerOptions, allowImportingTsExtensions, allowJs, experimentalDecorators, isolatedModules, jsx, lib, module (+9 more)
 
 ### Community 21 - "savingSafety.test.ts"
-Cohesion: 0.14
-Nodes (11): clearYearToDateCache(), Desired, fingerprint(), Known, planSync(), SyncPlan, queuesByRepo, RETRY_EVERY_MS (+3 more)
+Cohesion: 0.13
+Nodes (10): clearYearToDateCache(), forgetCachedRoster(), afterShiftsSaved(), queuesByRepo, RETRY_EVERY_MS, rosterSaveQueues, STAMP_EVERY_MS, apps (+2 more)
 
-### Community 22 - "publicRosterService.ts"
-Cohesion: 0.23
-Nodes (9): pick(), PUBLIC_LEAVE_TYPE, PUBLIC_ROSTER_FORMAT, removePublicRoster(), syncPublicRoster(), SubscribeCallback, Unsubscribe, deleteEntireSchedule() (+1 more)
+### Community 22 - "ShareModal.tsx"
+Cohesion: 0.53
+Nodes (5): ShareModal(), TabType, ensurePublicRosters(), pick(), syncPublicRoster()
 
 ### Community 23 - "icsExportService.ts"
-Cohesion: 0.22
-Nodes (15): RFC-5545, calendarRouter, buildNurseIcs(), buildNurseRosterIcs(), escapeIcsText(), foldLine(), formatIcsDate(), nextDayCompact() (+7 more)
+Cohesion: 0.14
+Nodes (19): RFC-5545, buildNurseIcs(), buildNurseRosterIcs(), escapeIcsText(), foldLine(), formatIcsDate(), nextDayCompact(), NurseRosterIcsInput (+11 more)
 
 ### Community 24 - "devDependencies"
 Cohesion: 0.17
 Nodes (12): devDependencies, autoprefixer, esbuild, tailwindcss, @types/cors, @types/express, @types/node, @types/nodemailer (+4 more)
 
 ### Community 25 - "nurseRosterService.ts"
-Cohesion: 0.15
-Nodes (26): dateLabel(), PublishedRosterSheet(), DayEntry, LoadState, mondayOf(), MONTHS, MyRosterView(), MyRosterViewProps (+18 more)
+Cohesion: 0.17
+Nodes (21): DayEntry, LoadState, mondayOf(), MONTHS, MyRosterView(), MyRosterViewProps, shortDate(), addDaysIso() (+13 more)
 
 ### Community 26 - "seedRunner.ts"
-Cohesion: 0.20
-Nodes (11): ALL_COLLECTIONS, BackupCheck, ClearResult, DatabaseStats, downloadFullDatabaseBackup(), ensureWorkingHoursPeriodsDefaults(), exportFullDatabaseBackup(), initializeDatabaseIfEmpty() (+3 more)
+Cohesion: 0.12
+Nodes (24): assertScheduleRangeAvailable(), assertValidDates(), findRangeConflict(), findScheduleOverlaps(), holdsDates(), mergeScheduleRanges(), rangesOverlap(), ScheduleOverlap (+16 more)
 
 ### Community 27 - "IRepository"
-Cohesion: 0.14
-Nodes (15): saveRosterBackup(), restoreVersion(), VersionRestoreResult, removeNurseRoster(), revokeNurseLink(), fingerprint(), syncScheduleAssignments(), repositoryManager (+7 more)
+Cohesion: 0.13
+Nodes (12): saveRosterBackup(), restoreVersion(), VersionRestoreResult, saveHolidayLeave(), removePublicRoster(), fingerprint(), syncScheduleAssignments(), repositoryManager (+4 more)
 
 ### Community 28 - "scripts"
 Cohesion: 0.25
 Nodes (8): scripts, build, clean, dev, lint, preview, start, test
 
-### Community 29 - "SchedulingEngine.ts"
-Cohesion: 0.07
-Nodes (73): 7. Rules, 8. The roster engine (`src/services/engine/SchedulingEngine.ts`), Entry points, How a run works, Other engine files, checkAssignment(), hardRule(), minutes() (+65 more)
+### Community 29 - "analysisExportService.ts"
+Cohesion: 0.11
+Nodes (33): ClinicSetup, DEFAULT_CLOSE_TIME, DEFAULT_OPEN_TIME, doctorSessionsOn(), fromMinutes(), hoursToCover(), isFreeDuring(), openingHourSlots() (+25 more)
 
 ### Community 30 - "PlannerSample.tsx"
 Cohesion: 0.16
 Nodes (34): countOf(), dayProblems(), problemAt(), tint(), Brand(), clamp(), DayView(), describe() (+26 more)
 
 ### Community 31 - "engineRules.test.ts"
-Cohesion: 0.09
-Nodes (14): ScheduleValidator, LEE, MONDAY_SESSIONS, MONDAYS, ROSTERS, session(), TUESDAYS, JUNIOR (+6 more)
+Cohesion: 0.20
+Nodes (4): JUNIOR, LEVELS, NC, PHL
 
 ### Community 32 - "Hardening Controls"
 Cohesion: 0.05
@@ -322,13 +311,9 @@ Nodes (29): 1. Correctness, 2. Readability & Simplicity, 3. Architecture, 4. Sec
 Cohesion: 0.08
 Nodes (24): For /graphify add and --watch, For /graphify query, For the commit hook and native CLAUDE.md integration, For --update and --cluster-only, /graphify, Honesty Rules, Interpreter guard for subcommands, Part A - Structural extraction for code files (+16 more)
 
-### Community 37 - "scheduleTransactions.test.ts"
-Cohesion: 0.12
-Nodes (9): CacheEntry, ListFilter, LiveCollectionCache, entry, matchesFilter(), UNCACHED_COLLECTIONS, apps, { initializeTestEnvironment } (+1 more)
-
 ### Community 38 - "WorkbookGrid.tsx"
-Cohesion: 0.10
-Nodes (33): 6. Clinic model (the business rules in plain English), fmt(), hoursText(), WhoCanCover(), WhoCanCoverProps, CellChoice, cellKeyOf(), fmtHours() (+25 more)
+Cohesion: 0.14
+Nodes (23): findCell(), QuickCellPopup(), QuickCellPopupProps, QuickDayNote, QuickLeaveOption, QuickWish, QuickWorkOption, CellChoice (+15 more)
 
 ### Community 39 - "hoursTopUp.test.ts"
 Cohesion: 0.15
@@ -337,6 +322,10 @@ Nodes (9): DR_G, DR_O, EARLY, FULL, NINE_FIVE, NINE_SEVEN, NO_EXTRAS, OBGYN (+1 
 ### Community 40 - "Optimization Patterns"
 Cohesion: 0.07
 Nodes (25): Connection Pool Exhaustion, Large Bundle Size, Missing Caching (Backend), Missing Image Optimization (Frontend), N+1 Queries (Backend), Optimization Patterns, Queries That Ignore Their Index, Unbounded Data Fetching (+17 more)
+
+### Community 41 - "analysisExport.test.ts"
+Cohesion: 0.12
+Nodes (15): 15. Tests, ANALYSIS_FORMAT, CARD, input(), KHAN, LATE, SCHEDULE, SESSIONS (+7 more)
 
 ### Community 42 - "continuousHours.test.ts"
 Cohesion: 0.14
@@ -349,6 +338,10 @@ Nodes (8): anon, editor, manager, owner, results, stranger, unverified, viewer
 ### Community 44 - "Frontend UI Engineering"
 Cohesion: 0.08
 Nodes (24): Accessibility (WCAG 2.1 AA), ARIA Labels, Avoid the AI Aesthetic, Color, Common Rationalizations, Component Architecture, Component Patterns, Design System Adherence (+16 more)
+
+### Community 45 - "EntityForCollection"
+Cohesion: 0.32
+Nodes (3): FirestoreRepository, sanitizePayload(), EntityForCollection
 
 ### Community 46 - "ui.tsx"
 Cohesion: 0.13
@@ -366,9 +359,9 @@ Nodes (21): YearToDate, YearToDateCounts, daysBefore(), loadClinicSetup(), clamp
 Cohesion: 0.10
 Nodes (17): 0. Quick start for a new chat, 14. Server, security and config, 17. Known quirks and ideas for later, 1. Features at a glance, 2. Repository layout, 9. Checking a roster (`src/services/validation/ScheduleValidator.ts`), NSC Clinic Roster: complete project guide, ClinicRoster (+9 more)
 
-### Community 50 - "nurseClinicFloat.test.ts"
+### Community 50 - "dialogs.tsx"
 Cohesion: 0.20
-Nodes (8): FLOAT_ROLE_ID, CARD, EARLY, FULL, LATE, NC, NINE_SEVEN, run()
+Nodes (12): ConfirmBox(), ConfirmOptions, DialogHost(), DialogState, dismissNotice(), listeners, Notice, PendingConfirm (+4 more)
 
 ### Community 51 - "Debugging and Error Recovery"
 Cohesion: 0.09
@@ -380,15 +373,15 @@ Nodes (8): graphify reference: extra exports and benchmark, Step 6b - Wiki (only
 
 ### Community 53 - "handMoves.test.ts"
 Cohesion: 0.12
-Nodes (13): AGREED_EXCEPTION_NOTE, AMY, BEA, CARA, DAN, DOCTORS, DUTIES, EARLY (+5 more)
+Nodes (12): AMY, BEA, CARA, DAN, DOCTORS, DUTIES, EARLY, JUNIOR (+4 more)
 
 ### Community 54 - "Incremental Implementation"
 Cohesion: 0.09
 Nodes (22): Common Rationalizations, Contract-First Slicing, Implementation Rules, Increment Checklist, Incremental Implementation, Overview, Red Flags, Risk-First Slicing (+14 more)
 
 ### Community 55 - "RulesTab.tsx"
-Cohesion: 0.14
-Nodes (19): ALWAYS_ON, effectiveValue(), findRule(), GROUPS, KNOWN_KEYS, NumberField, RuleDef, RuleGroup (+11 more)
+Cohesion: 0.13
+Nodes (23): ALWAYS_ON, effectiveValue(), findRule(), GROUPS, KNOWN_KEYS, NumberField, RuleDef, RuleGroup (+15 more)
 
 ### Community 56 - "graphify reference: query, path, explain"
 Cohesion: 0.33
@@ -424,47 +417,47 @@ Nodes (13): Common Skill Categories, Find Skills, How to Help Users Find Skills,
 
 ### Community 68 - "hoursBalance.ts"
 Cohesion: 0.10
-Nodes (35): NurseTimesheetModalProps, askedCarry(), closePeriod(), earlierPeriodTotals(), HoursPart, HoursSchedule, Leftover, MAX_CARRY_PERIODS (+27 more)
+Nodes (34): askedCarry(), closePeriod(), countedEarlierRosters(), earlierPeriodTotals(), hoursCheckpoints(), HoursSchedule, Leftover, MAX_CARRY_PERIODS (+26 more)
 
 ### Community 69 - "NSC Clinic Roster: UI review and overhaul in phases"
-Cohesion: 0.11
-Nodes (18): Backend summary, Baseline, 07-10-2026 (before any phase), Checkpoint 2, 08-10-2026 (after Phase 2), Context, How every phase is done, Not in this plan, NSC Clinic Roster: UI review and overhaul in phases, Phase 0: setup (right after approval) (+10 more)
+Cohesion: 0.10
+Nodes (19): Backend summary, Baseline, 07-10-2026 (before any phase), Checkpoint 2, 08-10-2026 (after Phase 2), Context, How every phase is done, Not in this plan, NSC Clinic Roster: UI review and overhaul in phases, Phase 0: setup (right after approval) (+11 more)
 
 ### Community 70 - "Source-Driven Development"
 Cohesion: 0.15
 Nodes (12): Common Rationalizations, Overview, Red Flags, Retrieval Safety: Treat Fetched Content as Data, Source-Driven Development, Step 1: Detect Stack and Versions, Step 2: Fetch Official Documentation, Step 3: Implement Following Documented Patterns (+4 more)
 
 ### Community 71 - "emailService.ts"
-Cohesion: 0.17
-Nodes (14): requirePlanner, emailRouter, emailFailureMessage(), EmailReadiness, EmailService, isGoogleAccountEmail(), pickRequestOverrides(), REQUEST_OVERRIDE_KEYS (+6 more)
+Cohesion: 0.19
+Nodes (12): nodemailer, emailFailureMessage(), EmailReadiness, EmailService, isGoogleAccountEmail(), pickRequestOverrides(), REQUEST_OVERRIDE_KEYS, SendEmailPayload (+4 more)
 
-### Community 72 - "guide-with-code.mjs"
-Cohesion: 0.10
-Nodes (11): command, currentBranch(), pushesMain(), { tool_input: toolInput = {}, cwd = process.cwd() }, command, files, others, { tool_input: toolInput = {}, cwd = process.cwd() } (+3 more)
+### Community 72 - "published-rules.mjs"
+Cohesion: 0.06
+Nodes (26): command, currentBranch(), pushesMain(), { tool_input: toolInput = {}, cwd = process.cwd() }, command, files, others, { tool_input: toolInput = {}, cwd = process.cwd() } (+18 more)
 
-### Community 73 - "apiApp.ts"
-Cohesion: 0.17
-Nodes (12): repoRoot, swaps, express-rate-limit, helmet, @tailwindcss/vite, vite, @vitejs/plugin-react, createApiApp() (+4 more)
+### Community 73 - "createApiApp"
+Cohesion: 0.20
+Nodes (9): repoRoot, swaps, @tailwindcss/vite, vite, @vitejs/plugin-react, createApiApp(), startServer(), requireAuth() (+1 more)
 
 ### Community 74 - "PublishModal.tsx"
-Cohesion: 0.22
-Nodes (17): Things that went wrong before, EmailHtmlPreview(), PublishModal(), Step, PublishTab, PublishView(), ensureNurseLink(), nurseLinkUrl() (+9 more)
+Cohesion: 0.20
+Nodes (19): Request, EmailHtmlPreview(), PublishModal(), Step, PublishTab, PublishView(), nurseLinkUrl(), regenerateNurseLink() (+11 more)
 
 ### Community 75 - "Design system: NSC Clinic Roster"
 Cohesion: 0.14
-Nodes (12): Checklist before a screen is delivered, Colours, Dates and times, Design system: NSC Clinic Roster, Do not, Nurse pages (phones first), Parts (in `src/components/ui/`, shown together on the test page's `?view=gallery`; first drafts in `.claude/skills/browser-check/harness/sample/`), Roster marks (+4 more)
+Nodes (18): Checklist before a screen is delivered, Colours, Dates and times, Design system: NSC Clinic Roster, Do not, Nurse pages (phones first), Parts (in `src/components/ui/`, shown together on the test page's `?view=gallery`; first drafts in `.claude/skills/browser-check/harness/sample/`), Roster marks (+10 more)
 
-### Community 77 - "sharing.test.ts"
-Cohesion: 0.20
-Nodes (7): DR_PCC, DR_PEDS, FULL, NINE_SEVEN, PCC, PEDS, RULES
+### Community 77 - "lastResort.test.ts"
+Cohesion: 0.10
+Nodes (16): AGREED_EXCEPTION_NOTE, isLastResortShift(), LAST_RESORT_NOTE, SchedulingEngine, DR_PEDS, ENT, FULL, PEDS (+8 more)
 
-### Community 78 - "16. History of work (for context)"
-Cohesion: 0.17
-Nodes (17): 16. History of work (for context), cx(), Dialog(), WIDTHS, Checkbox(), DateInput(), Field(), Input() (+9 more)
+### Community 78 - "weekHours.ts"
+Cohesion: 0.27
+Nodes (10): Other engine files, leaveApprovalFields(), namesSpecialty(), outsideNurseList(), addDays(), fitsWeekHours(), heaviestWeekAround(), over() (+2 more)
 
-### Community 79 - "published-rules.mjs"
-Cohesion: 0.11
-Nodes (15): { access_token: token }, claims, curl(), dir, fail(), get(), local, now (+7 more)
+### Community 79 - "holidayLeave.ts"
+Cohesion: 0.33
+Nodes (10): 10. Hours, applyHolidayChangeToLeave(), DatedLeave, datesOf(), HolidayLeaveTidy, isOldHolidayLeave(), leaveAfterHolidayChange(), planHolidayLeaveTidy() (+2 more)
 
 ### Community 80 - "Sidebar.tsx"
 Cohesion: 0.36
@@ -476,51 +469,51 @@ Nodes (4): assert, base, checks, { chromium }
 
 ### Community 82 - "Button.tsx"
 Cohesion: 0.17
-Nodes (14): LocalModeBanner(), LocalModeBannerProps, Button(), ButtonProps, ButtonSize, ButtonVariant, IconButton(), IconButtonProps (+6 more)
+Nodes (13): LocalModeBanner(), LocalModeBannerProps, Button(), ButtonProps, ButtonSize, ButtonVariant, IconButtonProps, SIZES (+5 more)
 
 ### Community 83 - "types/index.ts"
-Cohesion: 0.06
-Nodes (35): isPairing(), PREFERENCE_FOCUS_LABELS, othersOnRoster(), STALE_MS, TAB_ID, usePresence(), ApprovalStatus, BlockWeeks (+27 more)
+Cohesion: 0.09
+Nodes (21): ApprovalStatus, AuditAction, AuditEvent, DoctorSessionSource, EmailLogKind, EmailLogStatus, Invitation, InvitationStatus (+13 more)
 
 ### Community 84 - "fixtures.ts"
 Cohesion: 0.08
-Nodes (23): EARLY, input(), LATE, softHoursLimit, week, ANNUAL_LEAVE, DAY_DUTY, makeLeave() (+15 more)
+Nodes (23): ANNUAL_LEAVE, DAY_DUTY, makeLeave(), SENIOR, UNPAID_LEAVE, LONG, NOV, OCT (+15 more)
 
 ### Community 85 - "ui/index.ts"
-Cohesion: 0.22
-Nodes (15): Badge(), PROBLEM_MARKS, ProblemBadge(), ProblemKind, Tone, TONE_CLASSES, Card(), Crumb (+7 more)
+Cohesion: 0.11
+Nodes (38): 16. History of work (for context), Badge(), PROBLEM_MARKS, ProblemBadge(), ProblemKind, Tone, TONE_CLASSES, Card() (+30 more)
 
 ### Community 87 - "UI overhaul: summary and next steps"
 Cohesion: 0.10
-Nodes (19): 1. Where things stand, 2. Why this work, 3. What the review found, and where each part stands, 4. What has been done, 5. Numbers, 6. How the work is done, 7. Next steps, 8. Where to find things (+11 more)
+Nodes (20): 1. Where things stand, 2. Why this work, 3. What the review found, and where each part stands, 4. What has been done, 5. Numbers, 6. How the work is done, 7. Next steps, 8. Where to find things (+12 more)
 
-### Community 88 - "authService.ts"
-Cohesion: 0.15
-Nodes (13): LoginPageProps, AppShellProps, AuthModalProps, AccessManagementPanelProps, ApprovalsQueuePanelProps, MASTER_ADMIN_EMAIL, UserPrivileges, UserProfile (+5 more)
+### Community 88 - "preferenceOrder.ts"
+Cohesion: 0.22
+Nodes (9): 8. The roster engine (`src/services/engine/SchedulingEngine.ts`), Entry points, How a run works, applyPreferenceFocus(), isPairing(), PREFERENCE_FOCUS_LABELS, GenerationResult, NursePreference (+1 more)
 
 ### Community 89 - "access.ts"
-Cohesion: 0.28
-Nodes (11): 3. Users, roles and access, 4. Navigation and app shell, usePermissions(), AccountMenu(), TopBar(), canAccessRoute(), canEditClinicData(), canExportReports() (+3 more)
+Cohesion: 0.22
+Nodes (13): 3. Users, roles and access, 4. Navigation and app shell, AccountMenu(), TopBar(), IconButton(), Dialog(), WIDTHS, canAccessRoute() (+5 more)
 
-### Community 90 - "geminiApi.test.ts"
+### Community 90 - "apiApp.ts"
+Cohesion: 0.16
+Nodes (13): express, @google/genai, BackendRole, authRouter, calendarRouter, geminiRouter, GEMINI_MODEL, generateContentWithGemini() (+5 more)
+
+### Community 91 - "middleware/auth.ts"
 Cohesion: 0.24
-Nodes (10): express, @google/genai, geminiRouter, GEMINI_MODEL, generateContentWithGemini(), GenerateOptions, generateRosterInsights(), getGeminiClient() (+2 more)
-
-### Community 91 - "lastResort.test.ts"
-Cohesion: 0.25
-Nodes (5): DR_PEDS, ENT, FULL, PEDS, RULES
+Nodes (7): authMiddleware(), Express, requireOwner, requirePlanner, ROLE_HIERARCHY, verifyToken(), emailRouter
 
 ### Community 92 - "harness/main.tsx"
 Cohesion: 0.09
 Nodes (9): Gallery(), Request, REQUESTS, STATUS_TONE, context, publishNovember(), Single(), start() (+1 more)
 
-### Community 93 - "DoctorsView.tsx"
-Cohesion: 0.11
-Nodes (34): CreateScheduleModal(), CreateScheduleModalProps, DoctorWeekChangeDialog(), WeekChangePreview, EditDoctorShiftModal(), TIME_PRESETS, DoctorsView(), WEEKDAY_NAMES (+26 more)
+### Community 93 - "doctorScheduleService.ts"
+Cohesion: 0.22
+Nodes (17): 13. Screens in detail, EditDoctorShiftModal(), TIME_PRESETS, DoctorsScheduleSheet(), WEEKDAY_ABBR, deleteDoctorShift(), doctorFromDate(), getWeekdayFromIsoDate() (+9 more)
 
-### Community 94 - "EmailTab.tsx"
-Cohesion: 0.24
-Nodes (10): 12. Publishing and nurse links, nodemailer, EmailTab(), checkEmailReadiness(), EmailReadiness, readEmailResponse(), escapeHtml(), safeColor() (+2 more)
+### Community 94 - "address.ts"
+Cohesion: 0.33
+Nodes (7): Address, addressHash(), ORDER, readAddress(), ROSTER_SHEETS, rosterSheetFromAddress(), rosterSheetToAddress()
 
 ### Community 95 - "Finish a change"
 Cohesion: 0.20
@@ -528,51 +521,39 @@ Nodes (9): 1. Verify, 2. Clean up, 3. Update PROJECT_GUIDE.md, 4. Refresh the co
 
 ### Community 96 - "weekHours.test.ts"
 Cohesion: 0.13
-Nodes (5): SchedulingEngine, CANONICAL_RULES_SPEC, LATE, LONG, OCT
+Nodes (10): CANONICAL_RULES_SPEC, ScheduleValidator, LEE, MONDAY_SESSIONS, MONDAYS, ROSTERS, session(), TUESDAYS (+2 more)
 
-### Community 97 - "hoursRules.test.ts"
-Cohesion: 0.22
-Nodes (7): D, E, L, NC, PHL, SENIOR, week
+### Community 97 - "dateDefaults.ts"
+Cohesion: 0.44
+Nodes (7): addDays(), DateRange, defaultPatternRange(), defaultSessionDate(), monthRange(), requestDefaults(), rosterFor()
 
-### Community 98 - "FirestoreRepository.ts"
-Cohesion: 0.29
-Nodes (12): FirebaseClientConfig, assertScheduleRangeAvailable(), assertValidDates(), findRangeConflict(), findScheduleOverlaps(), holdsDates(), mergeScheduleRanges(), rangesOverlap() (+4 more)
+### Community 98 - "preferenceFocus.test.ts"
+Cohesion: 0.25
+Nodes (6): CARD, KHAN, LATE, LEE, ORTHO, SESSIONS
 
 ### Community 99 - "context7"
 Cohesion: 0.33
 Nodes (5): bash, npx, context7, firebase, @upstash/context7-mcp
-
-### Community 100 - "colorContrast.ts"
-Cohesion: 0.50
-Nodes (7): contrastRatio(), INK, INK_MUTED, luminance(), readableTextOn(), rgbOf(), tint()
 
 ### Community 101 - "firestore-rules-reviewer.md"
 Cohesion: 0.40
 Nodes (4): Check, Read first, Report, Test
 
 ### Community 102 - "ref_node_assert"
-Cohesion: 0.11
-Nodes (9): ctx(), EARLY, LATE, diff(), LATE, nurse, october, octoberVersion (+1 more)
+Cohesion: 0.08
+Nodes (17): FLOAT_ROLE_ID, BACKUPS_KEPT, LATE, nurse, configured, live, CARD, EARLY (+9 more)
 
 ### Community 104 - "react"
-Cohesion: 0.11
-Nodes (30): lucide-react, react, uuid, ConfirmBox(), ConfirmOptions, DialogHost(), DialogState, dismissNotice() (+22 more)
-
-### Community 107 - "WorkingHoursPeriodsPanel.tsx"
-Cohesion: 0.28
-Nodes (10): WorkingHoursPeriodsPanel(), calculateWorkingHoursForDateRange(), findExactMatchingPeriod(), getDaysInPeriod(), getInclusiveDays(), PeriodProratingBreakdown, WorkingHoursCalculationResult, SEED_CLINIC_PROFILE (+2 more)
-
-### Community 108 - "nurseRoster.test.ts"
-Cohesion: 0.21
-Nodes (8): fromFirestoreFields(), fromFirestoreValue(), getPublicDocument(), NURSE_TOKEN_PATTERN, base, dutyWindows, refs, schedule
+Cohesion: 0.15
+Nodes (22): lucide-react, react, openStack, useDialogA11y(), BulkImportModal(), DeleteScheduleModal(), DeleteScheduleModalProps, DeleteVersionModal() (+14 more)
 
 ### Community 109 - "index.tsx"
 Cohesion: 0.33
 Nodes (5): FONTS, renderSample(), NurseSample(), where(), react-dom
 
-### Community 110 - "newRosterDates.ts"
-Cohesion: 0.73
-Nodes (4): addDays(), iso(), monthEnd(), suggestNewRosterDates()
+### Community 110 - "CreateScheduleModal.tsx"
+Cohesion: 0.33
+Nodes (9): CreateScheduleModal(), CreateScheduleModalProps, generateDoctorSessionsForDateRange(), populateRecurringDoctorSessionsForSchedule(), addDays(), iso(), monthEnd(), suggestNewRosterDates() (+1 more)
 
 ### Community 111 - "ddmmyyyy"
 Cohesion: 0.50
@@ -586,77 +567,49 @@ Nodes (11): Phase 0: setup, Phase 1: quick fixes and safety, Phase 2: design sys
 Cohesion: 0.50
 Nodes (4): devDependencies, firebase, @firebase/rules-unit-testing, firebase-tools
 
-### Community 114 - "handMoveChecks.ts"
-Cohesion: 0.36
-Nodes (10): FairnessModal(), listProblem(), checkSwap(), isPinnedShift(), MoveContext, newFindings(), rebalancedFields(), suggestMoves() (+2 more)
-
-### Community 115 - "uiComponents.test.ts"
-Cohesion: 0.24
-Nodes (8): Column, DataTable(), SortDirection, sortRows(), SortState, Phase 6: Nurses, Doctors, Availability and Requests (planner screens), columns, Row
-
-### Community 116 - "WarningsSheet.tsx"
-Cohesion: 0.24
-Nodes (8): ProblemsPanelProps, SEVERITY, CATEGORY_LABELS, SEVERITY_LABELS, WarningsSheetProps, FindingCategory, FindingSeverity, ValidationFinding
-
 ### Community 117 - "PublishedRosterView.tsx"
-Cohesion: 0.39
-Nodes (7): PublishedRosterView(), loadPublishedRoster(), PublishedRosterViewProps, downloadIcsFile(), withoutBackups(), buildTeamRosterSheet(), loadPublicRoster()
+Cohesion: 0.22
+Nodes (12): 12. Publishing and nurse links, dateLabel(), PublishedRosterSheet(), PublishedRosterView(), loadPublishedRoster(), PublishedRosterViewProps, downloadIcsFile(), withoutBackups() (+4 more)
 
-### Community 118 - "authorizedFetch"
-Cohesion: 0.31
-Nodes (8): authorizedFetch(), fetchRosterInsights(), GeminiGenerateResponse, GeminiInsightsResponse, GeminiStatus, generateWithGemini(), getGeminiStatus(), RosterInsightsPayload
-
-### Community 119 - "QuickCellPopup.tsx"
-Cohesion: 0.29
-Nodes (7): findCell(), QuickCellPopup(), QuickCellPopupProps, QuickDayNote, QuickLeaveOption, QuickWish, QuickWorkOption
+### Community 118 - "EmailTab.tsx"
+Cohesion: 0.23
+Nodes (13): EmailTab(), authorizedFetch(), checkEmailReadiness(), EmailReadiness, readEmailResponse(), fetchRosterInsights(), GeminiGenerateResponse, GeminiInsightsResponse (+5 more)
 
 ### Community 120 - "emailLogSize.ts"
-Cohesion: 0.39
-Nodes (5): EMAIL_LOG_HTML_BUDGET, encoder, htmlBytes(), recipientsForLog(), EmailRecipientLog
-
-### Community 121 - "createLiveReconciler"
-Cohesion: 0.39
-Nodes (3): createLiveReconciler(), LiveReconcileOptions, LiveSaveQueue
-
-### Community 122 - "dateUtils.ts"
-Cohesion: 0.48
-Nodes (4): formatDateTime(), formatDayDate(), parseDayMonthYear(), WEEKDAYS
+Cohesion: 0.33
+Nodes (6): EMAIL_LOG_HTML_BUDGET, encoder, htmlBytes(), recipientsForLog(), DispatchResult, EmailRecipientLog
 
 ### Community 123 - "teamRoster.test.ts"
 Cohesion: 0.29
 Nodes (5): nurses, published, refs, schedule, today
 
-### Community 124 - "fakeAuth.ts"
-Cohesion: 0.33
-Nodes (3): AuthService, MASTER_ADMIN_EMAIL, PEOPLE
+### Community 124 - "ensureNurseLink"
+Cohesion: 0.18
+Nodes (10): AuthService, MASTER_ADMIN_EMAIL, PEOPLE, Things that went wrong before, ensureNurseLink(), newToken(), removeNurseRoster(), revokeNurseLink() (+2 more)
 
-### Community 125 - "plain-english-reviewer.md"
+### Community 127 - "uuid"
 Cohesion: 0.50
-Nodes (3): Report, What to check, What to look at
-
-### Community 126 - "MenuButton.tsx"
-Cohesion: 0.50
-Nodes (3): MenuButton(), MenuButtonProps, MenuItem
+Nodes (3): uuid, moveShift(), swapShifts()
 
 ## Knowledge Gaps
-- **819 isolated node(s):** `{ tool_input: toolInput = {}, cwd = process.cwd() }`, `command`, `{ tool_input: toolInput = {}, cwd = process.cwd() }`, `command`, `files` (+814 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 995 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **12 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **820 isolated node(s):** `{ tool_input: toolInput = {}, cwd = process.cwd() }`, `command`, `{ tool_input: toolInput = {}, cwd = process.cwd() }`, `command`, `files` (+815 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 996 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **10 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `react` connect `react` to `SchedulesView.tsx`, `DashboardView.tsx`, `ExportModal.tsx`, `ClinicContextState`, `getRepository`, `package.json`, `AppShell.tsx`, `AvailabilityView.tsx`, `App.tsx`, `NurseTimesheetModal.tsx`, `SchedulesView`, `nurseRosterService.ts`, `PlannerSample.tsx`, `data.ts`, `WorkbookGrid.tsx`, `ui.tsx`, `NSC Clinic Roster: complete project guide`, `RulesTab.tsx`, `PublishModal.tsx`, `Design system: NSC Clinic Roster`, `16. History of work (for context)`, `Sidebar.tsx`, `Button.tsx`, `types/index.ts`, `fixtures.ts`, `ui/index.ts`, `authService.ts`, `access.ts`, `harness/main.tsx`, `DoctorsView.tsx`, `EmailTab.tsx`, `WorkingHoursPeriodsPanel.tsx`, `uiComponents.test.ts`, `WarningsSheet.tsx`, `PublishedRosterView.tsx`, `QuickCellPopup.tsx`, `MenuButton.tsx`?**
+- **Why does `react` connect `react` to `Assignment`, `DashboardView.tsx`, `authService.ts`, `notify`, `package.json`, `AppShell.tsx`, `getRepository`, `App.tsx`, `SchedulesView.tsx`, `ShareModal.tsx`, `nurseRosterService.ts`, `PlannerSample.tsx`, `data.ts`, `WorkbookGrid.tsx`, `ui.tsx`, `NSC Clinic Roster: complete project guide`, `dialogs.tsx`, `RulesTab.tsx`, `PublishModal.tsx`, `Sidebar.tsx`, `Button.tsx`, `ui/index.ts`, `access.ts`, `harness/main.tsx`, `doctorScheduleService.ts`, `ref_node_assert`, `CreateScheduleModal.tsx`, `PublishedRosterView.tsx`, `EmailTab.tsx`?**
   _High betweenness centrality (0.085) - this node is a cross-community bridge._
-- **Why does `lucide-react` connect `react` to `SchedulesView.tsx`, `DashboardView.tsx`, `ExportModal.tsx`, `getRepository`, `package.json`, `AppShell.tsx`, `AvailabilityView.tsx`, `App.tsx`, `NurseTimesheetModal.tsx`, `nurseRosterService.ts`, `PlannerSample.tsx`, `data.ts`, `WorkbookGrid.tsx`, `ui.tsx`, `RulesTab.tsx`, `PublishModal.tsx`, `16. History of work (for context)`, `Sidebar.tsx`, `Button.tsx`, `ui/index.ts`, `authService.ts`, `access.ts`, `harness/main.tsx`, `DoctorsView.tsx`, `EmailTab.tsx`, `WorkingHoursPeriodsPanel.tsx`, `uiComponents.test.ts`, `WarningsSheet.tsx`, `PublishedRosterView.tsx`, `QuickCellPopup.tsx`?**
+- **Why does `lucide-react` connect `react` to `Assignment`, `DashboardView.tsx`, `authService.ts`, `notify`, `package.json`, `AppShell.tsx`, `getRepository`, `App.tsx`, `SchedulesView.tsx`, `ShareModal.tsx`, `nurseRosterService.ts`, `PlannerSample.tsx`, `data.ts`, `WorkbookGrid.tsx`, `ui.tsx`, `dialogs.tsx`, `RulesTab.tsx`, `PublishModal.tsx`, `Sidebar.tsx`, `Button.tsx`, `ui/index.ts`, `access.ts`, `harness/main.tsx`, `doctorScheduleService.ts`, `CreateScheduleModal.tsx`, `PublishedRosterView.tsx`, `EmailTab.tsx`?**
   _High betweenness centrality (0.063) - this node is a cross-community bridge._
-- **Why does `useDialogA11y()` connect `react` to `SchedulesView.tsx`, `ExportModal.tsx`, `getRepository`, `WorkbookGrid.tsx`, `AppShell.tsx`, `Design system: NSC Clinic Roster`, `PublishModal.tsx`, `AvailabilityView.tsx`, `16. History of work (for context)`, `WorkingHoursPeriodsPanel.tsx`, `NurseTimesheetModal.tsx`, `handMoveChecks.ts`, `SchedulesView`, `Button.tsx`, `access.ts`, `DoctorsView.tsx`?**
+- **Why does `useDialogA11y()` connect `react` to `Assignment`, `authService.ts`, `notify`, `WorkbookGrid.tsx`, `AppShell.tsx`, `Design system: NSC Clinic Roster`, `PublishModal.tsx`, `getRepository`, `CreateScheduleModal.tsx`, `dialogs.tsx`, `SchedulesView.tsx`, `Button.tsx`, `ui/index.ts`, `ShareModal.tsx`, `access.ts`, `doctorScheduleService.ts`?**
   _High betweenness centrality (0.021) - this node is a cross-community bridge._
 - **What connects `{ tool_input: toolInput = {}, cwd = process.cwd() }`, `command`, `{ tool_input: toolInput = {}, cwd = process.cwd() }` to the rest of the system?**
-  _819 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `SchedulesView.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.13539873780837636 - nodes in this community are weakly interconnected._
-- **Should `ExportModal.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.0670807453416149 - nodes in this community are weakly interconnected._
+  _820 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Assignment` be split into smaller, more focused modules?**
+  _Cohesion score 0.05467636156258911 - nodes in this community are weakly interconnected._
 - **Should `clinicModel.test.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.09090909090909091 - nodes in this community are weakly interconnected._
+- **Should `IRepository.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.10846560846560846 - nodes in this community are weakly interconnected._

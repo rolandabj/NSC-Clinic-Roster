@@ -1,7 +1,7 @@
 # UI overhaul: summary and next steps
 
-As of 13-10-2026. Phases 0, 1 and 2 of the ten phase plan are done and on main (`39ae8d8`), and
-the checks on main passed. Phase 3, a faster roster grid, is next.
+As of 13-10-2026. Phases 0, 1 and 2 of the ten phase plan are done and on main, and the checks
+on main passed. Phase 3, roster grid speed and structure, is next.
 
 The full plan is in `tasks/plan.md` and the checklist in `tasks/todo.md`. Each step is recorded
 in detail in `PROJECT_GUIDE.md`, section 16, items 42 to 46.
@@ -11,17 +11,17 @@ in detail in `PROJECT_GUIDE.md`, section 16, items 42 to 46.
 | | |
 |---|---|
 | Done | Phase 0 (setup), Phase 1 (quick fixes and safety), Phase 2 (the new look and the app frame) |
-| On main | Everything up to the end of Phase 2. Main is at `39ae8d8` (08-10-2026) |
-| Checks on main | CI run 57 (Phases 0 and 1) and CI run 58 (Phase 2) passed |
-| Unit tests | 335 (274 when the plan started), and 96 Firestore rules checks |
+| On main | Everything up to the end of Phase 2, which ended with `39ae8d8` on 08-10-2026, and this summary (13-10-2026) |
+| Checks on main | CI run 57 (Phases 0 and 1), CI run 58 (Phase 2) and CI run 59 (this summary) passed |
+| Unit tests | 335 (279 when the plan started), and 96 Firestore rules checks |
 | Firestore rules | Not changed by the overhaul so far, so there is nothing to publish by hand |
-| Next | Phase 3: a faster roster grid, when the owner says go |
+| Next | Phase 3: roster grid speed and structure, when the owner says go |
 
 ## 2. Why this work
 
 On 07-10-2026 the owner asked for a review of the whole UI against standard practice, then an
-overhaul of the whole app in phases, with backend changes where needed. It started after the
-`ui-ux-pro-max` design skill was installed.
+overhaul of the whole app in phases, with backend changes where needed. The work uses the
+`ui-ux-pro-max` design skill, installed in Phase 0.
 
 **The owner's decisions (07-10-2026):**
 
@@ -30,7 +30,7 @@ overhaul of the whole app in phases, with backend changes where needed. It start
 * Planners edit the roster on a laptop or tablet. On a phone, planners get a read only day view
   and the problems list. Nurse screens are designed for phones first.
 * Three backend changes: an email to a nurse when their request is decided, resuming a publish
-  that stopped partway, and paging for the audit trail and the email log. Sending email from the
+  that stopped partway, and loading the audit trail and the email log in pages. Sending email from the
   server on its own was declined, because it needs a service account.
 * English only: the unused Arabic text is removed.
 * The Gemini routes are for any signed in user (they had been open to anyone).
@@ -43,16 +43,16 @@ the screens, the roster screen, permissions, data flow and the server.
 
 | Area | What was wrong | Where it stands |
 |---|---|---|
-| Design | No shared colours, sizes or parts: 786 made up text sizes of 7 to 11 px, text too faint to read 261 times, 12 hand made tab bars, and a separate copy of the corner message in 15 screens | Phase 2 added the design system and the shared parts; each screen takes them up in its own phase |
-| Accessibility | 58 colour contrast failures; the grid cells' spoken names left out what they show; History had nested buttons and buttons 17 px high; some signals were shown by colour only | The app frame is clean; the screens follow in their phases (section 5) |
-| Words | Generated jargon such as "Schedule Version History Center"; one idea under five names; dashes and hyphens in visible text | The menu, the frame and the messages are done; the screens follow in their phases |
+| Design | No shared colours, sizes or parts: 786 made up text sizes of 7 to 11 px, text too faint to read 261 times, 12 hand made tab bars, and a separate copy of the corner message in 15 screens and dialogs | Phase 2 added the design system and the shared parts; each screen takes them up in its own phase |
+| Accessibility | 58 colour contrast failures; the grid cells' spoken names left out what they show; History had nested buttons and buttons 17 px high; some signals were shown by colour only | The app frame has no serious problems on the dashboards, and its text under 12 px went from 11 places to 7; the screens follow in their phases (section 5) |
+| Words | Generated jargon such as "Schedule Version History Center"; one idea under five names; dashes and hyphens in visible text | The menu and the frame's words are done; each screen's words and messages are reworded in its phase |
 | Dates | About ten formats, some in US style | One date module (Phase 2); the screens switch to it in their phases |
 | Phones | The sidebar left 166 px of a 390 px phone for the content; touch targets of 15 to 30 px | A slide in menu (Phase 1); nurse screens in Phase 5; the roster day view in Phase 4 |
-| Grid speed | About 1 s before the cells show; every key press redrew all 1,860 cells | Phase 3 |
+| Grid speed | About 1 s before the cells show on the production build (the review first measured 2.2 s on the slower development build); every key press redrew all 1,860 cells | Phase 3 |
 | Roster layout | Four different problem counts, the sheet tabs below the grid, Full screen twice | Phase 4 |
-| Navigation | Back did nothing inside a screen; no link could open a given roster, nurse, day or tab; three screens started in October 2026 | Done (Phases 1 and 2) |
+| Navigation | Back did nothing inside a screen; no link could open a given roster, nurse, day or tab; three screens started in October 2026 | Done for rosters, sheets, nurses, days and the Settings tabs, and the screens start from today (Phases 1 and 2); the Reports, History and Availability tabs take up links and Back in their phases |
 | Permissions | Buttons shown to people the rules refuse; exports open to viewers | Done (Phase 1) |
-| Backend | A publish stopped by closing the tab cannot be finished; the email log could pass Firestore's 1 MiB limit; nurses are not told when a request is decided; the audit trail and email log load in full | The email log size guard is done (Phase 1); the rest follows in Phases 5, 7 and 8 |
+| Backend | A publish stopped by closing the tab cannot be finished; the email log could pass Firestore's 1 MiB limit at about 40 nurses (an estimate); nurses are not told when a request is decided; the audit trail and email log load in full | The email log size guard is done (Phase 1); the rest follows in Phases 5, 7 and 8 |
 | Code | Two files of about 3,000 lines each; no shared app state; no ESLint | Shared app state is done (Phase 2); the files are split in Phase 3; ESLint comes in Phase 9 |
 
 ## 4. What has been done
@@ -78,7 +78,8 @@ everyone else.
 ### Phase 1: quick fixes and safety (07-10-2026)
 
 * **Dates:** Availability, the nurse request forms and the Doctors defaults started in October
-  2026 whatever the date. They now start from today or from the open roster.
+  2026 whatever the date. Now Availability opens on the current month, the nurse request forms
+  start a week ahead, and the Doctors defaults follow the open roster or today.
 * **Phones:** below 1024 px the sidebar is a slide in menu opened from the top bar, so a 390 px
   phone gives its whole width to the content.
 * **Permissions:** screens show only what the rules allow. History's Restore and Delete show for
@@ -99,27 +100,27 @@ everyone else.
   an icon and a word. Inter is the one font, 12 px is the smallest text, and controls are 36 px
   on a laptop and 44 px on touch screens. The owner approved it from a sample page on 07-10-2026.
 * **In the app:** the colours and the font are in `src/index.css`, so every screen shows the new
-  teal at once. A helper (`colorContrast.ts`) picks readable text for the shift and leave colours
-  that planners choose.
+  teal at once. A helper (`colorContrast.ts`) is ready to pick readable text for the shift and
+  leave colours that planners choose; the grid and the leave screens take it up in Phases 4 and 6.
 * **Shared parts** in `src/components/ui/`: buttons, badges, cards, a page header, tabs, a
   dialog, form fields (with a date field that always shows DD-MM-YYYY), notices, empty, loading
   and error states, and a table that becomes cards on a phone. The test page's `?view=gallery`
   shows them all, with no accessibility problems.
-* **One date module** (`src/utils/dateUtils.ts`), now with the weekday and typed dates; the
+* **One date module** (`src/utils/dateUtils.ts`), now with the weekday and dates typed in; the
   unused second copy is deleted.
 * **One corner message** for every screen (`notify`): screen readers hear it, and errors show as
-  errors. 15 screens had their own copy.
+  errors. 15 screens and dialogs had their own copy.
 * **The app frame:** a white sidebar with the open screen in teal, one app name (NSC Clinic
   Roster), a title for each browser tab, a skip link, and an account panel that works with the
   keyboard and in Safari.
 * **Links and Back:** an address can open a given roster, sheet, nurse, day or settings tab (for
   example `#schedules?roster=nov&sheet=problems` or `#settings?tab=email`), and Back moves
   between tabs.
-* **One app context** in place of four window events, so the screens share the clinic, the
+* **One app context** in place of four separate browser events, so the screens share the clinic, the
   person signed in, their permissions and the open roster's problem count.
 * **The Checkpoint 2 review** found two problems, both fixed. Creating a roster while another was
   open made the page stop answering (over 200,000 database reads in 45 seconds on the test
-  page); it now takes 48. In Safari, a click in the account panel could be lost. A new browser
+  page); it now makes 48 database reads. In Safari, a click in the account panel could be lost. A new browser
   check, `links.cjs` (9 checks), covers both, along with the links and Back.
 
 ## 5. Numbers
@@ -160,7 +161,7 @@ before the overhaul.
 
 * Every change is built in small slices on the working branch `claude/ui-overhaul`.
 * Before each commit: the type check, the unit tests, the build and the email server check; the
-  rules tests and the emulator test when database code changes; and a browser check on the test
+  emulator test when repository code changes, and the rules tests when `firestore.rules` changes; and a browser check on the test
   page for every screen change.
 * Every commit updates `PROJECT_GUIDE.md` and the code graph (`graphify-out/`).
 * Wording is checked for plain English: no hyphens, "they" for people, dates as DD-MM-YYYY.
@@ -176,11 +177,11 @@ before the overhaul.
 1. Look at the new look in the live app once AI Studio has synced main.
 2. Say go for Phase 3.
 
-### Phase 3: a faster roster grid (next)
+### Phase 3: roster grid speed and structure (next)
 
 Targets on the full size clinic, production build: the cells show in under 1 s, an arrow key
 takes under 50 ms, the popup and deleting a shift take under 100 ms each, and nothing blocks the
-page for more than 200 ms while typing.
+page for more than 200 ms, while loading or while typing.
 
 The slices, each timed with `grid-timing.cjs`:
 
@@ -200,7 +201,7 @@ The slices, each timed with `grid-timing.cjs`:
 8. `WorkbookGrid.tsx` split the same way (toolbar, table, cell, status bar, cell editor, menu,
    selection and keys).
 
-Risks: the save queues, live updates, undo and shift ids. The existing tests cover them, along
+Risks: the save queues, live updates, undo and the shift IDs. The existing tests cover them, along
 with the emulator test and a browser script for an edit, undo, the popup, a fill, a swap and a
 failed save.
 
@@ -208,26 +209,35 @@ failed save.
 
 | Phase | What | Backend | Size |
 |---|---|---|---|
-| 4 | Roster screen layout, words and accessibility: the sheet tabs above the content, one problem count everywhere ("N must fix · M to check"), a regrouped toolbar, readable cells and marks, and a read only day view on phones | none | large |
-| 5 | Nurse screens for phones (My roster as cards, My requests with a clear status), and an email to a nurse when their request is decided | a new route, `POST /api/requests/:id/notify`, with a switch in Settings | medium |
+| 4 | Roster screen layout, words and accessibility: the sheet tabs above the content, one problem count everywhere ("N must fix · M to check"), a regrouped toolbar, readable cells and marks, and a read only day view below 1024 px (see the open question below) | none | large |
+| 5 | Nurse screens for phones (My roster as cards, My requests with a clear status, the read receipt page, the shared roster page and the viewer Dashboard), and an email to a nurse when their request is decided | a new route, `POST /api/requests/:id/notify`, with a switch in Settings | medium |
 | 6 | Planner screens: the Nurses and Doctors lists and editors, Availability split into "Leave and days off" and "Requests", and a leave grid that works without dragging | none | large |
-| 7 | Every dialog on the shared dialog, one publish flow, a "Sent rosters" screen, History tidied, and resuming a publish that stopped | resuming a publish; paging for the email log | large |
-| 8 | Settings in clear sections with Save and Cancel, Reports in plain words, and the audit trail loaded in pages | paging and count queries | medium |
-| 9 | Dead code and unused packages removed, ESLint in CI, the final audit, and the guide's screens section rewritten | none | medium |
+| 7 | Every dialog moved onto the shared dialog, one publish flow, a "Sent rosters" screen, History tidied, and resuming a publish that stopped | resuming a publish; the email log loaded in pages | large |
+| 8 | Settings in clear sections with Save and Cancel, Reports in plain words, and the audit trail loaded in pages | the audit trail loaded in pages, and counts that do not read every record | medium |
+| 9 | Dead code and unused packages removed, the package renamed with a plain English description, ESLint in CI, the final audit, and the guide's screens section rewritten | none | medium |
 
 No phase is expected to change the Firestore rules. If one does, the change is reviewed and the
 owner publishes it by hand.
 
+### An open question for the owner, before Phase 4
+
+The plan gives the read only day view to screens narrower than 1024 px, which includes a tablet
+held upright, while the owner's decision says planners edit the roster on a laptop or a tablet.
+Should a tablet held upright edit the roster, or get the day view?
+
 ### Noticed, and waiting for their phase
 
-* The roster screen shows two problem counts (34 in the top bar, 28 in the steps). Phase 4 makes
+* The roster screen shows different problem counts. On the test page's November roster, the top
+  bar says 34 (Must fix and Check together) and the steps say 28 (Must fix only). Phase 4 makes
   it one count.
-* The top bar shows 0 problems when the app first opens on Settings, until the roster screen has
-  been opened. Phase 4.
-* The roster toolbar wraps beside the menu. Phase 4.
-* "ClinicRoster" still appears on the Doctors screen (Phase 6) and in the roster email (Phase 7).
-* The New roster dialog suggests a name with the month first, in US style, and with dashes in
-  it. Phase 7.
+* The top bar shows 0 problems when the app opens on a screen other than the Dashboard or
+  Rosters, until one of those two has been opened, because only they report the count. Phase 4.
+* At 1024 px, with the menu showing, the roster toolbar's buttons wrap onto a second row and
+  the day range breaks across two lines. Phase 4.
+* "ClinicRoster" still appears on the Doctors screen (Phase 6), and in the roster email and the
+  footer of the test email (Phase 7).
+* The New roster dialog suggests a name with the month first, in US style and with dashes in it,
+  and falls back to names that start with "Schedule". Phase 7.
 * The Time periods form in Settings starts at 19-01-2026. Phase 8.
 * Each screen's own accessibility problems (section 5) are fixed in that screen's phase.
 
@@ -271,7 +281,7 @@ owner publishes it by hand.
 
 **Phase 2** (main at `39ae8d8`, 08-10-2026):
 
-* `970b2f1` Sample of the new look for the owner
+* `970b2f1` Sample of the new look for the owner (UI overhaul Phase 2)
 * `ea77021` The owner approved the new look with Inter
 * `e63bb4f` One date module: day with weekday and typed DD-MM-YYYY dates
 * `a4ed8c2` The approved look's colours and font in the app

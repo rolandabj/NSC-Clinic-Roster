@@ -106,9 +106,9 @@ The owner asked to install the `ui-ux-pro-max` skill, then for a plan that revie
 
 ## How every phase is done
 
-* **Working branch.** Each phase is built in small slices on the working branch (`incremental-implementation`).
+* **Working branch.** Each phase is built in small slices on the working branch `claude/ui-overhaul`, following the `incremental-implementation` skill.
 * **Each slice is checked before it is committed:**
-  * type check, unit tests (274 today), build and the email server check;
+  * type check, unit tests (279 when the plan was saved), build and the email server check;
   * the emulator tests when database code changes;
   * a browser check of every screen it changes.
 * **Each commit** updates `PROJECT_GUIDE.md` and the code graph (`finish-change`).
@@ -205,7 +205,7 @@ Targets on the full size clinic (production build; the baseline is at the end of
 * an arrow key takes under 50 ms;
 * the popup opens in under 100 ms;
 * a deleted shift disappears in under 100 ms;
-* nothing blocks the page for more than 200 ms while typing.
+* nothing blocks the page for more than 200 ms, while loading or while typing.
 
 Each slice is measured with `grid-timing.cjs`:
 1. A memoized `GridCell` with simple props and a precomputed view of each cell (pure functions, unit tested).
