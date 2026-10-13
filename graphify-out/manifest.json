@@ -108,8 +108,8 @@
     "semantic_hash": "5e21b5b122c895dce73f2e1445074004"
   },
   "src/components/layout/AppShell.tsx": {
-    "mtime": 1791882652.9497964,
-    "seen": 1791882923.1798244,
+    "mtime": 1791885147.7362895,
+    "seen": 1791885479.67411,
     "ast_hash": "b1ec100f085241b39dda887ca3be8eba",
     "semantic_hash": ""
   },
@@ -312,8 +312,8 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791883830.4863188,
-    "seen": 1791884029.771237,
+    "mtime": 1791885147.7434387,
+    "seen": 1791885479.6742458,
     "ast_hash": "e1d81098c87e24c8e3122fdf90402195",
     "semantic_hash": ""
   },
@@ -426,8 +426,8 @@
     "semantic_hash": ""
   },
   "src/components/workbook/WorkbookGrid.tsx": {
-    "mtime": 1791884728.8014314,
-    "seen": 1791884989.4047651,
+    "mtime": 1791885147.7441034,
+    "seen": 1791885479.6742969,
     "ast_hash": "6840ba75922d312d7bdbe3065c442855",
     "semantic_hash": ""
   },
@@ -570,8 +570,8 @@
     "semantic_hash": "e397787d18907205465de496124a761d"
   },
   "src/services/repository/collectionSyncer.ts": {
-    "mtime": 1791881268.4296217,
-    "seen": 1791881289.1189942,
+    "mtime": 1791885147.7449055,
+    "seen": 1791885479.6744127,
     "ast_hash": "fa9775fd67f76f3e95e0d5b39b6cabc1",
     "semantic_hash": ""
   },
@@ -828,8 +828,8 @@
     "semantic_hash": ""
   },
   "src/services/dashboard/problemCount.ts": {
-    "mtime": 1791882652.952839,
-    "seen": 1791882923.1799572,
+    "mtime": 1791885147.7441034,
+    "seen": 1791885479.6743376,
     "ast_hash": "425cb315911b8104f4ef5b326f5d8467",
     "semantic_hash": ""
   },
@@ -870,14 +870,14 @@
     "semantic_hash": ""
   },
   "src/services/presence/presenceRules.ts": {
-    "mtime": 1791882983.8102832,
-    "seen": 1791883005.6364043,
+    "mtime": 1791885147.744564,
+    "seen": 1791885479.6744003,
     "ast_hash": "181a05f07e57e22966e215033f226834",
     "semantic_hash": ""
   },
   "src/services/presence/usePresence.ts": {
-    "mtime": 1791882652.9535866,
-    "seen": 1791882923.180043,
+    "mtime": 1791885147.744758,
+    "seen": 1791885479.6744013,
     "ast_hash": "1db5aa68593cab05fc3dbc3c14a61c25",
     "semantic_hash": ""
   },
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791885008.7028894,
-    "seen": 1791885016.6351259,
-    "ast_hash": "5ff802ba789c2d2ba9fbdbf373f42e52",
+    "mtime": 1791885081.1820025,
+    "seen": 1791885479.674674,
+    "ast_hash": "f26a183b6caedac0f7a3bca09a99f0d6",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1218,8 +1218,8 @@
     "semantic_hash": ""
   },
   "src/services/hours/hoursHistoryService.ts": {
-    "mtime": 1791882074.986089,
-    "seen": 1791882096.7297695,
+    "mtime": 1791885147.744564,
+    "seen": 1791885479.6743948,
     "ast_hash": "024d40b873344081b0d3af6fe6bf29bf",
     "semantic_hash": ""
   },
@@ -1578,9 +1578,9 @@
     "semantic_hash": ""
   },
   "tasks/plan.md": {
-    "mtime": 1791882915.179178,
-    "seen": 1791882923.1802275,
-    "ast_hash": "6bea46d3e291371ba5ffd459f82a523e",
+    "mtime": 1791885403.0643048,
+    "seen": 1791885479.6746788,
+    "ast_hash": "e9d6f0f2fe85276937724639fc685ba7",
     "semantic_hash": ""
   },
   "tasks/todo.md": {
@@ -1806,9 +1806,9 @@
     "semantic_hash": ""
   },
   "tasks/summary.md": {
-    "mtime": 1791880290.262415,
-    "seen": 1791880298.3227785,
-    "ast_hash": "e7d6ba4a4aaa51a3d895352207681067",
+    "mtime": 1791885446.9926546,
+    "seen": 1791885479.6746798,
+    "ast_hash": "f98b6e7a80a69a7c93c9a0a5a785c301",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/grid-flow.cjs": {
@@ -2022,9 +2022,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/grid/useGridSelection.ts": {
-    "mtime": 1791884683.6426823,
-    "seen": 1791884989.404789,
-    "ast_hash": "bb71f2599d8e8a83f5560068e5689d37",
+    "mtime": 1791885079.0965166,
+    "seen": 1791885479.674326,
+    "ast_hash": "2ddcd7bd7401fcfb67780641b25ad08a",
     "semantic_hash": ""
   }
 }

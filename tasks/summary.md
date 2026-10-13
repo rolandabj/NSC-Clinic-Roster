@@ -1,21 +1,23 @@
 # UI overhaul: summary and next steps
 
-As of 13-10-2026. Phases 0, 1 and 2 of the ten phase plan are done and on main, and the checks
-on main passed. Phase 3, roster grid speed and structure, is next.
+As of 13-10-2026. Phases 0, 1 and 2 of the ten phase plan are done and on main. Phase 3, roster
+grid speed and structure, is done and at Checkpoint 3: slices 1 to 3 are on main, slices 4 to 8
+wait for the owner's "push to main". Phase 4 is next.
 
 The full plan is in `tasks/plan.md` and the checklist in `tasks/todo.md`. Each step is recorded
-in detail in `PROJECT_GUIDE.md`, section 16, items 42 to 46.
+in detail in `PROJECT_GUIDE.md`, section 16, items 42 to 58.
 
 ## 1. Where things stand
 
 | | |
 |---|---|
-| Done | Phase 0 (setup), Phase 1 (quick fixes and safety), Phase 2 (the new look and the app frame) |
-| On main | Everything up to the end of Phase 2, which ended with `39ae8d8` on 08-10-2026, and this summary (13-10-2026) |
-| Checks on main | CI run 57 (Phases 0 and 1), CI run 58 (Phase 2) and CI run 59 (this summary) passed |
-| Unit tests | 335 (279 when the plan started), and 96 Firestore rules checks |
+| Done | Phase 0 (setup), Phase 1 (quick fixes and safety), Phase 2 (the new look and the app frame), Phase 3 (roster grid speed and structure, at Checkpoint 3) |
+| On main | Everything up to Phase 3 slice 3 and the caveman voice skills (`bf22360`, 13-10-2026) |
+| Waiting for "push to main" | Phase 3 slices 4 to 8 and Checkpoint 3, on the working branch `claude/ui-overhaul` |
+| Checks on main | CI runs 57 to 61 passed |
+| Unit tests | 375 (279 when the plan started), and 96 Firestore rules checks |
 | Firestore rules | Not changed by the overhaul so far, so there is nothing to publish by hand |
-| Next | Phase 3: roster grid speed and structure, when the owner says go |
+| Next | Phase 4: the roster screen's layout, words and accessibility, when the owner says go |
 
 ## 2. Why this work
 
@@ -48,12 +50,12 @@ the screens, the roster screen, permissions, data flow and the server.
 | Words | Generated jargon such as "Schedule Version History Center"; one idea under five names; dashes and hyphens in visible text | The menu and the frame's words are done; each screen's words and messages are reworded in its phase |
 | Dates | About ten formats, some in US style | One date module (Phase 2); the screens switch to it in their phases |
 | Phones | The sidebar left 166 px of a 390 px phone for the content; touch targets of 15 to 30 px | A slide in menu (Phase 1); nurse screens in Phase 5; the roster day view in Phase 4 |
-| Grid speed | About 1 s before the cells show on the production build (the review first measured 2.2 s on the slower development build); every key press redrew all 1,860 cells | Phase 3 |
+| Grid speed | About 1 s before the cells show on the production build (the review first measured 2.2 s on the slower development build); every key press redrew all 1,860 cells | Done (Phase 3), apart from the longest task while loading, which needs fewer elements on screen (Phase 4) |
 | Roster layout | Four different problem counts, the sheet tabs below the grid, Full screen twice | Phase 4 |
 | Navigation | Back did nothing inside a screen; no link could open a given roster, nurse, day or tab; three screens started in October 2026 | Done for rosters, sheets, nurses, days and the Settings tabs, and the screens start from today (Phases 1 and 2); the Reports, History and Availability tabs take up links and Back in their phases |
 | Permissions | Buttons shown to people the rules refuse; exports open to viewers | Done (Phase 1) |
 | Backend | A publish stopped by closing the tab cannot be finished; the email log could pass Firestore's 1 MiB limit at about 40 nurses (an estimate); nurses are not told when a request is decided; the audit trail and email log load in full | The email log size guard is done (Phase 1); the rest follows in Phases 5, 7 and 8 |
-| Code | Two files of about 3,000 lines each; no shared app state; no ESLint | Shared app state is done (Phase 2); the files are split in Phase 3; ESLint comes in Phase 9 |
+| Code | Two files of about 3,000 lines each; no shared app state; no ESLint | Shared app state is done (Phase 2); the two files are split (Phase 3: 2,323 and 1,286 lines now); ESLint comes in Phase 9 |
 
 ## 4. What has been done
 
@@ -123,20 +125,48 @@ everyone else.
   page); it now makes 48 database reads. In Safari, a click in the account panel could be lost. A new browser
   check, `links.cjs` (9 checks), covers both, along with the links and Back.
 
+### Phase 3: roster grid speed and structure (13-10-2026)
+
+* **Cells drawn only when they change:** what each cell shows is worked out in advance, once per
+  change, and each cell and each nurse's row is drawn again only when what it shows changes.
+* **The selection in a small store:** an arrow key or a click draws two cells, not 1,860; the
+  keys are handled on the grid itself.
+* **Less work per edit:** an edit saves only the lists it changed, the save no longer compares
+  records it saved last time, the compare dialog is built only while it is open, and "Who could
+  cover?" no longer works its answer out on every redraw.
+* **The roster check kept out of the way:** it runs once after the screen has drawn (opening the
+  full size roster ran it four times), and its result is drawn so a key press can interrupt it.
+* **No extra redraws:** the top bar count, presence ("X is also here") and the fill progress no
+  longer redraw the grid; another sheet and back keeps the zoom and the selection.
+* **Smaller files:** the roster screen's toolbar, steps, sheet tabs, fill dialog, roster picker,
+  check and edits, and the grid's toolbar, table, status bar, legend, cell editor and right click
+  menu, each in their own file.
+* **Checked at every slice:** the page's and the grid's HTML in 82 states stayed byte for byte the
+  same, and browser scripts for edits, undo, the popup, a fill, a swap, a failed save, the keys,
+  the menus, the editor and the links pass.
+* The owner's answer before Phase 4: tablets edit the roster, held either way; only phones get the
+  read only day view.
+
 ## 5. Numbers
 
-**Roster grid on the full size clinic, production build** (median of 3 runs):
+**Roster grid on the full size clinic, production build** (Checkpoint 3, median of 7 runs, the
+same machine and script for both columns; times in the page, from the press or the key to the
+next frame drawn):
 
-| | At the start (07-10-2026) | Checkpoint 2 (08-10-2026) | Phase 3 target |
-|---|---|---|---|
-| Cells shown | 1,004 ms | 963 ms | under 1,000 ms |
-| Longest task that blocks the page while loading | 341 ms | 257 ms | under 200 ms |
-| Cell popup opens | 209 ms | 208 ms | under 100 ms |
-| One arrow key | 62 ms | 55 ms | under 50 ms |
-| Deleting a shift | 147 ms | 132 ms | under 100 ms |
+| | Before Phase 3 | Checkpoint 3 | Phase 3 target | |
+|---|---|---|---|---|
+| First cells | 523 ms | 450 ms | under 1,000 ms | met |
+| Cell popup opens | 112 ms | 48 ms | under 100 ms | met |
+| One arrow key | 56 ms | 27 ms | under 50 ms | met |
+| Deleting a shift | 147 ms | 86 ms | under 100 ms | met |
+| Longest task that blocks the page while using the grid | 107 ms | 51 ms | under 200 ms | met |
+| Longest task that blocks the page while loading | 270 ms | 274 ms | under 200 ms | not met |
 
-Phase 2 did not change the grid, so these stay close to where they started; Phase 3 is the
-speed work. Hospital computers slower than the test machine will feel these times more.
+The longest task while loading is the browser alone (styles, layout and paint of the grid's
+12,000 elements); Phase 4's cells, or drawing only the rows in view, can bring it down. Earlier
+numbers in `tasks/plan.md` came from the script's own clock, which includes the test tool's work
+and a different machine, so they do not compare with these. Hospital computers slower than the
+test machine will feel these times more.
 
 **Serious accessibility problems** (axe, laptop width):
 
@@ -174,36 +204,8 @@ before the overhaul.
 
 ### Now
 
-1. Look at the new look in the live app once AI Studio has synced main.
-2. Say go for Phase 3.
-
-### Phase 3: roster grid speed and structure (next)
-
-Targets on the full size clinic, production build: the cells show in under 1 s, an arrow key
-takes under 50 ms, the popup and deleting a shift take under 100 ms each, and nothing blocks the
-page for more than 200 ms, while loading or while typing.
-
-The slices, each timed with `grid-timing.cjs`:
-
-1. Grid cells that redraw only when their own content changes, drawn from a view of each cell
-   worked out in advance (with unit tests).
-2. The selection and the popup kept in a small store, so an arrow key redraws two cells instead
-   of 1,860, with the keys handled on the grid itself.
-3. Hours per nurse, day totals and the problem maps worked out once per change; the compare
-   dialog built only while it is open.
-4. An edit replaces only the lists it changed, and saving checks only the records that changed.
-5. The roster checker kept out of the way of typing (in a background worker if it still takes
-   over 100 ms).
-6. No extra redraws from the top bar count, the presence timer and the fill progress; the grid
-   stays in place while another sheet is open.
-7. `SchedulesView.tsx` split into smaller parts (toolbar, steps, sheets, fill dialog, and the
-   code for loading, edits and checks).
-8. `WorkbookGrid.tsx` split the same way (toolbar, table, cell, status bar, cell editor, menu,
-   selection and keys).
-
-Risks: the save queues, live updates, undo and the shift IDs. The existing tests cover them, along
-with the emulator test and a browser script for an edit, undo, the popup, a fill, a swap and a
-failed save.
+1. Look at Checkpoint 3 and say "push to main" for Phase 3 slices 4 to 8.
+2. Say go for Phase 4.
 
 ### The phases after that
 
@@ -262,14 +264,15 @@ upright.
 | The plan, with the starting and Checkpoint 2 numbers | `tasks/plan.md` |
 | The checklist | `tasks/todo.md` |
 | This summary | `tasks/summary.md` |
-| The full record of each step | `PROJECT_GUIDE.md`, section 16, items 42 to 46 |
+| The full record of each step | `PROJECT_GUIDE.md`, section 16, items 42 to 58 |
 | The approved look | `design-system/nsc-clinic-roster/MASTER.md` |
 | Colours and font | `src/index.css` |
 | Shared parts | `src/components/ui/` (on the test page at `?view=gallery`) |
 | Dates | `src/utils/dateUtils.ts` |
 | Links and Back | `src/services/navigation/address.ts` |
 | Shared app state | `src/components/common/AppContext.tsx` |
-| The test page and its scripts | `.claude/skills/browser-check/` (`ui-audit.cjs`, `grid-timing.cjs`, `links.cjs`) |
+| The test page and its scripts | `.claude/skills/browser-check/` (`ui-audit.cjs`, `grid-timing.cjs`, `links.cjs`, `grid-flow.cjs`) |
+| The roster screen's parts, and the grid's | `src/components/roster/`, `src/components/workbook/grid/` |
 
 ## 9. Commits on main
 
@@ -299,3 +302,21 @@ upright.
 * `0a3fe24` Phase 2 checkpoint: a new roster stays open, and the account panel works in Safari
 * `122493a` Checkpoint 2 wording: clearer address details, labelled numbers
 * `39ae8d8` Guide: items 45 and 46 approved for main
+
+**Phase 3, slices 1 to 3, and the caveman voice skills** (main at `bf22360`, 13-10-2026):
+
+* `02708a0` Roster grid cells drawn only when what they show changes (slice 1)
+* `4c04698` Grid selection and popup in a small store, keys on the grid (slice 2)
+* `32e7519` Grid rows drawn again only when an edit changes them (slice 3)
+* `cd6f17f` Caveman voice skills, on in every chat (the owner's choice)
+* `bf22360` Guide: items 48 to 51 approved for main
+
+**Phase 3, slices 4 to 8** (on the working branch, waiting for "push to main"):
+
+* `d8e693c` An edit saves only the lists it changed (slice 4)
+* `11ba50f` Roster check runs once, after the screen has drawn (slice 5)
+* `355876f` No extra grid redraws; grid kept while another sheet is open (slice 6)
+* `a570713` Roster screen parts out of SchedulesView (slice 7, part 1)
+* `c2023dc` Roster check and edits into hooks (slice 7, part 2)
+* `31f0a7c` Roster grid split into parts (slice 8)
+* `601b361` Grid selection hook: the comment says where the cell is scrolled to

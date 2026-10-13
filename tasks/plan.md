@@ -462,3 +462,22 @@ After slice 5 (7 runs). `grid-timing.cjs` now also measures the first cells in t
 The longest task while loading is the grid's first drawing of its 60 rows, not the check.
 
 After slice 6 (7 runs, in the page): first cells 482 ms, longest blocking task while loading 281 ms, popup 47 ms, arrow key 28 ms, deleting a shift 93 ms. Grid redraws: one edit 4 to 2, a fill 8 to 2, 65 seconds idle 2 to 0. Back to the grid from another sheet: about 280 ms (300 to 390 ms before), with the zoom and the selection now kept; about 35 ms of it is the app's own work and the rest is the browser laying out and painting the grid's 12,000 elements, which fewer elements (Phase 4) would cut.
+
+## Checkpoint 3, 13-10-2026 (after Phase 3)
+
+**Roster grid, full size clinic, production build** (`grid-timing.cjs`, median of 7 runs, this session's machine). "Before" is the code at the start of Phase 3 (`302918c`), built and timed on the same machine with the same script, so the two columns compare fairly. The times in the page run from the press or the key to the next frame drawn after the change (first cells: from the start of the page load).
+
+| | Before Phase 3 | Checkpoint 3 | Phase 3 target | |
+|---|---|---|---|---|
+| First cells, in the page | 523 ms | 450 ms | under 1,000 ms | met |
+| Cell popup opens, in the page | 112 ms | 48 ms | under 100 ms | met |
+| One arrow key, in the page | 56 ms | 27 ms | under 50 ms | met |
+| Deleting a shift, in the page | 147 ms | 86 ms | under 100 ms | met |
+| Longest blocking task while using the grid | 107 ms | 51 ms | under 200 ms | met |
+| Longest blocking task while loading | 270 ms | 274 ms | under 200 ms | not met |
+
+The longest task while loading is the browser alone: a trace shows about 125 ms of styles, 101 ms of layout and 40 ms of paint for the grid's 12,000 elements, and none of the app's code. Only fewer elements on screen will bring it under 200 ms: Phase 4's readable cells, or drawing only the rows in view. The times from the script's command (which include Playwright's own work) are, before and after: first cells 1,087 and 1,057 ms, the popup 198 and 140 ms, an arrow key 59 and 27 ms, deleting a shift 171 and 98 ms.
+
+**Also measured during Phase 3:** the roster check runs once while the full size roster opens instead of four times; the grid is drawn 2 times for one edit instead of 4, 2 times for a fill instead of 8, and not at all in a minute with nobody touching it instead of 2 times; another sheet and back keeps the zoom and the selection. `SchedulesView.tsx` went from 3,158 to 2,323 lines and `WorkbookGrid.tsx` from 2,970 to 1,286.
+
+**Screens** (`ui-audit.cjs`, 1366, 1024 and 390 px): the same as Checkpoint 2, as the HTML did not change: the roster has 13 serious axe problems at 1366 px (Phase 4), the dashboards none.
