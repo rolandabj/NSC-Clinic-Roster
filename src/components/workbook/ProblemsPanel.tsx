@@ -7,6 +7,7 @@
  */
 
 import React, { useState } from 'react';
+import { ProblemCounts } from '../ui';
 import { X, AlertTriangle, AlertCircle, Info, CheckCircle2, ArrowRight } from 'lucide-react';
 import { ValidationReport, ValidationFinding, FindingSeverity } from '../../services/validation/ScheduleValidator';
 import { formatDate } from '../../utils/dateUtils';
@@ -56,9 +57,10 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, 
       className="w-full sm:w-80 shrink-0 h-full flex flex-col bg-slate-50 border-l border-slate-200 text-xs absolute sm:static inset-0 z-30"
     >
       <div className="px-3 py-2 bg-white border-b border-slate-200 flex items-center justify-between gap-2">
-        <h2 className="font-bold text-slate-800 text-sm">
-          Problems ({validationReport.errorCount + validationReport.warnCount})
-        </h2>
+        <div className="min-w-0">
+          <h2 className="font-bold text-slate-800 text-sm">Problems</h2>
+          <ProblemCounts mustFix={validationReport.errorCount} toCheck={validationReport.warnCount} notes={validationReport.infoCount} className="text-xs" />
+        </div>
         <button
           type="button"
           onClick={onClose}

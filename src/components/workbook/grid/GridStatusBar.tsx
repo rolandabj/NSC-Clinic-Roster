@@ -4,6 +4,7 @@ import type { ValidationReport } from '../../../services/validation/ScheduleVali
 import { formatDate } from '../../../utils/dateUtils';
 import type { GridSelection } from './gridSelection';
 import { SelectionView } from './SelectionView';
+import { ProblemCounts } from '../../ui';
 
 /**
  * The bar under the grid: the selected cell, the opening hours without a free nurse on its
@@ -79,11 +80,7 @@ export const GridStatusBar: React.FC<{
         title="Open the Problems tab"
       >
         <span className="text-slate-500">Problems:</span>
-        <span>
-          {validationReport.errorCount + validationReport.warnCount === 0
-            ? 'none'
-            : `${validationReport.errorCount} must fix · ${validationReport.warnCount} to check`}
-        </span>
+        <ProblemCounts mustFix={validationReport.errorCount} toCheck={validationReport.warnCount} notes={validationReport.infoCount} none="none" />
       </button>
     </div>
   </div>

@@ -184,6 +184,7 @@ async function loadPlannerData(timezone: string, canApprove: boolean): Promise<P
       endDate: roster.endDate,
       mustFix: report.errorCount,
       toCheck: report.warnCount,
+      notes: report.infoCount,
     };
   }
 

@@ -1,10 +1,10 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { Bell, ChevronDown, Keyboard, LogOut, Menu, Shield, ShieldAlert } from 'lucide-react';
+import { Bell, ChevronDown, Keyboard, LogOut, Menu, Shield } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { authService } from '../../services/auth/authService';
 import { signOutSafely } from '../common/signOut';
 import { canEditClinicData, roleLabel } from '../../services/auth/access';
-import { IconButton, cx } from '../ui';
+import { IconButton, ProblemCounts, cx } from '../ui';
 
 interface TopBarProps {
   context: ClinicContextState;
@@ -72,17 +72,25 @@ export const TopBar: React.FC<TopBarProps> = ({
             onClick={onOpenWarnings}
             className={cx(
               'flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors duration-150 pointer-coarse:h-11',
-              context.warningCount > 0
-                ? 'border-warning-line/40 bg-warning-soft text-warning hover:border-warning-line'
+              context.problems && context.problems.mustFix + context.problems.toCheck > 0
+                ? 'border-line bg-surface hover:bg-sunken'
                 : 'border-line bg-surface text-ink-muted hover:bg-sunken'
             )}
             title="Open the roster and its problems"
           >
-            {context.warningCount > 0 ? <ShieldAlert className="size-4" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
-            <span className="font-semibold tabular-nums">{context.warningCount}</span>{' '}
-            {/* The word shows from 768 px; screen readers always hear it. */}
-            <span className="sr-only md:not-sr-only">{context.warningCount === 1 ? 'problem' : 'problems'}</span>
-            <span className="sr-only"> on the roster</span>
+            {context.problems ? (
+              <>
+                {/* The one count (Must fix, Check, Note): words from 768 px, always read out. */}
+                <ProblemCounts {...context.problems} wordsFrom="md" className="font-semibold" />
+                <span className="sr-only"> on the roster</span>
+              </>
+            ) : (
+              // No screen has checked the roster yet (the app opened on another screen): no count, rather than 0.
+              <>
+                <Bell className="size-4" aria-hidden="true" />
+                <span>Problems</span>
+              </>
+            )}
           </button>
         )}
 

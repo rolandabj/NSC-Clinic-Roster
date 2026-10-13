@@ -52,3 +52,46 @@ export const ProblemBadge: React.FC<{ kind: ProblemKind; children?: React.ReactN
     </Badge>
   );
 };
+
+/**
+ * The one problem count: each kind with its icon, number and word ("28 must fix", "6 to check",
+ * "3 notes"), kinds with none left out. `wordsFrom: 'md'` shows only the icons and numbers
+ * below 768 px; screen readers always hear the words. `none` is shown when there are no problems.
+ */
+export const ProblemCounts: React.FC<{ mustFix: number; toCheck: number; notes: number; wordsFrom?: 'md'; none?: string; className?: string }> = ({
+  mustFix,
+  toCheck,
+  notes,
+  wordsFrom,
+  none = 'No problems',
+  className,
+}) => {
+  const items = [
+    { kind: 'must' as const, n: mustFix, word: 'must fix' },
+    { kind: 'check' as const, n: toCheck, word: 'to check' },
+    { kind: 'note' as const, n: notes, word: notes === 1 ? 'note' : 'notes' },
+  ].filter((i) => i.n > 0);
+  if (items.length === 0) return <span className={className}>{none}</span>;
+  return (
+    <span className={cx('inline-flex items-center gap-2 whitespace-nowrap', className)}>
+      {items.map(({ kind, n, word }, i) => {
+        const { icon: Icon, text } = PROBLEM_MARKS[kind];
+        return (
+          <span key={kind} className={cx('inline-flex items-center gap-1 tabular-nums', text)}>
+            {/* A pause between the kinds for screen readers; the icons part them on screen. */}
+            {i > 0 && <span className="sr-only">, </span>}
+            <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+            {wordsFrom ? (
+              <span>
+                {n}
+                <span className="sr-only md:not-sr-only"> {word}</span>
+              </span>
+            ) : (
+              <span>{`${n} ${word}`}</span>
+            )}
+          </span>
+        );
+      })}
+    </span>
+  );
+};

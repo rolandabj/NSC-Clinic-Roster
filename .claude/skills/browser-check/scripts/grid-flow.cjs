@@ -147,7 +147,7 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   const appState = () =>
     app.evaluate(() => ({
       roster: document.querySelector('button[title^="Open another roster"]')?.textContent.replace('▾', ''),
-      problems: [...document.querySelectorAll('button')].find((x) => /^Problems \(/.test(x.textContent))?.textContent,
+      problems: [...document.querySelectorAll('button')].find((x) => /^Problems · /.test(x.textContent))?.textContent,
     }));
 
   // 9. The popup open, then Back to another sheet: the hidden grid's popup closes.

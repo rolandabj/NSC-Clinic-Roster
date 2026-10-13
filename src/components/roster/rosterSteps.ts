@@ -30,7 +30,7 @@ export function rosterSteps(r: {
   const steps: { label: string; action?: RosterStepAction }[] = [
     { label: 'Create' },
     { label: filled ? 'Filled' : 'Fill', action: filled ? 'fillEmpty' : 'fillAll' },
-    { label: !filled ? 'Fix problems' : r.mustFix > 0 ? `Fix problems (${r.mustFix})` : 'No problems to fix', action: 'problems' },
+    { label: !filled ? 'Fix problems' : r.mustFix > 0 ? `Fix problems · ${r.mustFix} must fix` : 'No problems to fix', action: 'problems' },
     {
       label: r.hasPublished && r.changedSincePublish > 0 ? `Send changes (${r.changedSincePublish})` : r.published ? 'Published' : 'Publish',
       action: r.hasPublished ? 'change' : 'publish',

@@ -61,7 +61,7 @@ check('Rosters: a link opens a sheet; a click on another adds a step to Back; Ba
   await page.goBack();
   await page.waitForFunction(() => location.hash === '#schedules?roster=nov&sheet=problems');
   await page.waitForTimeout(300);
-  assert.equal(await page.getByRole('button', { name: /^Problems \(/ }).last().getAttribute('aria-current'), 'page');
+  assert.equal(await page.getByRole('button', { name: /^Problems · / }).last().getAttribute('aria-current'), 'page');
 });
 
 check("Rosters: a link to a nurse's day puts the focus on that cell", async ({ open }) => {

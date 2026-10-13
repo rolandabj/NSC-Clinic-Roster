@@ -121,7 +121,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
     activeScheduleName: '',
     activeSchedulePeriod: '',
     activeScheduleId: '',
-    warningCount: 0,
+    problems: null,
     isLocalMode: !repositoryManager.getIsCloudMode(),
     currentUser: {
       name: initialUser?.name || 'Unauthenticated User',
@@ -199,7 +199,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       activeScheduleName: '',
       activeSchedulePeriod: '',
       activeScheduleId: '',
-      warningCount: 0,
+      problems: null,
     }));
     setDataVersion((v) => v + 1);
   }, []);

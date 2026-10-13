@@ -6,17 +6,17 @@ export type RosterSheet = 'roster' | 'doctors' | 'coverage' | 'warnings' | 'leav
 /** The sheet tabs along the bottom of the roster screen (Phase 4 moves them above the content). */
 export const RosterSheetTabs: React.FC<{
   active: RosterSheet;
-  /** Must fix and Check together, for the Problems tab. */
-  problemCount: number;
+  /** The roster's problems, for the Problems tab ("Problems · 28 must fix · 6 to check · 3 notes"). */
+  problemWords: string;
   onOpen: (sheet: RosterSheet) => void;
-}> = ({ active, problemCount, onOpen }) => (
+}> = ({ active, problemWords, onOpen }) => (
   <div className="h-9 bg-slate-200 border-t border-slate-300 px-2 flex items-center gap-1 shrink-0 overflow-x-auto select-none">
     {(
       [
         { id: 'roster', label: 'Roster' },
         { id: 'doctors', label: 'Doctors' },
         { id: 'coverage', label: 'Coverage by hour' },
-        { id: 'warnings', label: `Problems (${problemCount})` },
+        { id: 'warnings', label: `Problems · ${problemWords}` },
         { id: 'leave', label: 'Leave and pinned days' },
         { id: 'hours', label: 'Hours' },
         { id: 'legend', label: 'Key' },

@@ -21,6 +21,7 @@ import { useAppContext } from '../common/AppContext';
 import { WhoCanCover } from '../workbook/WhoCanCover';
 import { useLatestCallback } from '../common/useLatestCallback';
 import { RosterSteps } from '../roster/RosterSteps';
+import { problemCountWords } from '../../services/dashboard/problemCount';
 import { FillDialog } from '../roster/FillDialog';
 import { RosterPicker } from '../roster/RosterPicker';
 import { RosterToolbar } from '../roster/RosterToolbar';
@@ -291,6 +292,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       endDate: sched.endDate,
       mustFix: validationReport.errorCount,
       toCheck: validationReport.warnCount,
+      notes: validationReport.infoCount,
     });
   }, [validationReport]);
 
@@ -302,7 +304,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // No roster open (e.g. the last one was deleted): the top bar shows none.
   useEffect(() => {
     if (!activeSchedule && !isFirstLoad) {
-      reportProblems?.({ scheduleId: '', name: '', startDate: '', endDate: '', mustFix: 0, toCheck: 0 });
+      reportProblems?.({ scheduleId: '', name: '', startDate: '', endDate: '', mustFix: 0, toCheck: 0, notes: 0 });
     }
   }, [activeSchedule, isFirstLoad]);
 
@@ -1936,7 +1938,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       {/* Sheet tabs along the bottom */}
       <RosterSheetTabs
         active={activeTab}
-        problemCount={validationReport.errorCount + validationReport.warnCount}
+        problemWords={problemCountWords({ mustFix: validationReport.errorCount, toCheck: validationReport.warnCount, notes: validationReport.infoCount })}
         onOpen={(sheet) => {
           // A new sheet is a step Back returns from.
           if (sheet !== activeTab) onAddressChange?.({ roster: activeSchedule?.id, sheet: rosterSheetToAddress(sheet) }, 'push');

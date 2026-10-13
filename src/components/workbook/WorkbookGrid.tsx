@@ -267,17 +267,6 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     });
     return { cellViolationMessages, dayProblems, nurseProblems };
   }, [validationReport]);
-  // How many problems the marks show on the days on screen (for the switch's label).
-  const shownDates = new Set(blockDates);
-  const shownProblemCount = validationReport.findings.filter(
-    (f) =>
-      f.severity !== 'INFO' &&
-      (isDayProblem(f)
-        ? shownDates.has(f.date || f.id.match(/\d{4}-\d{2}-\d{2}/)?.[0] || '')
-        : f.cellRefs.length === 0
-        ? f.affectedNurseIds.length > 0
-        : f.cellRefs.some((r) => shownDates.has(r.date)))
-  ).length;
 
   // Group nurses if requested
   const displayNurses = useMemo(
@@ -1097,7 +1086,6 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         onGroupBy={setGroupBy}
         showProblems={highlightViolations}
         onToggleMarks={() => setHighlightViolations(!highlightViolations)}
-        shownProblemCount={shownProblemCount}
         zoomLevel={zoomLevel}
         onZoom={setZoomLevel}
         isLegendOpen={isLegendDrawerOpen}

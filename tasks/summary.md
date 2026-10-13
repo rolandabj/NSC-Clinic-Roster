@@ -233,11 +233,8 @@ upright.
 
 ### Noticed, and waiting for their phase
 
-* The roster screen shows different problem counts. On the test page's November roster, the top
-  bar says 34 (Must fix and Check together) and the steps say 28 (Must fix only). Phase 4 makes
-  it one count.
-* The top bar shows 0 problems when the app opens on a screen other than the Dashboard or
-  Rosters, until one of those two has been opened, because only they report the count. Phase 4.
+* Done in Phase 4, slice 1: one problem count everywhere ("28 must fix · 6 to check · 3 notes"), and no
+  count in the top bar until a screen has checked the roster (it showed 0).
 * The selected cell shows only a light tint: its ring hardly shows. Phase 4 (readable cells).
 * At 1024 px, with the menu showing, the roster toolbar's buttons wrap onto a second row and
   the day range breaks across two lines. Phase 4.

@@ -108,9 +108,9 @@
     "semantic_hash": "5e21b5b122c895dce73f2e1445074004"
   },
   "src/components/layout/AppShell.tsx": {
-    "mtime": 1791885147.7362895,
-    "seen": 1791885479.67411,
-    "ast_hash": "b1ec100f085241b39dda887ca3be8eba",
+    "mtime": 1791894588.5351806,
+    "seen": 1791894982.5124753,
+    "ast_hash": "1ee6f36e6078bd17274eb2d7c0b09eb2",
     "semantic_hash": ""
   },
   "src/components/layout/LocalModeBanner.tsx": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "src/components/layout/TopBar.tsx": {
-    "mtime": 1791878011.1478653,
-    "seen": 1791878701.9117258,
-    "ast_hash": "c3fb300ceb83a868adf4821c39afe39c",
+    "mtime": 1791894588.5386884,
+    "seen": 1791894982.51248,
+    "ast_hash": "21bbca6f15d6eaebd059020bbc2409de",
     "semantic_hash": ""
   },
   "src/components/modals/AuthModal.tsx": {
@@ -264,9 +264,9 @@
     "semantic_hash": ""
   },
   "src/components/views/DashboardView.tsx": {
-    "mtime": 1791878011.16058,
-    "seen": 1791878701.9117932,
-    "ast_hash": "3a5f0368168b1f443f0cc61c63833252",
+    "mtime": 1791894588.5361507,
+    "seen": 1791894982.5125477,
+    "ast_hash": "e0b0f995f004874be1d433aa1afbfed8",
     "semantic_hash": ""
   },
   "src/components/views/DoctorsView.tsx": {
@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791885658.4310517,
-    "seen": 1791885939.1370983,
-    "ast_hash": "2bc0f0d8ffc4cbca6da25a34201a7554",
+    "mtime": 1791894607.0015368,
+    "seen": 1791894982.5125604,
+    "ast_hash": "b5c5e958094fc370dd2c88ec95ad594e",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -426,9 +426,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/WorkbookGrid.tsx": {
-    "mtime": 1791885658.4293315,
-    "seen": 1791885939.1371295,
-    "ast_hash": "1b7102a6b837ffdfe08ee44398ad05c4",
+    "mtime": 1791894614.7450771,
+    "seen": 1791894982.5125875,
+    "ast_hash": "19793ea575b1ac2e9d69e1c143d70212",
     "semantic_hash": ""
   },
   "src/main.tsx": {
@@ -648,9 +648,9 @@
     "semantic_hash": ""
   },
   "src/types/navigation.ts": {
-    "mtime": 1791878011.1718652,
-    "seen": 1791878701.9119308,
-    "ast_hash": "28ba9434e254682c07826bb5b8d19ca6",
+    "mtime": 1791894562.4247208,
+    "seen": 1791894982.512825,
+    "ast_hash": "804e8f42e7ac81447740e67e3268e492",
     "semantic_hash": ""
   },
   "src/types/settings.ts": {
@@ -804,9 +804,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/ProblemsPanel.tsx": {
-    "mtime": 1791362587.9689438,
-    "seen": 1791365225.1340413,
-    "ast_hash": "fd6a1b720be427d0850c0f086d784902",
+    "mtime": 1791894606.9970713,
+    "seen": 1791894982.512584,
+    "ast_hash": "ff53e1f4aa30acd92cb3fb0e77ffa94e",
     "semantic_hash": ""
   },
   "src/components/workbook/WhoCanCover.tsx": {
@@ -828,9 +828,9 @@
     "semantic_hash": ""
   },
   "src/services/dashboard/problemCount.ts": {
-    "mtime": 1791885147.7441034,
-    "seen": 1791885479.6743376,
-    "ast_hash": "425cb315911b8104f4ef5b326f5d8467",
+    "mtime": 1791894562.4243424,
+    "seen": 1791894982.5126233,
+    "ast_hash": "1a66e9ff398b66c264ee22f245842ba6",
     "semantic_hash": ""
   },
   "src/services/engine/explainCell.ts": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791894233.5452237,
-    "seen": 1791894245.7483215,
-    "ast_hash": "2d1b3b72e5c974e10a5a4041fec2251f",
+    "mtime": 1791894953.5471275,
+    "seen": 1791894982.5129647,
+    "ast_hash": "5c24df1b46fdd7ac46b6fe04408b7bcd",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791894182.894879,
-    "seen": 1791894195.0734656,
-    "ast_hash": "ffff43199a2468d52a3b71d6a060d9c7",
+    "mtime": 1791894890.7962527,
+    "seen": 1791894982.5129714,
+    "ast_hash": "c17a152307b506227957ed52a95a1a89",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1692,9 +1692,9 @@
     "semantic_hash": ""
   },
   "src/components/ui/Badge.tsx": {
-    "mtime": 1791878011.1558654,
-    "seen": 1791878701.911766,
-    "ast_hash": "03e9f70841b2e1ea395a02d44eeee728",
+    "mtime": 1791894953.5484982,
+    "seen": 1791894982.5125215,
+    "ast_hash": "971d054f7ffa26fb4b87a1ab4ea22fe4",
     "semantic_hash": ""
   },
   "src/components/ui/Button.tsx": {
@@ -1752,9 +1752,9 @@
     "semantic_hash": ""
   },
   "src/components/ui/index.ts": {
-    "mtime": 1791878011.16058,
-    "seen": 1791878701.9117818,
-    "ast_hash": "88b4e917f7224fea55b3d0acef8914f7",
+    "mtime": 1791894562.4253302,
+    "seen": 1791894982.512536,
+    "ast_hash": "68b5bdd28e01778b0ad6b4591138f5ef",
     "semantic_hash": ""
   },
   "tests/unit/uiComponents.test.ts": {
@@ -1800,21 +1800,21 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/links.cjs": {
-    "mtime": 1791878010.769552,
-    "seen": 1791878701.911616,
-    "ast_hash": "cc0f2e0d88dd3df3ca3de8f47c57aece",
+    "mtime": 1791894642.4499395,
+    "seen": 1791894982.5124104,
+    "ast_hash": "0fc65e677aa74e1b82a08e5f3d7990f5",
     "semantic_hash": ""
   },
   "tasks/summary.md": {
-    "mtime": 1791894238.0390375,
-    "seen": 1791894245.748329,
-    "ast_hash": "db52fb6e4bfee389c01103cac73e0af5",
+    "mtime": 1791894953.547889,
+    "seen": 1791894982.5129704,
+    "ast_hash": "6ced904b0a84d84720c8f88eeaf51a71",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/grid-flow.cjs": {
-    "mtime": 1791885621.1154933,
-    "seen": 1791885939.1369307,
-    "ast_hash": "f73a5b1ca0ee95235f8d0533ed740364",
+    "mtime": 1791894642.4472346,
+    "seen": 1791894982.5124042,
+    "ast_hash": "2ccd1517bf61d2626c09495606e7c757",
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridCell.tsx": {
@@ -1914,9 +1914,9 @@
     "semantic_hash": ""
   },
   "tests/unit/fewerRedraws.test.ts": {
-    "mtime": 1791882652.9579008,
-    "seen": 1791882923.1801386,
-    "ast_hash": "69177b6692588013494dbac5678f09dd",
+    "mtime": 1791894588.5390515,
+    "seen": 1791894982.5128715,
+    "ast_hash": "ca676994798ecaebc17266577efba8d4",
     "semantic_hash": ""
   },
   "src/components/roster/FillDialog.tsx": {
@@ -1932,9 +1932,9 @@
     "semantic_hash": ""
   },
   "src/components/roster/RosterSheetTabs.tsx": {
-    "mtime": 1791883195.5961735,
-    "seen": 1791883630.3387284,
-    "ast_hash": "bfff7e41571600199d7c9f3c63dae70d",
+    "mtime": 1791894606.9993582,
+    "seen": 1791894982.512513,
+    "ast_hash": "1ac03bc6cdc4b2150793655a1c104057",
     "semantic_hash": ""
   },
   "src/components/roster/RosterSteps.tsx": {
@@ -1950,15 +1950,15 @@
     "semantic_hash": ""
   },
   "src/components/roster/rosterSteps.ts": {
-    "mtime": 1791883171.8509834,
-    "seen": 1791883630.3387318,
-    "ast_hash": "4b302ede7ab5c6f0f458a2f80b6347ba",
+    "mtime": 1791894606.9990182,
+    "seen": 1791894982.5125175,
+    "ast_hash": "8bb891ae19490e2a852125c0f1ca65b4",
     "semantic_hash": ""
   },
   "tests/unit/rosterSteps.test.ts": {
-    "mtime": 1791883156.988171,
-    "seen": 1791883630.339026,
-    "ast_hash": "0cac03bbc632c5884ab9edd167278b27",
+    "mtime": 1791894607.0021222,
+    "seen": 1791894982.5129054,
+    "ast_hash": "3260f8e01f8e75c364fcc98d301d494e",
     "semantic_hash": ""
   },
   "src/components/roster/useRosterChecks.ts": {
@@ -1992,9 +1992,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridStatusBar.tsx": {
-    "mtime": 1791884642.4482403,
-    "seen": 1791884989.4047773,
-    "ast_hash": "b5b02f3f05d2fc17f53822a06c77bcfb",
+    "mtime": 1791894953.5489087,
+    "seen": 1791894982.512604,
+    "ast_hash": "c21224401a170bab4b94b64a133706b2",
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridTable.tsx": {
@@ -2004,9 +2004,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridToolbar.tsx": {
-    "mtime": 1791884642.4485033,
-    "seen": 1791884989.4047792,
-    "ast_hash": "d40019c73a80788b3a7541261f797fcf",
+    "mtime": 1791894614.7455368,
+    "seen": 1791894982.5126066,
+    "ast_hash": "e63eba8821b0c545a0fbce4b6551a864",
     "semantic_hash": ""
   },
   "src/components/workbook/grid/SelectionView.tsx": {
@@ -2025,6 +2025,12 @@
     "mtime": 1791885658.4278364,
     "seen": 1791885939.137152,
     "ast_hash": "4d9aa418af86165e2d696ec5a3acde8a",
+    "semantic_hash": ""
+  },
+  "tests/unit/problemCount.test.ts": {
+    "mtime": 1791894541.9070306,
+    "seen": 1791894982.5128992,
+    "ast_hash": "1ef17ffecc853fe27265e5cd5ea6af6c",
     "semantic_hash": ""
   }
 }

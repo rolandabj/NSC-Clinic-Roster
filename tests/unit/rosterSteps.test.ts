@@ -16,7 +16,7 @@ test('a filled roster with problems: fixing them is next, and Fill fills empty c
   assert.deepEqual(view(rosterSteps({ ...base, shiftCount: 40, mustFix: 28 })), [
     'Create done',
     'Filled done [fillEmpty]',
-    'Fix problems (28) current [problems]',
+    'Fix problems · 28 must fix current [problems]',
     'Publish [publish]',
   ]);
 });

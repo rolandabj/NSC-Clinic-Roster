@@ -33,7 +33,8 @@ export interface ClinicContextState {
   activeScheduleName: string;
   activeSchedulePeriod: string;
   activeScheduleId: string | null;
-  warningCount: number;
+  /** The open roster's problems; null until a screen has checked it (the top bar then shows no count). */
+  problems: { mustFix: number; toCheck: number; notes: number } | null;
   isLocalMode: boolean;
   currentUser: {
     name: string;

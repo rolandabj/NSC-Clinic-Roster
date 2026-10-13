@@ -20,8 +20,6 @@ interface GridToolbarProps {
   /** The Problem marks switch. */
   showProblems: boolean;
   onToggleMarks: () => void;
-  /** Problems the marks show on the days shown. */
-  shownProblemCount: number;
   zoomLevel: GridZoom;
   onZoom: (zoom: GridZoom) => void;
   isLegendOpen: boolean;
@@ -44,7 +42,6 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
   onGroupBy,
   showProblems,
   onToggleMarks,
-  shownProblemCount,
   zoomLevel,
   onZoom,
   isLegendOpen,
@@ -135,7 +132,7 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
             className={`absolute top-0.5 w-2.5 h-2.5 rounded-full bg-white transition-all ${showProblems ? 'left-3' : 'left-0.5'}`}
           />
         </span>
-        Problem marks ({shownProblemCount} on these days)
+        Problem marks
       </button>
     </div>
 

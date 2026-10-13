@@ -45,7 +45,7 @@ Main moves only when the owner says "push to main".
 - [x] Checkpoint 3 with timings against the targets (all targets met except the longest task while loading, which is the browser's own layout work; three review fixes)
 
 ## Phase 4: roster screen layout, words and accessibility
-- [ ] Tabs above the content, one problem count, no duplicates
+- [ ] Tabs above the content, one problem count, no duplicates (one problem count done)
 - [ ] Toolbar regrouped
 - [ ] Grid cells, marks, spoken names, keyboard reach
 - [ ] Read only day view on phones (under 700 px wide or under 500 px high); tablets edit, held either way (owner, 13-10-2026)

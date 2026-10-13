@@ -13,13 +13,13 @@ const frame = {
   clinicId: 'c1',
   clinicName: 'Test Clinic',
   timezone: 'Asia/Dubai',
-  warningCount: 34,
+  problems: { mustFix: 28, toCheck: 6, notes: 0 },
   activeScheduleId: 'nov',
   activeScheduleName: 'November',
   activeSchedulePeriod: '16-11-2026 to 29-11-2026',
 } as unknown as ClinicContextState;
 
-const november = { scheduleId: 'nov', name: 'November', startDate: '2026-11-16', endDate: '2026-11-29', mustFix: 28, toCheck: 6 };
+const november = { scheduleId: 'nov', name: 'November', startDate: '2026-11-16', endDate: '2026-11-29', mustFix: 28, toCheck: 6, notes: 0 };
 
 test('the same problem count for the same roster keeps the frame as it is', () => {
   assert.equal(withProblemCount(frame, november), frame);
@@ -28,7 +28,7 @@ test('the same problem count for the same roster keeps the frame as it is', () =
 test('a new count, or another roster, changes the frame', () => {
   const fewer = withProblemCount(frame, { ...november, toCheck: 5 });
   assert.notEqual(fewer, frame);
-  assert.equal(fewer.warningCount, 33);
+  assert.deepEqual(fewer.problems, { mustFix: 28, toCheck: 5, notes: 0 });
   const december = withProblemCount(frame, { ...november, scheduleId: 'dec', name: 'December', startDate: '2026-12-01', endDate: '2026-12-31' });
   assert.equal(december.activeScheduleName, 'December');
   assert.equal(december.activeSchedulePeriod, '01-12-2026 to 31-12-2026');
@@ -36,12 +36,12 @@ test('a new count, or another roster, changes the frame', () => {
 });
 
 test('no roster open clears the roster and the count', () => {
-  const none = withProblemCount(frame, { scheduleId: '', name: '', startDate: '', endDate: '', mustFix: 0, toCheck: 0 });
+  const none = withProblemCount(frame, { scheduleId: '', name: '', startDate: '', endDate: '', mustFix: 0, toCheck: 0, notes: 0 });
   assert.equal(none.activeScheduleId, null);
   assert.equal(none.activeScheduleName, '');
   assert.equal(none.activeSchedulePeriod, '');
-  assert.equal(none.warningCount, 0);
-  assert.equal(withProblemCount(none, { scheduleId: '', name: '', startDate: '', endDate: '', mustFix: 0, toCheck: 0 }), none);
+  assert.equal(none.problems, null);
+  assert.equal(withProblemCount(none, { scheduleId: '', name: '', startDate: '', endDate: '', mustFix: 0, toCheck: 0, notes: 0 }), none);
 });
 
 const here = (uid: string, name: string, at = 1000): PresenceRecord =>
