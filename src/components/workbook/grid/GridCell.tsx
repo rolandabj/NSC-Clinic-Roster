@@ -23,6 +23,16 @@ interface GridCellProps {
   actions: GridCellActions;
 }
 
+/** A cell's flags (selected, Tab stop, popup, flash), redrawing it only when they change. */
+export function useCellFlags(selection: GridSelection, key: string): number {
+  const subscribe = useCallback((listener: () => void) => selection.subscribeCell(key, listener), [selection, key]);
+  return useSyncExternalStore(subscribe, () => selection.flagsOf(key));
+}
+
+/** The look of a selected cell, and of the focus ring of one that is not. */
+export const SELECTED_CELL = 'outline-3 -outline-offset-3 outline-brand z-10 bg-brand-soft';
+export const FOCUS_CELL = 'focus-visible:outline-3 focus-visible:-outline-offset-3 focus-visible:outline-brand';
+
 /**
  * One roster grid cell. Its props are plain values and a view worked out in advance, and it
  * reads its own part of the selection from the store, so it is drawn again only when what it
@@ -37,8 +47,7 @@ export const GridCell = memo(function GridCell({
   actions,
 }: GridCellProps) {
   const { nurseId, date, key } = view;
-  const subscribe = useCallback((listener: () => void) => selection.subscribeCell(key, listener), [selection, key]);
-  const flags = useSyncExternalStore(subscribe, () => selection.flagsOf(key));
+  const flags = useCellFlags(selection, key);
   const isSelected = (flags & CELL_SELECTED) !== 0;
   const isTabStop = (flags & CELL_TAB_STOP) !== 0;
   const isPopupCell = (flags & CELL_POPUP) !== 0;
@@ -75,8 +84,8 @@ export const GridCell = memo(function GridCell({
         isFlashing
           ? 'outline-3 -outline-offset-3 outline-amber-400 z-10 bg-amber-50'
           : isSelected
-          ? 'outline-3 -outline-offset-3 outline-brand z-10 bg-brand-soft'
-          : `${view.dayShade} hover:bg-sunken focus-visible:outline-3 focus-visible:-outline-offset-3 focus-visible:outline-brand`
+          ? SELECTED_CELL
+          : `${view.dayShade} hover:bg-sunken ${FOCUS_CELL}`
       }`}
     >
       {/* Request mark, top right: round for a day off, square for a shift; hollow while waiting for approval; amber when not followed. */}

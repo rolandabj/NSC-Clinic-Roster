@@ -1,8 +1,11 @@
 import React, { memo } from 'react';
 import type { Nurse, SeniorityLevel } from '../../../types';
 import type { CellView } from './cellView';
-import { GridCell, GridCellActions } from './GridCell';
+import { OctagonAlert, TriangleAlert } from 'lucide-react';
+import { CELL_SELECTED, CELL_TAB_STOP, HOURS_COLUMN } from './gridSelection';
+import { FOCUS_CELL, GridCell, GridCellActions, SELECTED_CELL, useCellFlags } from './GridCell';
 import type { GridSelection } from './gridSelection';
+import { problemWords } from './dayTotals';
 
 /** Hours rounded for reading: whole hours, or one decimal when needed. */
 const fmtHours = (n: number): string => String(Math.round(n * 10) / 10);
@@ -19,6 +22,25 @@ export function hoursDisplay(totalHours: number, targetHours: number, percent: n
   const overShare = totalHours > targetHours && totalHours > 0 ? (totalHours - targetHours) / totalHours : 0;
   const fillPercent = overShare > 0 ? 100 - overShare * 100 : Math.min(100, Math.max(0, percent));
   return { tone, hoursNote, hoursLine, overShare, fillPercent };
+}
+
+/** A nurse's hours in words, the spoken name of their hours cell, with the nurse's problems. */
+export function hoursWords(o: {
+  name: string;
+  blockTotal: number;
+  blockDuty: number;
+  blockLeave: number;
+  totalHours: number;
+  targetHours: number;
+  percent: number;
+  problems?: string[];
+  mustFix?: boolean;
+}): string {
+  const { hoursNote } = hoursDisplay(o.totalHours, o.targetHours, o.percent);
+  const spokenNote = hoursNote.replace(/ h /, ' hours ');
+  const whole = o.targetHours > 0 ? `${fmtHours(o.totalHours)} of ${fmtHours(o.targetHours)} hours, ${spokenNote}` : `${fmtHours(o.totalHours)} hours`;
+  const p = problemWords(o.problems ? { messages: o.problems, mustFix: !!o.mustFix } : undefined);
+  return `Hours, ${o.name}: ${fmtHours(o.blockTotal)} hours on these days (${fmtHours(o.blockDuty)} in shifts, ${fmtHours(o.blockLeave)} in leave). Whole roster: ${whole}${p ? `. ${p}` : ''}`;
 }
 
 /**
@@ -125,15 +147,16 @@ export const GridRow = memo(function GridRow({
             <span className="text-[10px] text-slate-500 shrink-0 font-sans">{nurse.contractPercent}% time</span>
           )}
           {showProblems && problems.length > 0 && (
+            // Not a Tab stop: the keyboard reads these problems on the nurse's hours (the arrow keys reach them).
             <button
               type="button"
+              tabIndex={-1}
               onClick={actions.openProblems}
               title={problems.join('\n')}
               aria-label={`${problems.length} problem${problems.length === 1 ? '' : 's'} for ${nurse.fullName}: ${problems.join('. ')}`}
-              className={`shrink-0 flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold font-sans cursor-pointer ${
-                problemMustFix ? 'bg-rose-600 text-white' : 'bg-amber-400 text-amber-950'
-              }`}
+              className={`shrink-0 inline-flex items-center gap-0.5 text-xs font-semibold font-sans tabular-nums cursor-pointer ${problemMustFix ? 'text-danger' : 'text-warning'}`}
             >
+              {problemMustFix ? <OctagonAlert className="size-3.5" aria-hidden="true" /> : <TriangleAlert className="size-3.5" aria-hidden="true" />}
               {problems.length}
             </button>
           )}
@@ -171,14 +194,58 @@ export const GridRow = memo(function GridRow({
         />
       ))}
 
-      {/* Hours inside the days shown */}
-      <td
-        className="py-1 px-2 text-center text-xs font-bold text-slate-800 bg-slate-50 border-b border-slate-200"
-        title={`These days: ${fmtHours(blockDuty)} h shifts + ${fmtHours(blockLeave)} h leave. Whole roster: ${hoursLine}`}
-      >
-        <span>{fmtHours(blockTotal)} h</span>
-        <span className="block text-[10px] font-normal text-slate-500">{fmtHours(totalHours)} h in all</span>
-      </td>
+      {/* Hours inside the days shown: reached by the arrow keys, read out with the nurse's problems */}
+      <HoursCell
+        nurseId={nurse.id}
+        selection={selection}
+        actions={actions}
+        title={`These days: ${fmtHours(blockDuty)} hours in shifts and ${fmtHours(blockLeave)} hours in leave. Whole roster: ${hoursLine}`}
+        words={hoursWords({ name: nurse.fullName, blockTotal, blockDuty, blockLeave, totalHours, targetHours, percent, problems, mustFix: problemMustFix })}
+        blockTotal={blockTotal}
+        totalHours={totalHours}
+      />
     </tr>
   );
 });
+
+/** A nurse's hours on the days shown, a cell the arrow keys reach (its words are read out). */
+function HoursCell({
+  nurseId,
+  selection,
+  actions,
+  title,
+  words,
+  blockTotal,
+  totalHours,
+}: {
+  nurseId: string;
+  selection: GridSelection;
+  actions: GridCellActions;
+  title: string;
+  words: string;
+  blockTotal: number;
+  totalHours: number;
+}) {
+  const key = `${nurseId}|${HOURS_COLUMN}`;
+  const flags = useCellFlags(selection, key);
+  const selected = (flags & CELL_SELECTED) !== 0;
+  return (
+    <td
+      data-cell={key}
+      tabIndex={flags & CELL_TAB_STOP ? 0 : -1}
+      aria-selected={selected}
+      onClick={() => actions.select(nurseId, HOURS_COLUMN)}
+      onFocus={() => {
+        if (!selected) actions.select(nurseId, HOURS_COLUMN);
+      }}
+      title={title}
+      className={`relative py-1 px-2 text-center border-b border-line font-sans ${selected ? SELECTED_CELL : `bg-sunken ${FOCUS_CELL}`}`}
+    >
+      <span className="sr-only">{words}</span>
+      <span aria-hidden="true">
+        <span className="block text-sm font-semibold text-ink tabular-nums">{fmtHours(blockTotal)} h</span>
+        <span className="block text-xs text-ink-muted tabular-nums">{fmtHours(totalHours)} h in all</span>
+      </span>
+    </td>
+  );
+}

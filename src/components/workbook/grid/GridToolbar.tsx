@@ -94,7 +94,7 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
       <div className="h-4 w-px bg-slate-200" />
 
       <div className="flex items-center gap-1 text-slate-600">
-        <span className="text-[11px] text-slate-400">Group:</span>
+        <span className="text-xs text-ink-muted">Group:</span>
         <select
           aria-label="Group nurses"
           value={groupBy}
@@ -136,40 +136,20 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
 
     {/* Right side: zoom and the Key */}
     <div className="flex items-center gap-2">
-      <div className="inline-flex rounded border border-slate-200 p-0.5 bg-slate-50">
-        <button
-          onClick={() => onZoom(75)}
-          className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
-            zoomLevel === 75 ? 'bg-indigo-600 text-white font-bold' : 'text-slate-600'
-          }`}
-          title="Smaller, to fit more days"
-        >
-          75%
-        </button>
-        <button
-          onClick={() => onZoom(90)}
-          className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
-            zoomLevel === 90 ? 'bg-indigo-600 text-white font-bold' : 'text-slate-600'
-          }`}
-        >
-          90%
-        </button>
-        <button
-          onClick={() => onZoom(100)}
-          className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
-            zoomLevel === 100 ? 'bg-indigo-600 text-white font-bold' : 'text-slate-600'
-          }`}
-        >
-          100%
-        </button>
-        <button
-          onClick={() => onZoom(115)}
-          className={`px-1.5 py-0.5 rounded text-[10px] font-mono cursor-pointer ${
-            zoomLevel === 115 ? 'bg-indigo-600 text-white font-bold' : 'text-slate-600'
-          }`}
-        >
-          115%
-        </button>
+      {/* Zoom: the level that is on is pressed */}
+      <div role="group" aria-label="Zoom" className="inline-flex rounded border border-slate-200 p-0.5 bg-slate-50">
+        {([75, 90, 100, 115] as GridZoom[]).map((z) => (
+          <button
+            key={z}
+            type="button"
+            onClick={() => onZoom(z)}
+            aria-pressed={zoomLevel === z}
+            title={z === 75 ? 'Smaller, to fit more days' : undefined}
+            className={`px-1.5 py-0.5 rounded text-xs tabular-nums cursor-pointer ${zoomLevel === z ? 'bg-brand text-white font-semibold' : 'text-ink-muted hover:bg-sunken'}`}
+          >
+            {z}%
+          </button>
+        ))}
       </div>
 
       <button

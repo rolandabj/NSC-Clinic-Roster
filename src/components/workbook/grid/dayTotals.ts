@@ -1,6 +1,7 @@
 import type { Assignment, DoctorSession, Nurse, SeniorityLevel } from '../../../types';
 import type { ValidationReport } from '../../../services/validation/ScheduleValidator';
 import { doctorSessionsOn } from '../../../services/engine/clinicModel';
+import { formatDayDate } from '../../../utils/dateUtils';
 
 /** One day's totals under the grid. */
 export interface DayTotal {
@@ -48,4 +49,28 @@ export function dayTotalsOf(
       ] as const;
     })
   );
+}
+
+/** "2 problems, must fix: ..." for the spoken name of a nurse's hours or a day's totals. */
+export function problemWords(problems?: { messages: string[]; mustFix: boolean }): string {
+  if (!problems || problems.messages.length === 0) return '';
+  const n = problems.messages.length;
+  return `${n} ${n === 1 ? 'problem' : 'problems'}, ${problems.mustFix ? 'must fix' : 'to check'}: ${problems.messages.join('. ')}`;
+}
+
+/** A day's totals in words (their spoken name and tooltip), with the day's problems. */
+export function dayTotalWords(date: string, t: DayTotal, problems?: { messages: string[]; mustFix: boolean }): string {
+  const gapWords =
+    t.gapHours === undefined ? '' : t.gapHours === 0 ? 'a free nurse every opening hour' : `${t.gapHours} ${t.gapHours === 1 ? 'hour' : 'hours'} without a free nurse`;
+  const seniorWords = t.hasSenior === undefined ? '' : t.hasSenior ? 'a senior nurse on duty' : 'no senior nurse on duty';
+  const facts = [
+    `${t.doctors} ${t.doctors === 1 ? 'doctor' : 'doctors'} in session`,
+    `${t.nurses} ${t.nurses === 1 ? 'nurse' : 'nurses'} on duty`,
+    gapWords,
+    seniorWords,
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const p = problemWords(problems);
+  return `Day totals, ${formatDayDate(date)}: ${facts}${p ? `. ${p}` : ''}`;
 }

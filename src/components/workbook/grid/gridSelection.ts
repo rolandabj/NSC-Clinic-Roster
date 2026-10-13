@@ -29,6 +29,16 @@ export const CELL_TAB_STOP = 2;
 export const CELL_POPUP = 4;
 export const CELL_FLASH = 8;
 
+/**
+ * The hours column and the day totals row, reached by the arrow keys like the cells (Phase 4,
+ * slice 4): `${nurseId}|hours` is a nurse's hours, `totals|${date}` a day's totals.
+ */
+export const HOURS_COLUMN = 'hours';
+export const TOTALS_ROW = 'totals';
+
+/** A nurse's day, which can be changed (not their hours, nor a day's totals). */
+export const isRosterCell = (c: CellRef) => c.nurseId !== TOTALS_ROW && c.date !== HOURS_COLUMN;
+
 const keyOf = (c: CellRef | null) => (c ? `${c.nurseId}|${c.date}` : null);
 const sameCell = (a: CellRef | null, b: CellRef | null) => a?.nurseId === b?.nurseId && a?.date === b?.date;
 
@@ -140,8 +150,9 @@ export function createGridSelection(): GridSelection {
 }
 
 /**
- * Where an arrow key or Tab moves the selection: one cell, staying put at the edge.
- * Undefined for any other key.
+ * Where an arrow key or Tab moves the selection: one cell, staying put at the edge and before
+ * the empty corner under the hours column. The lists may end with `TOTALS_ROW` and
+ * `HOURS_COLUMN`. Undefined for any other key.
  */
 export function moveSelection(
   current: CellRef,
@@ -151,8 +162,9 @@ export function moveSelection(
 ): CellRef | undefined {
   const row = nurseIds.indexOf(current.nurseId);
   const col = dates.indexOf(current.date);
-  const toDate = (i: number) => (i >= 0 && i < dates.length ? { nurseId: current.nurseId, date: dates[i] } : current);
-  const toNurse = (i: number) => (i >= 0 && i < nurseIds.length ? { nurseId: nurseIds[i], date: current.date } : current);
+  const corner = (c: CellRef) => c.nurseId === TOTALS_ROW && c.date === HOURS_COLUMN;
+  const toDate = (i: number) => (i >= 0 && i < dates.length && !corner({ nurseId: current.nurseId, date: dates[i] }) ? { nurseId: current.nurseId, date: dates[i] } : current);
+  const toNurse = (i: number) => (i >= 0 && i < nurseIds.length && !corner({ nurseId: nurseIds[i], date: current.date }) ? { nurseId: nurseIds[i], date: current.date } : current);
   if (e.key === 'Tab') return toDate(e.shiftKey ? col - 1 : col + 1);
   if (e.key === 'ArrowRight') return toDate(col + 1);
   if (e.key === 'ArrowLeft') return toDate(col - 1);

@@ -1,6 +1,6 @@
 import type { HoursHistory } from '../../services/hours/hoursBalance';
 import { isWeekendDay } from '../../utils/weekend';
-import React, { memo, useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import React, { memo, useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Schedule,
   Assignment,
@@ -41,7 +41,7 @@ import { useGridSelection } from './grid/useGridSelection';
 import { useGridKeyboard } from './grid/useGridKeyboard';
 import { CellContextMenu } from './grid/CellContextMenu';
 import { CellView, cellLookupsOf, cellViewOf, reuseCellViews } from './grid/cellView';
-import { PopupRef, createGridSelection } from './grid/gridSelection';
+import { HOURS_COLUMN, PopupRef, TOTALS_ROW, createGridSelection } from './grid/gridSelection';
 import { describeRequest, explainNurseDay, isPendingLeave, pendingLeaveOn, requestOn, RequestWords } from '../../services/engine/explainCell';
 
 interface WorkbookGridProps {
@@ -401,11 +401,17 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     return reuseCellViews(previousViewsRef.current, views);
   }, [displayNurses, dayInfo, assignmentByCell, lockByCell, leaveByCell, requestsByCell, leaveEntries, availabilityRequests, cellViolationMessages, cellMustFix, cellLookups]);
   previousViewsRef.current = cellViews;
+  // What a cell holds, for the line under the grid: the first part of its spoken name.
+  const cellWords = useCallback((nurseId: string, date: string) => previousViewsRef.current?.get(cellKeyOf(nurseId, date))?.ariaLabel.split('. ')[0] || '', []);
 
   // The Tab stop is the selected cell when it is on the days shown, else the first cell.
   const firstCellKey = displayNurses[0] && blockDates[0] ? cellKeyOf(displayNurses[0].id, blockDates[0]) : null;
   const shownCellKeys = useMemo(
-    () => new Set(displayNurses.flatMap((n) => blockDates.map((d) => cellKeyOf(n.id, d)))),
+    () =>
+      new Set([
+        ...displayNurses.flatMap((n) => [...blockDates, HOURS_COLUMN].map((d) => cellKeyOf(n.id, d))),
+        ...blockDates.map((d) => cellKeyOf(TOTALS_ROW, d)),
+      ]),
     [displayNurses, blockDates]
   );
   selection.setLayout(firstCellKey, shownCellKeys);
@@ -528,8 +534,9 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   const onGridKeyDown = useGridKeyboard({
     selection,
     enabled: isActive && !isEditorOpen,
-    nurseIds: displayNurses.map((n) => n.id),
-    dates: blockDates,
+    // The arrow keys go on to the nurses' hours and the days' totals.
+    nurseIds: [...displayNurses.map((n) => n.id), TOTALS_ROW],
+    dates: [...blockDates, HOURS_COLUMN],
     onEnter: handleCellDoubleClick,
     onSpace: (nurseId, date) => openQuickPopup(nurseId, date, true),
     onDelete: (nurseId, date) => handleDeleteCellAssignment(nurseId, date),
@@ -1131,6 +1138,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         selection={selection}
         nurseMap={nurseMap}
         firstDate={blockDates[0] || schedule.startDate}
+        cellWords={cellWords}
         validationReport={validationReport}
         onOpenCoverage={() => onNavigateTab && onNavigateTab('coverage')}
         onOpenProblems={() => onNavigateTab && onNavigateTab('warnings')}

@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useEffect, useRef } from 'react';
-import { moveSelection, type GridSelection } from './gridSelection';
+import { isRosterCell, moveSelection, type GridSelection } from './gridSelection';
 
 /** What a key does to the selected cell. */
 type CellAction = (nurseId: string, date: string) => void;
@@ -63,6 +63,9 @@ export function useGridKeyboard(o: {
     if (moved) {
       e.preventDefault();
       selection.select(moved);
+    } else if (!isRosterCell(selectedCell)) {
+      // A nurse's hours or a day's totals: only the arrow keys work there.
+      return;
     } else if (e.key === 'Enter') {
       e.preventDefault();
       o.onEnter(selectedCell.nurseId, selectedCell.date);

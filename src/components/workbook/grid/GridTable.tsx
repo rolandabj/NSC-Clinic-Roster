@@ -1,12 +1,13 @@
 import React, { type Ref } from 'react';
-import { Check, Clock, Stethoscope, Users } from 'lucide-react';
+import { Check, Clock, OctagonAlert, Stethoscope, TriangleAlert, Users } from 'lucide-react';
 import type { Nurse, PublicHoliday, SeniorityLevel } from '../../../types';
 import type { NurseHoursSummary } from '../../../services/reports/hoursAccounting';
 import { formatDate } from '../../../utils/dateUtils';
 import type { CellView } from './cellView';
-import type { DayTotal } from './dayTotals';
+import { dayTotalWords, type DayTotal } from './dayTotals';
+import { FOCUS_CELL, SELECTED_CELL, useCellFlags } from './GridCell';
 import { GridRow, PROBLEM_SEPARATOR, type GridRowActions } from './GridRow';
-import type { GridSelection } from './gridSelection';
+import { CELL_SELECTED, CELL_TAB_STOP, TOTALS_ROW, type GridSelection } from './gridSelection';
 
 const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -89,7 +90,7 @@ export const GridTable: React.FC<GridTableProps> = ({
           </th>
           <th
             colSpan={blockDates.length}
-            className="py-1 px-2 text-center font-mono text-[11px] text-slate-600 bg-slate-100 border-r border-slate-300"
+            className="py-1 px-2 text-center font-sans text-xs text-ink-muted bg-slate-100 border-r border-slate-300"
           >
             {isAllDaysExpanded ? (
               <span className="font-bold text-indigo-700">All {totalDays} days of the roster</span>
@@ -100,7 +101,7 @@ export const GridTable: React.FC<GridTableProps> = ({
               </span>
             )}
           </th>
-          <th className="py-1 px-2 text-center font-mono text-[11px] text-slate-600 bg-slate-100">
+          <th className="py-1 px-2 text-center font-sans text-xs text-ink-muted bg-slate-100">
             These days
           </th>
         </tr>
@@ -110,50 +111,39 @@ export const GridTable: React.FC<GridTableProps> = ({
           {/* Sticky Left Column: Nurse, seniority and hours */}
           <th className="sticky left-0 bg-slate-50 z-40 border-r-2 border-slate-300 py-1.5 px-3 text-left font-semibold text-slate-800 w-60 min-w-60 max-w-60 shadow-xs">
             <span className="block">Nurse</span>
-            <span className="block text-[10px] font-normal text-slate-500">Hours worked / goal for the whole roster</span>
+            <span className="block text-xs font-normal text-ink-muted">Hours worked / goal for the whole roster</span>
           </th>
 
-          {/* Date Columns */}
+          {/* Date columns: the weekday small, the day's number; weekends and holidays shaded, today in brand */}
           {dayInfo.map(({ dateStr, day, weekday, isWeekend, holiday, isToday }) => (
             <th
               key={dateStr}
               scope="col"
               title={`${WEEKDAY_ABBR[weekday]} ${formatDate(dateStr)}${isToday ? ' · Today' : ''}${holiday ? ` · Public holiday: ${holiday.name}` : isWeekend ? ' · Weekend' : ''}`}
               aria-label={`${WEEKDAY_ABBR[weekday]} ${formatDate(dateStr)}${isToday ? ', today' : ''}${holiday ? `, public holiday: ${holiday.name}` : isWeekend ? ', weekend' : ''}`}
-              className={`py-1 px-1 text-center font-mono border-r border-slate-200 ${widthClass} ${
-                isToday
-                  ? 'bg-indigo-600 text-white'
-                  : holiday
-                  ? 'bg-cyan-100 text-cyan-900 font-bold'
-                  : isWeekend
-                  ? 'bg-slate-200 text-slate-800'
-                  : 'bg-slate-50 text-slate-700'
-              }`}
+              className={`relative py-1 px-1 text-center font-sans border-r border-line ${widthClass} ${
+                holiday ? 'bg-cyan-50' : isWeekend ? 'bg-sunken' : 'bg-surface'
+              } ${isToday ? 'shadow-[inset_0_-3px_0_var(--color-brand)]' : ''}`}
             >
-              <div className="text-[10px] font-normal leading-tight">
-                {isToday ? 'Today' : WEEKDAY_ABBR[weekday]}
-              </div>
-              <div className="flex items-center justify-center gap-0.5 text-xs font-bold">
-                <span>{day}</span>
-                {holiday && (
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full inline-block ${isToday ? 'bg-white' : 'bg-cyan-600'}`}
-                    aria-hidden="true"
-                  />
-                )}
-              </div>
+              <span className={`block text-xs ${isToday ? 'font-semibold text-brand-strong' : 'text-ink-muted'}`}>{isToday ? 'Today' : WEEKDAY_ABBR[weekday]}</span>
+              <span className="flex items-center justify-center gap-1 text-sm font-semibold text-ink tabular-nums">
+                {day}
+                {holiday && <span className="size-1.5 rounded-full bg-cyan-600" aria-hidden="true" />}
+              </span>
               {showProblems && dayProblems.has(dateStr) && (() => {
                 const dp = dayProblems.get(dateStr)!;
+                const Icon = dp.mustFix ? OctagonAlert : TriangleAlert;
                 return (
+                  // Not a Tab stop: the keyboard reads the day's problems on its totals (the arrow keys reach them).
                   <button
                     type="button"
+                    tabIndex={-1}
                     onClick={actions.openProblems}
                     title={dp.messages.join('\n')}
                     aria-label={`${dp.messages.length} problem${dp.messages.length === 1 ? '' : 's'} on ${formatDate(dateStr)}: ${dp.messages.join('. ')}`}
-                    className={`mt-0.5 mx-auto flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold font-sans cursor-pointer ${
-                      dp.mustFix ? 'bg-rose-600 text-white' : 'bg-amber-400 text-amber-950'
-                    }`}
+                    className={`mx-auto inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums cursor-pointer ${dp.mustFix ? 'text-danger' : 'text-warning'}`}
                   >
+                    <Icon className="size-3.5" aria-hidden="true" />
                     {dp.messages.length}
                   </button>
                 );
@@ -161,7 +151,7 @@ export const GridTable: React.FC<GridTableProps> = ({
             </th>
           ))}
 
-          <th className="py-1 px-2 text-center font-mono text-[11px] text-slate-600 bg-slate-50">
+          <th className="py-1 px-2 text-center font-sans text-xs text-ink-muted bg-slate-50">
             Hours
           </th>
         </tr>
@@ -205,69 +195,84 @@ export const GridTable: React.FC<GridTableProps> = ({
             className="sticky left-0 bg-slate-100 z-40 border-r-2 border-slate-300 py-1 px-2.5 text-left font-normal w-60 min-w-60 max-w-60 shadow-xs"
           >
             <span className="block text-xs font-semibold text-slate-800">Day totals</span>
-            <span className="block text-[10px] text-slate-500 leading-tight">
+            <span className="block text-xs text-ink-muted leading-tight">
               Doctors · nurses · hours without a free nurse · senior
             </span>
           </th>
-          {dayInfo.map(({ dateStr, isWeekend, holiday }) => {
-            const t = dayTotals.get(dateStr);
-            if (!t) return <td key={dateStr} />;
-            const gapWords =
-              t.gapHours === undefined
-                ? ''
-                : t.gapHours === 0
-                ? 'a free nurse every opening hour'
-                : `${t.gapHours} ${t.gapHours === 1 ? 'hour' : 'hours'} without a free nurse`;
-            const seniorWords = t.hasSenior === undefined ? '' : t.hasSenior ? 'a senior nurse on duty' : 'no senior nurse on duty';
-            const summary = [
-              `${formatDate(dateStr)}: ${t.doctors} ${t.doctors === 1 ? 'doctor' : 'doctors'} in session`,
-              `${t.nurses} ${t.nurses === 1 ? 'nurse' : 'nurses'} on duty`,
-              gapWords,
-              seniorWords,
-            ]
-              .filter(Boolean)
-              .join(', ');
-            return (
-              <td
-                key={dateStr}
-                title={summary}
-                className={`py-0.5 px-0.5 text-center border-r border-slate-200 text-[10px] leading-tight align-top ${
-                  holiday ? 'bg-cyan-50' : isWeekend ? 'bg-slate-100' : 'bg-slate-50'
-                }`}
-              >
-                <span className="sr-only">{summary}</span>
-                <span aria-hidden="true" className="flex flex-col items-center gap-px">
-                  <span className="flex items-center gap-1 text-slate-700 font-mono">
-                    <span className="inline-flex items-center gap-px">
-                      <Stethoscope className="w-2.5 h-2.5 text-slate-400" />
-                      {t.doctors}
-                    </span>
-                    <span className="inline-flex items-center gap-px">
-                      <Users className="w-2.5 h-2.5 text-slate-400" />
-                      {t.nurses}
-                    </span>
-                  </span>
-                  {t.gapHours !== undefined &&
-                    (t.gapHours === 0 ? (
-                      <Check className="w-3 h-3 text-emerald-600" />
-                    ) : (
-                      <span className="inline-flex items-center gap-px font-bold text-rose-700">
-                        <Clock className="w-2.5 h-2.5" />
-                        {t.gapHours} h
-                      </span>
-                    ))}
-                  {t.hasSenior !== undefined &&
-                    (t.hasSenior ? (
-                      <span className="text-emerald-700 font-semibold">✓ Senior</span>
-                    ) : (
-                      <span className="text-rose-700 font-bold whitespace-nowrap">No senior</span>
-                    ))}
-                </span>
-              </td>
-            );
-          })}
+          {dayInfo.map(({ dateStr, isWeekend, holiday }) => (
+            <TotalsCell
+              key={dateStr}
+              date={dateStr}
+              total={dayTotals.get(dateStr)}
+              problems={showProblems ? dayProblems.get(dateStr) : undefined}
+              shade={holiday ? 'bg-cyan-50' : isWeekend ? 'bg-sunken' : 'bg-slate-50'}
+              selection={selection}
+              actions={actions}
+            />
+          ))}
           <td className="bg-slate-50" />
         </tr>
       </tfoot>
     </table>
 );
+
+/** A day's totals under the grid, a cell the arrow keys reach (its words, with the day's problems, are read out). */
+function TotalsCell({
+  date,
+  total: t,
+  problems,
+  shade,
+  selection,
+  actions,
+}: {
+  date: string;
+  total?: DayTotal;
+  problems?: ProblemMark;
+  shade: string;
+  selection: GridSelection;
+  actions: GridRowActions;
+}) {
+  const key = `${TOTALS_ROW}|${date}`;
+  const flags = useCellFlags(selection, key);
+  const selected = (flags & CELL_SELECTED) !== 0;
+  if (!t) return <td />;
+  const words = dayTotalWords(date, t, problems);
+  return (
+    <td
+      data-cell={key}
+      tabIndex={flags & CELL_TAB_STOP ? 0 : -1}
+      aria-selected={selected}
+      onClick={() => actions.select(TOTALS_ROW, date)}
+      onFocus={() => {
+        if (!selected) actions.select(TOTALS_ROW, date);
+      }}
+      title={words}
+      className={`relative py-0.5 px-0.5 text-center border-r border-line text-[11px] leading-tight align-top ${selected ? SELECTED_CELL : `${shade} ${FOCUS_CELL}`}`}
+    >
+      <span className="sr-only">{words}</span>
+      <span aria-hidden="true" className="flex flex-col items-center gap-px">
+        <span className="flex items-center gap-1 text-ink tabular-nums">
+          <span className="inline-flex items-center gap-px">
+            <Stethoscope className="size-3 text-ink-muted" />
+            {t.doctors}
+          </span>
+          <span className="inline-flex items-center gap-px">
+            <Users className="size-3 text-ink-muted" />
+            {t.nurses}
+          </span>
+        </span>
+        {t.gapHours !== undefined &&
+          (t.gapHours === 0 ? (
+            <Check className="size-3 text-emerald-700" />
+          ) : (
+            <span className="inline-flex items-center gap-px font-semibold text-danger">
+              <Clock className="size-3" />
+              {t.gapHours} h
+            </span>
+          ))}
+        {t.hasSenior !== undefined &&
+          (t.hasSenior ? <span className="text-emerald-700 font-semibold">✓ Senior</span> : <span className="text-danger font-semibold whitespace-nowrap">No senior</span>)}
+      </span>
+    </td>
+  );
+}

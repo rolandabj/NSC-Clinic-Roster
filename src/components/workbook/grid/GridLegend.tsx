@@ -117,10 +117,10 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
               <span>Check: a problem with this shift that may be fine</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-6 h-5 flex items-center justify-center shrink-0" aria-hidden="true">
-                <span className="min-w-4 h-4 px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center">2</span>
+              <span className="w-6 inline-flex items-center gap-0.5 text-xs font-semibold text-danger shrink-0" aria-hidden="true">
+                <OctagonAlert className="w-3.5 h-3.5" />2
               </span>
-              <span>Problems about a whole day (on the day's heading) or a nurse (by the name); red must be fixed, amber to check</span>
+              <span>Problems about a whole day (under the day's heading) or a nurse (by the name). Each has an icon and a number. The day totals and the hours list them too, reached with the arrow keys.</span>
             </div>
             <div className="flex items-center gap-2">
               <span
@@ -190,16 +190,18 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
           </h4>
           <div className="space-y-1.5 text-[11px] text-slate-600">
             <div className="flex items-center gap-2">
-              <span className="w-6 h-5 rounded bg-slate-200 border border-slate-300 shrink-0" aria-hidden="true" />
+              <span className="w-6 h-5 rounded-sm bg-sunken border border-line shrink-0" aria-hidden="true" />
               <span>Weekend</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-6 h-5 rounded bg-cyan-100 border border-cyan-300 shrink-0" aria-hidden="true" />
+              <span className="w-6 h-5 rounded-sm bg-cyan-50 border border-line shrink-0 flex items-center justify-center" aria-hidden="true">
+                <span className="size-1.5 rounded-full bg-cyan-600" />
+              </span>
               <span>Public holiday (point at the date for its name)</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-6 h-5 rounded bg-indigo-600 shrink-0" aria-hidden="true" />
-              <span>Today</span>
+              <span className="w-6 h-5 rounded-sm bg-surface border border-line shadow-[inset_0_-3px_0_var(--color-brand)] shrink-0" aria-hidden="true" />
+              <span>Today (a brand line under the date)</span>
             </div>
           </div>
         </div>

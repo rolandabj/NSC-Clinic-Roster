@@ -1,8 +1,8 @@
 import React from 'react';
 import type { Nurse } from '../../../types';
 import type { ValidationReport } from '../../../services/validation/ScheduleValidator';
-import { formatDate } from '../../../utils/dateUtils';
-import type { GridSelection } from './gridSelection';
+import { formatDate, formatDayDate } from '../../../utils/dateUtils';
+import { HOURS_COLUMN, TOTALS_ROW, type GridSelection } from './gridSelection';
 import { SelectionView } from './SelectionView';
 import { ProblemCounts } from '../../ui';
 
@@ -15,23 +15,35 @@ export const GridStatusBar: React.FC<{
   nurseMap: Map<string, Nurse>;
   /** The day the coverage is shown for when no cell is selected. */
   firstDate: string;
+  /** What a roster cell holds, in a few words ("Lee #1 09:00 to 17:00, Day shift"). */
+  cellWords: (nurseId: string, date: string) => string;
   validationReport: ValidationReport;
   onOpenCoverage: () => void;
   onOpenProblems: () => void;
-}> = ({ selection, nurseMap, firstDate, validationReport, onOpenCoverage, onOpenProblems }) => (
-  <div className="h-7 bg-white border-t border-slate-200 px-4 flex items-center justify-between text-[11px] text-slate-600 shrink-0 select-none">
-    <div className="flex items-center gap-4">
+}> = ({ selection, nurseMap, firstDate, cellWords, validationReport, onOpenCoverage, onOpenProblems }) => (
+  <div className="min-h-8 bg-surface border-t border-line px-4 py-1 flex items-center justify-between gap-4 text-xs text-ink-muted shrink-0 select-none">
+    <div className="flex min-w-0 items-center gap-4">
       <SelectionView
         selection={selection}
         render={({ selected: selectedCell }) =>
+          // What the selected cell holds: "Mary, 16-11-2026: Lee #1 09:00 to 17:00, Day shift".
           selectedCell ? (
-            <div className="flex items-center gap-1.5 font-mono text-slate-800">
-              <span className="font-bold">{nurseMap.get(selectedCell.nurseId)?.fullName}</span>
-              <span>·</span>
-              <span>{formatDate(selectedCell.date)}</span>
-            </div>
+            <p className="truncate text-ink">
+              {selectedCell.nurseId === TOTALS_ROW ? (
+                <span className="font-semibold">Day totals, {formatDayDate(selectedCell.date)}</span>
+              ) : selectedCell.date === HOURS_COLUMN ? (
+                <span className="font-semibold">Hours, {nurseMap.get(selectedCell.nurseId)?.fullName}</span>
+              ) : (
+                <>
+                  <span className="font-semibold">
+                    {nurseMap.get(selectedCell.nurseId)?.fullName}, {formatDate(selectedCell.date)}:
+                  </span>{' '}
+                  {cellWords(selectedCell.nurseId, selectedCell.date)}
+                </>
+              )}
+            </p>
           ) : (
-            <span className="text-slate-500">Click a cell to change it</span>
+            <span>Click a cell to change it</span>
           )
         }
       />
@@ -42,7 +54,7 @@ export const GridStatusBar: React.FC<{
         selection={selection}
         render={({ selected: selectedCell }) => {
           // The day of the selected cell (else the first day shown): opening hours missing a free nurse.
-          const checkDate = selectedCell?.date || firstDate;
+          const checkDate = selectedCell && selectedCell.date !== HOURS_COLUMN ? selectedCell.date : firstDate;
           const dayMap = validationReport.hourlyCoverageMap[checkDate];
           if (!dayMap || Object.keys(dayMap).length === 0) {
             return <span className="text-slate-500">Coverage: not checked yet</span>;
@@ -57,7 +69,7 @@ export const GridStatusBar: React.FC<{
               }`}
               title="Open the Coverage tab"
             >
-              <span className="text-slate-500">Coverage {formatDate(checkDate)}:</span>
+              <span>Coverage {formatDate(checkDate)}:</span>
               <span>
                 {shortHours.length === 0
                   ? 'every hour covered'
@@ -79,7 +91,7 @@ export const GridStatusBar: React.FC<{
         }`}
         title="Open the Problems tab"
       >
-        <span className="text-slate-500">Problems:</span>
+        <span>Problems:</span>
         <ProblemCounts mustFix={validationReport.errorCount} toCheck={validationReport.warnCount} notes={validationReport.infoCount} none="none" />
       </button>
     </div>
