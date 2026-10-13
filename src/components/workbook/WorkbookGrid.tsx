@@ -39,6 +39,7 @@ import { GridTable } from './grid/GridTable';
 import { CellEditorDialog, type CellChoice } from './grid/CellEditorDialog';
 import { useGridSelection } from './grid/useGridSelection';
 import { useGridKeyboard } from './grid/useGridKeyboard';
+import { useRowsInSteps } from './grid/rowsInSteps';
 import { CellContextMenu } from './grid/CellContextMenu';
 import { CellView, cellLookupsOf, cellViewOf, reuseCellViews } from './grid/cellView';
 import { HOURS_COLUMN, PopupRef, TOTALS_ROW, createGridSelection } from './grid/gridSelection';
@@ -1074,10 +1075,11 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   );
 
   // Zoom sizing classes
-  // Cells 44 px high and 60 px wide at 100 % (the design system), smaller or larger with the zoom.
+  // Cells 44 px high and 64 px wide at 100 % (the design system asks for at least 60; 64 fits a problem's icon with the start time), smaller or larger with the zoom.
   const cellHeightClass = zoomLevel === 75 ? 'h-8' : zoomLevel === 90 ? 'h-9' : zoomLevel === 115 ? 'h-12' : 'h-11';
   const cellFontSizeClass = zoomLevel === 75 ? 'text-[10px]' : zoomLevel === 90 ? 'text-[11px]' : zoomLevel === 115 ? 'text-sm' : 'text-xs';
-  const cellWidthClass = zoomLevel === 75 ? 'min-w-12' : zoomLevel === 90 ? 'min-w-13' : zoomLevel === 115 ? 'min-w-18' : 'min-w-15';
+  const rowLimit = useRowsInSteps(displayNurses.length, schedule.id);
+  const dayWidth = zoomLevel === 75 ? 50 : zoomLevel === 90 ? 56 : zoomLevel === 115 ? 76 : 64;
 
   return (
     <div className={`flex flex-col h-full overflow-hidden bg-slate-100 font-sans select-none ${isActive ? '' : 'hidden'}`}>
@@ -1113,6 +1115,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
             currentBlockIndex={currentBlockIndex}
             blockWeeks={schedule.blockWeeks}
             displayNurses={displayNurses}
+            rowLimit={rowLimit}
             seniorityMap={seniorityMap}
             rowViews={rowViews}
             hoursByNurse={hoursByNurse}
@@ -1123,7 +1126,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
             showProblems={highlightViolations}
             heightClass={cellHeightClass}
             fontClass={cellFontSizeClass}
-            widthClass={cellWidthClass}
+            dayWidth={dayWidth}
             selection={selection}
             actions={cellActions}
           />

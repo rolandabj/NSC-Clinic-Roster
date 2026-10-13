@@ -94,7 +94,7 @@ async function once(browser, base) {
   const arrowTimes = [];
   for (let i = 0; i < 5; i++) {
     const next = `n5|2026-11-${19 - i}`;
-    await watch('keydown', `() => document.querySelector('[aria-selected="true"]')?.getAttribute('data-cell') === '${next}'`);
+    await watch('keydown', `() => document.querySelector('[data-cell][aria-selected="true"]')?.getAttribute('data-cell') === '${next}'`);
     await page.keyboard.press('ArrowLeft');
     arrowTimes.push(await watched());
   }
@@ -104,9 +104,10 @@ async function once(browser, base) {
   await page.focus(target);
   await longest();
   t = Date.now();
-  await watch('keydown', () => !/★/.test(document.querySelector('[data-cell="n2|2026-11-03"]')?.textContent || ''));
+  // The shift is gone when the cell is read as "No shift" (since Phase 4, slice 4; before, its ★ went).
+  await watch('keydown', () => (document.querySelector('[data-cell="n2|2026-11-03"]')?.getAttribute('aria-label') || '').startsWith('No shift'));
   await page.keyboard.press('Delete');
-  await page.waitForFunction((sel) => !/★/.test(document.querySelector(sel)?.textContent || ''), target, { timeout: 15000 })
+  await page.waitForFunction((sel) => (document.querySelector(sel)?.getAttribute('aria-label') || '').startsWith('No shift'), target, { timeout: 15000 })
     .catch(() => errors.push('the shift was not removed'));
   const deleteShift = Date.now() - t;
   const deleteShiftInPage = await watched();
@@ -126,7 +127,9 @@ async function once(browser, base) {
   await browser.close();
   const keys = Object.keys(results[0]).filter((k) => k !== 'errors');
   const summary = Object.fromEntries(keys.map((k) => [k, median(results.map((r) => r[k]))]));
-  console.log(JSON.stringify({ base, runs, median: summary, errors: [...new Set(results.flatMap((r) => r.errors))] }, null, 2));
+  // Each run's times too, to see how much they spread.
+  const each = Object.fromEntries(keys.map((k) => [k, results.map((r) => r[k])]));
+  console.log(JSON.stringify({ base, runs, median: summary, each, errors: [...new Set(results.flatMap((r) => r.errors))] }, null, 2));
 })().catch((e) => {
   console.error(e);
   process.exit(1);

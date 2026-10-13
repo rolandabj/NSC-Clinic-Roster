@@ -11,6 +11,10 @@ import { CELL_SELECTED, CELL_TAB_STOP, TOTALS_ROW, type GridSelection } from './
 
 const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+/** The widths of the nurse column and the hours column, in pixels. */
+const NAME_COLUMN = 240;
+const HOURS_COLUMN_WIDTH = 104;
+
 /** One day column of the grid. */
 export interface DayColumn {
   dateStr: string;
@@ -38,6 +42,8 @@ interface GridTableProps {
   currentBlockIndex: number;
   blockWeeks: number;
   displayNurses: Nurse[];
+  /** How many of the nurses' rows are drawn so far (`useRowsInSteps`). */
+  rowLimit: number;
   seniorityMap: Map<string, SeniorityLevel>;
   rowViews: Map<string, CellView[]>;
   hoursByNurse: Map<string, NurseHoursSummary>;
@@ -49,8 +55,8 @@ interface GridTableProps {
   showProblems: boolean;
   heightClass: string;
   fontClass: string;
-  /** The day columns' least width, by the zoom. */
-  widthClass: string;
+  /** The day columns' width in pixels, by the zoom. */
+  dayWidth: number;
   selection: GridSelection;
   actions: GridRowActions;
 }
@@ -65,6 +71,7 @@ export const GridTable: React.FC<GridTableProps> = ({
   currentBlockIndex,
   blockWeeks,
   displayNurses,
+  rowLimit,
   seniorityMap,
   rowViews,
   hoursByNurse,
@@ -75,11 +82,26 @@ export const GridTable: React.FC<GridTableProps> = ({
   showProblems,
   heightClass,
   fontClass,
-  widthClass,
+  dayWidth,
   selection,
   actions,
 }) => (
-    <table ref={tableRef} className="border-collapse bg-white text-xs w-max" role="grid" aria-label="Nurse roster">
+    // Fixed column widths: the browser does not measure every cell to size the columns, which
+    // took a large part of the longest task while a full size roster loads (Phase 4, slice 4).
+    <table
+      ref={tableRef}
+      className="table-fixed border-collapse bg-white text-xs"
+      style={{ width: NAME_COLUMN + dayInfo.length * dayWidth + HOURS_COLUMN_WIDTH }}
+      role="grid"
+      aria-label="Nurse roster"
+    >
+      <colgroup>
+        <col style={{ width: NAME_COLUMN }} />
+        {dayInfo.map((d) => (
+          <col key={d.dateStr} style={{ width: dayWidth }} />
+        ))}
+        <col style={{ width: HOURS_COLUMN_WIDTH }} />
+      </colgroup>
       {/* Sticky Header Row 1: Week Spans */}
       <thead className="sticky top-0 z-30 bg-slate-100 border-b border-slate-300">
         <tr className="border-b border-slate-200">
@@ -121,7 +143,7 @@ export const GridTable: React.FC<GridTableProps> = ({
               scope="col"
               title={`${WEEKDAY_ABBR[weekday]} ${formatDate(dateStr)}${isToday ? ' · Today' : ''}${holiday ? ` · Public holiday: ${holiday.name}` : isWeekend ? ' · Weekend' : ''}`}
               aria-label={`${WEEKDAY_ABBR[weekday]} ${formatDate(dateStr)}${isToday ? ', today' : ''}${holiday ? `, public holiday: ${holiday.name}` : isWeekend ? ', weekend' : ''}`}
-              className={`relative py-1 px-1 text-center font-sans border-r border-line ${widthClass} ${
+              className={`relative py-1 px-1 text-center font-sans border-r border-line ${
                 holiday ? 'bg-cyan-50' : isWeekend ? 'bg-sunken' : 'bg-surface'
               } ${isToday ? 'shadow-[inset_0_-3px_0_var(--color-brand)]' : ''}`}
             >
@@ -159,7 +181,7 @@ export const GridTable: React.FC<GridTableProps> = ({
 
       {/* Table Body: Nurse Rows */}
       <tbody className="divide-y divide-slate-200 font-mono">
-        {displayNurses.map((nurse) => {
+        {displayNurses.slice(0, rowLimit).map((nurse) => {
           const hours = hoursByNurse.get(nurse.id)!;
           const block = blockHoursByNurse.get(nurse.id);
           const np = nurseProblems.get(nurse.id);

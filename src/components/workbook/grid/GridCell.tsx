@@ -106,7 +106,8 @@ export const GridCell = memo(function GridCell({
       {boxed ? (
         // The doctor or role (or the leave) on the first line; the start time and the marks on the second.
         <div
-          className={`${heightClass} flex flex-col justify-center rounded-sm px-1 leading-tight ${
+          // A small grid: the name (cut short when long) and the rank side by side, so the rank always shows; the second line under both.
+          className={`${heightClass} grid grid-cols-[minmax(0,1fr)_auto] content-center items-baseline gap-x-0.5 rounded-sm px-1 leading-tight ${
             view.content === 'off'
               ? 'bg-sunken text-ink-muted'
               : view.content === 'pendingLeave'
@@ -121,25 +122,23 @@ export const GridCell = memo(function GridCell({
               : undefined
           }
         >
-          <span className="flex min-w-0 items-center gap-0.5 font-semibold">
-            <span className="truncate">
-              {view.content === 'leave' ? view.leaveAcronym : view.content === 'off' ? 'Day off' : view.content === 'pendingLeave' ? view.pendingLeaveAcronym : view.label}
-            </span>
-            {/* Spaces between the parts, so the text reads as the spoken name does ("Lee #1 09:00"); flex does not show them. */}
-            {view.rankBadge && ' '}
-            {view.rankBadge && (
-              <span className={`shrink-0 rounded-sm px-0.5 text-[0.85em] font-bold ${view.rankBadge === '!' ? 'bg-danger-soft text-danger' : 'text-ink-muted'}`}>
-                {view.rankBadge}
-              </span>
-            )}
-          </span>{' '}
+          {/* No wrapper round the first line (fewer elements: a full size roster has over 1,000 shifts). */}
+          <span className={`truncate font-semibold ${view.rankBadge ? '' : 'col-span-2'}`}>
+            {view.content === 'leave' ? view.leaveAcronym : view.content === 'off' ? 'Day off' : view.content === 'pendingLeave' ? view.pendingLeaveAcronym : view.label}
+          </span>
+          {/* Spaces between the parts, so the text reads as the spoken name does ("Lee #1 09:00"); the grid does not show them. */}
+          {view.rankBadge && ' '}
+          {view.rankBadge && (
+            <span className={`rounded-sm px-0.5 text-[0.85em] font-bold ${view.rankBadge === '!' ? 'bg-danger-soft text-danger' : 'text-ink-muted'}`}>{view.rankBadge}</span>
+          )}{' '}
           {(view.startTime || view.pinned || view.handChange || view.pendingMark || ProblemIcon) && (
-            <span className="flex items-center gap-0.5 text-ink-muted tabular-nums" aria-hidden="true">
+            // The problem's icon first, so a narrow cell (75 % zoom) cuts off the time, not the problem.
+            <span className="col-span-2 flex items-center gap-0.5 overflow-hidden whitespace-nowrap text-ink-muted tabular-nums" aria-hidden="true">
+              {ProblemIcon && <ProblemIcon className={`size-3 shrink-0 ${PROBLEM_MARKS[view.problemKind as 'must' | 'check'].text}`} />}
               {view.startTime}
               {view.pinned && <Pin className="size-3 shrink-0 text-brand-strong" />}
               {view.handChange && !view.pinned && <Pencil className="size-3 shrink-0" />}
               {view.pendingMark && <Clock className="size-3 shrink-0" />}
-              {ProblemIcon && <ProblemIcon className={`size-3.5 shrink-0 ${PROBLEM_MARKS[view.problemKind as 'must' | 'check'].text}`} />}
             </span>
           )}
         </div>
