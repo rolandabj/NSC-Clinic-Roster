@@ -7,7 +7,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Lock, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { Lock, ArrowLeft, Loader2, TriangleAlert } from 'lucide-react';
+import { Button } from '../ui';
+import { PublicMessage, PublicPageFrame } from '../common/PublicPageFrame';
 import type { Schedule, ScheduleVersion, Nurse, DutyWindow, Doctor, ClinicalRole, Specialty } from '../../types';
 import { getRepository } from '../../services/repository';
 import { authService } from '../../services/auth/authService';
@@ -70,8 +72,8 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
           if (!snap) {
             setAccessDeniedMessage(
               currentUser
-                ? 'This link is not valid for your account. It may have been revoked, replaced, or shared only with other staff.'
-                : 'This link is not valid. It may have been revoked or replaced, or it is shared only with signed in staff. Ask the clinic for a new link, or sign in with an authorized account.'
+                ? 'This link is not valid for your account. It may have been turned off, replaced, or shared only with other staff.'
+                : 'This link is not valid. It may have been turned off or replaced, or it is shared only with signed in staff. Ask the clinic for a new link, or sign in with an authorized account.'
             );
             return;
           }
@@ -123,66 +125,52 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
     loadPublishedRoster();
   }, [shareToken, nurseIdParam]);
 
+  const backButton = onExitPreview && (
+    <Button size="lg" icon={ArrowLeft} onClick={onExitPreview}>
+      Back to the app
+    </Button>
+  );
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="flex flex-col items-center gap-3 text-slate-500 text-xs">
-          <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <p className="font-semibold">Loading official published schedule...</p>
+      <PublicPageFrame clinicName={clinicLabel}>
+        <div className="pt-6">
+          <PublicMessage live icon={<Loader2 className="size-8 animate-spin text-brand" aria-hidden="true" />} title="Opening the published roster…" />
         </div>
-      </div>
+      </PublicPageFrame>
     );
   }
 
   if (accessDeniedMessage) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white border border-slate-200 rounded-lg p-6 shadow-xl space-y-4 text-center">
-          <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
-            <Lock className="w-6 h-6" />
-          </div>
-          <h2 className="text-base font-bold text-slate-900">Access Restricted</h2>
-          <p className="text-xs text-slate-600 leading-relaxed">{accessDeniedMessage}</p>
-          {onExitPreview && (
-            <button
-              onClick={onExitPreview}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold"
-            >
-              Return to Workspace
-            </button>
-          )}
+      <PublicPageFrame clinicName={clinicLabel}>
+        <div className="pt-6">
+          <PublicMessage icon={<Lock className="size-10 text-warning" aria-hidden="true" />} title="This link does not open the roster" action={backButton}>
+            {accessDeniedMessage}
+          </PublicMessage>
         </div>
-      </div>
+      </PublicPageFrame>
     );
   }
 
   if (!schedule || !version) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white border border-slate-200 rounded-lg p-6 shadow-xl space-y-4 text-center">
-          <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto" />
-          <h2 className="text-base font-bold text-slate-900">No Published Schedule Found</h2>
-          <p className="text-xs text-slate-600">
-            A published version of this roster has not yet been released.
-          </p>
-          {onExitPreview && (
-            <button
-              onClick={onExitPreview}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold"
-            >
-              Return to Workspace
-            </button>
-          )}
+      <PublicPageFrame clinicName={clinicLabel}>
+        <div className="pt-6">
+          <PublicMessage icon={<TriangleAlert className="size-10 text-warning" aria-hidden="true" />} title="No published roster yet" action={backButton}>
+            The roster has not been published yet.
+          </PublicMessage>
         </div>
-      </div>
+      </PublicPageFrame>
     );
   }
 
   const sheet = buildTeamRosterSheet({ schedule, version, nurses, dutyWindows, doctors, clinicalRoles: roles, specialties });
   return (
-    <main className="min-h-screen bg-slate-100 p-4 sm:p-6">
-      <div className="max-w-[1600px] mx-auto space-y-5">
-        {onExitPreview && <button onClick={onExitPreview} className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600"><ArrowLeft size={16} />Return to workspace</button>}
+    <PublicPageFrame clinicName={clinicLabel} wide>
+      <div className="space-y-5">
+        {onExitPreview && <div>{backButton}</div>}
+        <h1 className="text-2xl font-semibold">Published roster</h1>
         <PublishedRosterSheet key={version.id} sheet={sheet} clinicName={clinicLabel} timezone={clinicTimezone} initialNurseId={nurseIdParam} myNurseId={currentUser?.linkedNurseId} nurseActions={nurseId => <>
           <button type="button" onClick={() => {
           const nurse = nurses.find(n => n.id === nurseId);
@@ -196,8 +184,8 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
             catch { setLinkStatus('Could not copy. Copy the page address from your browser instead.'); }
           }}>Copy personal link</button>}
         </>} />
-        {linkStatus && <p role="status" className="text-sm text-slate-600">{linkStatus}</p>}
+        {linkStatus && <p role="status" className="text-ink-muted">{linkStatus}</p>}
       </div>
-    </main>
+    </PublicPageFrame>
   );
 };

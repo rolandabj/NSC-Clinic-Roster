@@ -292,7 +292,7 @@ export class RosterPublishService {
                 <tr>
                   <td align="center">
                     <a href="${ackUrl}" style="display: inline-block; background-color: #4f46e5; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600; padding: 12px 24px; border-radius: 6px; box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);">
-                      ✓ Confirm Receipt &amp; Acknowledge Schedule
+                      ✓ I have my roster
                     </a>
                   </td>
                 </tr>
@@ -362,7 +362,7 @@ export class RosterPublishService {
       params.versionNumber ? ` (version ${params.versionNumber})` : ''
     } was published, but we have not yet received your confirmation. Please review it and confirm receipt.</p>
   <p style="text-align: center; margin: 24px 0;">
-    <a href="${h(ackUrl)}" style="display: inline-block; background-color: #b45309; color: #ffffff; text-decoration: none; font-weight: 700; padding: 12px 22px; border-radius: 6px;">Confirm Receipt of My Roster</a>
+    <a href="${h(ackUrl)}" style="display: inline-block; background-color: #b45309; color: #ffffff; text-decoration: none; font-weight: 700; padding: 12px 22px; border-radius: 6px;">I have my roster</a>
   </p>
   ${params.privateRosterUrl ? `<p style="text-align: center; font-size: 13px;"><a href="${h(params.privateRosterUrl)}" style="color: #4338ca; font-weight: 600;">Open my schedule and team roster</a></p>` : ''}
   ${viewUrl ? `<p style="text-align: center; font-size: 12px;"><a href="${h(viewUrl)}" style="color: #4f46e5;">${params.privateRosterUrl ? 'View the whole roster' : 'View my roster'}</a></p>` : ''}

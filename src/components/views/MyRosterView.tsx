@@ -170,8 +170,8 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
           <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-brand text-white">
             <CalendarRange aria-hidden="true" className="size-5" />
           </span>
-          <p className="min-w-0 flex-1 truncate font-bold">NSC Clinic Roster</p>
-          {state.doc.clinicName && <p className="truncate text-sm text-ink-muted">{state.doc.clinicName}</p>}
+          <p className="shrink-0 font-bold">NSC Clinic Roster</p>
+          {state.doc.clinicName && <p className="min-w-0 flex-1 truncate text-right text-sm text-ink-muted">{state.doc.clinicName}</p>}
         </div>
       </header>
 

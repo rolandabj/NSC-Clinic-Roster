@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "src/components/views/AcknowledgePage.tsx": {
-    "mtime": 1791362587.9600093,
-    "seen": 1791365225.1339982,
-    "ast_hash": "0673a459ed6aa70b4ded7ef8e773ea3c",
+    "mtime": 1791912579.0424032,
+    "seen": 1791912615.9698584,
+    "ast_hash": "3fc5e38b1b7547f8d9a52528be8a6ee8",
     "semantic_hash": ""
   },
   "src/components/views/ApprovalsQueuePanel.tsx": {
@@ -264,9 +264,9 @@
     "semantic_hash": ""
   },
   "src/components/views/DashboardView.tsx": {
-    "mtime": 1791898283.739253,
-    "seen": 1791899950.2463603,
-    "ast_hash": "e0b0f995f004874be1d433aa1afbfed8",
+    "mtime": 1791912240.0406322,
+    "seen": 1791912475.5495954,
+    "ast_hash": "a18a3248e81c0a73ef713ada2cf04c1b",
     "semantic_hash": ""
   },
   "src/components/views/DoctorsView.tsx": {
@@ -300,9 +300,9 @@
     "semantic_hash": ""
   },
   "src/components/views/PublishedRosterView.tsx": {
-    "mtime": 1791362587.9617636,
-    "seen": 1791365225.134015,
-    "ast_hash": "a4c76a5a596bb019245640e1e9bab469",
+    "mtime": 1791912572.6519024,
+    "seen": 1791912615.9698777,
+    "ast_hash": "3426696f57ea49b5463432da478fc9a8",
     "semantic_hash": ""
   },
   "src/components/views/ReportsView.tsx": {
@@ -540,9 +540,9 @@
     "semantic_hash": ""
   },
   "src/services/publish/rosterPublishService.ts": {
-    "mtime": 1791362587.9772897,
-    "seen": 1791365225.1340954,
-    "ast_hash": "fdfa71353b3f7a27b5c17ff44d5a54eb",
+    "mtime": 1791912579.039371,
+    "seen": 1791912615.970001,
+    "ast_hash": "c2a2088341ae1ef47df524d40d95fd78",
     "semantic_hash": ""
   },
   "src/services/reports/hoursAccounting.ts": {
@@ -798,9 +798,9 @@
     "semantic_hash": ""
   },
   "src/components/views/MyRosterView.tsx": {
-    "mtime": 1791903113.813226,
-    "seen": 1791903137.9663944,
-    "ast_hash": "f0fe0459c9a0f6dc9c6d632858073a73",
+    "mtime": 1791912271.4078872,
+    "seen": 1791912475.5495992,
+    "ast_hash": "c654eb4d0615d61e8f9b472dab02cac6",
     "semantic_hash": ""
   },
   "src/components/workbook/ProblemsPanel.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791903792.6824198,
-    "seen": 1791903815.8850482,
-    "ast_hash": "2e973ec3b20d1c181b7b2bf4e4887837",
+    "mtime": 1791912594.995708,
+    "seen": 1791912615.9701986,
+    "ast_hash": "dce8a16b1dbec9b0206dac8b66f91279",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1158,9 +1158,9 @@
     "semantic_hash": ""
   },
   "src/components/roster/PublishedRosterSheet.tsx": {
-    "mtime": 1791362587.9577637,
-    "seen": 1791365225.1339955,
-    "ast_hash": "833f5960460290b49eb7ce7e2b2f9b23",
+    "mtime": 1791912271.408664,
+    "seen": 1791912475.5495508,
+    "ast_hash": "e7c147be453cb8db690eedb380b51f23",
     "semantic_hash": ""
   },
   "src/services/email/emailReadiness.ts": {
@@ -2157,6 +2157,18 @@
     "mtime": 1791903778.4696627,
     "seen": 1791903815.8849769,
     "ast_hash": "9237971d5474a0e69e6d8606f66b33dd",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/public-pages.cjs": {
+    "mtime": 1791912289.9924207,
+    "seen": 1791912475.5494232,
+    "ast_hash": "0719204f04ac83ef6cdef0325944a6c5",
+    "semantic_hash": ""
+  },
+  "src/components/common/PublicPageFrame.tsx": {
+    "mtime": 1791912271.407265,
+    "seen": 1791912475.5494816,
+    "ast_hash": "d57c8f10b63f542b4aee1aaf51120161",
     "semantic_hash": ""
   }
 }

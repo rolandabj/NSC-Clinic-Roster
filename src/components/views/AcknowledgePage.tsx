@@ -2,13 +2,16 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Standalone acknowledgment page opened from the "Confirm Receipt" link in a
+ * Standalone acknowledgment page opened from the "I have my roster" link in a
  * roster email. Works without signing in: the token in the link is the proof.
+ * Made for phones in UI overhaul Phase 5, slice 3.
  */
 
 import React, { useState } from 'react';
-import { CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
+import { CalendarCheck, CircleCheck, Loader2, TriangleAlert } from 'lucide-react';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
+import { Button } from '../ui';
+import { PublicMessage, PublicPageFrame } from '../common/PublicPageFrame';
 
 interface AcknowledgePageProps {
   token: string;
@@ -17,7 +20,7 @@ interface AcknowledgePageProps {
 
 export const AcknowledgePage: React.FC<AcknowledgePageProps> = ({ token, clinicName }) => {
   // Nothing is confirmed until the nurse presses the button: email apps that open links
-  // to scan them must not confirm on her behalf.
+  // to scan them must not confirm on their behalf.
   const [state, setState] = useState<'ask' | 'working' | 'done' | 'failed'>('ask');
 
   const confirm = async () => {
@@ -27,46 +30,38 @@ export const AcknowledgePage: React.FC<AcknowledgePageProps> = ({ token, clinicN
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white border border-slate-200 rounded-lg p-6 shadow-xl space-y-4 text-center">
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{clinicName}</p>
-        {state === 'ask' && (
-          <>
-            <h1 className="text-base font-bold text-slate-900">Confirm you received your roster</h1>
-            <p className="text-xs text-slate-600">Press the button to let the clinic know you've seen your schedule.</p>
-            <button
-              type="button"
-              onClick={confirm}
-              className="px-5 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm cursor-pointer"
-            >
-              I've received my roster
-            </button>
-          </>
-        )}
-        {state === 'working' && (
-          <>
-            <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto" />
-            <p className="text-sm text-slate-700">Confirming receipt of your roster...</p>
-          </>
+    <PublicPageFrame clinicName={clinicName}>
+      <div className="pt-6">
+        {(state === 'ask' || state === 'working') && (
+          <PublicMessage
+            icon={<CalendarCheck className="size-10 text-brand" aria-hidden="true" />}
+            title="Please confirm you have your roster"
+            action={
+              <Button variant="primary" size="lg" busy={state === 'working'} onClick={confirm} className="w-full sm:w-auto">
+                I have my roster
+              </Button>
+            }
+          >
+            The clinic then knows you have seen your shifts.
+          </PublicMessage>
         )}
         {state === 'done' && (
-          <>
-            <CheckCircle2 className="w-10 h-10 text-emerald-600 mx-auto" />
-            <h1 className="text-base font-bold text-slate-900">Roster receipt confirmed</h1>
-            <p className="text-xs text-slate-600">Thank you. The clinic can now see that you received your schedule.</p>
-          </>
+          <PublicMessage live icon={<CircleCheck className="size-10 text-success" aria-hidden="true" />} title="Thank you">
+            The clinic can now see that you have your roster.
+          </PublicMessage>
         )}
         {state === 'failed' && (
-          <>
-            <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto" />
-            <h1 className="text-base font-bold text-slate-900">This confirmation link is not valid</h1>
-            <p className="text-xs text-slate-600">
-              It may belong to an older version of the roster. Please use the link in your most recent roster email,
-              or contact the clinic office.
-            </p>
-          </>
+          <PublicMessage live icon={<TriangleAlert className="size-10 text-warning" aria-hidden="true" />} title="This link no longer works">
+            It may belong to an older roster. Use the link in your most recent roster email, or ask the clinic office.
+          </PublicMessage>
+        )}
+        {state === 'working' && (
+          <p className="sr-only" role="status">
+            <Loader2 aria-hidden="true" />
+            Sending your confirmation…
+          </p>
         )}
       </div>
-    </div>
+    </PublicPageFrame>
   );
 };

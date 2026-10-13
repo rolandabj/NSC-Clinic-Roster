@@ -43,7 +43,6 @@ import {
   shiftDetail,
   todayIso,
   addDaysIso,
-  weekdayOf,
 } from '../../services/publish/nurseRosterService';
 import {
   countChangedCells,
@@ -54,7 +53,7 @@ import {
 } from '../../services/dashboard/dashboardSummary';
 import type { ProblemCount } from '../../services/dashboard/problemCount';
 import { useAppContext } from '../common/AppContext';
-import { formatDate, formatDateRange } from '../../utils/dateUtils';
+import { formatDate, formatDateRange, formatDayDate } from '../../utils/dateUtils';
 import { PageLoading } from '../common/PageLoading';
 import { Assignment, NurseRosterShift, Schedule } from '../../types';
 
@@ -101,8 +100,6 @@ const readStoredId = () => {
   }
 };
 
-const longDate = (iso: string) =>
-  new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
 
 async function loadPlannerData(timezone: string, canApprove: boolean): Promise<PlannerData> {
   const repo = getRepository();
@@ -273,33 +270,34 @@ async function loadViewerData(timezone: string, linkedNurseId: string | undefine
 }
 
 /** A small card with a heading. */
-const Card: React.FC<{ title: string; action?: React.ReactNode; children: React.ReactNode; className?: string }> = ({
+const Card: React.FC<{ title: string; action?: React.ReactNode; children: React.ReactNode; className?: string; large?: boolean }> = ({
   title,
   action,
   children,
   className = '',
+  large,
 }) => {
   const headingId = useId();
   return (
     <section className={`bg-white border border-slate-200 rounded-lg shadow-2xs ${className}`} aria-labelledby={headingId}>
       <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2 border-b border-slate-100">
-        <h2 id={headingId} className="text-sm font-bold text-slate-900">
+        <h2 id={headingId} className={large ? 'text-lg font-semibold text-ink' : 'text-sm font-bold text-slate-900'}>
           {title}
         </h2>
         {action}
       </div>
-      <div className="p-4">{children}</div>
+      <div className={large ? 'p-4 text-base' : 'p-4'}>{children}</div>
     </section>
   );
 };
 
 /** Who works today, as a list. */
-const TodayList: React.FC<{ info: TodayAtClinic | null; roster: Schedule | null; note?: string }> = ({ info, roster, note }) => {
+const TodayList: React.FC<{ info: TodayAtClinic | null; roster: Schedule | null; note?: string; large?: boolean }> = ({ info, roster, note, large }) => {
   if (!roster || !info) {
-    return <p className="text-xs text-slate-500">{note || 'No roster covers today.'}</p>;
+    return <p className={large ? 'text-ink-muted' : 'text-xs text-slate-500'}>{note || 'No roster covers today.'}</p>;
   }
   return (
-    <div className="space-y-3 text-xs">
+    <div className={large ? 'space-y-3 text-base' : 'space-y-3 text-xs'}>
       {info.onDuty.length === 0 ? (
         <p className="text-slate-500">Nobody is on the roster today.</p>
       ) : (
@@ -319,7 +317,7 @@ const TodayList: React.FC<{ info: TodayAtClinic | null; roster: Schedule | null;
           ))}
         </ul>
       )}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600 pt-1 border-t border-slate-100">
+      <div className={`flex flex-wrap items-center gap-x-4 gap-y-1 ${large ? 'text-sm' : 'text-[11px]'} text-slate-600 pt-1 border-t border-slate-100`}>
         {info.onDuty.length > 0 &&
           (info.hasSenior ? (
             <span className="inline-flex items-center gap-1 text-emerald-700">
@@ -382,7 +380,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
     <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pb-3 border-b border-slate-200">
       <div>
         <p className="text-xs font-semibold text-slate-500">{context.clinicName}</p>
-        <h1 className="text-xl font-bold text-slate-900 tracking-tight">Today, {longDate(today)}</h1>
+        <h1 className="text-xl font-bold text-slate-900 tracking-tight">Today, {formatDayDate(today, 'long')}</h1>
       </div>
       {isPlanner && (
         <div className="flex items-center gap-2">
@@ -452,8 +450,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
           <span className="text-indigo-700 group-hover:text-indigo-800" aria-hidden="true">
             {s.icon}
           </span>
-          <span className="block mt-1.5 text-xs font-semibold text-slate-900">{s.label}</span>
-          <span className="block text-[11px] text-slate-500 leading-snug">{s.hint}</span>
+          <span className="block mt-1.5 text-sm font-semibold text-slate-900">{s.label}</span>
+          <span className="block text-xs text-ink-muted leading-snug">{s.hint}</span>
         </a>
       ))}
     </nav>
@@ -466,32 +464,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
         {header}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {viewer.myShifts && (
-            <Card title="Your next two weeks">
+            <Card title="Your next two weeks" large>
               {viewer.myShifts.length === 0 && viewer.myLeaveDays.length === 0 ? (
-                <p className="text-xs text-slate-500">No published shifts in the next two weeks.</p>
+                <p className="text-ink-muted">No published shifts in the next two weeks.</p>
               ) : (
-                <ul className="divide-y divide-slate-100 text-xs">
+                <ul className="divide-y divide-line">
                   {[
                     ...viewer.myShifts.map((s) => ({ date: s.date, shift: s })),
                     ...viewer.myLeaveDays.map((d) => ({ date: d, shift: null as NurseRosterShift | null })),
                   ]
                     .sort((a, b) => a.date.localeCompare(b.date))
                     .map(({ date, shift }) => (
-                      <li key={date + (shift?.startTime || 'leave')} className={`flex items-center gap-3 py-1.5 ${date === viewer.today ? 'font-semibold' : ''}`}>
-                        <span className="w-24 shrink-0 text-slate-700">
-                          {weekdayOf(date)} {formatDate(date).slice(0, 5)}
-                          {date === viewer.today && <span className="ml-1 text-indigo-700">Today</span>}
-                        </span>
+                      <li key={date + (shift?.startTime || 'leave')} className="py-2">
+                        <p className="font-semibold">
+                          {formatDayDate(date)}
+                          {date === viewer.today && <span className="ml-1.5 text-brand-strong">(today)</span>}
+                        </p>
                         {shift ? (
                           <>
-                            <span className="px-1.5 py-0.5 rounded bg-slate-100 font-bold text-[11px]">{shift.acronym}</span>
-                            <span className="tabular-nums text-slate-700">
-                              {shift.startTime} to {shift.endTime}
-                            </span>
-                            <span className="ml-auto text-slate-600 truncate">{shift.detail}</span>
+                            <p>
+                              {shift.startTime} to {shift.endTime}, {shift.shiftName} shift
+                            </p>
+                            {shift.detail && <p className="text-ink-muted">{shift.detail}</p>}
                           </>
                         ) : (
-                          <span className="text-amber-700 font-semibold">Leave</span>
+                          <p>Leave</p>
                         )}
                       </li>
                     ))}
@@ -499,8 +496,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
               )}
             </Card>
           )}
-          <Card title="Today at the clinic">
-            <TodayList info={viewer.todayInfo} roster={viewer.todayRoster} note="No published roster covers today." />
+          <Card title="Today at the clinic" large>
+            <TodayList large info={viewer.todayInfo} roster={viewer.todayRoster} note="No published roster covers today." />
           </Card>
           {viewer.pendingRequests !== null && (
             <Card title="Needs your attention">

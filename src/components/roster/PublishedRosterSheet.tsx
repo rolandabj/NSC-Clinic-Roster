@@ -4,9 +4,11 @@ import type { TeamRosterSheet } from '../../types';
 import { addDaysIso, weekdayOf } from '../../services/publish/nurseRosterService';
 import { dutyDurationHours } from '../../services/hours/hoursBalance';
 import { safeColor } from '../../utils/escapeHtml';
+import { formatDate } from '../../utils/dateUtils';
 import './publishedRosterSheet.css';
 
-const dateLabel = (date: string) => new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+/** Dates on screen as DD-MM-YYYY, like the rest of the app (they read "16 Nov" before Phase 5). */
+const dateLabel = (date: string) => formatDate(date);
 
 export function PublishedRosterSheet({ sheet, clinicName, myNurseId, initialNurseId, timezone = 'Asia/Dubai', nurseActions }: {
   sheet: TeamRosterSheet; clinicName: string; myNurseId?: string; initialNurseId?: string; timezone?: string;
@@ -29,15 +31,15 @@ export function PublishedRosterSheet({ sheet, clinicName, myNurseId, initialNurs
     <section className="roster-paper" key={page}>
       <header className="roster-paper-heading">
         <div><p className="roster-eyebrow">{clinicName || 'Clinic'} · Nursing roster</p>
-          <h2>{sheet.name}</h2><p>{dateLabel(sheet.startDate)} to {dateLabel(sheet.endDate)} · {sheet.startDate.slice(0, 4)}</p>
+          <h2>{sheet.name}</h2><p>{dateLabel(sheet.startDate)} to {dateLabel(sheet.endDate)}</p>
         </div>
         <div className="roster-edition"><span>Published · Version {sheet.version}</span><p>{timezone}</p><p>Page {page + 1} of {total}</p></div>
       </header>
       <div className="roster-table-scroll" tabIndex={0} role="region" aria-label="Published nursing roster">
         <table className="roster-paper-table">
           <caption className="sr-only">{sheet.name}, {nurseId === 'ALL' ? 'team schedule' : 'personal schedule'}, {dateLabel(pageDates[0] || sheet.startDate)} to {dateLabel(pageDates.at(-1) || sheet.endDate)}</caption>
-          <thead><tr><th scope="col" className="roster-name">Nursing team <small>{dateLabel(pageDates[0] || sheet.startDate)} to {dateLabel(pageDates.at(-1) || sheet.endDate)}</small></th>
-            {pageDates.map(date => <th scope="col" key={date} className={(sheet.weekendDays || [6, 0]).includes(new Date(`${date}T00:00:00Z`).getUTCDay()) ? 'roster-weekend' : ''}><small>{weekdayOf(date)}</small><strong>{Number(date.slice(8))}</strong><small>{dateLabel(date).split(' ')[1]}</small></th>)}
+          <thead><tr><th scope="col" className="roster-name">Nursing team <small><span className="whitespace-nowrap">{dateLabel(pageDates[0] || sheet.startDate)}</span> to <span className="whitespace-nowrap">{dateLabel(pageDates.at(-1) || sheet.endDate)}</span></small></th>
+            {pageDates.map(date => <th scope="col" key={date} className={(sheet.weekendDays || [6, 0]).includes(new Date(`${date}T00:00:00Z`).getUTCDay()) ? 'roster-weekend' : ''}><small>{weekdayOf(date)}</small><strong>{Number(date.slice(8))}</strong></th>)}
             <th scope="col" className="roster-total">Shift<small>hours</small></th>
           </tr></thead>
           <tbody>{pageRows.map(nurse => {
@@ -56,7 +58,7 @@ export function PublishedRosterSheet({ sheet, clinicName, myNurseId, initialNurs
           })}</tbody>
         </table>
       </div>
-      {rows.length === 0 && <p className="p-5 text-sm text-slate-500">No published shifts for this selection.</p>}
+      {rows.length === 0 && <p className="p-5 text-sm text-ink-muted">No published shifts for this selection.</p>}
       <footer className="roster-paper-footer">
         <div className="roster-legend">{sheet.duties.map(d => <span key={d.id}><i style={{ backgroundColor: safeColor(d.color, '#64748b') }} /><b>{d.acronym}</b> {d.startTime} to {d.endTime}</span>)}<span><b>LV</b> Leave</span><span><b>OFF</b> Day off</span></div>
         <p>Shift hours cover the dates shown and exclude leave credit. Only published shifts appear here.</p>
@@ -78,9 +80,9 @@ export function PublishedRosterSheet({ sheet, clinicName, myNurseId, initialNurs
       </div>
     </div>
     <div className="roster-pagination"><p>{nurseId === 'ALL' ? `${rows.length} nurses · Published team schedule` : `${rows[0]?.name || 'Nurse'} · Published schedule`}</p><div>
-      <button aria-label="Previous dates" disabled={currentBlock === 0} onClick={() => setBlock(currentBlock - 1)}><ChevronLeft size={17} /></button><span>{dateLabel(visibleDates[0] || sheet.startDate)} to {dateLabel(visibleDates.at(-1) || sheet.endDate)}</span><button aria-label="Next dates" disabled={currentBlock >= pageCount - 1} onClick={() => setBlock(currentBlock + 1)}><ChevronRight size={17} /></button>
+      <button aria-label="Previous dates" disabled={currentBlock === 0} onClick={() => setBlock(currentBlock - 1)}><ChevronLeft size={17} /></button><span className="whitespace-nowrap">{dateLabel(visibleDates[0] || sheet.startDate)} to {dateLabel(visibleDates.at(-1) || sheet.endDate)}</span><button aria-label="Next dates" disabled={currentBlock >= pageCount - 1} onClick={() => setBlock(currentBlock + 1)}><ChevronRight size={17} /></button>
     </div></div>
-    <div className="roster-screen-pages"><p className="mb-2 text-xs text-slate-500 sm:hidden">Swipe across the grid to see more dates. Names stay in view.</p>{renderPage(visibleDates, currentBlock, pageCount)}</div>
+    <div className="roster-screen-pages"><p className="mb-2 text-sm text-ink-muted sm:hidden">Swipe across the grid to see more dates. Names stay in view.</p>{renderPage(visibleDates, currentBlock, pageCount)}</div>
     <div className="roster-print-pages">{printedPages.flatMap((part, index) => printRows.map((pageRows, rowIndex) => renderPage(part, index * printRows.length + rowIndex, printedPages.length * printRows.length, pageRows)))}</div>
   </div>;
 }
