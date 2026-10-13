@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 13-10-2026, after UI overhaul Phase 3 slice 8 (section 16, item 57): `WorkbookGrid.tsx` split into parts in `src/components/workbook/grid/`. Slices 4 to 8 (items 52 to 57) are on the working branch `claude/ui-overhaul`, not yet on main; Checkpoint 3 is next. Main is at `bf22360` (Phase 3 slices 1 to 3 and the caveman voice skills, items 48 to 51), and its CI run 61 passed.
+Last updated: 13-10-2026, after UI overhaul Phase 3 slice 8 (section 16, item 57, and a comment corrected after its wording review): `WorkbookGrid.tsx` split into parts in `src/components/workbook/grid/`. Slices 4 to 8 (items 52 to 57) are on the working branch `claude/ui-overhaul`, not yet on main; Checkpoint 3 is next. Main is at `bf22360` (Phase 3 slices 1 to 3 and the caveman voice skills, items 48 to 51), and its CI run 61 passed.
 
 ---
 

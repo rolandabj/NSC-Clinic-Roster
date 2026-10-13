@@ -6,7 +6,7 @@ const cellKeyOf = (nurseId: string, date: string) => `${nurseId}|${date}`;
 /**
  * The grid's selection on screen: keyboard focus follows the selected cell while the focus
  * is in the grid, and a request from outside ("Show in grid") selects a cell, scrolls it to
- * the middle of the grid, focuses it and flashes it.
+ * the middle of the visible cells, focuses it and flashes it.
  */
 export function useGridSelection(o: {
   selection: GridSelection;
