@@ -28297,7 +28297,7 @@
       "node_kind": "heading",
       "norm_label": "1. where things stand",
       "source_file": "tasks/summary.md",
-      "source_location": "L10"
+      "source_location": "L9"
     },
     {
       "id": "tasks_summary_2_why_this_work",
@@ -28309,7 +28309,7 @@
       "node_kind": "heading",
       "norm_label": "2. why this work",
       "source_file": "tasks/summary.md",
-      "source_location": "L22"
+      "source_location": "L20"
     },
     {
       "id": "tasks_summary_3_what_the_review_found_and_where_each_part_stands",
@@ -28321,7 +28321,7 @@
       "node_kind": "heading",
       "norm_label": "3. what the review found, and where each part stands",
       "source_file": "tasks/summary.md",
-      "source_location": "L40"
+      "source_location": "L38"
     },
     {
       "id": "tasks_summary_4_what_has_been_done",
@@ -28333,7 +28333,7 @@
       "node_kind": "heading",
       "norm_label": "4. what has been done",
       "source_file": "tasks/summary.md",
-      "source_location": "L60"
+      "source_location": "L58"
     },
     {
       "id": "tasks_summary_5_numbers",
@@ -28345,7 +28345,7 @@
       "node_kind": "heading",
       "norm_label": "5. numbers",
       "source_file": "tasks/summary.md",
-      "source_location": "L154"
+      "source_location": "L152"
     },
     {
       "id": "tasks_summary_6_how_the_work_is_done",
@@ -28357,7 +28357,7 @@
       "node_kind": "heading",
       "norm_label": "6. how the work is done",
       "source_file": "tasks/summary.md",
-      "source_location": "L194"
+      "source_location": "L192"
     },
     {
       "id": "tasks_summary_7_next_steps",
@@ -28369,7 +28369,7 @@
       "node_kind": "heading",
       "norm_label": "7. next steps",
       "source_file": "tasks/summary.md",
-      "source_location": "L207"
+      "source_location": "L205"
     },
     {
       "id": "tasks_summary_8_where_to_find_things",
@@ -28381,7 +28381,7 @@
       "node_kind": "heading",
       "norm_label": "8. where to find things",
       "source_file": "tasks/summary.md",
-      "source_location": "L264"
+      "source_location": "L261"
     },
     {
       "id": "tasks_summary_9_commits_on_main",
@@ -28393,7 +28393,7 @@
       "node_kind": "heading",
       "norm_label": "9. commits on main",
       "source_file": "tasks/summary.md",
-      "source_location": "L281"
+      "source_location": "L278"
     },
     {
       "id": "tasks_summary_not_in_the_plan",
@@ -28405,7 +28405,7 @@
       "node_kind": "heading",
       "norm_label": "not in the plan",
       "source_file": "tasks/summary.md",
-      "source_location": "L256"
+      "source_location": "L253"
     },
     {
       "id": "tasks_summary_noticed_and_waiting_for_their_phase",
@@ -28417,7 +28417,7 @@
       "node_kind": "heading",
       "norm_label": "noticed, and waiting for their phase",
       "source_file": "tasks/summary.md",
-      "source_location": "L237"
+      "source_location": "L234"
     },
     {
       "id": "tasks_summary_now",
@@ -28429,7 +28429,7 @@
       "node_kind": "heading",
       "norm_label": "now",
       "source_file": "tasks/summary.md",
-      "source_location": "L209"
+      "source_location": "L207"
     },
     {
       "id": "tasks_summary_phase_0_setup_07_10_2026",
@@ -28441,7 +28441,7 @@
       "node_kind": "heading",
       "norm_label": "phase 0: setup (07-10-2026)",
       "source_file": "tasks/summary.md",
-      "source_location": "L62"
+      "source_location": "L60"
     },
     {
       "id": "tasks_summary_phase_1_quick_fixes_and_safety_07_10_2026",
@@ -28453,7 +28453,7 @@
       "node_kind": "heading",
       "norm_label": "phase 1: quick fixes and safety (07-10-2026)",
       "source_file": "tasks/summary.md",
-      "source_location": "L80"
+      "source_location": "L78"
     },
     {
       "id": "tasks_summary_phase_2_the_new_look_and_the_app_frame_07_10_2026_to_08_10_2026",
@@ -28465,7 +28465,7 @@
       "node_kind": "heading",
       "norm_label": "phase 2: the new look and the app frame (07-10-2026 to 08-10-2026)",
       "source_file": "tasks/summary.md",
-      "source_location": "L97"
+      "source_location": "L95"
     },
     {
       "id": "tasks_summary_phase_3_roster_grid_speed_and_structure_13_10_2026",
@@ -28477,7 +28477,7 @@
       "node_kind": "heading",
       "norm_label": "phase 3: roster grid speed and structure (13-10-2026)",
       "source_file": "tasks/summary.md",
-      "source_location": "L128"
+      "source_location": "L126"
     },
     {
       "id": "tasks_summary_the_gemini_routes_need_sign_in_07_10_2026",
@@ -28489,7 +28489,7 @@
       "node_kind": "heading",
       "norm_label": "the gemini routes need sign in (07-10-2026)",
       "source_file": "tasks/summary.md",
-      "source_location": "L74"
+      "source_location": "L72"
     },
     {
       "id": "tasks_summary_the_phases_after_that",
@@ -28501,7 +28501,7 @@
       "node_kind": "heading",
       "norm_label": "the phases after that",
       "source_file": "tasks/summary.md",
-      "source_location": "L214"
+      "source_location": "L211"
     },
     {
       "id": "tasks_summary_the_question_before_phase_4_answered",
@@ -28513,7 +28513,7 @@
       "node_kind": "heading",
       "norm_label": "the question before phase 4, answered",
       "source_file": "tasks/summary.md",
-      "source_location": "L228"
+      "source_location": "L225"
     },
     {
       "id": "tasks_summary_ui_overhaul_summary_and_next_steps",
@@ -118443,7 +118443,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L128",
+      "source_location": "L126",
       "weight": 1.0
     },
     {
@@ -118454,7 +118454,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L62",
+      "source_location": "L60",
       "weight": 1.0
     },
     {
@@ -118465,7 +118465,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L74",
+      "source_location": "L72",
       "weight": 1.0
     },
     {
@@ -118476,7 +118476,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L80",
+      "source_location": "L78",
       "weight": 1.0
     },
     {
@@ -118487,7 +118487,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L97",
+      "source_location": "L95",
       "weight": 1.0
     },
     {
@@ -118498,7 +118498,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L209",
+      "source_location": "L207",
       "weight": 1.0
     },
     {
@@ -118509,7 +118509,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L214",
+      "source_location": "L211",
       "weight": 1.0
     },
     {
@@ -118520,7 +118520,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L228",
+      "source_location": "L225",
       "weight": 1.0
     },
     {
@@ -118531,7 +118531,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L237",
+      "source_location": "L234",
       "weight": 1.0
     },
     {
@@ -118542,18 +118542,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L256",
-      "weight": 1.0
-    },
-    {
-      "source": "tasks_summary_ui_overhaul_summary_and_next_steps",
-      "target": "tasks_summary_1_where_things_stand",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "tasks/summary.md",
-      "source_location": "L10",
+      "source_location": "L253",
       "weight": 1.0
     },
     {
@@ -118564,7 +118553,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L154",
+      "source_location": "L152",
       "weight": 1.0
     },
     {
@@ -118575,18 +118564,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L194",
-      "weight": 1.0
-    },
-    {
-      "source": "tasks_summary_ui_overhaul_summary_and_next_steps",
-      "target": "tasks_summary_7_next_steps",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "tasks/summary.md",
-      "source_location": "L207",
+      "source_location": "L192",
       "weight": 1.0
     },
     {
@@ -118597,7 +118575,18 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L22",
+      "source_location": "L20",
+      "weight": 1.0
+    },
+    {
+      "source": "tasks_summary_ui_overhaul_summary_and_next_steps",
+      "target": "tasks_summary_7_next_steps",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tasks/summary.md",
+      "source_location": "L205",
       "weight": 1.0
     },
     {
@@ -118608,7 +118597,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L264",
+      "source_location": "L261",
       "weight": 1.0
     },
     {
@@ -118619,7 +118608,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L281",
+      "source_location": "L278",
       "weight": 1.0
     },
     {
@@ -118630,7 +118619,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L40",
+      "source_location": "L38",
       "weight": 1.0
     },
     {
@@ -118641,7 +118630,18 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "tasks/summary.md",
-      "source_location": "L60",
+      "source_location": "L58",
+      "weight": 1.0
+    },
+    {
+      "source": "tasks_summary_ui_overhaul_summary_and_next_steps",
+      "target": "tasks_summary_1_where_things_stand",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "tasks/summary.md",
+      "source_location": "L9",
       "weight": 1.0
     },
     {
@@ -126992,5 +126992,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "0773825b2b1f7fc1e0dd3d06e3c671fcaf58139d"
+  "built_at_commit": "81040dc7b34ba248281793229d9650b8e272b634"
 }

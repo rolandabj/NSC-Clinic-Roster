@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791885931.264895,
-    "seen": 1791885939.1375399,
-    "ast_hash": "b44a48097e0db025255e332b04b2e46f",
+    "mtime": 1791894233.5452237,
+    "seen": 1791894245.7483215,
+    "ast_hash": "2d1b3b72e5c974e10a5a4041fec2251f",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1806,9 +1806,9 @@
     "semantic_hash": ""
   },
   "tasks/summary.md": {
-    "mtime": 1791894182.8933098,
-    "seen": 1791894195.0734644,
-    "ast_hash": "6a8f21f627656057af2dd11cd9ecc74e",
+    "mtime": 1791894238.0390375,
+    "seen": 1791894245.748329,
+    "ast_hash": "db52fb6e4bfee389c01103cac73e0af5",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/grid-flow.cjs": {

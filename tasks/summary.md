@@ -1,8 +1,7 @@
 # UI overhaul: summary and next steps
 
 As of 13-10-2026. Phases 0, 1 and 2 of the ten phase plan are done and on main. Phase 3, roster
-grid speed and structure, is done and at Checkpoint 3: slices 1 to 3 are on main, slices 4 to 8
-wait for the owner's "push to main". Phase 4 is next.
+grid speed and structure, is done and on main too (Checkpoint 3). Phase 4 is next.
 
 The full plan is in `tasks/plan.md` and the checklist in `tasks/todo.md`. Each step is recorded
 in detail in `PROJECT_GUIDE.md`, section 16, items 42 to 58.
@@ -12,8 +11,7 @@ in detail in `PROJECT_GUIDE.md`, section 16, items 42 to 58.
 | | |
 |---|---|
 | Done | Phase 0 (setup), Phase 1 (quick fixes and safety), Phase 2 (the new look and the app frame), Phase 3 (roster grid speed and structure, at Checkpoint 3) |
-| On main | Everything up to Phase 3 slice 3 and the caveman voice skills (`bf22360`, 13-10-2026) |
-| Waiting for "push to main" | Phase 3 slices 4 to 8 and Checkpoint 3, on the working branch `claude/ui-overhaul` |
+| On main | Everything up to the end of Phase 3 and Checkpoint 3 (13-10-2026) |
 | Checks on main | CI runs 57 to 61 passed |
 | Unit tests | 375 (279 when the plan started), and 96 Firestore rules checks |
 | Firestore rules | Not changed by the overhaul so far, so there is nothing to publish by hand |
@@ -208,8 +206,7 @@ before the overhaul.
 
 ### Now
 
-1. Look at Checkpoint 3 and say "push to main" for Phase 3 slices 4 to 8.
-2. Say go for Phase 4.
+1. Say go for Phase 4.
 
 ### The phases after that
 
@@ -315,7 +312,7 @@ upright.
 * `cd6f17f` Caveman voice skills, on in every chat (the owner's choice)
 * `bf22360` Guide: items 48 to 51 approved for main
 
-**Phase 3, slices 4 to 8** (on the working branch, waiting for "push to main"):
+**Phase 3, slices 4 to 8, and Checkpoint 3** (pushed to main on 13-10-2026):
 
 * `d8e693c` An edit saves only the lists it changed (slice 4)
 * `11ba50f` Roster check runs once, after the screen has drawn (slice 5)
@@ -324,3 +321,6 @@ upright.
 * `c2023dc` Roster check and edits into hooks (slice 7, part 2)
 * `31f0a7c` Roster grid split into parts (slice 8)
 * `601b361` Grid selection hook: the comment says where the cell is scrolled to (a comment fix, after slice 8)
+* `0773825` Checkpoint 3: timings against the targets, and the summary brought up to date
+* `81040dc` Checkpoint 3: three fixes from the code review, guide item 58
+* Guide: items 52 to 58 approved for main
