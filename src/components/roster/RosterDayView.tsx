@@ -32,6 +32,12 @@ export const RosterDayView: React.FC<{
   const { dates, nurses, seniorityLevels, validationReport } = props;
   const today = localTodayIso();
   const [chosen, setChosen] = useState(() => firstDayShown(dates, today, props.linkedDate));
+  // A later link (or Back and Forward) to another day moves the view there.
+  const [lastLink, setLastLink] = useState(props.linkedDate);
+  if (props.linkedDate !== lastLink) {
+    setLastLink(props.linkedDate);
+    if (props.linkedDate && dates.includes(props.linkedDate)) setChosen(props.linkedDate);
+  }
   const date = dates.includes(chosen) ? chosen : firstDayShown(dates, today, props.linkedDate);
   const index = dates.indexOf(date);
   const sortedNurses = useMemo(() => [...nurses].sort((a, b) => a.fullName.localeCompare(b.fullName)), [nurses]);

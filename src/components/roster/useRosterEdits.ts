@@ -34,6 +34,8 @@ export function useRosterEdits(o: {
   persistLeave: (next: LeaveEntry[]) => Promise<boolean>;
   runValidation: (sched: Schedule, list: Assignment[], overrides?: Partial<CheckInputs>) => void;
   toast: (message: string, tone?: 'success' | 'warning') => void;
+  /** False on a phone, where the roster is only read: Ctrl+Z and Ctrl+Y do nothing there. */
+  keysEnabled?: boolean;
 }) {
   const { activeSchedule, loadingRef, liveRef } = o;
   const [undoStack, setUndoStack] = useState<RosterSnapshot[]>([]);
@@ -133,11 +135,11 @@ export function useRosterEdits(o: {
   };
 
   // Ctrl/Cmd+Z undoes, Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z redoes (not while typing in a box).
-  const undoRedoRef = useRef({ handleUndo, handleRedo });
-  undoRedoRef.current = { handleUndo, handleRedo };
+  const undoRedoRef = useRef({ handleUndo, handleRedo, enabled: o.keysEnabled !== false });
+  undoRedoRef.current = { handleUndo, handleRedo, enabled: o.keysEnabled !== false };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
+      if (!(e.ctrlKey || e.metaKey) || !undoRedoRef.current.enabled) return;
       const target = e.target as HTMLElement | null;
       if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
       if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;

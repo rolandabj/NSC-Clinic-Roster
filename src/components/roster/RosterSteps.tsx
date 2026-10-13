@@ -5,7 +5,7 @@ import type { RosterStep, RosterStepAction } from './rosterSteps';
 /** The roster screen's step bar: where this roster is, and the next thing to do. */
 export const RosterSteps: React.FC<{ steps: RosterStep[]; onStep: (action: RosterStepAction) => void }> = ({ steps, onStep }) => (
   <nav aria-label="Roster steps" className="relative bg-slate-50 border-b border-slate-200 px-3 sm:px-4 py-1.5 shrink-0 overflow-x-auto">
-    <ol className="flex items-center gap-1 text-[11px] whitespace-nowrap">
+    <ol className="flex items-center gap-1 text-xs whitespace-nowrap">
       {steps.map((step, i) => (
         <li key={step.label} className="flex items-center gap-1">
           {i > 0 && <ChevronRight className="w-3 h-3 text-slate-400" aria-hidden="true" />}
@@ -19,7 +19,7 @@ export const RosterSteps: React.FC<{ steps: RosterStep[]; onStep: (action: Roste
             } ${step.current ? 'bg-white text-indigo-800 ring-1 ring-indigo-300' : step.done ? 'text-emerald-800' : 'text-slate-600'}`}
           >
             <span
-              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
+              className={`size-5 rounded-full flex items-center justify-center text-xs ${
                 step.done ? 'bg-emerald-600 text-white' : step.current ? 'bg-indigo-600 text-white' : 'bg-slate-300 text-slate-700'
               }`}
               aria-hidden="true"

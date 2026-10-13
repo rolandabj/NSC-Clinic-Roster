@@ -137,14 +137,14 @@ export const GridRow = memo(function GridRow({
           <span className="font-semibold text-slate-900 truncate text-xs font-sans">{nurse.fullName}</span>
           {seniority && (
             <span
-              className="text-[10px] font-medium px-1 rounded shrink-0 font-sans"
+              className="text-xs font-medium px-1 rounded shrink-0 font-sans"
               style={{ backgroundColor: `${seniority.color}15`, color: seniority.color }}
             >
               {seniority.name}
             </span>
           )}
           {nurse.contractPercent !== 100 && (
-            <span className="text-[10px] text-slate-500 shrink-0 font-sans">{nurse.contractPercent}% time</span>
+            <span className="text-xs text-ink-muted shrink-0 font-sans">{nurse.contractPercent}% time</span>
           )}
           {showProblems && problems.length > 0 && (
             // Not a Tab stop: the keyboard reads these problems on the nurse's hours (the arrow keys reach them).
@@ -154,7 +154,7 @@ export const GridRow = memo(function GridRow({
               onClick={actions.openProblems}
               title={problems.join('\n')}
               aria-label={`${problems.length} problem${problems.length === 1 ? '' : 's'} for ${nurse.fullName}: ${problems.join('. ')}`}
-              className={`shrink-0 inline-flex items-center gap-0.5 text-xs font-semibold font-sans tabular-nums cursor-pointer ${problemMustFix ? 'text-danger' : 'text-warning'}`}
+              className={`shrink-0 inline-flex min-h-6 min-w-6 items-center justify-center gap-0.5 text-xs font-semibold font-sans tabular-nums cursor-pointer ${problemMustFix ? 'text-danger' : 'text-warning'}`}
             >
               {problemMustFix ? <OctagonAlert className="size-3.5" aria-hidden="true" /> : <TriangleAlert className="size-3.5" aria-hidden="true" />}
               {problems.length}
@@ -167,7 +167,7 @@ export const GridRow = memo(function GridRow({
           )}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className={`text-[11px] font-sans whitespace-nowrap ${toneText}`}>{hoursLine}</span>
+          <span className={`text-xs font-sans whitespace-nowrap ${toneText}`}>{hoursLine}</span>
           {targetHours > 0 && (
             <div
               className="flex-1 min-w-8 h-1.5 rounded bg-slate-100 overflow-hidden flex"

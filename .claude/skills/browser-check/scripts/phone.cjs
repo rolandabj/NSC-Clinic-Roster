@@ -62,6 +62,26 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   if (shots) await tablet.screenshot({ path: `${shots}/tablet-744.png` });
   await tablet.close();
 
+  // 5. Checkpoint 4 review: the window is resized to phone size after an edit, with Full screen on.
+  const shrink = await open(1366, 768);
+  const saved = () => shrink.evaluate(() => [...window.__repo.col('assignments').values()].map((x) => `${x.nurseId}|${x.date}`).sort().join());
+  await shrink.focus('[data-cell="mary|2026-11-16"]');
+  await shrink.keyboard.press('Delete');
+  await shrink.waitForTimeout(800);
+  const afterDelete = await saved();
+  await shrink.getByRole('button', { name: 'Full screen' }).click();
+  await shrink.setViewportSize({ width: 390, height: 844 });
+  await shrink.waitForTimeout(500);
+  check('Full screen does not stay on over a phone', (await shrink.evaluate(() => !!document.querySelector('.fixed.inset-0.z-40'))) === false);
+  await shrink.keyboard.press('Control+z');
+  await shrink.waitForTimeout(800);
+  check('Ctrl+Z does not change the roster on a phone', (await saved()) === afterDelete);
+  // A later link to another day moves the day view.
+  await shrink.evaluate(() => { location.hash = '#schedules?roster=nov&nurse=mary&date=2026-11-20'; });
+  await shrink.waitForTimeout(800);
+  check('a later link to a day moves the day view', /20-11-2026/.test(await heading(shrink)), await heading(shrink));
+  await shrink.close();
+
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   for (const r of results) console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name}${r.detail && !r.ok ? `  (${r.detail})` : ''}`);
   await browser.close();

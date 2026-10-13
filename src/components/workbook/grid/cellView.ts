@@ -69,6 +69,8 @@ export interface CellView {
   dayShade: string;
   /** The tooltip. */
   title: string;
+  /** What the cell holds in a few words, with "to" between the times (`cellSummary`). */
+  summary: string;
   /**
    * The spoken name: what the cell shows first (so it matches what is seen), then the end time
    * and the shift, the nurse and the day, and its marks.
@@ -384,17 +386,19 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     isToday,
     dayShade: isToday ? 'bg-indigo-50/70' : holiday ? 'bg-cyan-50' : isWeekend ? 'bg-slate-100' : '',
     title,
+    summary: shown.replace(/(\d\d:\d\d) (\d\d:\d\d)/, '$1 to $2'),
     ariaLabel,
   };
 }
 
 /**
  * What a cell holds in a few words, for the line under the grid and the phone's day view: the
- * first part of its spoken name, with "to" between the times ("Lee #1 09:00 to 17:00, Day shift";
- * the spoken name has the times as the cell shows them).
+ * start of its spoken name, with "to" between the times ("Lee #1 09:00 to 17:00, Day shift"; the
+ * spoken name has the times as the cell shows them). Kept as its own field, since a name such as
+ * "Ahmed H." holds a full stop.
  */
 export function cellSummary(view: CellView): string {
-  return view.ariaLabel.split('. ')[0].replace(/(\d\d:\d\d) (\d\d:\d\d)/, '$1 to $2');
+  return view.summary;
 }
 
 function sameView(a: CellView, b: CellView): boolean {

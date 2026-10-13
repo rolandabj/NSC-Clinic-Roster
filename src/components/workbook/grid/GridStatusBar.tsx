@@ -21,8 +21,9 @@ export const GridStatusBar: React.FC<{
   onOpenCoverage: () => void;
   onOpenProblems: () => void;
 }> = ({ selection, nurseMap, firstDate, cellWords, validationReport, onOpenCoverage, onOpenProblems }) => (
-  <div className="min-h-8 bg-surface border-t border-line px-4 py-1 flex items-center justify-between gap-4 text-xs text-ink-muted shrink-0 select-none">
-    <div className="flex min-w-0 items-center gap-4">
+  <div className="min-h-8 bg-surface border-t border-line px-4 py-1 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-ink-muted shrink-0 select-none">
+    {/* At least 18 rem for what the cell holds; on a narrow screen the counts wrap under it. */}
+    <div className="flex min-w-72 flex-1 items-center gap-4">
       <SelectionView
         selection={selection}
         render={({ selected: selectedCell }) =>
@@ -49,7 +50,7 @@ export const GridStatusBar: React.FC<{
       />
     </div>
 
-    <div className="flex items-center gap-4">
+    <div className="flex shrink-0 items-center gap-4">
       <SelectionView
         selection={selection}
         render={({ selected: selectedCell }) => {
@@ -64,7 +65,7 @@ export const GridStatusBar: React.FC<{
             <button
               type="button"
               onClick={onOpenCoverage}
-              className={`flex items-center gap-1 cursor-pointer px-1.5 py-0.5 rounded ${
+              className={`flex min-h-6 shrink-0 items-center gap-1 whitespace-nowrap cursor-pointer px-1.5 py-0.5 rounded ${
                 shortHours.length > 0 ? 'bg-rose-50 text-rose-700 font-bold border border-rose-200' : 'text-slate-600 hover:bg-slate-100'
               }`}
               title="Open the Coverage tab"
@@ -82,7 +83,7 @@ export const GridStatusBar: React.FC<{
 
       <button
         onClick={onOpenProblems}
-        className={`flex items-center gap-1 font-mono px-2 py-0.5 rounded cursor-pointer transition-colors ${
+        className={`flex min-h-6 shrink-0 items-center gap-1 whitespace-nowrap font-mono px-2 py-0.5 rounded cursor-pointer transition-colors ${
           validationReport.errorCount > 0
             ? 'bg-rose-50 text-rose-700 font-bold hover:bg-rose-100 border border-rose-200'
             : validationReport.warnCount > 0

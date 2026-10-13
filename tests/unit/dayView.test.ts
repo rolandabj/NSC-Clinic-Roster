@@ -68,3 +68,35 @@ test("the day view lists each nurse's day in words, and the day's problems, Must
     ['must: Amy has too little rest', 'check: No free nurse from 17:00', 'note: A request was not followed']
   );
 });
+
+// Checkpoint 4 review: a name with an initial ("Ahmed H.") cut the words short, and the phone
+// marked every nurse on duty with a problem about the whole day, which the grid shows only on
+// the day's heading.
+
+test('a doctor name with an initial keeps the whole summary', () => {
+  const two = cellLookupsOf({
+    dutyWindows: [DAY_DUTY],
+    doctors: [{ id: 'a', fullName: 'Dr Ahmed Hashimi', specialtyIds: [] }, { id: 'b', fullName: 'Dr Ahmed Khan', specialtyIds: [] }] as unknown as Doctor[],
+    roles: [],
+    specialties: [],
+    leaveTypes: [],
+  });
+  const v = cellViewOf({ nurse: mary, day: { dateStr: '2026-11-17', isWeekend: false, isToday: false }, assignment: { ...shift, nurseId: 'mary', doctorId: 'a' }, problems: [] }, two);
+  assert.equal(cellSummary(v), 'Ahmed H. Pool 09:00 to 17:00, Day shift');
+});
+
+test('problems about the whole day are listed for the day, not marked on each nurse', () => {
+  const day = dayViewOf('2026-11-17', {
+    nurses: [amy],
+    assignments: [shift],
+    leaveEntries: [],
+    locks: [],
+    holidays: [],
+    lookups,
+    findings: [finding('cov-gap-2026-11-17-14', 'ERROR', 'No free nurse from 14:00', { date: '2026-11-17', cellRefs: [{ nurseId: 'amy', date: '2026-11-17' }] })],
+    today: '2026-10-13',
+  });
+  assert.equal(day.rows[0].problemKind, 'none');
+  assert.deepEqual(day.problems.map((p) => p.message), ['No free nurse from 14:00']);
+});
+

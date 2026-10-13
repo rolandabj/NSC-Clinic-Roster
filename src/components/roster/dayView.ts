@@ -3,6 +3,7 @@ import type { ValidationFinding } from '../../services/validation/ScheduleValida
 import { pendingLeaveOn, requestOn } from '../../services/engine/explainCell';
 import { isWeekendDay } from '../../utils/weekend';
 import { cellSummary, cellViewOf, type CellLookups } from '../workbook/grid/cellView';
+import { isDayProblem } from '../workbook/grid/dayProblems';
 
 /**
  * The roster on a phone (UI overhaul Phase 4, slice 5): a read only view of one day at a time.
@@ -69,7 +70,8 @@ export function dayViewOf(
   const onDay = data.findings.filter((f) => f.date === date || f.cellRefs.some((r) => r.date === date));
   const rows = data.nurses.map((nurse) => {
     const leave = data.leaveEntries.find((l) => l.nurseId === nurse.id && l.approved && date >= l.startDate && date <= l.endDate);
-    const cellFindings = onDay.filter((f) => f.severity !== 'INFO' && f.cellRefs.some((r) => r.nurseId === nurse.id && r.date === date));
+    // As in the grid: a nurse's card shows the problems about their shift, not those about the whole day.
+    const cellFindings = onDay.filter((f) => f.severity !== 'INFO' && !isDayProblem(f) && f.cellRefs.some((r) => r.nurseId === nurse.id && r.date === date));
     const view = cellViewOf(
       {
         nurse,

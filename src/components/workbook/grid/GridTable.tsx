@@ -163,7 +163,7 @@ export const GridTable: React.FC<GridTableProps> = ({
                     onClick={actions.openProblems}
                     title={dp.messages.join('\n')}
                     aria-label={`${dp.messages.length} problem${dp.messages.length === 1 ? '' : 's'} on ${formatDate(dateStr)}: ${dp.messages.join('. ')}`}
-                    className={`mx-auto inline-flex items-center gap-0.5 text-xs font-semibold tabular-nums cursor-pointer ${dp.mustFix ? 'text-danger' : 'text-warning'}`}
+                    className={`mx-auto inline-flex min-h-6 min-w-6 items-center justify-center gap-0.5 text-xs font-semibold tabular-nums cursor-pointer ${dp.mustFix ? 'text-danger' : 'text-warning'}`}
                   >
                     <Icon className="size-3.5" aria-hidden="true" />
                     {dp.messages.length}
@@ -269,7 +269,7 @@ function TotalsCell({
         if (!selected) actions.select(TOTALS_ROW, date);
       }}
       title={words}
-      className={`relative py-0.5 px-0.5 text-center border-r border-line text-[11px] leading-tight align-top ${selected ? SELECTED_CELL : `${shade} ${FOCUS_CELL}`}`}
+      className={`relative py-0.5 px-0.5 text-center border-r border-line text-xs leading-tight align-top ${selected ? SELECTED_CELL : `${shade} ${FOCUS_CELL}`}`}
     >
       <span className="sr-only">{words}</span>
       <span aria-hidden="true" className="flex flex-col items-center gap-px">

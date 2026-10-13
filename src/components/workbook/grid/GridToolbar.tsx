@@ -54,7 +54,7 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
         <button
           disabled={isAllDaysExpanded || currentBlockIndex === 0}
           onClick={() => onBlockChange(currentBlockIndex - 1)}
-          className="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 cursor-pointer"
+          className="inline-flex size-6 items-center justify-center rounded hover:bg-white text-slate-600 disabled:opacity-30 cursor-pointer"
           title="Show the earlier days"
           aria-label="Show the earlier days"
         >
@@ -68,7 +68,7 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
         <button
           disabled={isAllDaysExpanded || currentBlockIndex >= numBlocks - 1}
           onClick={() => onBlockChange(currentBlockIndex + 1)}
-          className="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 cursor-pointer"
+          className="inline-flex size-6 items-center justify-center rounded hover:bg-white text-slate-600 disabled:opacity-30 cursor-pointer"
           title="Show the later days"
           aria-label="Show the later days"
         >
@@ -145,7 +145,7 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
             onClick={() => onZoom(z)}
             aria-pressed={zoomLevel === z}
             title={z === 75 ? 'Smaller, to fit more days' : undefined}
-            className={`px-1.5 py-0.5 rounded text-xs tabular-nums cursor-pointer ${zoomLevel === z ? 'bg-brand text-white font-semibold' : 'text-ink-muted hover:bg-sunken'}`}
+            className={`min-h-6 px-1.5 rounded text-xs tabular-nums cursor-pointer ${zoomLevel === z ? 'bg-brand text-white font-semibold' : 'text-ink-muted hover:bg-sunken'}`}
           >
             {z}%
           </button>

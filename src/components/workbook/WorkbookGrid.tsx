@@ -40,6 +40,7 @@ import { CellEditorDialog, type CellChoice } from './grid/CellEditorDialog';
 import { useGridSelection } from './grid/useGridSelection';
 import { useGridKeyboard } from './grid/useGridKeyboard';
 import { useRowsInSteps } from './grid/rowsInSteps';
+import { isDayProblem } from './grid/dayProblems';
 import { CellContextMenu } from './grid/CellContextMenu';
 import { CellView, cellLookupsOf, cellSummary, cellViewOf, reuseCellViews } from './grid/cellView';
 import { HOURS_COLUMN, PopupRef, TOTALS_ROW, createGridSelection } from './grid/gridSelection';
@@ -104,9 +105,6 @@ const localTodayIso = (): string => {
 
 const cellKeyOf = (nurseId: string, date: string) => `${nurseId}|${date}`;
 
-/** Problems about a whole day (not one nurse's shift), shown on the day's heading. */
-const DAY_PROBLEM_IDS = /^(cov-gap-|h1-senior-|evening-tail-|holiday-|nc-coverage-|role-quota-|session-partial-|unassigned-session-)/;
-const isDayProblem = (f: ValidationFinding) => DAY_PROBLEM_IDS.test(f.id);
 
 const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   workingHoursPeriods = [],

@@ -1431,6 +1431,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     persistLeave,
     runValidation,
     toast: triggerToast,
+    keysEnabled: !isPhone,
   });
 
   // "Show in grid": open the roster tab on the right days, then the grid scrolls
@@ -1606,7 +1607,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   return (
     <div
       className={`flex flex-col overflow-hidden bg-slate-50 select-none ${
-        isExpandedView
+        // Full screen does not apply on a phone (its button is not there), so it cannot get stuck on.
+        isExpandedView && !isPhone
           ? 'fixed inset-0 z-40 bg-slate-50 shadow-2xl animate-in fade-in duration-150'
           : 'h-full'
       }`}
