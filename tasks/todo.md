@@ -58,7 +58,7 @@ Main moves only when the owner says "push to main".
 - [x] Checkpoint 5
 
 ## Phase 6: planner screens
-- [ ] Nurses and Doctors lists and editors (Nurses list done, item 75)
+- [ ] Nurses and Doctors lists and editors (Nurses list and editor done, items 75 and 76)
 - [ ] Availability split into Leave and days off, and Requests
 - [ ] Leave grid without dragging
 - [ ] Checkpoint 6

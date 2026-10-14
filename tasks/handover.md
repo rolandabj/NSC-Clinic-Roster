@@ -11,7 +11,7 @@ Start a new chat by reading this file, then `CLAUDE.md` and `PROJECT_GUIDE.md`.
 | On main | Everything up to Phase 5 slice 4 (guide items 42 to 72) |
 | Done | Phases 0 to 5 with Checkpoints 1 to 5 (Checkpoint 5 is guide item 73, on main) |
 | Next | Phase 6, when the owner says go |
-| Unit tests | 433 passing, and 98 Firestore rules checks in the emulator |
+| Unit tests | 440 passing, and 98 Firestore rules checks in the emulator |
 | Firestore rules | Not changed by the overhaul, so there is nothing to publish by hand |
 | HawkScan | Never run: the session has no `HAWK_API_KEY`. The owner knows |
 

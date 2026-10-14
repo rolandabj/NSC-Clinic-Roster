@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useId, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
   Plus,
@@ -38,11 +38,12 @@ import {
 } from '../../types';
 import { PREFERENCE_FOCUS_LABELS } from '../../services/engine/preferenceOrder';
 import { BulkImportModal } from '../modals/BulkImportModal';
-import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import { revokeNurseLink } from '../../services/publish/nurseRosterService';
 import { filterNurses, nurseCounts, type NurseFilters } from '../../services/nurses/nurseList';
-import { Badge, Button, DataTable, EmptyState, Field, Input, PageHeader, Select, type Column } from '../ui';
+import { checkNurseForm, movePreference } from '../../services/nurses/nurseForm';
+import { localTodayIso } from '../../utils/dateUtils';
+import { Badge, Button, Checkbox, DataTable, DateInput, Dialog, EmptyState, Field, IconButton, Input, Notice, PageHeader, Select, Textarea, cx, type Column } from '../ui';
 
 interface NursesViewProps {
   context: ClinicContextState;
@@ -111,17 +112,24 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
     );
   const isConfiguredExclusiveNC = !formData.isClinicNurse && isOnlyNcCapability;
 
-  // Validation Warnings
-  const [formErrors, setFormErrors] = useState<{ gmail?: string; fullName?: string }>({});
-  const [formWarnings, setFormWarnings] = useState<string[]>([]);
+  // Each field is checked as it is filled in: its message shows once the field has been
+  // left, or for every field after Save was pressed (Phase 6, slice 2).
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const [triedSave, setTriedSave] = useState(false);
+  const allErrors = checkNurseForm(formData, nurses, formData.id, localTodayIso());
+  const errorFor = (field: string) => (triedSave || touched.has(field) ? allErrors[field] : undefined);
+  const leave = (field: string) => () => setTouched((t) => (t.has(field) ? t : new Set(t).add(field)));
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Preferences: the one chosen to add, what was last moved (its button keeps the focus), and what is read out.
+  const [prefToAdd, setPrefToAdd] = useState('');
+  const [prefFocus, setPrefFocus] = useState<{ key: string; button: 'up' | 'down' } | null>(null);
+  const [prefStatus, setPrefStatus] = useState('');
 
   // Drag and drop state for preferences priority
   const [draggedPrefIdx, setDraggedPrefIdx] = useState<number | null>(null);
   const [dragOverPrefIdx, setDragOverPrefIdx] = useState<number | null>(null);
 
-  // Nurse profile dialog keyboard and screen reader support
-  const nurseTitleId = useId();
-  const nurseDialogRef = useDialogA11y<HTMLDivElement>(isModalOpen, () => setIsModalOpen(false));
 
   const repo = getRepository();
 
@@ -161,7 +169,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
       employeeCode: `N-${100 + nurses.length + 1}`,
       seniorityLevelId: defaultSeniority,
       contractPercent: 100,
-      dateOfBirth: '1995-05-15',
+      dateOfBirth: '',
       capabilityIds: [],
       isClinicNurse: true,
       preferences: [],
@@ -170,8 +178,10 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
       active: true,
       notes: '',
     });
-    setFormErrors({});
-    setFormWarnings([]);
+    setTouched(new Set());
+    setTriedSave(false);
+    setPrefToAdd('');
+    setPrefStatus('');
     setIsModalOpen(true);
   };
 
@@ -204,8 +214,10 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
       active: nurse.active,
       notes: nurse.notes || '',
     });
-    setFormErrors({});
-    validateFormRealtime(nurse.gmail, nurse.fullName, nurse.preferences || [], nurse.id);
+    setTouched(new Set());
+    setTriedSave(false);
+    setPrefToAdd('');
+    setPrefStatus('');
     setIsModalOpen(true);
   };
 
@@ -227,57 +239,14 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
     if (open !== nurseId) onAddressChange?.({ nurse: open }, 'replace');
   }, [isModalOpen, editingNurse?.id]);
 
-  const validateFormRealtime = (
-    gmail: string,
-    fullName: string,
-    prefs: NursePreference[],
-    nurseId?: string
-  ) => {
-    const errors: { gmail?: string; fullName?: string } = {};
-    const warnings: string[] = [];
-
-    if (!fullName.trim()) {
-      errors.fullName = 'Full name is required.';
-    }
-
-    const gmailTrimmed = gmail.trim().toLowerCase();
-    if (!gmailTrimmed) {
-      errors.gmail = 'Gmail address is required for roster publishing and change notifications.';
-    } else {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(gmailTrimmed)) {
-        errors.gmail = 'Please enter a valid email address.';
-      } else if (!gmailTrimmed.endsWith('@gmail.com') && !gmailTrimmed.includes('.')) {
-        warnings.push('Address does not end with @gmail.com — verify this account can receive Google notifications.');
-      }
-
-      // Duplicate check
-      const duplicate = nurses.find(
-        (n) => n.gmail.toLowerCase() === gmailTrimmed && n.id !== nurseId
-      );
-      if (duplicate) {
-        errors.gmail = `Gmail address is already assigned to ${duplicate.fullName}.`;
-      }
-    }
-
-    if (prefs.length === 0) {
-      warnings.push('Nurse has no doctor or specialty preferences — engine will assign any available pairing.');
-    }
-
-    setFormErrors(errors);
-    setFormWarnings(warnings);
-    return Object.keys(errors).length === 0;
-  };
-
   const handleSaveNurse = async (e: React.FormEvent) => {
     e.preventDefault();
-    const isValid = validateFormRealtime(
-      formData.gmail,
-      formData.fullName,
-      formData.preferences,
-      formData.id
-    );
-    if (!isValid) return;
+    if (Object.keys(allErrors).length) {
+      setTriedSave(true);
+      // The first field to fix gets the focus, so its message is read out.
+      requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
+      return;
+    }
 
     // Sanitize leave quotas: only store non-negative days, purge sick leave completely
     const cleanQuotas: Record<string, number> = {};
@@ -392,40 +361,44 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
   };
 
   // Preference list helpers
-  const handleAddPreference = (kind: 'DOCTOR' | 'SPECIALTY', refId: string) => {
-    if (!refId) return;
-    if (formData.preferences.some((p) => p.kind === kind && p.refId === refId)) {
-      notify('This doctor or specialty preference has already been added.', 'warning');
-      return;
-    }
-    const newPref: NursePreference = {
-      kind,
-      refId,
-      rank: formData.preferences.length + 1,
-    };
-    const nextPrefs = [...formData.preferences, newPref];
-    setFormData({ ...formData, preferences: nextPrefs });
-    validateFormRealtime(formData.gmail, formData.fullName, nextPrefs, formData.id);
+  const prefKey = (p: NursePreference) => `${p.kind}:${p.refId}`;
+  const prefTitle = (p: NursePreference) => {
+    const doc = doctors.find((d) => d.id === p.refId);
+    const sp = specialties.find((x) => x.id === p.refId);
+    return doc ? doc.fullName : sp ? sp.name : p.refId;
   };
 
-  const handleReorderPreference = (sourceIdx: number, targetIdx: number) => {
-    if (sourceIdx === targetIdx || sourceIdx < 0 || targetIdx < 0) return;
-    const list = [...formData.preferences];
-    const [movedItem] = list.splice(sourceIdx, 1);
-    list.splice(targetIdx, 0, movedItem);
-
-    // Recalculate 1-based ranks
-    const updated = list.map((p, idx) => ({ ...p, rank: idx + 1 }));
-    setFormData({ ...formData, preferences: updated });
-    validateFormRealtime(formData.gmail, formData.fullName, updated, formData.id);
+  const handleAddPreference = () => {
+    if (!prefToAdd) return;
+    const [kind, refId] = prefToAdd.split(':') as ['DOCTOR' | 'SPECIALTY', string];
+    if (formData.preferences.some((p) => p.kind === kind && p.refId === refId)) return;
+    const added: NursePreference = { kind, refId, rank: formData.preferences.length + 1 };
+    setFormData({ ...formData, preferences: [...formData.preferences, added] });
+    setPrefToAdd('');
+    setPrefStatus(`${prefTitle(added)} added as number ${added.rank}.`);
   };
+
+  const handleReorderPreference = (from: number, to: number, button?: 'up' | 'down') => {
+    const list = movePreference(formData.preferences, from, to);
+    if (list === formData.preferences) return;
+    const moved = list[to];
+    setFormData({ ...formData, preferences: list });
+    setPrefStatus(`${prefTitle(moved)} is now number ${to + 1} of ${list.length}.`);
+    // At the top or bottom that button is turned off, so the focus goes to the other one.
+    if (button) setPrefFocus({ key: prefKey(moved), button: to === 0 ? 'down' : to === list.length - 1 ? 'up' : button });
+  };
+
+  useEffect(() => {
+    if (!prefFocus) return;
+    formRef.current?.querySelector<HTMLElement>(`[data-pref="${prefFocus.key}"] [data-move="${prefFocus.button}"]`)?.focus();
+    setPrefFocus(null);
+  }, [prefFocus]);
 
   const handleRemovePreference = (index: number) => {
-    const list = formData.preferences
-      .filter((_, idx) => idx !== index)
-      .map((p, idx) => ({ ...p, rank: idx + 1 }));
+    const removed = formData.preferences[index];
+    const list = formData.preferences.filter((_, i) => i !== index).map((p, i) => ({ ...p, rank: i + 1 }));
     setFormData({ ...formData, preferences: list });
-    validateFormRealtime(formData.gmail, formData.fullName, list, formData.id);
+    setPrefStatus(`${prefTitle(removed)} removed.`);
   };
 
   const toggleCapability = (roleId: string) => {
@@ -648,654 +621,403 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
       </div>
 
       {/* NURSE PROFILE MODAL */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
-          <div
-            ref={nurseDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={nurseTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs"
-          >
-            {/* Modal Header */}
-            <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                <h2 id={nurseTitleId} className="text-sm font-bold text-slate-800">
-                  {editingNurse ? `Edit Profile: ${editingNurse.fullName}` : 'Add New Nurse'}
-                </h2>
-              </div>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
-                aria-label="Close"
-                title="Close"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
+      <Dialog
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        size="lg"
+        title={editingNurse ? `Edit ${editingNurse.fullName}` : 'Add a nurse'}
+        description="Each field is checked as you fill it in."
+        footer={
+          <>
+            <Button onClick={() => setIsModalOpen(false)}>Cancel</Button>
+            <Button variant="primary" type="submit" form="nurse-editor" icon={Save}>
+              {editingNurse ? 'Save changes' : 'Add nurse'}
+            </Button>
+          </>
+        }
+      >
+        <form id="nurse-editor" ref={formRef} onSubmit={handleSaveNurse} noValidate className="space-y-6 text-sm">
+          {triedSave && Object.keys(allErrors).length > 0 && (
+            <Notice tone="danger" title={Object.keys(allErrors).length === 1 ? '1 field needs fixing' : `${Object.keys(allErrors).length} fields need fixing`}>
+              The first one has the focus. Each message is under its field.
+            </Notice>
+          )}
 
-            {/* Modal Body Form */}
-            <form onSubmit={handleSaveNurse} className="flex-1 overflow-y-auto p-5 space-y-4">
-              {/* Warnings Banner */}
-              {formWarnings.length > 0 && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 space-y-1 text-[11px]">
-                  {formWarnings.map((w, i) => (
-                    <div key={i} className="flex items-start gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                      <span>{w}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Section 1: Identity */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-slate-800 border-b border-slate-100 pb-1">
-                  1. Identity &amp; Notification Account
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Full Name <span className="text-red-500">*</span>
-                    </label>
-                    <input aria-label="Full Name"
-                      type="text"
-                      required
-                      value={formData.fullName}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setFormData({ ...formData, fullName: val });
-                        validateFormRealtime(formData.gmail, val, formData.preferences, formData.id);
-                      }}
-                      placeholder="e.g. Maryam Al-Nuaimi"
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500"
-                    />
-                    {formErrors.fullName && (
-                      <span className="text-red-600 text-[10px] mt-0.5 block">
-                        {formErrors.fullName}
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Gmail Address <span className="text-red-500">*</span>
-                    </label>
-                    <input aria-label="Gmail Address"
-                      type="email"
-                      required
-                      value={formData.gmail}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setFormData({ ...formData, gmail: val });
-                        validateFormRealtime(val, formData.fullName, formData.preferences, formData.id);
-                      }}
-                      placeholder="e.g. nurse@gmail.com"
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                    />
-                    {formErrors.gmail ? (
-                      <span className="text-red-600 text-[10px] mt-0.5 block">
-                        {formErrors.gmail}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 mt-0.5 block">
-                        Required — no notifications or personal read-only links without Gmail.
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Employee Code
-                    </label>
-                    <input aria-label="Employee Code"
-                      type="text"
-                      value={formData.employeeCode}
-                      onChange={(e) => setFormData({ ...formData, employeeCode: e.target.value })}
-                      placeholder="e.g. N-101"
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Date of Birth
-                    </label>
-                    <input aria-label="Date of Birth"
-                      type="date"
-                      value={formData.dateOfBirth}
-                      onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">
-                      Drives automatic Birthday Leave entitlement.
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 2: Seniority & Contract */}
-              <div className="space-y-3 pt-2">
-                <h3 className="font-semibold text-slate-800 border-b border-slate-100 pb-1">
-                  2. Seniority &amp; Working Contract
-                </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Seniority Level (Designates H1 Senior Rule)
-                    </label>
-                    <select aria-label="Seniority Level (Designates H1 Senior Rule)"
-                      value={formData.seniorityLevelId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, seniorityLevelId: e.target.value })
-                      }
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white"
-                    >
-                      {seniorityLevels.map((lvl) => (
-                        <option key={lvl.id} value={lvl.id}>
-                          {lvl.name} {lvl.isSenior ? '★ (Fulfills H1 Senior On Duty)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Contract Percentage (%)
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input aria-label="Contract Percentage (%)"
-                        type="number"
-                        min={10}
-                        max={100}
-                        value={formData.contractPercent}
-                        onChange={(e) =>
-                          setFormData({ ...formData, contractPercent: Number(e.target.value) })
-                        }
-                        className="w-24 px-3 py-1.5 border border-slate-300 rounded font-mono text-center font-bold"
-                      />
-                      <span className="text-slate-500 text-[11px]">
-                        {formData.contractPercent === 100
-                          ? 'Full-time (100% of roster target hours)'
-                          : `Part-time (${formData.contractPercent}% of roster target hours)`}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 3: Clinical Capabilities */}
-              <div className="space-y-3 pt-2">
-                <h3 className="font-semibold text-slate-800 border-b border-slate-100 pb-1">
-                  3. Clinical Capabilities &amp; Quotas
-                </h3>
-
-                <div className="flex flex-wrap gap-3">
-                  <label className="flex items-center gap-2 p-2 border border-slate-200 rounded cursor-pointer hover:bg-slate-50">
-                    <input
-                      type="checkbox"
-                      checked={formData.isClinicNurse}
-                      onChange={(e) =>
-                        setFormData({ ...formData, isClinicNurse: e.target.checked })
-                      }
-                      className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                    />
-                    <div>
-                      <span className="font-semibold text-slate-800">Clinic Nurse</span>
-                      <p className="text-[10px] text-slate-500">
-                        Default outpatient clinic doctor-pairing support.
-                      </p>
-                    </div>
-                  </label>
-
-                  {clinicalRoles.map((role) => {
-                    const isChecked = formData.capabilityIds.includes(role.id);
-                    return (
-                      <label
-                        key={role.id}
-                        className={`flex items-center gap-2 p-2 border rounded cursor-pointer transition-colors ${
-                          isChecked
-                            ? 'bg-rose-50/50 border-rose-300'
-                            : 'border-slate-200 hover:bg-slate-50'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleCapability(role.id)}
-                          className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
-                        />
-                        <div>
-                          <div className="flex items-center gap-1">
-                            <Droplets className="w-3.5 h-3.5 text-rose-600" />
-                            <span className="font-semibold text-slate-800">
-                              {role.name} ({role.acronym})
-                            </span>
-                            {/* Nurse Clinic and blood collection follow the clinic's opening hours. */}
-                            {role.acronym !== 'NC' && role.acronym !== 'PHL' && role.id !== 'role-nurse-clinic' && (
-                              <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
-                                {role.defaultStartTime || '09:00'}–{role.defaultEndTime || '13:00'}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-slate-500">{role.description}</p>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-
-                {isConfiguredExclusiveNC && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-md flex items-start gap-2.5 text-emerald-900 mt-2">
-                    <Stethoscope className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-semibold text-xs text-emerald-950 block">
-                        ★ Exclusive Nurse Clinic Staff Designation Active
-                      </span>
-                      <p className="text-[11px] text-emerald-800 mt-0.5 leading-relaxed">
-                        This nurse is not a Clinic Nurse and is dedicated exclusively to the Nurse Clinic. The scheduler will strictly assign them to Nurse Clinic sessions and will never pair them with doctors or specialty clinics.
-                      </p>
-                    </div>
-                  </div>
+          <section aria-labelledby="nurse-details" className="space-y-3">
+            <h3 id="nurse-details" className="text-base font-semibold text-ink">
+              Details
+            </h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Full name" error={errorFor('fullName')}>
+                {(f) => (
+                  <Input
+                    {...f}
+                    autoComplete="off"
+                    value={formData.fullName}
+                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                    onBlur={leave('fullName')}
+                  />
                 )}
-              </div>
+              </Field>
+              <Field label="Email" hint="Rosters and the private page are sent here." error={errorFor('gmail')}>
+                {(f) => (
+                  <Input
+                    {...f}
+                    type="email"
+                    autoComplete="off"
+                    placeholder="name@gmail.com"
+                    value={formData.gmail}
+                    onChange={(e) => setFormData({ ...formData, gmail: e.target.value })}
+                    onBlur={leave('gmail')}
+                  />
+                )}
+              </Field>
+              <Field label="Employee code" optional error={errorFor('employeeCode')}>
+                {(f) => (
+                  <Input
+                    {...f}
+                    autoComplete="off"
+                    value={formData.employeeCode}
+                    onChange={(e) => setFormData({ ...formData, employeeCode: e.target.value })}
+                    onBlur={leave('employeeCode')}
+                  />
+                )}
+              </Field>
+              <Field label="Date of birth" hint="For birthday leave." error={errorFor('dateOfBirth')}>
+                {(f) => (
+                  <DateInput
+                    {...f}
+                    value={formData.dateOfBirth}
+                    onChange={(iso) => setFormData({ ...formData, dateOfBirth: iso })}
+                    onBlur={leave('dateOfBirth')}
+                    max={localTodayIso()}
+                  />
+                )}
+              </Field>
+            </div>
+          </section>
 
-              {/* Section 4: Ordered Preferences List */}
-              <div className="space-y-3 pt-2">
-                <div className="flex flex-col gap-1 border-b border-slate-100 pb-2">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-800">
-                      4. Doctor &amp; Specialty Preferences &amp; Department Allocations
-                    </h3>
-                    <span className="text-[10px] text-slate-500">
-                      Drag to reorder priority · Rank 1 = +50 pts · Rank 2 = +30 pts · Rank 3 = +15 pts
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200/60 rounded px-2.5 py-1.5 flex items-center gap-1.5">
-                    <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                    <span>
-                      <strong>Strict Allocation Rule:</strong> Nurses with specific doctor or specialty allocations will only be scheduled to those departments during roster generation. Staff without allocations remain available for general clinic float pool.
-                    </span>
-                  </div>
-                </div>
+          <section aria-labelledby="nurse-contract" className="space-y-3">
+            <h3 id="nurse-contract" className="text-base font-semibold text-ink">
+              Level and contract
+            </h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Level" hint="A senior level counts for the senior on duty rule.">
+                {(f) => (
+                  <Select {...f} value={formData.seniorityLevelId} onChange={(e) => setFormData({ ...formData, seniorityLevelId: e.target.value })}>
+                    {seniorityLevels.map((lvl) => (
+                      <option key={lvl.id} value={lvl.id}>
+                        {lvl.name}
+                        {lvl.isSenior && !/senior/i.test(lvl.name) ? ' (senior)' : ''}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <Field
+                label="Contract (%)"
+                hint={
+                  allErrors.contractPercent
+                    ? 'From 10 to 100.'
+                    : formData.contractPercent === 100
+                      ? 'Full time: all of the goal hours.'
+                      : `Part time: ${formData.contractPercent} % of the goal hours.`
+                }
+                error={errorFor('contractPercent')}
+              >
+                {(f) => (
+                  <Input
+                    {...f}
+                    type="number"
+                    inputMode="numeric"
+                    min={10}
+                    max={100}
+                    step={1}
+                    className="w-28"
+                    value={Number.isNaN(formData.contractPercent) ? '' : formData.contractPercent}
+                    onChange={(e) => setFormData({ ...formData, contractPercent: e.target.value === '' ? NaN : Number(e.target.value) })}
+                    onBlur={leave('contractPercent')}
+                  />
+                )}
+              </Field>
+            </div>
+          </section>
 
-                {isConfiguredExclusiveNC ? (
-                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-md space-y-2">
-                    <div className="flex items-center gap-2 text-slate-700">
-                      <Info className="w-4 h-4 text-indigo-600 shrink-0" />
-                      <span className="font-semibold text-xs">
-                        Doctor &amp; Specialty Preferences are Inactive
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      Because this nurse is designated as <strong>Exclusive Nurse Clinic</strong>, doctor pairings and specialty clinic assignments are not applicable.
-                    </p>
-                    {formData.preferences.some((p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY') && (
-                      <div className="pt-1.5 flex items-center justify-between border-t border-slate-200">
-                        <span className="text-amber-700 text-[11px] font-medium">
-                          ⚠️ {formData.preferences.filter((p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY').length} existing doctor/specialty preferences will be cleared on save.
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setFormData({
-                              ...formData,
-                              preferences: formData.preferences.filter(
-                                (p) => p.kind !== 'DOCTOR' && p.kind !== 'SPECIALTY'
-                              ),
-                            })
-                          }
-                          className="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 rounded text-xs text-slate-700 cursor-pointer font-medium"
-                        >
-                          Clear Preferences Now
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ) : (
+          <fieldset className="space-y-3">
+            <legend className="text-base font-semibold text-ink">Skills</legend>
+            <Checkbox
+              label="Clinic nurse"
+              hint="Works with the doctors in their clinics."
+              checked={formData.isClinicNurse}
+              onChange={(e) => setFormData({ ...formData, isClinicNurse: e.target.checked })}
+            />
+            {clinicalRoles.map((role) => (
+              <Checkbox
+                key={role.id}
+                label={`${role.name} (${role.acronym})`}
+                hint={role.description}
+                checked={formData.capabilityIds.includes(role.id)}
+                onChange={() => toggleCapability(role.id)}
+              />
+            ))}
+            {isConfiguredExclusiveNC && (
+              <Notice tone="info" title="Nurse clinic only">
+                This nurse is not a clinic nurse, so new rosters put them only in the nurse clinic, never with a doctor.
+              </Notice>
+            )}
+          </fieldset>
+
+          <section aria-labelledby="nurse-prefs" className="space-y-3">
+            <div>
+              <h3 id="nurse-prefs" className="text-base font-semibold text-ink">
+                Preferences
+              </h3>
+              <p className="text-ink-muted">
+                The doctors and specialties this nurse works with, most wanted first. A nurse with preferences is put only with them; a nurse without goes where needed.
+              </p>
+            </div>
+            {isConfiguredExclusiveNC ? (
+              <Notice tone="info" title="No preferences for the nurse clinic only">
+                {formData.preferences.length > 0 ? (
                   <>
-                    {/* Preference Picker Add Row */}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded flex flex-wrap items-center gap-2">
-                  <span className="text-slate-600 font-medium">Add Preference:</span>
-                  <select
-                    id="prefKindSelect"
-                    defaultValue="DOCTOR"
-                    className="px-2 py-1 border border-slate-300 rounded bg-white text-xs"
-                  >
-                    <option value="DOCTOR">Doctor</option>
-                    <option value="SPECIALTY">Specialty</option>
-                  </select>
-
-                  <select
-                    id="prefRefSelect"
-                    className="px-2 py-1 border border-slate-300 rounded bg-white text-xs max-w-xs"
-                  >
-                    <optgroup label="Doctors (A to Z)">
-                      {[...doctors]
-                        .sort((a, b) => a.fullName.localeCompare(b.fullName))
-                        .map((d) => {
-                          const docSpecs = specialties
-                            .filter((s) => d.specialtyIds?.includes(s.id))
-                            .map((s) => s.name)
-                            .join(', ');
-                          return (
-                            <option key={d.id} value={`DOCTOR:${d.id}`}>
-                              {d.fullName}{docSpecs ? ` (${docSpecs})` : ''}
-                            </option>
-                          );
-                        })}
-                    </optgroup>
-                    <optgroup label="Specialties">
-                      {[...specialties]
-                        .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((s) => (
-                          <option key={s.id} value={`SPECIALTY:${s.id}`}>
-                            {s.name} ({s.code})
-                          </option>
-                        ))}
-                    </optgroup>
-                  </select>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const select = document.getElementById('prefRefSelect') as HTMLSelectElement;
-                      if (!select.value) return;
-                      const [kind, refId] = select.value.split(':');
-                      handleAddPreference(kind as any, refId);
-                    }}
-                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
-                  >
-                    + Add to Priority List
-                  </button>
+                    The {formData.preferences.length === 1 ? 'preference' : `${formData.preferences.length} preferences`} below will be cleared when you save.
+                  </>
+                ) : (
+                  'Doctors and specialties do not apply to this nurse.'
+                )}
+              </Notice>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-end gap-2">
+                  <Field label="Add a doctor or specialty" className="min-w-0 flex-1">
+                    {(f) => (
+                      <Select {...f} value={prefToAdd} onChange={(e) => setPrefToAdd(e.target.value)}>
+                        <option value="">Choose…</option>
+                        <optgroup label="Doctors">
+                          {[...doctors]
+                            .filter((d) => !formData.preferences.some((p) => p.kind === 'DOCTOR' && p.refId === d.id))
+                            .sort((a, b) => a.fullName.localeCompare(b.fullName))
+                            .map((d) => {
+                              const docSpecs = specialties.filter((x) => d.specialtyIds?.includes(x.id)).map((x) => x.name).join(', ');
+                              return (
+                                <option key={d.id} value={`DOCTOR:${d.id}`}>
+                                  {d.fullName}
+                                  {docSpecs ? ` (${docSpecs})` : ''}
+                                </option>
+                              );
+                            })}
+                        </optgroup>
+                        <optgroup label="Specialties">
+                          {[...specialties]
+                            .filter((x) => !formData.preferences.some((p) => p.kind === 'SPECIALTY' && p.refId === x.id))
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map((x) => (
+                              <option key={x.id} value={`SPECIALTY:${x.id}`}>
+                                {x.name}
+                              </option>
+                            ))}
+                        </optgroup>
+                      </Select>
+                    )}
+                  </Field>
+                  <Button icon={Plus} onClick={handleAddPreference} disabled={!prefToAdd}>
+                    Add
+                  </Button>
                 </div>
 
-                {/* Preference Ordered List */}
-                <div className="space-y-1.5">
-                  {formData.preferences.map((pref, idx) => {
-                    const doc = doctors.find((d) => d.id === pref.refId);
-                    const sp = specialties.find((s) => s.id === pref.refId);
-                    const docSpecs = doc
-                      ? specialties
-                          .filter((s) => doc.specialtyIds?.includes(s.id))
-                          .map((s) => s.name)
-                          .join(', ')
-                      : '';
-                    const title = doc ? doc.fullName : sp ? `${sp.name} (${sp.code})` : pref.refId;
-                    const specialtyLabel = doc ? (docSpecs || 'Doctor') : sp ? sp.name : pref.kind;
-                    const isDragging = draggedPrefIdx === idx;
-                    const isDragOver = dragOverPrefIdx === idx;
-
-                    return (
-                      <div
-                        key={idx}
-                        draggable
-                        onDragStart={(e) => {
-                          setDraggedPrefIdx(idx);
-                          e.dataTransfer.effectAllowed = 'move';
-                          e.dataTransfer.setData('text/plain', String(idx));
-                        }}
-                        onDragOver={(e) => {
-                          e.preventDefault();
-                          e.dataTransfer.dropEffect = 'move';
-                          if (dragOverPrefIdx !== idx) {
-                            setDragOverPrefIdx(idx);
-                          }
-                        }}
-                        onDragLeave={() => {
-                          if (dragOverPrefIdx === idx) {
+                {formData.preferences.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-line p-3 text-ink-muted">No preferences: new rosters put this nurse where needed.</p>
+                ) : (
+                  <ol aria-label="Preferences, most wanted first" className="space-y-2">
+                    {formData.preferences.map((pref, idx) => {
+                      const title = prefTitle(pref);
+                      const doc = doctors.find((d) => d.id === pref.refId);
+                      const kindLabel = doc
+                        ? specialties.filter((x) => doc.specialtyIds?.includes(x.id)).map((x) => x.name).join(', ') || 'Doctor'
+                        : 'Specialty';
+                      const last = idx === formData.preferences.length - 1;
+                      return (
+                        <li
+                          key={prefKey(pref)}
+                          data-pref={prefKey(pref)}
+                          draggable
+                          onDragStart={(e) => {
+                            setDraggedPrefIdx(idx);
+                            e.dataTransfer.effectAllowed = 'move';
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            if (dragOverPrefIdx !== idx) setDragOverPrefIdx(idx);
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            if (draggedPrefIdx !== null) handleReorderPreference(draggedPrefIdx, idx);
+                            setDraggedPrefIdx(null);
                             setDragOverPrefIdx(null);
-                          }
-                        }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          if (draggedPrefIdx !== null && draggedPrefIdx !== idx) {
-                            handleReorderPreference(draggedPrefIdx, idx);
-                          }
-                          setDraggedPrefIdx(null);
-                          setDragOverPrefIdx(null);
-                        }}
-                        onDragEnd={() => {
-                          setDraggedPrefIdx(null);
-                          setDragOverPrefIdx(null);
-                        }}
-                        className={`flex items-center justify-between p-2 rounded border transition-all select-none cursor-grab active:cursor-grabbing ${
-                          isDragging
-                            ? 'opacity-40 border-indigo-400 bg-indigo-50/50 shadow-inner scale-[0.99]'
-                            : isDragOver
-                            ? 'border-indigo-600 bg-indigo-50/80 shadow-md ring-2 ring-indigo-400 ring-offset-1'
-                            : 'border-slate-200 bg-white hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="p-1 text-slate-400 hover:text-slate-600 cursor-grab active:cursor-grabbing"
-                            title="Drag to change priority rank"
-                            aria-hidden="true"
-                          >
-                            <GripVertical className="w-4 h-4" />
-                          </div>
-                          <span className="w-5 h-5 rounded bg-indigo-50 text-indigo-700 flex items-center justify-center font-mono font-bold text-[10px]">
-                            #{pref.rank}
+                          }}
+                          onDragEnd={() => {
+                            setDraggedPrefIdx(null);
+                            setDragOverPrefIdx(null);
+                          }}
+                          className={cx(
+                            'flex flex-wrap items-center gap-2 rounded-lg border bg-surface p-2',
+                            dragOverPrefIdx === idx && draggedPrefIdx !== idx ? 'border-brand ring-2 ring-brand/40' : 'border-line',
+                            draggedPrefIdx === idx && 'opacity-50'
+                          )}
+                        >
+                          <GripVertical aria-hidden="true" className="size-4 shrink-0 cursor-grab text-ink-muted" />
+                          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-brand-soft font-semibold text-brand-strong">
+                            {pref.rank}
                           </span>
-                          <span className="font-medium text-slate-800">{title}</span>
-                          <span className="text-[10px] font-mono font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
-                            [{specialtyLabel}]
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-semibold text-ink">{title}</span>
+                            <span className="block text-xs text-ink-muted">{kindLabel}</span>
                           </span>
-                        </div>
+                          <span className="flex gap-1">
+                            <IconButton
+                              data-move="up"
+                              icon={ChevronUp}
+                              label={`Move ${title} up`}
+                              disabled={idx === 0}
+                              onClick={() => handleReorderPreference(idx, idx - 1, 'up')}
+                            />
+                            <IconButton
+                              data-move="down"
+                              icon={ChevronDown}
+                              label={`Move ${title} down`}
+                              disabled={last}
+                              onClick={() => handleReorderPreference(idx, idx + 1, 'down')}
+                            />
+                            <IconButton icon={X} label={`Remove ${title}`} onClick={() => handleRemovePreference(idx)} />
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+                <p className="sr-only" role="status" aria-live="polite">
+                  {prefStatus}
+                </p>
 
-                        <div className="flex items-center gap-1">
-                          {/* Keyboard and click alternative to dragging */}
-                          <button
-                            type="button"
-                            onClick={() => handleReorderPreference(idx, idx - 1)}
-                            disabled={idx === 0}
-                            className="p-1 hover:bg-slate-100 rounded text-slate-500 cursor-pointer disabled:opacity-30 disabled:cursor-default"
-                            title="Move up"
-                            aria-label={`Move ${title} up`}
-                          >
-                            <ChevronUp className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleReorderPreference(idx, idx + 1)}
-                            disabled={idx === formData.preferences.length - 1}
-                            className="p-1 hover:bg-slate-100 rounded text-slate-500 cursor-pointer disabled:opacity-30 disabled:cursor-default"
-                            title="Move down"
-                            aria-label={`Move ${title} down`}
-                          >
-                            <ChevronDown className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemovePreference(idx)}
-                            className="p-1 hover:bg-red-50 rounded text-red-500 cursor-pointer ml-1"
-                            title="Remove preference"
-                            aria-label={`Remove ${title}`}
-                          >
-                            <X className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {formData.preferences.length === 0 && (
-                    <div className="text-center py-3 border border-dashed border-slate-200 rounded text-slate-400 text-[11px]">
-                      No doctor or specialty allocations configured. Nurse remains available across the general clinic pool.
-                    </div>
-                  )}
-                </div>
-
-                {/* Which comes first when her doctors and her specialties all need a nurse the same day */}
                 {formData.preferences.some((p) => p.kind === 'DOCTOR') && formData.preferences.some((p) => p.kind === 'SPECIALTY') && (
-                  <fieldset className="mt-3 p-2.5 rounded border border-slate-200 bg-slate-50 space-y-1.5">
-                    <legend className="px-1 text-[11px] font-semibold text-slate-700">
-                      When her doctors and her specialties need a nurse on the same day
-                    </legend>
+                  <fieldset className="space-y-2 rounded-lg border border-line p-3">
+                    <legend className="px-1 font-semibold text-ink">When their doctors and their specialties need a nurse on the same day</legend>
                     {(Object.keys(PREFERENCE_FOCUS_LABELS) as PreferenceFocus[]).map((focus) => (
-                      <label key={focus} className="flex items-start gap-2 text-[11px] text-slate-700 cursor-pointer">
+                      <label key={focus} className="flex items-start gap-2.5">
                         <input
                           type="radio"
                           name="preferenceFocus"
-                          className="mt-0.5"
+                          className="mt-1 size-4"
                           checked={formData.preferenceFocus === focus}
                           onChange={() => setFormData({ ...formData, preferenceFocus: focus })}
                         />
                         <span>
-                          <span className="font-semibold">{PREFERENCE_FOCUS_LABELS[focus]}</span>
-                          <span className="block text-slate-500">
+                          <span className="font-semibold text-ink">{PREFERENCE_FOCUS_LABELS[focus]}</span>
+                          <span className="block text-ink-muted">
                             {focus === 'LIST'
                               ? 'Uses the order of the list above, top first.'
                               : focus === 'DOCTOR'
-                              ? 'Her named doctors come before her specialties, whatever the order above.'
-                              : 'Her specialties come before her named doctors, whatever the order above.'}
+                                ? 'Their named doctors come before their specialties, whatever the order above.'
+                                : 'Their specialties come before their named doctors, whatever the order above.'}
                           </span>
                         </span>
                       </label>
                     ))}
-                    <p className="text-[10px] text-slate-500">
-                      For each doctor, nurses who name that doctor are still asked before nurses who only chose the doctor's specialty.
-                    </p>
+                    <p className="text-xs text-ink-muted">For each doctor, nurses who name that doctor are still asked before nurses who only chose the doctor's specialty.</p>
                   </fieldset>
                 )}
               </>
             )}
-          </div>
+          </section>
 
-              {/* Section 5: Leave Annual Quota (Days per Year) */}
-              <div className="space-y-3 pt-2">
-                <div className="border-b border-slate-100 pb-1">
-                  <h3 className="font-semibold text-slate-800">
-                    5. Annual Leave Quotas (Days per Year)
-                  </h3>
-                  <p className="text-[10px] text-slate-500 mt-0.5">
-                    Specify allowed days per calendar year. Once reached, staff cannot be scheduled beyond their allocated days for capped leave types. Sick leave has no allowed quota ceiling.
-                  </p>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {leaveTypes
-                    .filter(
-                      (lt) =>
-                        lt.id !== 'leave-sl' &&
-                        lt.acronym?.toUpperCase() !== 'SL' &&
-                        !lt.name.toLowerCase().includes('sick') &&
-                        !['RO', 'DO'].includes(lt.acronym?.toUpperCase() || '') &&
-                        lt.creditedHours !== 0
-                    )
-                    .map((lt) => (
-                      <div key={lt.id} className="p-2 border border-slate-200 rounded bg-slate-50">
-                        <label className="block text-[11px] font-medium text-slate-700 truncate" title={lt.name}>
-                          {lt.name} ({lt.acronym})
-                        </label>
-                        <div className="relative mt-1">
-                          <input aria-label={`${lt.name} (${lt.acronym})`}
-                            type="number"
-                            min="0"
-                            step="1"
-                            placeholder={lt.acronym === 'BL' ? '1' : lt.acronym === 'AL' ? '30' : lt.acronym === 'PH' ? '10' : 'Days'}
-                            value={formData.leaveQuotas[lt.id] ?? ''}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              const val = raw !== '' ? Math.max(0, parseInt(raw, 10)) : undefined;
-                              const next = { ...formData.leaveQuotas };
-                              if (val === undefined || isNaN(val)) {
-                                delete next[lt.id];
-                              } else {
-                                next[lt.id] = val;
-                              }
-                              setFormData({ ...formData, leaveQuotas: next });
-                            }}
-                            className="w-full pl-2.5 pr-11 py-1 border border-slate-300 rounded font-mono text-xs bg-white focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                          />
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-slate-400 select-none">
-                            days
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-              {/* Status & Notes */}
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.active}
-                    onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                    className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                  />
-                  <span className="font-semibold text-slate-800">
-                    Active staff member (included in roster generation)
-                  </span>
-                </label>
-
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Notes</label>
-                  <textarea aria-label="Notes"
-                    rows={2}
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    placeholder="Certifications, shift requests, or clinical qualifications..."
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded"
-                  />
-                </div>
-              </div>
-
-              {/* Leaving the clinic: inactive first, removing for good second (Phase 6). */}
-              {editingNurse && (
-                <section aria-labelledby="nurse-leaving" className="space-y-2 rounded-lg border border-line p-3 text-sm">
-                  <h3 id="nurse-leaving" className="font-semibold text-ink">
-                    Leaving the clinic
-                  </h3>
-                  <p className="text-ink-muted">
-                    {editingNurse.active
-                      ? 'Make the nurse inactive: their history stays and new rosters leave them out. Remove them only if they were added by mistake.'
-                      : 'This nurse is inactive. Remove them only if they were added by mistake.'}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {editingNurse.active && (
-                      <Button type="button" onClick={() => handleMakeInactive(editingNurse.id, editingNurse.fullName)}>
-                        Make inactive
-                      </Button>
+          <section aria-labelledby="nurse-quotas" className="space-y-3">
+            <div>
+              <h3 id="nurse-quotas" className="text-base font-semibold text-ink">
+                Leave days a year
+              </h3>
+              <p className="text-ink-muted">Days allowed each calendar year. Leave a box empty for no limit. Sick leave has no limit.</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {leaveTypes
+                .filter(
+                  (lt) =>
+                    lt.id !== 'leave-sl' &&
+                    lt.acronym?.toUpperCase() !== 'SL' &&
+                    !lt.name.toLowerCase().includes('sick') &&
+                    !['RO', 'DO'].includes(lt.acronym?.toUpperCase() || '') &&
+                    lt.creditedHours !== 0
+                )
+                .map((lt) => (
+                  <Field key={lt.id} label={`${lt.name} (${lt.acronym})`} optional error={errorFor(`quota:${lt.id}`)}>
+                    {(f) => (
+                      <Input
+                        {...f}
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={366}
+                        step={1}
+                        value={formData.leaveQuotas[lt.id] ?? ''}
+                        onChange={(e) => {
+                          const next = { ...formData.leaveQuotas };
+                          if (e.target.value === '') delete next[lt.id];
+                          else next[lt.id] = Number(e.target.value);
+                          setFormData({ ...formData, leaveQuotas: next });
+                        }}
+                        onBlur={leave(`quota:${lt.id}`)}
+                      />
                     )}
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      icon={Trash2}
-                      className="text-danger hover:bg-danger-soft"
-                      onClick={() => handleDeleteNurse(editingNurse.id, editingNurse.fullName, editingNurse.active)}
-                    >
-                      Remove for good
-                    </Button>
-                  </div>
-                </section>
-              )}
+                  </Field>
+                ))}
+            </div>
+          </section>
 
-              {/* Modal Footer */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
-                <button
+          <section aria-labelledby="nurse-status" className="space-y-3">
+            <h3 id="nurse-status" className="text-base font-semibold text-ink">
+              Status and notes
+            </h3>
+            <Checkbox
+              label="Active"
+              hint="Active nurses are put on new rosters."
+              checked={formData.active}
+              onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
+            />
+            <Field label="Notes" optional>
+              {(f) => <Textarea {...f} rows={2} value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} />}
+            </Field>
+          </section>
+
+          {/* Leaving the clinic: inactive first, removing for good second (Phase 6). */}
+          {editingNurse && (
+            <section aria-labelledby="nurse-leaving" className="space-y-2 rounded-lg border border-line p-3 text-sm">
+              <h3 id="nurse-leaving" className="font-semibold text-ink">
+                Leaving the clinic
+              </h3>
+              <p className="text-ink-muted">
+                {editingNurse.active
+                  ? 'Make the nurse inactive: their history stays and new rosters leave them out. Remove them only if they were added by mistake.'
+                  : 'This nurse is inactive. Remove them only if they were added by mistake.'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {editingNurse.active && (
+                  <Button type="button" onClick={() => handleMakeInactive(editingNurse.id, editingNurse.fullName)}>
+                    Make inactive
+                  </Button>
+                )}
+                <Button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-medium cursor-pointer"
+                  variant="ghost"
+                  icon={Trash2}
+                  className="text-danger hover:bg-danger-soft"
+                  onClick={() => handleDeleteNurse(editingNurse.id, editingNurse.fullName, editingNurse.active)}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors shadow-xs cursor-pointer"
-                >
-                  <Save className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Save Nurse Profile</span>
-                </button>
+                  Remove for good
+                </Button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </section>
+          )}
+        </form>
+      </Dialog>
 
       {/* Bulk CSV Import Modal (Phase 14.6) */}
       <BulkImportModal
