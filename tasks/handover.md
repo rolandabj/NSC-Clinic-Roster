@@ -9,7 +9,7 @@ Start a new chat by reading this file, then `CLAUDE.md` and `PROJECT_GUIDE.md`.
 |---|---|
 | Working branch | `claude/ui-overhaul` (main fast forwards to it) |
 | On main | Everything up to Phase 5 slice 4 (guide items 42 to 72) |
-| Done | Phases 0 to 5 with Checkpoints 1 to 5 (Checkpoint 5 is guide item 73, on the working branch) |
+| Done | Phases 0 to 5 with Checkpoints 1 to 5 (Checkpoint 5 is guide item 73, on main) |
 | Next | Phase 6, when the owner says go |
 | Unit tests | 427 passing, and 96 Firestore rules checks in the emulator |
 | Firestore rules | Not changed by the overhaul, so there is nothing to publish by hand |
