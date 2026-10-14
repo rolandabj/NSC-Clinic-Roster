@@ -23,7 +23,7 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
 
   // 1. A new nurse: Save with empty fields says how many need fixing and focuses the first.
   await page.getByRole('button', { name: 'Add nurse' }).first().click();
-  const editor = page.getByRole('dialog', { name: 'Add a nurse' });
+  const editor = page.getByRole('dialog', { name: 'Add nurse' });
   await editor.waitFor({ timeout: 5000 });
   check('nothing is marked wrong before a field is left', (await editor.locator('[aria-invalid="true"]').count()) === 0);
   await editor.getByRole('button', { name: 'Add nurse' }).click();
@@ -42,7 +42,7 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await editor.getByLabel('Contract (%)').blur();
   check('a contract over 100 is refused when the field is left', /Enter a whole number from 10 to 100/.test(await editor.innerText()));
   await editor.getByLabel('Contract (%)').fill('80');
-  check('the contract says part time', /Part time: 80 % of the goal hours/.test(await editor.innerText()));
+  check('the contract says part time', /Part time: 80% of the goal hours/.test(await editor.innerText()));
   await editor.getByLabel('Date of birth').fill('02-03-1990');
   await editor.getByRole('button', { name: 'Add nurse' }).click();
   await editor.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});

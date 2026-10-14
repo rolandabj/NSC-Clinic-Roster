@@ -473,7 +473,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
       sortValue: (n) => n.contractPercent,
       cell: (n) => (
         <span className="whitespace-nowrap">
-          {n.contractPercent} %<span className="text-ink-muted">, {n.contractPercent >= 100 ? 'full time' : 'part time'}</span>
+          {n.contractPercent}%<span className="text-ink-muted">, {n.contractPercent >= 100 ? 'full time' : 'part time'}</span>
         </span>
       ),
     },
@@ -625,7 +625,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         size="lg"
-        title={editingNurse ? `Edit ${editingNurse.fullName}` : 'Add a nurse'}
+        title={editingNurse ? `Edit ${editingNurse.fullName}` : 'Add nurse'}
         description="Each field is checked as you fill it in."
         footer={
           <>
@@ -639,7 +639,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
         <form id="nurse-editor" ref={formRef} onSubmit={handleSaveNurse} noValidate className="space-y-6 text-sm">
           {triedSave && Object.keys(allErrors).length > 0 && (
             <Notice tone="danger" title={Object.keys(allErrors).length === 1 ? '1 field needs fixing' : `${Object.keys(allErrors).length} fields need fixing`}>
-              The first one has the focus. Each message is under its field.
+              The cursor is in the first one. Each message is under its field.
             </Notice>
           )}
 
@@ -721,7 +721,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
                     ? 'From 10 to 100.'
                     : formData.contractPercent === 100
                       ? 'Full time: all of the goal hours.'
-                      : `Part time: ${formData.contractPercent} % of the goal hours.`
+                      : `Part time: ${formData.contractPercent}% of the goal hours.`
                 }
                 error={errorFor('contractPercent')}
               >
@@ -826,7 +826,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
                 </div>
 
                 {formData.preferences.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-line p-3 text-ink-muted">No preferences: new rosters put this nurse where needed.</p>
+                  <p className="rounded-lg border border-dashed border-line p-3 text-ink-muted">None, goes where needed.</p>
                 ) : (
                   <ol aria-label="Preferences, most wanted first" className="space-y-2">
                     {formData.preferences.map((pref, idx) => {
@@ -923,7 +923,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
                         </span>
                       </label>
                     ))}
-                    <p className="text-xs text-ink-muted">For each doctor, nurses who name that doctor are still asked before nurses who only chose the doctor's specialty.</p>
+                    <p className="text-xs text-ink-muted">For each doctor, a nurse who named that doctor comes before a nurse who only chose the doctor's specialty.</p>
                   </fieldset>
                 )}
               </>
@@ -935,7 +935,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
               <h3 id="nurse-quotas" className="text-base font-semibold text-ink">
                 Leave days a year
               </h3>
-              <p className="text-ink-muted">Days allowed each calendar year. Leave a box empty for no limit. Sick leave has no limit.</p>
+              <p className="text-ink-muted">Days allowed each calendar year. Keep a box empty for no limit. Sick leave has no limit.</p>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {leaveTypes

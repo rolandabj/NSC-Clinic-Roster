@@ -10,7 +10,7 @@
 import type { Nurse, NursePreference, PreferenceFocus } from '../../types';
 
 export const PREFERENCE_FOCUS_LABELS: Record<PreferenceFocus, string> = {
-  LIST: 'Follow my list order',
+  LIST: 'Follow the list order',
   DOCTOR: 'Preferred doctors first',
   SPECIALTY: 'Specialty first',
 };
