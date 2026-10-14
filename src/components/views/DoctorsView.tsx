@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useId } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import {
@@ -20,6 +20,7 @@ import {
   Ban,
   RefreshCw,
   Upload,
+  Search,
   Loader2,
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
@@ -44,22 +45,14 @@ import {
   saveDoctorSessions,
   weekChanged,
 } from '../../services/schedule/doctorScheduleService';
-import { formatDate, localTodayIso } from '../../utils/dateUtils';
+import { formatDate, formatDayDate, localTodayIso } from '../../utils/dateUtils';
 import { defaultPatternRange, defaultSessionDate } from '../../utils/dateDefaults';
+import { checkDoctorForm, doctorCounts, filterDoctors, usualWeekLines, WEEKDAY_NAMES, type DoctorFilters } from '../../services/doctors/doctorForm';
+import { Badge, Button, Checkbox, DataTable, Dialog, EmptyState, Field, IconButton, Input, Notice, PageHeader, Select, Textarea, cx, type Column } from '../ui';
 
 interface DoctorsViewProps {
   context: ClinicContextState;
 }
-
-const WEEKDAY_NAMES = [
-  'Sunday',
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-];
 
 export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -76,6 +69,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSpecialtyFilter, setSelectedSpecialtyFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<DoctorFilters['status']>('ALL');
 
   // Active Doctor Detail / Calendar
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
@@ -106,6 +100,12 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [newSpecialtyName, setNewSpecialtyName] = useState('');
   const [isAddingSpecialty, setIsAddingSpecialty] = useState(false);
+  // Each field is checked as it is filled in: its message shows once the field has been
+  // left, or for every field after Save was pressed (Phase 6, slice 3).
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const [triedSave, setTriedSave] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const detailHeadingRef = useRef<HTMLHeadingElement>(null);
 
   // Expand Pattern Modal
   const [isExpandModalOpen, setIsExpandModalOpen] = useState(false);
@@ -126,10 +126,8 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
 
 
   // Dialog keyboard and screen reader support
-  const doctorTitleId = useId();
   const expandTitleId = useId();
   const sessionTitleId = useId();
-  const doctorDialogRef = useDialogA11y<HTMLDivElement>(isDoctorModalOpen, () => setIsDoctorModalOpen(false));
   const expandDialogRef = useDialogA11y<HTMLDivElement>(isExpandModalOpen, () => setIsExpandModalOpen(false));
   const sessionDialogRef = useDialogA11y<HTMLDivElement>(isSessionModalOpen && !!editingSession, () => setIsSessionModalOpen(false));
 
@@ -197,12 +195,14 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
     setInlineError(null);
     setNewSpecialtyName('');
     setIsAddingSpecialty(false);
+    setTouched(new Set());
+    setTriedSave(false);
     setFormData({
       fullName: '',
       gmail: '',
       specialtyIds: specialties.length > 0 ? [specialties[0].id] : [],
       weeklyPattern: [
-        { weekday: 0, startTime: '09:00', endTime: '13:00', room: 'Suite 101' },
+        { weekday: 0, startTime: '09:00', endTime: '13:00', room: '' },
       ],
       notes: '',
       active: true,
@@ -215,6 +215,8 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
     setInlineError(null);
     setNewSpecialtyName('');
     setIsAddingSpecialty(false);
+    setTouched(new Set());
+    setTriedSave(false);
     setFormData({
       id: doc.id,
       fullName: doc.fullName,
@@ -231,21 +233,17 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
     e.preventDefault();
     setInlineError(null);
 
-    const trimmedName = formData.fullName.trim();
-    if (!trimmedName) {
-      setInlineError('Doctor full name is required.');
+    if (Object.keys(allErrors).length) {
+      setTriedSave(true);
+      // The first field to fix gets the focus, so its message is read out.
+      requestAnimationFrame(() => formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
       return;
     }
-
+    const trimmedName = formData.fullName.trim();
     let finalSpecialtyIds = [...formData.specialtyIds];
 
-    // If no specialty is selected:
     if (finalSpecialtyIds.length === 0) {
-      if (specialties.length > 0) {
-        setInlineError('Please select at least one clinical specialty for this doctor.');
-        return;
-      }
-      // If no specialties exist in clinic directory at all, automatically create General Practice
+      // No specialties in the clinic at all: General Practice is added
       try {
         const defaultSpec = await repo.create('specialties', {
           name: 'General Practice',
@@ -270,8 +268,12 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       notes: formData.notes.trim() || '',
       active: formData.active,
     };
-    // A changed week (or a doctor added, or switched on or off) while days are already
-    // set up: ask from which date they follow it. Otherwise it starts today.
+    await commitDoctor(before, after);
+  };
+
+  // Saves a doctor. A changed week (or a doctor added, or switched on or off) while days are
+  // already set up asks from which date they follow it; otherwise it starts today.
+  const commitDoctor = async (before: Doctor | undefined, after: Doctor) => {
     if (weekChanged(before, after)) {
       if (planWeek(before, after, today).changedDays.length > 0) {
         setWeekChange({ before, after });
@@ -280,43 +282,43 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       try {
         await saveDoctorWeek(before, after, today);
       } catch (err: any) {
-        setInlineError(`Error saving doctor: ${err?.message || 'Please check your connection and try again.'}`);
+        setInlineError(`The doctor could not be saved: ${err?.message || 'check the connection and try again.'}`);
       }
       return;
     }
 
     setIsSaving(true);
+    const fields = {
+      fullName: after.fullName,
+      gmail: after.gmail || '',
+      specialtyIds: after.specialtyIds,
+      weeklyPattern: after.weeklyPattern,
+      notes: after.notes || '',
+      active: after.active,
+    };
     try {
-      if (formData.id) {
-        await repo.update('doctors', formData.id, {
-          fullName: trimmedName,
-          gmail: formData.gmail.trim() || '',
-          specialtyIds: finalSpecialtyIds,
-          weeklyPattern: formData.weeklyPattern,
-          notes: formData.notes.trim() || '',
-          active: formData.active,
-        });
-        triggerNotification(`Doctor profile for ${trimmedName} updated.`);
+      if (before) {
+        await repo.update('doctors', before.id, fields);
+        triggerNotification(`${after.fullName} updated.`);
       } else {
-        const created = await repo.create('doctors', {
-          fullName: trimmedName,
-          gmail: formData.gmail.trim() || '',
-          specialtyIds: finalSpecialtyIds,
-          weeklyPattern: formData.weeklyPattern,
-          notes: formData.notes.trim() || '',
-          active: formData.active,
-        });
-        triggerNotification(`Added Dr. ${trimmedName}.`);
+        const created = await repo.create('doctors', fields);
+        triggerNotification(`Added ${after.fullName}.`);
         setSelectedDoctorId(created.id);
       }
       setIsDoctorModalOpen(false);
       await loadData();
     } catch (err: any) {
       console.error('[DoctorsView] Error saving doctor:', err);
-      setInlineError(`Error saving doctor: ${err.message || 'Please check your connection and try again.'}`);
+      setInlineError(`The doctor could not be saved: ${err.message || 'check the connection and try again.'}`);
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Leaving the clinic: inactive keeps the doctor's history; their clinics stop from a date
+  // chosen in the week change question when days are already set up.
+  const handleMakeInactive = async (doc: Doctor) => {
+    await commitDoctor(doc, { ...doc, active: false });
   };
 
   // --- A doctor's week changed: the days already set up follow it from a chosen date ---
@@ -374,14 +376,17 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
     }
   };
 
-  const handleDeleteDoctor = async (id: string, name: string) => {
+  const handleDeleteDoctor = async (id: string, name: string, active: boolean) => {
     const ok = await confirmDialog({
-      title: 'Remove doctor?',
-      message: `Remove doctor "${name}" and their sessions?`,
-      confirmLabel: 'Remove doctor',
+      title: `Remove ${name} for good?`,
+      message: active
+        ? `This deletes ${name} and all their clinics, past and coming. It cannot be undone. If they are leaving the clinic, make them inactive instead: their history stays and their clinics stop from a date you choose.`
+        : `This deletes ${name} and all their clinics, past and coming. It cannot be undone.`,
+      confirmLabel: 'Remove for good',
       danger: true,
     });
     if (ok) {
+      setIsDoctorModalOpen(false);
       await repo.remove('doctors', id);
       // Remove associated sessions
       const docSessions = await repo.list('doctorSessions', {
@@ -392,7 +397,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       for (const s of docSessions) {
         await repo.remove('doctorSessions', s.id);
       }
-      triggerNotification(`Removed ${name}.`);
+      triggerNotification(`${name} is removed.`);
       setSelectedDoctorId(null);
       loadData();
     }
@@ -404,7 +409,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       ...formData,
       weeklyPattern: [
         ...formData.weeklyPattern,
-        { weekday: 1, startTime: '09:00', endTime: '13:00', room: 'Suite 101' },
+        { weekday: 1, startTime: '09:00', endTime: '13:00', room: '' },
       ],
     });
   };
@@ -491,7 +496,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
           startTime: editingSession.startTime || '09:00',
           endTime: editingSession.endTime || '13:00',
           specialtyId: editingSession.specialtyId || specialties[0]?.id || '',
-          room: editingSession.room || 'Suite 101',
+          room: editingSession.room || '',
           source: 'MANUAL',
           cancelled: false,
         });
@@ -505,246 +510,204 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
     }
   };
 
+  const allErrors = checkDoctorForm(formData, doctors, formData.id, specialties.length > 0);
+  const errorFor = (field: string) => (triedSave || touched.has(field) ? allErrors[field] : undefined);
+  const leave = (field: string) => () => setTouched((t) => (t.has(field) ? t : new Set(t).add(field)));
+
   const selectedDoctor = doctors.find((d) => d.id === selectedDoctorId);
   const selectedDoctorSessions = sessions
     .filter((s) => s.doctorId === selectedDoctorId)
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  const counts = doctorCounts(doctors);
+  const filteredDoctors = filterDoctors(doctors, { query: searchQuery, specialtyId: selectedSpecialtyFilter, status: statusFilter });
+  const filtersOn = searchQuery.trim() !== '' || selectedSpecialtyFilter !== 'ALL' || statusFilter !== 'ALL';
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedSpecialtyFilter('ALL');
+    setStatusFilter('ALL');
+  };
+  const showClinics = (id: string) => {
+    setSelectedDoctorId(id);
+    // On a narrow screen the clinics are under the list: move there.
+    requestAnimationFrame(() => detailHeadingRef.current?.focus());
+  };
+  const openExpand = () => {
+    setExpandRange((r) => ({ ...r, ...defaultPatternRange(schedules, context.activeScheduleId ?? undefined, localTodayIso()) }));
+    setIsExpandModalOpen(true);
+  };
+
+  const columns: Column<Doctor>[] = [
+    {
+      key: 'name',
+      header: 'Doctor',
+      sortValue: (d) => d.fullName,
+      cell: (d) => (
+        <span className="block">
+          <span className="block">{d.fullName}</span>
+          {d.notes && <span className="block max-w-56 truncate text-xs font-normal text-ink-muted">{d.notes}</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'specialties',
+      header: 'Specialties',
+      sortValue: (d) => specialties.filter((s) => d.specialtyIds?.includes(s.id)).map((s) => s.name).join(', '),
+      cell: (d) => {
+        const list = specialties.filter((s) => d.specialtyIds?.includes(s.id));
+        return list.length ? list.map((s) => s.name).join(', ') : <span className="text-ink-muted">None</span>;
+      },
+    },
+    {
+      key: 'week',
+      header: 'Usual week',
+      cell: (d) => {
+        const lines = usualWeekLines(d.weeklyPattern);
+        if (lines.length === 0) return <span className="text-ink-muted">No clinics</span>;
+        return (
+          <span className="block whitespace-nowrap">
+            {lines.slice(0, 2).map((l) => (
+              <span key={l} className="block">
+                {l}
+              </span>
+            ))}
+            {lines.length > 2 && <span className="block text-ink-muted">and {lines.length - 2} more</span>}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortValue: (d) => (d.active ? 'Active' : 'Inactive'),
+      cell: (d) => <Badge tone={d.active ? 'success' : 'neutral'}>{d.active ? 'Active' : 'Inactive'}</Badge>,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      hideHeader: true,
+      phone: 'actions',
+      align: 'right',
+      cell: (d) => (
+        <span className="inline-flex flex-wrap justify-end gap-2">
+          <Button size="sm" icon={CalendarRange} aria-pressed={selectedDoctorId === d.id} onClick={() => showClinics(d.id)} aria-label={`Clinics of ${d.fullName}`}>
+            Clinics
+          </Button>
+          <Button size="sm" icon={Edit2} onClick={() => handleOpenEditDoctor(d)} aria-label={`Edit ${d.fullName}`}>
+            Edit
+          </Button>
+        </span>
+      ),
+    },
+  ];
+
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Doctors' Clinic Schedule</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Configure weekly recurring patterns and ad-hoc sessions. Doctors' schedules are entered manually — never engine generated.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsBulkImportOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
-            title="Bulk import doctors from CSV"
-          >
-            <Upload className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-            <span>Bulk CSV Import</span>
-          </button>
+    <div className="mx-auto max-w-7xl space-y-5 p-4 text-ink sm:p-6">
+      <PageHeader
+        title="Doctors"
+        meta={
+          <span>
+            {counts.total} {counts.total === 1 ? 'doctor' : 'doctors'}, {counts.active} active
+          </span>
+        }
+        actions={
+          <>
+            <Button icon={Upload} onClick={() => setIsBulkImportOpen(true)}>
+              Import from CSV
+            </Button>
+            <Button icon={RefreshCw} onClick={openExpand}>
+              Put usual weeks on dates
+            </Button>
+            <Button variant="primary" icon={Plus} onClick={handleOpenAddDoctor}>
+              Add doctor
+            </Button>
+          </>
+        }
+      />
 
-          <button
-            onClick={() => {
-              setExpandRange((r) => ({ ...r, ...defaultPatternRange(schedules, context.activeScheduleId ?? undefined, localTodayIso()) }));
-              setIsExpandModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-medium transition-colors cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-            <span>Expand Pattern to Dates...</span>
-          </button>
-          <button
-            onClick={handleOpenAddDoctor}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition-colors shadow-xs cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Add Doctor</span>
-          </button>
-        </div>
-      </div>
+      <Notice tone="info" title="The roster does not plan the doctors">
+        Enter each doctor's clinics here. New rosters then put nurses with them.
+      </Notice>
 
-      {/* Explicit Clinical Policy Banner */}
-      <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900 flex items-start gap-2.5">
-        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-        <div>
-          <span className="font-semibold block">Demand Rule &amp; Scope Boundary</span>
-          <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
-            Doctors' schedules are entered here — <strong>ClinicRoster never generates doctor schedules</strong>. The deterministic scheduling engine's only role is to assign qualified nurses to each active doctor session and clinical support quota.
-          </p>
-        </div>
-      </div>
+      <search aria-label="Find doctors" className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-surface p-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+        <Field label="Search">
+          {(f) => <Input {...f} type="search" placeholder="Name or note" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />}
+        </Field>
+        <Field label="Specialty">
+          {(f) => (
+            <Select {...f} value={selectedSpecialtyFilter} onChange={(e) => setSelectedSpecialtyFilter(e.target.value)}>
+              <option value="ALL">All specialties</option>
+              {[...specialties]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+            </Select>
+          )}
+        </Field>
+        <Field label="Status">
+          {(f) => (
+            <Select {...f} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as DoctorFilters['status'])}>
+              <option value="ALL">Active and inactive</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+            </Select>
+          )}
+        </Field>
+      </search>
 
-      {/* Main Grid: Doctors Table (Left) + Selected Doctor Sessions Calendar (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Doctors Directory List (7 Cols) */}
-        <div className="lg:col-span-7 space-y-3">
-          <div className="bg-white border border-slate-200 rounded overflow-hidden shadow-xs">
-            <div className="p-3 border-b border-slate-200 flex items-center justify-between">
-              <span className="font-semibold text-xs text-slate-800">
-                Clinic Doctors ({doctors.length})
-              </span>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Click a doctor to inspect session calendar
-              </span>
-            </div>
+      <p className="sr-only" role="status" aria-live="polite">
+        {filtersOn ? `${filteredDoctors.length} of ${counts.total} doctors shown.` : ''}
+      </p>
 
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-medium">
-                <tr>
-                  <th className="py-2.5 px-3">Doctor</th>
-                  <th className="py-2.5 px-3">Specialties</th>
-                  <th className="py-2.5 px-3">Weekly Pattern</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {[...doctors]
-                  .sort((a, b) => a.fullName.localeCompare(b.fullName))
-                  .map((doc) => {
-                  const isSelected = selectedDoctorId === doc.id;
-                  const docSpecialties = specialties.filter((s) =>
-                    doc.specialtyIds?.includes(s.id)
-                  );
-
-                  return (
-                    <tr
-                      key={doc.id}
-                      onClick={() => setSelectedDoctorId(doc.id)}
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-                          e.preventDefault();
-                          setSelectedDoctorId(doc.id);
-                        }
-                      }}
-                      className={`cursor-pointer transition-colors ${
-                        isSelected
-                          ? 'bg-indigo-50/70 border-l-4 border-indigo-600'
-                          : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <td className="py-2.5 px-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-[11px] shrink-0">
-                            {doc.fullName.charAt(0)}
-                          </div>
-                          <div>
-                            <span className="font-semibold text-slate-900 block">
-                              {doc.fullName}
-                            </span>
-                            {doc.notes && (
-                              <span className="text-[10px] text-slate-400 truncate max-w-[160px] block">
-                                {doc.notes}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3">
-                        <div className="flex flex-wrap gap-1">
-                          {docSpecialties.map((s) => (
-                            <span
-                              key={s.id}
-                              className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 font-mono text-[10px] border border-slate-200"
-                            >
-                              {s.code}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-
-                      <td className="py-2.5 px-3 text-[11px] text-slate-600 font-mono">
-                        {doc.weeklyPattern?.length > 0 ? (
-                          <div className="space-y-0.5">
-                            {doc.weeklyPattern.slice(0, 2).map((p, idx) => (
-                              <div key={idx} className="truncate">
-                                {WEEKDAY_NAMES[p.weekday].substring(0, 3)} {p.startTime}–{p.endTime}
-                              </div>
-                            ))}
-                            {doc.weeklyPattern.length > 2 && (
-                              <span className="text-[10px] text-slate-400">
-                                +{doc.weeklyPattern.length - 2} more shifts
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-slate-400">No pattern</span>
-                        )}
-                      </td>
-
-                      <td className="py-2.5 px-3">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                            doc.active
-                              ? 'bg-emerald-50 text-emerald-700'
-                              : 'bg-slate-100 text-slate-500'
-                          }`}
-                        >
-                          {doc.active ? 'Active' : 'Archived'}
-                        </span>
-                      </td>
-
-                      <td className="py-2.5 px-3 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="inline-flex items-center gap-1">
-                          <button
-                            onClick={() => handleOpenEditDoctor(doc)}
-                            className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
-                            title="Edit Doctor & Patterns"
-                            aria-label={`Edit ${doc.fullName}`}
-                          >
-                            <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteDoctor(doc.id, doc.fullName)}
-                            className="p-1 hover:bg-red-50 rounded text-red-600 cursor-pointer"
-                            title="Delete Doctor"
-                            aria-label={`Delete ${doc.fullName}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {doctors.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="py-12 px-4 text-center">
-                      <div className="max-w-xs mx-auto space-y-3">
-                        <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
-                          <Stethoscope className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-bold text-slate-800">No Doctors Registered</h4>
-                          <p className="text-[11px] text-slate-500 mt-1">
-                            The physician directory is currently empty. Click "Add Doctor" to configure weekly session patterns.
-                          </p>
-                        </div>
-                        <button
-                          onClick={handleOpenAddDoctor}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold cursor-pointer shadow-xs"
-                        >
-                          <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                          <span>Add First Doctor</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
+        <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card xl:col-span-7">
+          <DataTable
+            caption="Doctors"
+            rows={filteredDoctors}
+            rowKey={(d) => d.id}
+            columns={columns}
+            initialSort={{ key: 'name', direction: 'ascending' }}
+            rowClassName={(d) => (d.id === selectedDoctorId ? 'bg-brand-soft hover:bg-brand-soft' : undefined)}
+            empty={
+              doctors.length === 0 ? (
+                <EmptyState
+                  icon={Stethoscope}
+                  title="No doctors yet"
+                  action={
+                    <Button variant="primary" icon={Plus} onClick={handleOpenAddDoctor}>
+                      Add doctor
+                    </Button>
+                  }
+                >
+                  Add the clinic's doctors with their usual week, or import them from a CSV file.
+                </EmptyState>
+              ) : (
+                <EmptyState icon={Search} title="No doctor matches" action={<Button onClick={clearFilters}>Clear the search and filters</Button>}>
+                  Try another name, or show all specialties and both active and inactive doctors.
+                </EmptyState>
+              )
+            }
+          />
         </div>
 
-        {/* Selected Doctor's Session Calendar & Exceptions (5 Cols) */}
-        <div className="lg:col-span-5 space-y-3">
+        <section aria-labelledby="doctor-clinics" className="space-y-4 rounded-lg border border-line bg-surface p-4 shadow-card xl:col-span-5">
           {selectedDoctor ? (
-            <div className="bg-white border border-slate-200 rounded p-4 shadow-xs space-y-4 text-xs">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm font-bold text-slate-900">
-                      {selectedDoctor.fullName}
-                    </h2>
-                    <span className="bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded text-[10px] font-mono">
-                      Sessions
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    {selectedDoctorSessions.length} sessions scheduled across active schedules.
+            <>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 id="doctor-clinics" ref={detailHeadingRef} tabIndex={-1} className="text-lg font-semibold text-ink focus:outline-none">
+                    Clinics of {selectedDoctor.fullName}
+                  </h2>
+                  <p className="text-sm text-ink-muted">
+                    {selectedDoctorSessions.length} {selectedDoctorSessions.length === 1 ? 'clinic' : 'clinics'} on the calendar.
                   </p>
                 </div>
-
-                <button
+                <Button
+                  size="sm"
+                  icon={Plus}
                   onClick={() => {
                     setEditingSession({
                       doctorId: selectedDoctor.id,
@@ -752,434 +715,313 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                       startTime: '09:00',
                       endTime: '13:00',
                       specialtyId: selectedDoctor.specialtyIds[0],
-                      room: 'Suite 101',
+                      room: '',
                       source: 'MANUAL',
                       cancelled: false,
                     });
                     setIsSessionModalOpen(true);
                   }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium text-[11px] cursor-pointer"
                 >
-                  <Plus className="w-3 h-3" aria-hidden="true" />
-                  <span>Add Ad-hoc Session</span>
-                </button>
+                  Add a clinic
+                </Button>
               </div>
 
-              {/* Weekly Pattern Summary Card */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-2">
-                <span className="font-semibold text-slate-800 text-[11px] block">
-                  Recurring Weekly Pattern:
-                </span>
-                <div className="space-y-1 font-mono text-[11px]">
-                  {selectedDoctor.weeklyPattern?.map((pat, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-slate-600">
-                      <span>{WEEKDAY_NAMES[pat.weekday]}</span>
-                      <span className="font-semibold text-slate-800">
-                        {pat.startTime} – {pat.endTime}
-                      </span>
-                      <span className="text-slate-400">({pat.room || 'No Room'})</span>
-                    </div>
-                  ))}
-                  {(!selectedDoctor.weeklyPattern || selectedDoctor.weeklyPattern.length === 0) && (
-                    <span className="text-slate-400 italic">No recurring pattern configured.</span>
-                  )}
-                </div>
+              <div className="rounded-lg bg-sunken p-3 text-sm">
+                <h3 className="font-semibold text-ink">Usual week</h3>
+                {usualWeekLines(selectedDoctor.weeklyPattern).length > 0 ? (
+                  <ul className="mt-1 space-y-0.5">
+                    {usualWeekLines(selectedDoctor.weeklyPattern).map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-1 text-ink-muted">No usual week.</p>
+                )}
               </div>
 
-              {/* Concrete Sessions Table */}
               <div className="space-y-2">
-                <span className="font-semibold text-slate-800 text-[11px] block">
-                  Concrete Session Bookings ({context.activeSchedulePeriod}):
-                </span>
-
-                <div className="max-h-[360px] overflow-y-auto border border-slate-200 rounded divide-y divide-slate-100">
-                  {selectedDoctorSessions.map((sess) => (
-                    <div
-                      key={sess.id}
-                      className={`p-2.5 flex items-center justify-between text-xs ${
-                        sess.cancelled ? 'bg-red-50/50 opacity-60' : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono font-semibold text-slate-900">
-                            {sess.date}
+                <h3 className="text-sm font-semibold text-ink">On the calendar</h3>
+                {selectedDoctorSessions.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-line p-3 text-sm text-ink-muted">
+                    No clinics on the calendar yet. Put usual weeks on dates to add this doctor's usual week to the roster's days.
+                  </p>
+                ) : (
+                  <ul className="max-h-96 divide-y divide-line overflow-y-auto rounded-lg border border-line">
+                    {selectedDoctorSessions.map((sess) => {
+                      const spec = specialties.find((x) => x.id === sess.specialtyId);
+                      const day = formatDayDate(sess.date);
+                      return (
+                        <li key={sess.id} className={cx('flex flex-wrap items-center justify-between gap-2 p-2.5 text-sm', sess.cancelled && 'bg-sunken')}>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={cx('font-semibold text-ink', sess.cancelled && 'line-through')}>{day}</span>
+                              <span className="tabular-nums">
+                                {sess.startTime} to {sess.endTime}
+                              </span>
+                              {sess.cancelled && <Badge tone="danger">Cancelled</Badge>}
+                              {sess.source !== 'PATTERN' && !sess.cancelled && <Badge tone="info">Added by hand</Badge>}
+                            </div>
+                            <div className="text-xs text-ink-muted">
+                              {[sess.room || 'No room', spec?.name].filter(Boolean).join(', ')}
+                            </div>
+                          </div>
+                          <span className="flex gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => handleToggleCancelSession(sess)} aria-label={`${sess.cancelled ? 'Restore' : 'Cancel'} the clinic of ${day}`}>
+                              {sess.cancelled ? 'Restore' : 'Cancel'}
+                            </Button>
+                            <IconButton
+                              icon={Edit2}
+                              label={`Change the clinic of ${day}`}
+                              onClick={() => {
+                                setEditingSession(sess);
+                                setIsSessionModalOpen(true);
+                              }}
+                            />
                           </span>
-                          <span className="font-mono text-slate-600 text-[11px]">
-                            {sess.startTime} – {sess.endTime}
-                          </span>
-                          {sess.source === 'PATTERN' && (
-                            <span className="text-[10px] text-slate-400 font-mono" title="Recurring pattern session">
-                              ↻
-                            </span>
-                          )}
-                          {sess.cancelled && (
-                            <span className="px-1.5 py-0.2 rounded bg-red-100 text-red-700 font-mono text-[10px] font-bold">
-                              CANCELLED
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-slate-400 flex items-center gap-2">
-                          <span>Room: {sess.room || 'Suite 101'}</span>
-                          <span>·</span>
-                          <span>Specialty: {specialties.find((s) => s.id === sess.specialtyId)?.code}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleToggleCancelSession(sess)}
-                          className={`px-2 py-1 rounded text-[10px] font-medium cursor-pointer transition-colors ${
-                            sess.cancelled
-                              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                              : 'bg-red-50 text-red-700 hover:bg-red-100'
-                          }`}
-                        >
-                          {sess.cancelled ? 'Restore' : 'Cancel'}
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setEditingSession(sess);
-                            setIsSessionModalOpen(true);
-                          }}
-                          className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
-                          title="Edit Session Times"
-                          aria-label={`Edit session times for ${sess.date}`}
-                        >
-                          <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {selectedDoctorSessions.length === 0 && (
-                    <div className="p-4 text-center text-slate-400 text-xs">
-                      No clinics on the calendar yet. Click "Expand Pattern to Dates" to put this doctor's usual week on the roster's days.
-                    </div>
-                  )}
-                </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
-            </div>
+            </>
           ) : (
-            <div className="bg-white border border-slate-200 rounded p-8 text-center text-xs space-y-2">
-              <Stethoscope className="w-8 h-8 text-slate-300 mx-auto" />
-              <p className="font-semibold text-slate-700">No Doctor Selected</p>
-              <p className="text-slate-400">
-                {doctors.length === 0
-                  ? 'Add physicians to configure clinic session patterns and room bookings.'
-                  : 'Select a doctor on the left to inspect and manage their booked sessions.'}
-              </p>
-            </div>
+            <EmptyState icon={Stethoscope} title="No doctor chosen">
+              <h2 id="doctor-clinics" className="sr-only">
+                Clinics
+              </h2>
+              {doctors.length === 0 ? 'Add a doctor to set up their clinics.' : 'Choose Clinics beside a doctor to see and change their clinics.'}
+            </EmptyState>
           )}
-        </div>
+        </section>
       </div>
 
-      {/* DOCTOR ADD / EDIT MODAL */}
-      {isDoctorModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div
-            ref={doctorDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={doctorTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs"
-          >
-            <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center gap-2">
-                <Stethoscope className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                <h2 id={doctorTitleId} className="text-sm font-bold text-slate-800">
-                  {editingDoctor ? `Edit Doctor: ${editingDoctor.fullName}` : 'Add New Doctor'}
-                </h2>
-              </div>
-              <button
-                onClick={() => setIsDoctorModalOpen(false)}
-                className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
-                aria-label="Close"
-                title="Close"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
+      {/* DOCTOR ADD / EDIT (Phase 6, slice 3: the shared dialog and fields) */}
+      <Dialog
+        open={isDoctorModalOpen}
+        onClose={() => setIsDoctorModalOpen(false)}
+        size="lg"
+        title={editingDoctor ? `Edit ${editingDoctor.fullName}` : 'Add doctor'}
+        description="Each field is checked as you fill it in."
+        footer={
+          <>
+            <Button onClick={() => setIsDoctorModalOpen(false)}>Cancel</Button>
+            <Button variant="primary" type="submit" form="doctor-editor" icon={Save} busy={isSaving}>
+              {editingDoctor ? 'Save changes' : 'Add doctor'}
+            </Button>
+          </>
+        }
+      >
+        <form id="doctor-editor" ref={formRef} onSubmit={handleSaveDoctor} noValidate className="space-y-6 text-sm">
+          {triedSave && Object.keys(allErrors).length > 0 && (
+            <Notice tone="danger" title={Object.keys(allErrors).length === 1 ? '1 field needs fixing' : `${Object.keys(allErrors).length} fields need fixing`}>
+              The cursor is in the first one. Each message is under its field.
+            </Notice>
+          )}
+          {inlineError && (
+            <Notice live tone="danger" title="Not saved">
+              {inlineError}
+            </Notice>
+          )}
 
-            <form onSubmit={handleSaveDoctor} className="flex-1 overflow-y-auto p-5 space-y-4">
-              {/* Inline Validation / Error Banner */}
-              {inlineError && (
-                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2 animate-in fade-in">
-                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                  <div className="flex-1 leading-snug">{inlineError}</div>
-                  <button
-                    type="button"
-                    onClick={() => setInlineError(null)}
-                    className="text-rose-400 hover:text-rose-600 font-bold px-1 cursor-pointer"
-                    aria-label="Dismiss error"
-                    title="Dismiss error"
-                  >
-                    <span aria-hidden="true">✕</span>
-                  </button>
-                </div>
-              )}
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Full Name (e.g. Dr. Ali Hassan) <span className="text-red-500">*</span>
-                </label>
-                <input aria-label="Full Name (e.g. Dr. Ali Hassan)"
-                  type="text"
-                  required
-                  value={formData.fullName}
-                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  placeholder="Dr. Full Name"
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">
-                    Gmail Address (Optional)
-                  </label>
-                  <input aria-label="Gmail Address (Optional)"
+          <section aria-labelledby="doctor-details" className="space-y-3">
+            <h3 id="doctor-details" className="text-base font-semibold text-ink">
+              Details
+            </h3>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Full name" error={errorFor('fullName')}>
+                {(f) => (
+                  <Input
+                    {...f}
+                    autoComplete="off"
+                    placeholder="Dr Ali Hassan"
+                    value={formData.fullName}
+                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                    onBlur={leave('fullName')}
+                  />
+                )}
+              </Field>
+              <Field label="Email" optional error={errorFor('gmail')}>
+                {(f) => (
+                  <Input
+                    {...f}
                     type="email"
+                    autoComplete="off"
                     value={formData.gmail}
                     onChange={(e) => setFormData({ ...formData, gmail: e.target.value })}
-                    placeholder="doctor@alshifa.ae"
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    onBlur={leave('gmail')}
                   />
-                </div>
+                )}
+              </Field>
+            </div>
+            <Field label="Note" optional hint="For example, their role or the patients they see.">
+              {(f) => <Input {...f} value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} />}
+            </Field>
+          </section>
 
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block font-medium text-slate-700">
-                      Clinical Specialties <span className="text-red-500">*</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingSpecialty(!isAddingSpecialty)}
-                      className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium cursor-pointer"
-                    >
-                      {isAddingSpecialty ? 'Cancel' : '+ New Specialty'}
-                    </button>
-                  </div>
-
-                  {/* Inline quick-add specialty box */}
-                  {isAddingSpecialty && (
-                    <div className="p-2 mb-2 bg-indigo-50/70 border border-indigo-200 rounded flex gap-1.5 items-center animate-in fade-in">
-                      <input aria-label="New specialty name"
-                        type="text"
-                        placeholder="e.g. Dermatology"
-                        value={newSpecialtyName}
-                        onChange={(e) => setNewSpecialtyName(e.target.value)}
-                        className="flex-1 px-2 py-1 bg-white border border-indigo-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleQuickAddSpecialty(newSpecialtyName)}
-                        disabled={!newSpecialtyName.trim()}
-                        className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium disabled:opacity-50 cursor-pointer"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  )}
-
-                  {specialties.length > 0 ? (
-                    <div>
-                      <select aria-label="Specialties"
-                        multiple
-                        value={formData.specialtyIds}
-                        onChange={(e) => {
-                          const selected = Array.from(e.target.selectedOptions, (opt) => opt.value);
-                          setFormData({ ...formData, specialtyIds: selected });
-                        }}
-                        className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white h-20 text-xs focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                      >
-                        {specialties.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} ({s.code})
-                          </option>
-                        ))}
-                      </select>
-                      <span className="text-[10px] text-slate-400 mt-0.5 block">
-                        Hold Ctrl / Cmd to select multiple specialties.
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="p-2.5 bg-slate-50 border border-dashed border-slate-300 rounded text-xs space-y-1.5">
-                      <p className="text-slate-500 text-[11px]">
-                        No specialties registered yet. Click a quick preset to assign:
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleQuickAddSpecialty('General Practice', 'GP')}
-                          className="px-2 py-1 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded text-[11px] text-indigo-700 font-medium cursor-pointer shadow-2xs"
-                        >
-                          + General Practice (GP)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleQuickAddSpecialty('Internal Medicine', 'IM')}
-                          className="px-2 py-1 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded text-[11px] text-indigo-700 font-medium cursor-pointer shadow-2xs"
-                        >
-                          + Internal Medicine (IM)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleQuickAddSpecialty('Pediatrics', 'PED')}
-                          className="px-2 py-1 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded text-[11px] text-indigo-700 font-medium cursor-pointer shadow-2xs"
-                        >
-                          + Pediatrics (PED)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleQuickAddSpecialty('Cardiology', 'CARD')}
-                          className="px-2 py-1 bg-white hover:bg-indigo-50 border border-slate-200 hover:border-indigo-300 rounded text-[11px] text-indigo-700 font-medium cursor-pointer shadow-2xs"
-                        >
-                          + Cardiology (CARD)
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Weekly Pattern Editor */}
-              <div className="space-y-2 pt-2 border-t border-slate-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="block font-semibold text-slate-800">
-                      Weekly Recurring Clinic Pattern
-                    </label>
-                    <p className="text-[10px] text-slate-500">
-                      Define the recurring days, operating hours, and room bookings for this doctor.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddPatternRow}
-                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-medium text-[11px] cursor-pointer"
-                  >
-                    + Add Day Shift
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {formData.weeklyPattern.map((pat, idx) => (
-                    <div
-                      key={idx}
-                      className="p-2 border border-slate-200 rounded bg-slate-50 flex items-center gap-2"
-                    >
-                      <select aria-label="Weekday"
-                        value={pat.weekday}
-                        onChange={(e) =>
-                          handlePatternChange(idx, 'weekday', Number(e.target.value))
-                        }
-                        className="px-2 py-1 border border-slate-300 rounded bg-white font-medium"
-                      >
-                        {WEEKDAY_NAMES.map((name, wIdx) => (
-                          <option key={wIdx} value={wIdx}>
-                            {name}
-                          </option>
-                        ))}
-                      </select>
-
-                      <input aria-label="Start time"
-                        type="time"
-                        value={pat.startTime}
-                        onChange={(e) => handlePatternChange(idx, 'startTime', e.target.value)}
-                        className="w-24 px-1.5 py-1 border border-slate-300 rounded font-mono text-center bg-white"
-                      />
-                      <span className="text-slate-400">to</span>
-                      <input aria-label="End time"
-                        type="time"
-                        value={pat.endTime}
-                        onChange={(e) => handlePatternChange(idx, 'endTime', e.target.value)}
-                        className="w-24 px-1.5 py-1 border border-slate-300 rounded font-mono text-center bg-white"
-                      />
-
-                      <input aria-label="Room"
-                        type="text"
-                        placeholder="Suite 101"
-                        value={pat.room || ''}
-                        onChange={(e) => handlePatternChange(idx, 'room', e.target.value)}
-                        className="w-24 px-2 py-1 border border-slate-300 rounded bg-white font-mono text-[11px]"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => handleRemovePatternRow(idx)}
-                        className="p-1 text-slate-400 hover:text-red-600 rounded cursor-pointer"
-                        aria-label="Remove pattern row"
-                        title="Remove pattern row"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                      </button>
-                    </div>
+          <fieldset className="space-y-3" aria-describedby={errorFor('specialtyIds') ? 'doctor-specialty-error' : undefined}>
+            <legend className="text-base font-semibold text-ink">Specialties</legend>
+            {specialties.length > 0 ? (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {[...specialties]
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((sp, i) => (
+                    <Checkbox
+                      key={sp.id}
+                      label={sp.name}
+                      checked={formData.specialtyIds.includes(sp.id)}
+                      aria-invalid={i === 0 && errorFor('specialtyIds') ? true : undefined}
+                      onChange={(e) => {
+                        const ids = e.target.checked ? [...formData.specialtyIds, sp.id] : formData.specialtyIds.filter((x) => x !== sp.id);
+                        setFormData({ ...formData, specialtyIds: ids });
+                        setTouched((t) => new Set(t).add('specialtyIds'));
+                      }}
+                    />
                   ))}
-                  {formData.weeklyPattern.length === 0 && (
-                    <div className="text-center py-3 border border-dashed border-slate-200 rounded text-slate-400 text-[11px]">
-                      No weekly recurring pattern. Click "+ Add Day Shift".
-                    </div>
-                  )}
-                </div>
               </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Notes / Bio</label>
-                <input aria-label="Notes / Bio"
-                  type="text"
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="e.g. Senior Consultant Cardiologist"
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded"
-                />
-              </div>
-
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.active}
-                    onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                    className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                  />
-                  <span className="font-semibold text-slate-800">
-                    Active doctor (clinic sessions open for roster pairing)
-                  </span>
-                </label>
-              </div>
-
-              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsDoctorModalOpen(false)}
-                  className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-                >
+            ) : (
+              <p className="text-ink-muted">The clinic has no specialties yet. Saving adds General Practice, or add one below.</p>
+            )}
+            {errorFor('specialtyIds') && (
+              <p id="doctor-specialty-error" className="text-sm font-semibold text-danger">
+                {errorFor('specialtyIds')}
+              </p>
+            )}
+            {isAddingSpecialty ? (
+              <div className="flex flex-wrap items-end gap-2">
+                <Field label="New specialty" className="min-w-0 flex-1">
+                  {(f) => <Input {...f} placeholder="Dermatology" value={newSpecialtyName} onChange={(e) => setNewSpecialtyName(e.target.value)} />}
+                </Field>
+                <Button onClick={() => handleQuickAddSpecialty(newSpecialtyName)} disabled={!newSpecialtyName.trim()}>
+                  Add
+                </Button>
+                <Button variant="ghost" onClick={() => setIsAddingSpecialty(false)}>
                   Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                      <span>Saving Doctor...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>Save Doctor</span>
-                    </>
-                  )}
-                </button>
+                </Button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+            ) : (
+              <Button variant="ghost" icon={Plus} onClick={() => setIsAddingSpecialty(true)} className="-ml-3">
+                New specialty
+              </Button>
+            )}
+          </fieldset>
+
+          <section aria-labelledby="doctor-week" className="space-y-3">
+            <div>
+              <h3 id="doctor-week" className="text-base font-semibold text-ink">
+                Usual week
+              </h3>
+              <p className="text-ink-muted">The days and times of this doctor's clinics each week. Put usual weeks on dates adds them to the roster's days.</p>
+            </div>
+            {formData.weeklyPattern.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-line p-3 text-ink-muted">No clinics in the usual week.</p>
+            ) : (
+              <ol aria-label="Clinics in the usual week" className="space-y-2">
+                {formData.weeklyPattern.map((pat, idx) => {
+                  const error = errorFor(`pattern:${idx}`);
+                  const n = idx + 1;
+                  return (
+                    <li key={idx} className={cx('rounded-lg border p-3', error ? 'border-danger-line' : 'border-line')}>
+                      <div className="grid grid-cols-2 items-end gap-3 sm:grid-cols-[1.3fr_1fr_1fr_1fr_auto]">
+                        <Field label={`Day, clinic ${n}`}>
+                          {(f) => (
+                            <Select {...f} value={pat.weekday} onChange={(e) => handlePatternChange(idx, 'weekday', Number(e.target.value))} onBlur={leave(`pattern:${idx}`)}>
+                              {WEEKDAY_NAMES.map((name, w) => (
+                                <option key={w} value={w}>
+                                  {name}
+                                </option>
+                              ))}
+                            </Select>
+                          )}
+                        </Field>
+                        <Field label="Starts">
+                          {(f) => (
+                            <Input
+                              {...f}
+                              type="time"
+                              aria-invalid={error ? true : undefined}
+                              aria-describedby={error ? `doctor-week-error-${idx}` : f['aria-describedby']}
+                              value={pat.startTime}
+                              onChange={(e) => handlePatternChange(idx, 'startTime', e.target.value)}
+                              onBlur={leave(`pattern:${idx}`)}
+                            />
+                          )}
+                        </Field>
+                        <Field label="Ends">
+                          {(f) => (
+                            <Input
+                              {...f}
+                              type="time"
+                              aria-invalid={error ? true : undefined}
+                              aria-describedby={error ? `doctor-week-error-${idx}` : f['aria-describedby']}
+                              value={pat.endTime}
+                              onChange={(e) => handlePatternChange(idx, 'endTime', e.target.value)}
+                              onBlur={leave(`pattern:${idx}`)}
+                            />
+                          )}
+                        </Field>
+                        <Field label="Room" optional>
+                          {(f) => <Input {...f} value={pat.room || ''} onChange={(e) => handlePatternChange(idx, 'room', e.target.value)} />}
+                        </Field>
+                        <IconButton icon={Trash2} label={`Remove clinic ${n}`} onClick={() => handleRemovePatternRow(idx)} />
+                      </div>
+                      {error && (
+                        <p id={`doctor-week-error-${idx}`} role="alert" className="mt-2 text-sm font-semibold text-danger">
+                          {error}
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+            <Button icon={Plus} onClick={handleAddPatternRow}>
+              Add a clinic to the week
+            </Button>
+          </section>
+
+          <section aria-labelledby="doctor-status" className="space-y-3">
+            <h3 id="doctor-status" className="text-base font-semibold text-ink">
+              Status
+            </h3>
+            <Checkbox
+              label="Active"
+              hint="New rosters put nurses with the clinics of active doctors."
+              checked={formData.active}
+              onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
+            />
+          </section>
+
+          {/* Leaving the clinic: inactive first, removing for good second (Phase 6). */}
+          {editingDoctor && (
+            <section aria-labelledby="doctor-leaving" className="space-y-2 rounded-lg border border-line p-3">
+              <h3 id="doctor-leaving" className="font-semibold text-ink">
+                Leaving the clinic
+              </h3>
+              <p className="text-ink-muted">
+                {editingDoctor.active
+                  ? 'Make the doctor inactive: their history stays, and their clinics stop from a date you choose. Remove them only if they were added by mistake.'
+                  : 'This doctor is inactive. Remove them only if they were added by mistake.'}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {editingDoctor.active && (
+                  <Button onClick={() => handleMakeInactive(editingDoctor)} disabled={isSaving}>
+                    Make inactive
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  icon={Trash2}
+                  className="text-danger hover:bg-danger-soft"
+                  onClick={() => handleDeleteDoctor(editingDoctor.id, editingDoctor.fullName, editingDoctor.active)}
+                >
+                  Remove for good
+                </Button>
+              </div>
+            </section>
+          )}
+        </form>
+      </Dialog>
 
       {/* EXPAND PATTERN MODAL */}
       {weekChange && (
@@ -1205,7 +1047,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
             className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
           >
             <h3 id={expandTitleId} className="text-sm font-bold text-slate-900">
-              Expand Weekly Patterns to Concrete Sessions
+              Put usual weeks on dates
             </h3>
             <p className="text-[11px] text-slate-500">
               Puts each doctor's usual week on every day of this range. Days changed or cancelled by hand for one date stay as they are; other days follow the week, and clinics the week no longer has are removed.

@@ -70,8 +70,9 @@ export const DoctorWeekChangeDialog: React.FC<DoctorWeekChangeDialogProps> = ({
     }
   };
 
+  // Above the shared Dialog (z-150): it opens over the doctor editor.
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+    <div className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
       <div
         ref={dialogRef}
         role="dialog"

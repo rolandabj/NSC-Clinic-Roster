@@ -11,7 +11,7 @@ Start a new chat by reading this file, then `CLAUDE.md` and `PROJECT_GUIDE.md`.
 | On main | Everything up to Phase 5 slice 4 (guide items 42 to 72) |
 | Done | Phases 0 to 5 with Checkpoints 1 to 5 (Checkpoint 5 is guide item 73, on main) |
 | Next | Phase 6, when the owner says go |
-| Unit tests | 440 passing, and 98 Firestore rules checks in the emulator |
+| Unit tests | 446 passing, and 98 Firestore rules checks in the emulator |
 | Firestore rules | Not changed by the overhaul, so there is nothing to publish by hand |
 | HawkScan | Never run: the session has no `HAWK_API_KEY`. The owner knows |
 
@@ -107,5 +107,5 @@ branch main).
 * `staffRequestService.decideRequest` starts the email without waiting for it to finish. A failure only
   writes a warning to the browser's console.
 * Known test page artefact: axe flags grid cells cut off at the edge of the scroll area.
-* "ClinicRoster" still appears on the Doctors screen (Phase 6), and in the roster email and the
+* "ClinicRoster" still appears in the roster email and the
   test email (Phase 7).

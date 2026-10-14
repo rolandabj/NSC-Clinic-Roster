@@ -72,6 +72,7 @@ export function DataTable<T>({
   initialSort = null,
   empty,
   maxHeight,
+  rowClassName,
   className,
 }: {
   /** Read out as the table's name. */
@@ -84,6 +85,8 @@ export function DataTable<T>({
   empty?: React.ReactNode;
   /** A height such as '28rem': the table scrolls inside it and its header stays in view. */
   maxHeight?: string;
+  /** Extra classes for a row (and its card on a phone), such as the one that is open beside the table. */
+  rowClassName?: (row: T) => string | undefined;
   className?: string;
 }) {
   const [sort, setSort] = useState<SortState | null>(initialSort);
@@ -131,7 +134,7 @@ export function DataTable<T>({
           </thead>
           <tbody className="divide-y divide-line">
             {sorted.map((row) => (
-              <tr key={rowKey(row)} className="h-11 hover:bg-sunken">
+              <tr key={rowKey(row)} className={cx('h-11 hover:bg-sunken', rowClassName?.(row))}>
                 {columns.map((c, i) => {
                   const Cell = i === 0 ? 'th' : 'td';
                   return (
@@ -157,7 +160,7 @@ export function DataTable<T>({
 
       <ul aria-label={caption} className="divide-y divide-line sm:hidden">
         {sorted.map((row) => (
-          <li key={rowKey(row)} className="space-y-2 px-4 py-3">
+          <li key={rowKey(row)} className={cx('space-y-2 px-4 py-3', rowClassName?.(row))}>
             {columns.map((c, i) =>
               phoneRole(c, i) === 'title' ? (
                 <div key={c.key} className="font-semibold text-ink">
