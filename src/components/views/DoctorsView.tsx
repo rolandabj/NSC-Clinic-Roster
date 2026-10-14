@@ -302,7 +302,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
         triggerNotification(`${after.fullName} updated.`);
       } else {
         const created = await repo.create('doctors', fields);
-        triggerNotification(`Added ${after.fullName}.`);
+        triggerNotification(`${after.fullName} added.`);
         setSelectedDoctorId(created.id);
       }
       setIsDoctorModalOpen(false);
@@ -364,7 +364,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       });
       await saveDoctorSessions(repo, plan.upsert, plan.remove.map((x) => x.id));
       triggerNotification(
-        `${before ? `${after.fullName} updated` : `Added ${after.fullName}`}` +
+        `${before ? `${after.fullName} updated` : `${after.fullName} added`}` +
           (plan.changedDays.length > 0 ? `: ${plan.changedDays.length} day${plan.changedDays.length === 1 ? '' : 's'} already set up follow the new week from ${formatDate(from)}.` : '.')
       );
       if (!before) setSelectedDoctorId(saved.id);
@@ -397,7 +397,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       for (const s of docSessions) {
         await repo.remove('doctorSessions', s.id);
       }
-      triggerNotification(`${name} is removed.`);
+      triggerNotification(`${name} removed.`);
       setSelectedDoctorId(null);
       loadData();
     }
@@ -488,7 +488,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
           cancelled: editingSession.cancelled,
           source: 'MANUAL',
         });
-        triggerNotification(`Updated session for ${editingSession.date}.`);
+        triggerNotification(`The clinic of ${formatDayDate(editingSession.date || '')} updated.`);
       } else {
         await repo.create('doctorSessions', {
           doctorId: editingSession.doctorId,
@@ -500,7 +500,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
           source: 'MANUAL',
           cancelled: false,
         });
-        triggerNotification(`Ad-hoc session created for ${editingSession.date}.`);
+        triggerNotification(`Clinic added on ${formatDayDate(editingSession.date || '')}.`);
       }
       setIsSessionModalOpen(false);
       setEditingSession(null);
@@ -911,7 +911,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
               <h3 id="doctor-week" className="text-base font-semibold text-ink">
                 Usual week
               </h3>
-              <p className="text-ink-muted">The days and times of this doctor's clinics each week. Put usual weeks on dates adds them to the roster's days.</p>
+              <p className="text-ink-muted">The days and times of this doctor's clinics each week. The button Put usual weeks on dates adds them to the roster's days.</p>
             </div>
             {formData.weeklyPattern.length === 0 ? (
               <p className="rounded-lg border border-dashed border-line p-3 text-ink-muted">No clinics in the usual week.</p>

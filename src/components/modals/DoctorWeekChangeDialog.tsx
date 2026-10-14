@@ -110,9 +110,9 @@ export const DoctorWeekChangeDialog: React.FC<DoctorWeekChangeDialogProps> = ({
             <p className="text-slate-600" aria-live="polite">
               {p.changedDays === 0
                 ? 'No day already set up changes from this date.'
-                : `${p.changedDays} day${p.changedDays === 1 ? '' : 's'} change${p.rosterNames.length ? ` (${p.rosterNames.join(', ')})` : ''}.`}{' '}
+                : `${p.changedDays} day${p.changedDays === 1 ? '' : 's'} will change${p.rosterNames.length ? ` (${p.rosterNames.join(', ')})` : ''}.`}{' '}
               {p.handChangedDays > 0 &&
-                `${p.handChangedDays} day${p.handChangedDays === 1 ? '' : 's'} changed by hand for one date stay${p.handChangedDays === 1 ? 's' : ''} as ${p.handChangedDays === 1 ? 'it is' : 'they are'}. `}
+                `${p.handChangedDays} day${p.handChangedDays === 1 ? '' : 's'} changed by hand stay${p.handChangedDays === 1 ? 's' : ''} as ${p.handChangedDays === 1 ? 'it is' : 'they are'}. `}
               Days before {formatDate(date)} keep the old week. Rosters not set up yet get the new week.
             </p>
           )}

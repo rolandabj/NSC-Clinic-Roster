@@ -296,7 +296,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
         if (!formData.active && nurses.find((n) => n.id === formData.id)?.active) {
           await revokeNurseLink(repo, formData.id).catch((err) => console.warn('Could not stop the private link:', err));
         }
-        triggerNotification(`Updated profile for ${formData.fullName}.`);
+        triggerNotification(`${formData.fullName} updated.`);
       } else {
         await repo.create('nurses', {
           fullName: formData.fullName.trim(),
@@ -315,7 +315,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         });
-        triggerNotification(`Added nurse ${formData.fullName}.`);
+        triggerNotification(`${formData.fullName} added.`);
       }
       setIsModalOpen(false);
       loadAllData();
@@ -352,7 +352,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
       // Their private link stops working too (it would otherwise keep showing their shifts).
       await revokeNurseLink(repo, id).catch((err) => console.warn('Could not stop the private link:', err));
       await repo.remove('nurses', id);
-      triggerNotification(`${name} is removed.`);
+      triggerNotification(`${name} removed.`);
       setIsModalOpen(false);
       loadAllData();
     } catch (err: any) {
