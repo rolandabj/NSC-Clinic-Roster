@@ -264,9 +264,9 @@
     "semantic_hash": ""
   },
   "src/components/views/DashboardView.tsx": {
-    "mtime": 1791954205.6691277,
-    "seen": 1791954260.3661869,
-    "ast_hash": "e05ab7b6ea6afcd6a6c86833cdde8359",
+    "mtime": 1791957511.5422928,
+    "seen": 1791957562.298486,
+    "ast_hash": "de56f06313202729b18764d6f004cf91",
     "semantic_hash": ""
   },
   "src/components/views/DoctorsView.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791955655.107427,
-    "seen": 1791955684.3090866,
-    "ast_hash": "67b5086cc748c900b805a7f55a648c24",
+    "mtime": 1791957536.7193027,
+    "seen": 1791957562.2987893,
+    "ast_hash": "31a1373c4daa7928570d53dcf58676ac",
     "semantic_hash": ""
   },
   "index.html": {
@@ -2190,9 +2190,9 @@
     "semantic_hash": ""
   },
   "tasks/handover.md": {
-    "mtime": 1791955655.1181757,
-    "seen": 1791955684.309094,
-    "ast_hash": "2852253e8590a20ef07a717b440065a1",
+    "mtime": 1791957363.805497,
+    "seen": 1791957562.2987938,
+    "ast_hash": "362d58f2809dbd22f7d9ef888f33bf64",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/nurses-list.cjs": {

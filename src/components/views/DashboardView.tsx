@@ -677,7 +677,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
                     e.preventDefault();
                     onNavigate('schedules');
                   }}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
+                  className="inline-flex min-h-6 items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
                 >
                   Open {d.roster.name} <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
                 </a>
@@ -700,7 +700,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-base font-bold text-slate-900">{d.roster.name}</span>
                   <span
-                    className={`text-[11px] px-1.5 py-0.5 rounded font-semibold ${
+                    className={`text-xs px-1.5 py-0.5 rounded font-semibold ${
                       status.published ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
                     }`}
                   >
@@ -760,7 +760,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
                     </span>
                     <div className="min-w-0">
                       <p className="text-slate-800">{a.text}</p>
-                      <button type="button" onClick={a.onClick} className="font-semibold text-indigo-700 hover:underline cursor-pointer">
+                      <button type="button" onClick={a.onClick} className="inline-flex min-h-6 items-center font-semibold text-indigo-700 hover:underline cursor-pointer">
                         {a.action}
                       </button>
                     </div>

@@ -29386,7 +29386,7 @@
       "node_kind": "heading",
       "norm_label": "17. known quirks and ideas for later",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L718"
+      "source_location": "L719"
     },
     {
       "id": "project_guide_1_features_at_a_glance",
@@ -117287,7 +117287,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L718",
+      "source_location": "L719",
       "weight": 1.0
     },
     {
@@ -137091,7 +137091,7 @@
       "confidence_score": 0.95,
       "context": "WalkthroughModal",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L730",
+      "source_location": "L731",
       "weight": 1.0
     },
     {
@@ -137787,7 +137787,7 @@
       "confidence_score": 0.95,
       "context": "doctorSessionsOn",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L727",
+      "source_location": "L728",
       "weight": 1.0
     },
     {
@@ -139508,5 +139508,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "88dc6d3ad8f5d985fb82cc2ac97077b9c3b7393e"
+  "built_at_commit": "b2dcd7cf74879898c508100ca2aeaba0d6af034b"
 }
