@@ -60,7 +60,7 @@ Main moves only when the owner says "push to main".
 ## Phase 6: planner screens
 - [ ] Nurses and Doctors lists and editors (Nurses done, items 75 and 76; Doctors done, item 77)
 - [x] Availability split into Leave and days off, and Requests (item 78)
-- [ ] Leave grid without dragging
+- [x] Leave grid without dragging (item 79)
 - [ ] Checkpoint 6
 
 ## Phase 7: publishing, History and dialogs

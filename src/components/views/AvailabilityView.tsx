@@ -2,9 +2,11 @@ import { leaveCreditInRange } from '../../services/hours/hoursPolicy';
 import { planHolidayLeaveTidy, saveHolidayLeave, withHolidaysAtZero } from '../../services/hours/holidayLeave';
 import { leaveApprovalFields } from '../../services/engine/leaveStatus';
 import { confirmDialog, notify, type NoticeTone } from '../common/dialogs';
-import { Notice, Tabs } from '../ui';
+import { Button, IconButton, Notice, PageHeader, Tabs, cx } from '../ui';
+import { moveInGrid, pickStep, type GridCell } from '../../services/availability/leaveGridPick';
+import { readableTextOn } from '../../utils/colorContrast';
 import { isWeekendDay } from '../../utils/weekend';
-import React, { useState, useEffect, useMemo, useId } from 'react';
+import React, { useState, useEffect, useMemo, useId, useRef } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import {
   CalendarCheck2,
@@ -18,6 +20,7 @@ import {
   AlertTriangle,
   AlertCircle,
   Flag,
+  Pin,
   Trash2,
   Edit2,
   Shield,
@@ -47,7 +50,7 @@ import {
   IsoDateString,
   LockMode,
 } from '../../types';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, formatDayDate } from '../../utils/dateUtils';
 import { countPendingApprovals, decideRequest } from '../../services/requests/staffRequestService';
 import { canApproveRequests, canEditClinicData } from '../../services/auth/access';
 import { authService } from '../../services/auth/authService';
@@ -91,6 +94,16 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   // Drag selection state for date range leave creation
   const [dragStart, setDragStart] = useState<{ nurseId: string; day: number } | null>(null);
   const [dragCurrent, setDragCurrent] = useState<{ nurseId: string; day: number } | null>(null);
+  // The first day picked by a click, the day with the grid's one Tab stop, and what is read out.
+  const [pickStart, setPickStart] = useState<GridCell | null>(null);
+  const [gridFocus, setGridFocus] = useState<[number, number]>([0, 0]);
+  const [gridStatus, setGridStatus] = useState('');
+  const dragEndedRef = useRef(false);
+  // Another month: a leave half picked is dropped, and the Tab stop stays on the grid.
+  useEffect(() => {
+    setPickStart(null);
+    setGridFocus(([r, c]) => [r, Math.min(c, 27)]);
+  }, [currentMonthIndex, currentYear]);
 
   // Leave Entry Modal
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
@@ -472,7 +485,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           targetRefId: editingLockEntry.targetRefId,
           note: editingLockEntry.note,
         });
-        triggerToast('Lock entry updated.');
+        triggerToast('Pinned day updated.');
       } else {
         await repo.create('locks', {
           nurseId: editingLockEntry.nurseId,
@@ -484,13 +497,13 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           note: editingLockEntry.note || '',
           createdAt: new Date().toISOString(),
         });
-        triggerToast('Day locked — generation will never overwrite this.');
+        triggerToast('Day pinned. Filling a roster leaves it as it is.');
       }
       setIsLockModalOpen(false);
       setEditingLockEntry(null);
       loadData();
     } catch (err: any) {
-      triggerToast(`Failed to save lock: ${err.message}`, 'error');
+      triggerToast(`The pinned day was not saved: ${err.message}`, 'error');
     }
   };
 
@@ -522,14 +535,14 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
         timestamp: new Date().toISOString(),
       });
 
-      triggerToast('Lock successfully removed via OVERRIDE protocol.');
+      triggerToast('Pinned day removed.');
       setIsOverrideModalOpen(false);
       setActiveLockToOverride(null);
       setOverrideInput('');
       await loadData();
     } catch (err: any) {
       console.error('Lock override failed:', err);
-      triggerToast(`Override failed: ${err?.message || 'Error occurred'}`, 'error');
+      triggerToast(`The pinned day was not removed: ${err?.message || 'try again'}`, 'error');
     } finally {
       setIsOverridingLock(false);
     }
@@ -647,8 +660,59 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     }
   };
 
-  // Drag selection helpers
+  // Leave by click or by drag (Phase 6, slice 5; WCAG 2.5.7). A click on an empty day starts
+  // the leave, a second click on the same row ends it; dragging across days still works.
+  const openLeaveRange = (nurseId: string, from: number, to: number) => {
+    setEditingLeaveEntry({
+      nurseId,
+      leaveTypeId: leaveTypes[0]?.id || '',
+      startDate: getIsoDate(from),
+      endDate: getIsoDate(to),
+      note: '',
+      approved: true,
+    });
+    setIsLeaveModalOpen(true);
+  };
+
+  const cancelPick = (say = true) => {
+    setPickStart(null);
+    if (say) setGridStatus('Stopped. No leave was started.');
+  };
+
+  const pickDay = (nurseId: string, day: number) => {
+    // A drag that just ended has already opened the leave.
+    if (dragEndedRef.current) {
+      dragEndedRef.current = false;
+      return;
+    }
+    const step = pickStep(pickStart, { nurseId, day });
+    setPickStart(step.start);
+    if (step.range) {
+      setGridStatus('');
+      openLeaveRange(step.range.nurseId, step.range.from, step.range.to);
+    } else {
+      const name = nurses.find((n) => n.id === nurseId)?.fullName || 'the nurse';
+      setGridStatus(`Leave for ${name} starts ${formatDayDate(getIsoDate(day))}. Choose the last day, or press Esc to stop.`);
+    }
+  };
+
+  const onGridKey = (e: React.KeyboardEvent, row: number, col: number) => {
+    if (e.key === 'Escape' && pickStart) {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelPick();
+      return;
+    }
+    const next = moveInGrid(row, col, e.key, nurses.length, daysInMonth);
+    if (!next) return;
+    e.preventDefault();
+    setGridFocus(next);
+    (e.currentTarget.closest('table')?.querySelector(`[data-cell="${next[0]}-${next[1]}"]`) as HTMLElement | null)?.focus();
+  };
+
   const handleCellMouseDown = (nurseId: string, day: number) => {
+    // A drag ending on another day sends no click to a day, so each press starts afresh.
+    dragEndedRef.current = false;
     setDragStart({ nurseId, day });
     setDragCurrent({ nurseId, day });
   };
@@ -660,114 +724,80 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   };
 
   const handleCellMouseUp = (nurseId: string, day: number) => {
-    if (dragStart && dragStart.nurseId === nurseId) {
-      const minDay = Math.min(dragStart.day, day);
-      const maxDay = Math.max(dragStart.day, day);
-
-      const startDate = getIsoDate(minDay);
-      const endDate = getIsoDate(maxDay);
-
-      setEditingLeaveEntry({
-        nurseId,
-        leaveTypeId: leaveTypes[0]?.id || '',
-        startDate,
-        endDate,
-        note: '',
-        approved: true,
-      });
-      setIsLeaveModalOpen(true);
+    // A drag over more than one day opens the leave; a click on one day is handled by pickDay.
+    if (dragStart && dragStart.nurseId === nurseId && dragStart.day !== day) {
+      dragEndedRef.current = true;
+      setPickStart(null);
+      openLeaveRange(nurseId, Math.min(dragStart.day, day), Math.max(dragStart.day, day));
     }
     setDragStart(null);
     setDragCurrent(null);
   };
 
   return (
-    <div className={onlyOwnRequests ? 'px-4 py-5' : 'p-6 max-w-7xl mx-auto space-y-6 select-none'}>
+    <div className={onlyOwnRequests ? 'px-4 py-5' : 'mx-auto max-w-7xl space-y-5 p-4 text-ink sm:p-6'}>
       {/* A nurse sees only their own requests (Phase 5): no planner heading and no tabs. */}
       {!onlyOwnRequests && (
       <>
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Leave and days off</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Record approved staff leave (Annual, Sick, Birthday) and pinned days. Drag across dates to record leave quickly. Leave counts 0 h on public holidays: the period hours already leave them out.
-          </p>
-        </div>
-
-        {canEdit && (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleGoToToday}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
-            title="Jump calendar view to today"
-          >
-            <Calendar className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-            <span>Go to Today</span>
-          </button>
-
-          {holidayTidy.remove.length + holidayTidy.zero.length > 0 && (
-            <button
-              onClick={handleTidyHolidayLeave}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded text-xs font-medium transition-colors cursor-pointer"
-              title="Public holidays are already left out of the period hours: leave counts 0 h on them"
-            >
-              <Flag className="w-3.5 h-3.5 text-cyan-600" aria-hidden="true" />
-              <span>Tidy public holiday leave ({holidayTidy.remove.length + holidayTidy.zero.length})</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => {
-              setCsvImportLog(null);
-              setIsCsvModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-medium transition-colors cursor-pointer"
-          >
-            <Upload className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-            <span>Import Leave CSV</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setEditingLockEntry({
-                nurseId: nurses[0]?.id || '',
-                date: getIsoDate(isViewingCurrentMonth ? todayDateNumber : 1),
-                mode: 'ASSIGNMENT',
-                dutyWindowId: dutyWindows[0]?.id || '',
-                assignmentKind: 'DOCTOR',
-                targetRefId: doctors[0]?.id || '',
-                note: '',
-              });
-              setIsLockModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 rounded text-xs font-medium transition-colors cursor-pointer"
-          >
-            <Lock className="w-3.5 h-3.5 text-amber-700" aria-hidden="true" />
-            <span>Pin Shift Lock</span>
-          </button>
-
-          <button
-            onClick={() => {
-              const defaultDate = getIsoDate(isViewingCurrentMonth ? todayDateNumber : 1);
-              setEditingLeaveEntry({
-                nurseId: nurses[0]?.id || '',
-                leaveTypeId: leaveTypes[0]?.id || '',
-                startDate: defaultDate,
-                endDate: defaultDate,
-                note: '',
-                approved: true,
-              });
-              setIsLeaveModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition-colors shadow-xs cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Record Leave</span>
-          </button>
-        </div>
-        )}
-      </div>
+      <PageHeader
+        title="Leave and days off"
+        meta={<span>Leave, days off and pinned days for each nurse. Leave counts 0 h on public holidays.</span>}
+        actions={
+          canEdit && (
+            <>
+              {holidayTidy.remove.length + holidayTidy.zero.length > 0 && (
+                <Button icon={Flag} onClick={handleTidyHolidayLeave} title="Public holidays are already left out of the period hours: leave counts 0 h on them">
+                  Tidy public holiday leave ({holidayTidy.remove.length + holidayTidy.zero.length})
+                </Button>
+              )}
+              <Button
+                icon={Upload}
+                onClick={() => {
+                  setCsvImportLog(null);
+                  setIsCsvModalOpen(true);
+                }}
+              >
+                Import leave from CSV
+              </Button>
+              <Button
+                icon={Pin}
+                onClick={() => {
+                  setEditingLockEntry({
+                    nurseId: nurses[0]?.id || '',
+                    date: getIsoDate(isViewingCurrentMonth ? todayDateNumber : 1),
+                    mode: 'ASSIGNMENT',
+                    dutyWindowId: dutyWindows[0]?.id || '',
+                    assignmentKind: 'DOCTOR',
+                    targetRefId: doctors[0]?.id || '',
+                    note: '',
+                  });
+                  setIsLockModalOpen(true);
+                }}
+              >
+                Pin a day
+              </Button>
+              <Button
+                variant="primary"
+                icon={Plus}
+                onClick={() => {
+                  const defaultDate = getIsoDate(isViewingCurrentMonth ? todayDateNumber : 1);
+                  setEditingLeaveEntry({
+                    nurseId: nurses[0]?.id || '',
+                    leaveTypeId: leaveTypes[0]?.id || '',
+                    startDate: defaultDate,
+                    endDate: defaultDate,
+                    note: '',
+                    approved: true,
+                  });
+                  setIsLeaveModalOpen(true);
+                }}
+              >
+                Record leave
+              </Button>
+            </>
+          )
+        }
+      />
 
       {/* Requests moved to their own screen (Phase 6, slice 4): a pointer when some wait. */}
       {canManageRequests && pendingApprovalsCount > 0 && (
@@ -814,306 +844,255 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
         />
       )}
 
-      {/* VIEW PANEL 3: 31-DAY MASTER CALENDAR & LOCK GRID */}
+      {/* VIEW PANEL 3: THE LEAVE GRID (Phase 6, slice 5: click to start and click to end, the arrow keys, readable colours) */}
       {activeTab === 'calendar' && canEdit && (
-        <div className="space-y-6">
-          {/* Month Navigator & Legend Bar */}
-      <div className="bg-white border border-slate-200 rounded p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => {
-                if (currentMonthIndex === 0) {
-                  setCurrentMonthIndex(11);
-                  setCurrentYear(currentYear - 1);
-                } else {
-                  setCurrentMonthIndex(currentMonthIndex - 1);
-                }
-              }}
-              className="p-1 rounded hover:bg-slate-100 text-slate-600 cursor-pointer"
-              title="Previous Month"
-              aria-label="Previous Month"
-            >
-              <ChevronLeft className="w-4 h-4" aria-hidden="true" />
-            </button>
-            <span className="font-bold text-slate-800 text-sm font-mono tabular-nums">
-              {monthName} {currentYear}
-            </span>
-            <button
-              onClick={() => {
-                if (currentMonthIndex === 11) {
-                  setCurrentMonthIndex(0);
-                  setCurrentYear(currentYear + 1);
-                } else {
-                  setCurrentMonthIndex(currentMonthIndex + 1);
-                }
-              }}
-              className="p-1 rounded hover:bg-slate-100 text-slate-600 cursor-pointer"
-              title="Next Month"
-              aria-label="Next Month"
-            >
-              <ChevronRight className="w-4 h-4" aria-hidden="true" />
-            </button>
-            <button
-              onClick={handleGoToToday}
-              className={`ml-1.5 px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border shadow-2xs ${
-                isViewingCurrentMonth
-                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
-                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-              }`}
-              title="Jump to today's date"
-            >
-              <Calendar className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-              <span>Today</span>
-            </button>
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-surface p-3">
+            <div className="flex items-center gap-1">
+              <IconButton
+                icon={ChevronLeft}
+                label="Previous month"
+                onClick={() => {
+                  if (currentMonthIndex === 0) {
+                    setCurrentMonthIndex(11);
+                    setCurrentYear(currentYear - 1);
+                  } else {
+                    setCurrentMonthIndex(currentMonthIndex - 1);
+                  }
+                }}
+              />
+              <h2 className="min-w-36 text-center text-base font-semibold text-ink tabular-nums">
+                {monthName} {currentYear}
+              </h2>
+              <IconButton
+                icon={ChevronRight}
+                label="Next month"
+                onClick={() => {
+                  if (currentMonthIndex === 11) {
+                    setCurrentMonthIndex(0);
+                    setCurrentYear(currentYear + 1);
+                  } else {
+                    setCurrentMonthIndex(currentMonthIndex + 1);
+                  }
+                }}
+              />
+              <Button size="sm" onClick={handleGoToToday} className="ml-1" aria-pressed={isViewingCurrentMonth}>
+                Today
+              </Button>
+            </div>
+
+            {/* The key: each kind of leave with its letters, and a pinned day */}
+            <ul aria-label="Key" className="flex flex-wrap items-center gap-2 text-xs">
+              {leaveTypes.map((lt) => (
+                <li
+                  key={lt.id}
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-semibold"
+                  style={{ backgroundColor: lt.color, color: readableTextOn(lt.color) }}
+                >
+                  {lt.acronym}
+                  <span className="font-normal">
+                    {lt.name}, {typeof lt.creditedHours === 'number' ? `${lt.creditedHours} h` : 'hours of the shift'}
+                  </span>
+                </li>
+              ))}
+              <li className="inline-flex items-center gap-1 rounded border border-dashed border-warning-line bg-warning-soft px-1.5 py-0.5 font-semibold text-warning">
+                <Pin className="size-3.5" aria-hidden="true" />
+                Pinned day
+              </li>
+            </ul>
           </div>
-          <span className="text-slate-300">|</span>
-          <span className="text-slate-500 font-mono text-[11px]">
-            {daysInMonth} Days · Drag horizontally across cells to set leave span
-          </span>
-        </div>
 
-        {/* Live Legend for Leave & Locks */}
-        <div className="flex flex-wrap items-center gap-2">
-          {leaveTypes.map((lt) => (
-            <span
-              key={lt.id}
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono text-white font-bold"
-              style={{ backgroundColor: lt.color }}
-              title={`${lt.name}: ${typeof lt.creditedHours === 'number' ? `${lt.creditedHours}h` : 'match'} credits`}
+          <p className="text-sm text-ink-muted" id="leave-grid-help">
+            Click the first day of a nurse's leave, then the last day. For a single day, click that day twice. You can also drag across the days. With the keyboard, the arrow keys move between days, Enter picks a day and Esc stops.
+          </p>
+          <p className="sr-only" role="status" aria-live="polite">
+            {gridStatus}
+          </p>
+          {pickStart && (
+            <Notice
+              tone="info"
+              title={`Leave for ${nurses.find((n) => n.id === pickStart.nurseId)?.fullName || 'the nurse'} starts ${formatDayDate(getIsoDate(pickStart.day))}`}
+              action={
+                <Button size="sm" onClick={() => cancelPick()}>
+                  Stop
+                </Button>
+              }
             >
-              <span>{lt.acronym}</span>
-              <span className="font-normal opacity-90 text-[9px]">
-                ({typeof lt.creditedHours === 'number' ? `${lt.creditedHours}h` : 'match'})
-              </span>
-            </span>
-          ))}
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-100 text-amber-900 border border-amber-300 font-bold">
-            <Lock className="w-2.5 h-2.5" />
-            <span>LOCK</span>
-          </span>
-        </div>
-      </div>
+              Now click the last day on the same row.
+            </Notice>
+          )}
 
-      {/* MATRIX GRID: Nurses (Rows) × Dates (Columns) */}
-      <div className="bg-white border border-slate-200 rounded overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs border-collapse">
-            <thead>
-              {/* Header Row: Days & Weekdays */}
-              <tr className="bg-slate-100 text-slate-700 border-b border-slate-200">
-                <th className="py-2 px-3 text-left font-semibold sticky left-0 bg-slate-100 z-10 w-48 border-r border-slate-200">
-                  Nurse Staff / Quota
-                </th>
-                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
-                  const isoDate = getIsoDate(day);
-                  const dateObj = new Date(Date.UTC(currentYear, currentMonthIndex, day));
-                  const weekday = dateObj.getUTCDay();
-                  const isWeekend = isWeekendDay(weekday);
-                  const holiday = holidays.find((h) => h.date === isoDate);
-                  const isToday = isViewingCurrentMonth && day === todayDateNumber;
-
-                  return (
-                    <th
-                      id={`availability-day-${day}`}
-                      key={day}
-                      className={`py-1.5 px-1 text-center font-mono border-r min-w-[36px] transition-colors relative ${
-                        isToday
-                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-xs z-10'
-                          : holiday
-                          ? 'bg-cyan-50/80 text-cyan-900 border-slate-200'
-                          : isWeekend
-                          ? 'bg-slate-200/60 text-slate-800 border-slate-200'
-                          : 'text-slate-600 border-slate-200'
-                      }`}
-                    >
-                      <div className="text-[10px] font-normal leading-tight flex items-center justify-center gap-0.5">
-                        {WEEKDAY_ABBR[weekday]}
-                        {isToday && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" title="Today" />}
-                      </div>
-                      <div className="font-bold flex items-center justify-center gap-0.5">
-                        <span>{day}</span>
-                        {holiday && (
-                          <span title={`Public Holiday: ${holiday.name}`}>
-                            <Flag className={`w-2.5 h-2.5 ${isToday ? 'text-amber-300' : 'text-cyan-600'}`} />
-                          </span>
-                        )}
-                      </div>
-                      {isToday && (
-                        <div className="text-[8px] font-sans font-bold uppercase tracking-wider text-indigo-100 -mt-0.5">
-                          Today
-                        </div>
-                      )}
+          <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
+            <div className="overflow-x-auto" onMouseLeave={() => setDragCurrent(dragStart)}>
+              <table className="w-full border-collapse text-xs" aria-describedby="leave-grid-help">
+                <caption className="sr-only">
+                  Leave and pinned days, {monthName} {currentYear}
+                </caption>
+                <thead>
+                  <tr className="border-b border-line bg-sunken text-ink">
+                    <th scope="col" className="sticky left-0 z-10 w-48 border-r border-line bg-sunken px-3 py-2 text-left font-semibold">
+                      Nurse
                     </th>
-                  );
-                })}
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-slate-100">
-              {nurses.map((nurse) => {
-                // Capped leave quota badges if configured
-                const alType = leaveTypes.find((l) => l.acronym === 'AL');
-                const alBadge = alType ? getLeaveQuotaBadge(nurse, alType) : null;
-                const phType = leaveTypes.find((l) => l.acronym === 'PH');
-                const phBadge = phType ? getLeaveQuotaBadge(nurse, phType) : null;
-                const blType = leaveTypes.find((l) => l.acronym === 'BL');
-                const blBadge = blType ? getLeaveQuotaBadge(nurse, blType) : null;
-
-                return (
-                  <tr key={nurse.id} className="hover:bg-slate-50/50">
-                    {/* Sticky Nurse Header */}
-                    <td className="py-2 px-3 sticky left-0 bg-white z-10 border-r border-slate-200">
-                      <div className="flex items-center justify-between gap-1">
-                        <div>
-                          <span className="font-semibold text-slate-900 block truncate max-w-[120px]">
-                            {nurse.fullName}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            {nurse.employeeCode}
-                          </span>
-                        </div>
-                        <div className="flex flex-col items-end gap-0.5 shrink-0">
-                          {alBadge && (
-                            <span
-                              className={`text-[9px] font-mono px-1 py-0.2 rounded border ${
-                                alBadge.isExceeded
-                                  ? 'bg-rose-50 text-rose-800 border-rose-300 font-bold'
-                                  : alBadge.isFull
-                                  ? 'bg-amber-50 text-amber-800 border-amber-300'
-                                  : 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                              }`}
-                              title={`Annual Leave: ${alBadge.usedDays} of ${alBadge.quotaDays} days scheduled (${currentYear})`}
-                            >
-                              AL: {alBadge.text}
-                            </span>
-                          )}
-                          {phBadge && (
-                            <span
-                              className={`text-[9px] font-mono px-1 py-0.2 rounded border ${
-                                phBadge.isExceeded
-                                  ? 'bg-rose-50 text-rose-800 border-rose-300 font-bold'
-                                  : 'bg-cyan-50 text-cyan-800 border-cyan-200'
-                              }`}
-                              title={`Public Holiday: ${phBadge.usedDays} of ${phBadge.quotaDays} days scheduled (${currentYear})`}
-                            >
-                              PH: {phBadge.text}
-                            </span>
-                          )}
-                          {blBadge && (
-                            <span
-                              className="text-[9px] font-mono px-1 py-0.2 rounded bg-pink-50 text-pink-800 border border-pink-200"
-                              title={`Birthday Leave: ${blBadge.usedDays} of ${blBadge.quotaDays} days scheduled (${currentYear})`}
-                            >
-                              BL: {blBadge.text}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Matrix Cells */}
                     {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
                       const isoDate = getIsoDate(day);
-                      const leave = findLeaveForNurseDate(nurse.id, isoDate);
-                      const lock = findLockForNurseDate(nurse.id, isoDate);
-
-                      const dateObj = new Date(Date.UTC(currentYear, currentMonthIndex, day));
-                      const weekday = dateObj.getUTCDay();
+                      const weekday = new Date(Date.UTC(currentYear, currentMonthIndex, day)).getUTCDay();
                       const isWeekend = isWeekendDay(weekday);
+                      const holiday = holidays.find((h) => h.date === isoDate);
                       const isToday = isViewingCurrentMonth && day === todayDateNumber;
-
-                      // Check if inside active drag span
-                      let isDragSelected = false;
-                      if (dragStart && dragCurrent && dragStart.nurseId === nurse.id) {
-                        const minDay = Math.min(dragStart.day, dragCurrent.day);
-                        const maxDay = Math.max(dragStart.day, dragCurrent.day);
-                        if (day >= minDay && day <= maxDay) {
-                          isDragSelected = true;
-                        }
-                      }
-
                       return (
-                        <td
+                        <th
+                          id={`availability-day-${day}`}
                           key={day}
-                          onMouseDown={() => handleCellMouseDown(nurse.id, day)}
-                          onMouseEnter={() => handleCellMouseEnter(nurse.id, day)}
-                          onMouseUp={() => handleCellMouseUp(nurse.id, day)}
-                          className={`py-1.5 px-0.5 text-center border-r cursor-pointer select-none transition-colors relative ${
-                            isDragSelected
-                              ? 'bg-indigo-100 ring-2 ring-indigo-400 z-10 border-slate-200'
-                              : isToday
-                              ? 'bg-indigo-50/25 border-r-indigo-200 border-l-indigo-200'
-                              : isWeekend
-                              ? 'bg-slate-50/70 border-slate-100'
-                              : 'bg-white border-slate-100'
-                          }`}
-                        >
-                          {/* 1. Render Lock (padlock + hatched border) */}
-                          {lock ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setActiveLockToOverride(lock);
-                                setOverrideInput('');
-                                setIsOverrideModalOpen(true);
-                              }}
-                              className="w-full h-7 rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center gap-0.5 text-amber-900 shadow-2xs font-mono font-bold text-[10px]"
-                              title={`Locked day: ${lock.mode === 'OFF' ? 'PINNED OFF' : 'PINNED DUTY'}. Click to manage/override.`}
-                            >
-                              <Lock className="w-3 h-3 text-amber-600 shrink-0" aria-hidden="true" />
-                              <span>{lock.mode === 'OFF' ? 'OFF' : 'PIN'}</span>
-                            </button>
-                          ) : leave ? (
-                            // 2. Render Leave Entry (acronym + color)
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingLeaveEntry(leave);
-                                setSelectedCellDate(isoDate);
-                                setIsLeaveModalOpen(true);
-                              }}
-                              className="w-full h-7 rounded flex items-center justify-center font-mono font-bold text-[11px] text-white shadow-2xs cursor-pointer"
-                              style={{
-                                backgroundColor:
-                                  leaveTypes.find((l) => l.id === leave.leaveTypeId)?.color ||
-                                  '#f59e0b',
-                              }}
-                              title={`${leaveTypes.find((l) => l.id === leave.leaveTypeId)?.name} (${Math.round(leaveCreditInRange(leave, leaveTypes.find((l) => l.id === leave.leaveTypeId), leave.startDate, leave.endDate) * 10) / 10}h counted). Click to edit.`}
-                            >
-                              {leaveTypes.find((l) => l.id === leave.leaveTypeId)?.acronym || 'L'}
-                            </button>
-                          ) : (
-                            // Empty Cell
-                            <div className="h-7 w-full flex items-center justify-center text-slate-300 hover:bg-slate-100/80 rounded">
-                              —
-                            </div>
+                          scope="col"
+                          aria-label={`${formatDayDate(isoDate, 'long')}${isToday ? ', today' : ''}${holiday ? `, public holiday: ${holiday.name}` : ''}`}
+                          className={cx(
+                            'relative min-w-10 border-r border-line px-1 py-1.5 text-center',
+                            isToday ? 'bg-brand text-white' : holiday ? 'bg-info-soft text-info' : isWeekend ? 'bg-canvas text-ink' : 'text-ink'
                           )}
-                        </td>
+                        >
+                          <span className="block font-normal">{WEEKDAY_ABBR[weekday]}</span>
+                          <span className="flex items-center justify-center gap-0.5 font-semibold tabular-nums">
+                            {day}
+                            {holiday && <Flag className="size-3" aria-hidden="true" />}
+                          </span>
+                        </th>
                       );
                     })}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </thead>
 
-      {/* Bottom Information Callout */}
-      <div className="p-3 bg-slate-100/80 border border-slate-200 rounded text-xs text-slate-600 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-indigo-600 shrink-0" />
-          <span>
-            <strong>Deterministic Invariant:</strong> Pinned shift locks (🔒) and approved leave entries are strictly non-changeable — generation passes will <strong>never overwrite</strong> these cells.
-          </span>
-        </div>
-        <span className="font-mono text-[11px] text-slate-500">
-          {locks.length} active locks · {leaveEntries.length} leave entries
-        </span>
-      </div>
+                <tbody className="divide-y divide-line">
+                  {nurses.map((nurse, row) => {
+                    const alType = leaveTypes.find((l) => l.acronym === 'AL');
+                    const alBadge = alType ? getLeaveQuotaBadge(nurse, alType) : null;
+                    const phType = leaveTypes.find((l) => l.acronym === 'PH');
+                    const phBadge = phType ? getLeaveQuotaBadge(nurse, phType) : null;
+                    const blType = leaveTypes.find((l) => l.acronym === 'BL');
+                    const blBadge = blType ? getLeaveQuotaBadge(nurse, blType) : null;
+                    const quota = (label: string, b: NonNullable<typeof alBadge>, title: string) => (
+                      <span
+                        className={cx(
+                          'rounded border px-1 text-xs tabular-nums',
+                          b.isExceeded ? 'border-danger-line bg-danger-soft font-semibold text-danger' : b.isFull ? 'border-warning-line bg-warning-soft text-warning' : 'border-line bg-sunken text-ink'
+                        )}
+                        title={title}
+                      >
+                        {label} {b.text}
+                      </span>
+                    );
+
+                    return (
+                      <tr key={nurse.id}>
+                        <th scope="row" className="sticky left-0 z-10 border-r border-line bg-surface px-3 py-1.5 text-left font-normal">
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="min-w-0">
+                              <span className="block max-w-32 truncate font-semibold text-ink">{nurse.fullName}</span>
+                              {nurse.employeeCode && <span className="text-xs text-ink-muted">{nurse.employeeCode}</span>}
+                            </div>
+                            <div className="flex shrink-0 flex-col items-end gap-0.5">
+                              {alBadge && quota('AL', alBadge, `Annual leave: ${alBadge.usedDays} of ${alBadge.quotaDays} days in ${currentYear}`)}
+                              {phBadge && quota('PH', phBadge, `Public holiday: ${phBadge.usedDays} of ${phBadge.quotaDays} days in ${currentYear}`)}
+                              {blBadge && quota('BL', blBadge, `Birthday leave: ${blBadge.usedDays} of ${blBadge.quotaDays} days in ${currentYear}`)}
+                            </div>
+                          </div>
+                        </th>
+
+                        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
+                          const col = day - 1;
+                          const isoDate = getIsoDate(day);
+                          const leave = findLeaveForNurseDate(nurse.id, isoDate);
+                          const lock = findLockForNurseDate(nurse.id, isoDate);
+                          const weekday = new Date(Date.UTC(currentYear, currentMonthIndex, day)).getUTCDay();
+                          const isWeekend = isWeekendDay(weekday);
+                          const isToday = isViewingCurrentMonth && day === todayDateNumber;
+                          const leaveType = leave ? leaveTypes.find((l) => l.id === leave.leaveTypeId) : undefined;
+                          const dayText = formatDayDate(isoDate);
+
+                          // Inside the range being dragged, or the first day picked by a click.
+                          let inRange = false;
+                          if (dragStart && dragCurrent && dragStart.nurseId === nurse.id) {
+                            inRange = day >= Math.min(dragStart.day, dragCurrent.day) && day <= Math.max(dragStart.day, dragCurrent.day);
+                          }
+                          const isPickStart = pickStart?.nurseId === nurse.id && pickStart.day === day;
+
+                          const cellProps = {
+                            'data-cell': `${row}-${col}`,
+                            tabIndex: gridFocus[0] === row && gridFocus[1] === col ? 0 : -1,
+                            onFocus: () => setGridFocus([row, col]),
+                            onKeyDown: (e: React.KeyboardEvent) => onGridKey(e, row, col),
+                          };
+
+                          return (
+                            <td
+                              key={day}
+                              onMouseDown={() => handleCellMouseDown(nurse.id, day)}
+                              onMouseEnter={() => handleCellMouseEnter(nurse.id, day)}
+                              onMouseUp={() => handleCellMouseUp(nurse.id, day)}
+                              className={cx(
+                                'relative select-none border-r border-line px-0.5 py-1 text-center',
+                                inRange || isPickStart ? 'bg-brand-soft ring-2 ring-brand ring-inset' : isToday ? 'bg-brand-soft/40' : isWeekend ? 'bg-canvas' : 'bg-surface'
+                              )}
+                            >
+                              {lock ? (
+                                <button
+                                  type="button"
+                                  {...cellProps}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveLockToOverride(lock);
+                                    setOverrideInput('');
+                                    setIsOverrideModalOpen(true);
+                                  }}
+                                  aria-label={`${nurse.fullName}, ${dayText}: ${lock.mode === 'OFF' ? 'Pinned day off' : 'Pinned shift'}. Open to change or remove the pin.`}
+                                  title={`Pinned ${lock.mode === 'OFF' ? 'day off' : 'shift'}`}
+                                  className="flex h-8 w-full items-center justify-center gap-0.5 rounded border border-dashed border-warning-line bg-warning-soft text-xs font-semibold text-warning"
+                                >
+                                  <Pin className="size-3 shrink-0" aria-hidden="true" />
+                                  {lock.mode === 'OFF' ? 'Off' : 'Shift'}
+                                </button>
+                              ) : leave ? (
+                                <button
+                                  type="button"
+                                  {...cellProps}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditingLeaveEntry(leave);
+                                    setSelectedCellDate(isoDate);
+                                    setIsLeaveModalOpen(true);
+                                  }}
+                                  aria-label={`${nurse.fullName}, ${dayText}: ${leaveType?.acronym || 'L'}, ${leaveType?.name || 'leave'}${leave.approved === false ? ', waiting' : ''}. Open to change it.`}
+                                  title={`${leaveType?.name || 'Leave'} (${Math.round(leaveCreditInRange(leave, leaveType, leave.startDate, leave.endDate) * 10) / 10} h counted)`}
+                                  className={cx('flex h-8 w-full items-center justify-center rounded text-xs font-semibold', leave.approved === false && 'border-2 border-dashed border-ink/40')}
+                                  style={{ backgroundColor: leaveType?.color || '#f59e0b', color: readableTextOn(leaveType?.color || '#f59e0b') }}
+                                >
+                                  {leaveType?.acronym || 'L'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  {...cellProps}
+                                  onClick={() => pickDay(nurse.id, day)}
+                                  aria-pressed={isPickStart || undefined}
+                                  aria-label={`${nurse.fullName}, ${dayText}: no leave${isPickStart ? ', first day of the new leave' : ''}`}
+                                  className="flex h-8 w-full items-center justify-center rounded text-ink-muted hover:bg-sunken"
+                                >
+                                  <span aria-hidden="true">·</span>
+                                </button>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <p className="text-sm text-ink-muted">
+            Pinned days and approved leave stay as they are when a roster is filled. This clinic has {locks.length} pinned {locks.length === 1 ? 'day' : 'days'} and {leaveEntries.length} {leaveEntries.length === 1 ? 'leave' : 'leaves'}.
+          </p>
         </div>
       )}
       </div>
@@ -1389,7 +1368,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <div className="flex items-center gap-2">
                 <Lock className="w-4 h-4 text-amber-600" aria-hidden="true" />
-                <h3 id={lockTitleId} className="text-sm font-bold text-slate-900">Pin Non-Changeable Lock</h3>
+                <h3 id={lockTitleId} className="text-sm font-bold text-slate-900">Pin a day</h3>
               </div>
               <button
                 onClick={() => setIsLockModalOpen(false)}
@@ -1402,7 +1381,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             </div>
 
             <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900 text-[11px] leading-relaxed">
-              <strong>Non-changeable day:</strong> The scheduling engine will never overwrite this assignment. Editing or removing it later requires explicit typed confirmation.
+              <strong>A pinned day</strong> stays as it is when a roster is filled. Removing the pin later asks you to type OVERRIDE.
             </div>
 
             <form onSubmit={handleSaveLockEntry} className="space-y-3">
@@ -1437,7 +1416,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Lock Mode</label>
+                <label className="block font-medium text-slate-700 mb-1">What is pinned</label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -1450,7 +1429,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                         : 'border-slate-300 text-slate-600'
                     }`}
                   >
-                    ASSIGNMENT (Pin Shift)
+                    A shift
                   </button>
                   <button
                     type="button"
@@ -1461,7 +1440,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                         : 'border-slate-300 text-slate-600'
                     }`}
                   >
-                    OFF (Pin Fixed Rest)
+                    A day off
                   </button>
                 </div>
               </div>
@@ -1533,14 +1512,14 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               )}
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">Lock Note / Reason</label>
-                <input aria-label="Lock Note / Reason"
+                <label className="block font-medium text-slate-700 mb-1">Note</label>
+                <input aria-label="Note"
                   type="text"
                   value={editingLockEntry.note || ''}
                   onChange={(e) =>
                     setEditingLockEntry({ ...editingLockEntry, note: e.target.value })
                   }
-                  placeholder="e.g. Requested VIP coverage or fixed off"
+                  placeholder="For example, asked for by the clinic manager"
                   className="w-full px-3 py-1.5 border border-slate-300 rounded"
                 />
               </div>
@@ -1557,7 +1536,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                   type="submit"
                   className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded font-medium cursor-pointer shadow-xs"
                 >
-                  Pin Lock
+                  Pin the day
                 </button>
               </div>
             </form>
@@ -1578,20 +1557,20 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             <div className="flex items-center gap-2 text-red-600">
               <ShieldAlert className="w-5 h-5 shrink-0" aria-hidden="true" />
               <h3 id={overrideTitleId} className="text-sm font-bold text-slate-900">
-                Non-Changeable Day Override Protocol
+                Remove the pin?
               </h3>
             </div>
 
             <div className="p-3 bg-red-50 border border-red-200 rounded text-red-900 space-y-1.5 leading-relaxed">
               <p className="font-semibold text-xs">
-                Non-changeable day. This was pinned on {formatDate(activeLockToOverride.date)} and will not be overwritten by generation.
+                This day is pinned for {formatDate(activeLockToOverride.date)}, so filling a roster leaves it as it is.
               </p>
               <p className="text-[11px] text-red-800">
                 Nurse:{' '}
                 <strong>
                   {nurses.find((n) => n.id === activeLockToOverride.nurseId)?.fullName}
                 </strong>{' '}
-                · Mode: <strong>{activeLockToOverride.mode}</strong>
+                · What is pinned: <strong>{activeLockToOverride.mode === 'OFF' ? 'A day off' : 'A shift'}</strong>
               </p>
               {activeLockToOverride.note && (
                 <p className="text-[10px] text-red-700 italic">
@@ -1601,7 +1580,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               {activeLockToOverride.mode === 'OFF' && activeLockToOverride.id.startsWith('lock-off-') && (
                 <p className="text-[11px] text-red-800">
                   If this day off comes from an approved request, removing the pin also declines the request. You can approve it
-                  again in All requests.
+                  again in Requests, under All day off and shift requests.
                 </p>
               )}
             </div>
@@ -1609,14 +1588,14 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block font-medium text-slate-700">
-                  To remove this lock and permit re-scheduling, confirm below:
+                  To remove the pin, type OVERRIDE:
                 </label>
                 <button
                   type="button"
                   onClick={() => setOverrideInput('OVERRIDE')}
                   className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer underline"
                 >
-                  Quick-fill OVERRIDE
+                  Fill in OVERRIDE
                 </button>
               </div>
               <input aria-label="Type OVERRIDE to confirm"
@@ -1645,7 +1624,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                 }}
                 className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer disabled:opacity-50"
               >
-                Keep Pinned
+                Keep the pin
               </button>
               <button
                 type="button"
@@ -1653,7 +1632,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                 onClick={handleExecuteLockOverride}
                 className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-bold cursor-pointer transition-colors shadow-xs disabled:opacity-50"
               >
-                {isOverridingLock ? 'Unlocking...' : 'Confirm OVERRIDE & Unlock'}
+                {isOverridingLock ? 'Removing the pin…' : 'Remove the pin'}
               </button>
             </div>
           </div>
