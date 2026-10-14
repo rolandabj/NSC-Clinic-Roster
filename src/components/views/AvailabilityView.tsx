@@ -5,6 +5,7 @@ import { confirmDialog, notify, type NoticeTone } from '../common/dialogs';
 import { Button, IconButton, Notice, PageHeader, Tabs, cx } from '../ui';
 import { moveInGrid, pickStep, type GridCell } from '../../services/availability/leaveGridPick';
 import { leaveClash } from '../../services/availability/leaveClash';
+import { allowanceDays } from '../../services/hours/leaveAllowance';
 import { readableTextOn } from '../../utils/colorContrast';
 import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo, useId, useRef } from 'react';
@@ -254,9 +255,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
   // Calculate annual leave quota usage for a nurse in DAYS
   const getLeaveQuotaBadge = (nurse: Nurse, leaveType: LeaveType) => {
-    const rawQuota = nurse.leaveQuotas?.[leaveType.id];
-    if (typeof rawQuota !== 'number' || rawQuota <= 0) return null;
-    const quotaDays = rawQuota > 40 && rawQuota % 8 === 0 ? rawQuota / 8 : rawQuota;
+    // In days, as typed (the owner's rule of 14-10-2026).
+    const quotaDays = allowanceDays(nurse.leaveQuotas?.[leaveType.id]);
+    if (quotaDays === null) return null;
 
     // Sum scheduled days for this nurse and leave type across the year
     const yearPrefix = `${currentYear}-`;
@@ -282,10 +283,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
   const leaveQuotaInfo = useMemo(() => {
     if (!editingLeaveEntry || !selectedNurseForLeave || !selectedTypeForLeave) return null;
-    const rawQuota = selectedNurseForLeave.leaveQuotas?.[selectedTypeForLeave.id];
-    if (typeof rawQuota !== 'number' || rawQuota <= 0) return null;
-
-    const quotaDays = rawQuota > 40 && rawQuota % 8 === 0 ? rawQuota / 8 : rawQuota;
+    const quotaDays = allowanceDays(selectedNurseForLeave.leaveQuotas?.[selectedTypeForLeave.id]);
+    if (quotaDays === null) return null;
     const start = editingLeaveEntry.startDate || '';
     const end = editingLeaveEntry.endDate || start;
     const year = start ? start.slice(0, 4) : String(currentYear);
@@ -636,9 +635,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
         const totalCredits = (typeof lt.creditedHours === 'number' ? lt.creditedHours : 8) * daySpan;
 
         // Quota Check
-        const rawQuota = nurse.leaveQuotas?.[lt.id];
-        if (typeof rawQuota === 'number' && rawQuota > 0) {
-          const quotaDays = rawQuota > 40 && rawQuota % 8 === 0 ? rawQuota / 8 : rawQuota;
+        const quotaDays = allowanceDays(nurse.leaveQuotas?.[lt.id]);
+        if (quotaDays !== null) {
           const year = startDate.slice(0, 4);
           const yearPrefix = `${year}-`;
           const used = leaveEntries

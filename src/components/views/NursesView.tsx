@@ -193,8 +193,8 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
       const lt = leaveTypes.find((l) => l.id === k);
       const isSick = lt?.id === 'leave-sl' || lt?.acronym?.toUpperCase() === 'SL' || lt?.name?.toLowerCase().includes('sick');
       if (!isSick && typeof v === 'number' && v > 0) {
-        // Convert legacy hours to days if > 40 and divisible by 8 (e.g. 240h -> 30d)
-        normalizedQuotas[k] = v > 40 && v % 8 === 0 ? v / 8 : v;
+        // In days, as typed (the owner's rule of 14-10-2026).
+        normalizedQuotas[k] = v;
       }
     }
 

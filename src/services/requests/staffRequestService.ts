@@ -8,6 +8,7 @@
  * PENDING requests; managers and editors approve or reject them.
  */
 
+import { allowanceDays } from '../hours/leaveAllowance';
 import { v4 as uuidv4 } from 'uuid';
 import {
   AvailabilityRequest,
@@ -116,10 +117,9 @@ export async function submitLeaveRequest(
   const requestedDays = daysInclusive(startDate, endDate);
   const hoursPerDay = typeof leaveType?.creditedHours === 'number' ? leaveType.creditedHours : 8;
 
-  // Annual quota (stored in days; large multiples of 8 are legacy hour values)
-  const rawQuota = nurse?.leaveQuotas?.[leaveTypeId];
-  if (typeof rawQuota === 'number' && rawQuota > 0) {
-    const quotaDays = rawQuota > 40 && rawQuota % 8 === 0 ? rawQuota / 8 : rawQuota;
+  // Annual allowance, in days as typed (the owner's rule of 14-10-2026)
+  const quotaDays = allowanceDays(nurse?.leaveQuotas?.[leaveTypeId]);
+  if (quotaDays !== null) {
     const year = startDate.slice(0, 4);
     const usedDays = existing
       .filter(

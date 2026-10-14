@@ -180,9 +180,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/NurseTimesheetModal.tsx": {
-    "mtime": 1791950940.5708406,
-    "seen": 1791951702.507751,
-    "ast_hash": "78a198079dbc8951608c5cd42a4c5718",
+    "mtime": 1791958461.9614792,
+    "seen": 1791958514.5700204,
+    "ast_hash": "b89f8921c59cc4db1f5bfe93d4a1fe64",
     "semantic_hash": ""
   },
   "src/components/modals/PublishModal.tsx": {
@@ -258,9 +258,9 @@
     "semantic_hash": "4c2c62984ee0483cd6eae5986a19910b"
   },
   "src/components/views/AvailabilityView.tsx": {
-    "mtime": 1791957829.336331,
-    "seen": 1791957940.7469113,
-    "ast_hash": "b9b9db883ba7f7df8e4e75445070480e",
+    "mtime": 1791958461.9614792,
+    "seen": 1791958514.5700848,
+    "ast_hash": "0f7f68fa9a026aff796bae0fb39fe179",
     "semantic_hash": ""
   },
   "src/components/views/DashboardView.tsx": {
@@ -288,9 +288,9 @@
     "semantic_hash": ""
   },
   "src/components/views/NursesView.tsx": {
-    "mtime": 1791957829.336331,
-    "seen": 1791957940.7469192,
-    "ast_hash": "c94f63d8ee4918d2d96141416a665282",
+    "mtime": 1791958461.9614792,
+    "seen": 1791958514.5700939,
+    "ast_hash": "9dd19f4362e8aae65112a83f6b2d7604",
     "semantic_hash": ""
   },
   "src/components/views/PublishView.tsx": {
@@ -546,9 +546,9 @@
     "semantic_hash": ""
   },
   "src/services/reports/hoursAccounting.ts": {
-    "mtime": 1791362587.9772897,
-    "seen": 1791365225.1340961,
-    "ast_hash": "9b52764d0506cc8af56cc03e384187c8",
+    "mtime": 1791958461.9614792,
+    "seen": 1791958514.5702264,
+    "ast_hash": "3b4feca60e01a89b2dc2eb9245b6fc6f",
     "semantic_hash": ""
   },
   "src/services/repository/FirestoreRepository.ts": {
@@ -588,9 +588,9 @@
     "semantic_hash": "0dffc6200bbc63a11dc6ae5d2a04366c"
   },
   "src/services/requests/staffRequestService.ts": {
-    "mtime": 1791951446.1388216,
-    "seen": 1791951702.50792,
-    "ast_hash": "16d5300110becc8b0f43887c9bd6adba",
+    "mtime": 1791958461.9614792,
+    "seen": 1791958514.5702403,
+    "ast_hash": "ed49fa3bf7049643c503d6d322429f3c",
     "semantic_hash": ""
   },
   "src/services/rules/ruleSyncService.ts": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791957896.5123823,
-    "seen": 1791957940.747263,
-    "ast_hash": "907e88b18c1929bfe98b94bf5a2bb44a",
+    "mtime": 1791958492.2507415,
+    "seen": 1791958514.5704186,
+    "ast_hash": "f0a22496e47be708936ce3a4bb3ccf90",
     "semantic_hash": ""
   },
   "index.html": {
@@ -2190,9 +2190,9 @@
     "semantic_hash": ""
   },
   "tasks/handover.md": {
-    "mtime": 1791957901.5003679,
-    "seen": 1791957940.747267,
-    "ast_hash": "e12f537e69d9faa15fcfe645e11cf2f4",
+    "mtime": 1791958492.2561076,
+    "seen": 1791958514.5704234,
+    "ast_hash": "7a6972a8032cfadfeacd2c98b189b507",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/nurses-list.cjs": {
@@ -2214,9 +2214,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/nurse-editor.cjs": {
-    "mtime": 1791957787.4402783,
-    "seen": 1791957940.746752,
-    "ast_hash": "6cc948bbb28c8f483a5ae458fe703da1",
+    "mtime": 1791958453.3288047,
+    "seen": 1791958514.5698946,
+    "ast_hash": "63876f0478d4acfe78b9e656ab2711f8",
     "semantic_hash": ""
   },
   "src/services/nurses/nurseForm.ts": {
@@ -2301,6 +2301,18 @@
     "mtime": 1791957623.9243188,
     "seen": 1791957940.7471778,
     "ast_hash": "e678bbe17b4ac19911812be2a2d60801",
+    "semantic_hash": ""
+  },
+  "src/services/hours/leaveAllowance.ts": {
+    "mtime": 1791958376.0777898,
+    "seen": 1791958514.5702105,
+    "ast_hash": "d2d4c177ba420c454938226aa588e59f",
+    "semantic_hash": ""
+  },
+  "tests/unit/leaveAllowance.test.ts": {
+    "mtime": 1791958389.0843642,
+    "seen": 1791958514.570329,
+    "ast_hash": "65f798eb687c2a855b416ca5af654634",
     "semantic_hash": ""
   }
 }

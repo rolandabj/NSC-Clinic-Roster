@@ -510,7 +510,7 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
             <div className="flex items-center gap-3">
               <span className="font-semibold text-slate-700">Leave left this year:</span>
               {quotas
-                .filter((q) => q.annualQuotaHours > 0)
+                .filter((q) => q.annualQuotaDays > 0)
                 .map((q) => (
                   <span
                     key={q.leaveTypeId}
@@ -518,7 +518,8 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
                   >
                     <span className="font-bold">{q.leaveTypeName}:</span>
                     <span>
-                      {fmtHours(q.usedHours)} used of {fmtHours(q.annualQuotaHours)} ({fmtHours(q.remainingHours)} left)
+                      {/* The allowance is in days; the hours are those counted for the leave taken. */}
+                      {q.usedDays} of {q.annualQuotaDays} days used, {q.remainingDays} left ({fmtHours(q.usedHours)} counted)
                     </span>
                   </span>
                 ))}

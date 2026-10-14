@@ -5,6 +5,7 @@
  * Hours Accounting, Contract Proportions & Payroll Ledger Service (Phase 9)
  */
 
+import { allowanceDays } from '../hours/leaveAllowance';
 import { HoursHistory, HoursPart, NurseHoursBalance, countHoursInRange, dutyDurationHours, nurseContractShare, resolveNurseHoursBalance } from '../hours/hoursBalance';
 
 import { isWeekendDay } from '../../utils/weekend';
@@ -92,12 +93,12 @@ export interface NurseHoursAccounting {
   quotas: Array<{
     leaveTypeId: string;
     leaveTypeName: string;
-    annualQuotaDays?: number;
-    usedDays?: number;
-    remainingDays?: number;
-    annualQuotaHours: number;
+    /** The allowance, in days (never in hours: each leave day's hours can differ). */
+    annualQuotaDays: number;
+    usedDays: number;
+    remainingDays: number;
+    /** The hours counted for the leave taken. */
     usedHours: number;
-    remainingHours: number;
   }>;
 
   // Day-by-Day Chronological Timesheet
@@ -392,22 +393,20 @@ export function calculateNurseHoursAccounting(
         !lt.name.toLowerCase().includes('sick')
     )
     .map((lt) => {
-      const rawQuota = nurse.leaveQuotas?.[lt.id];
+      // In days, as typed (the owner's rule of 14-10-2026).
       const annualQuotaDays =
-        typeof rawQuota === 'number' && rawQuota > 0
-          ? rawQuota > 40 && rawQuota % 8 === 0
-            ? rawQuota / 8
-            : rawQuota
-          : lt.acronym === 'AL'
+        allowanceDays(nurse.leaveQuotas?.[lt.id]) ??
+        (lt.acronym === 'AL'
           ? 30
           : lt.acronym === 'PH'
           ? 10
           : lt.acronym === 'BL'
           ? 1
-          : 0;
+          : 0);
 
       const usedDays = leaveBreakdown[lt.id]?.daysCount || 0;
-      const annualQuotaHours = annualQuotaDays * 8;
+      // The hours actually counted for this leave; the allowance itself is in days, since each
+      // leave day's hours can differ (it was shown as days times 8).
       const usedHours = leaveBreakdown[lt.id]?.hoursCredited || 0;
 
       return {
@@ -416,9 +415,7 @@ export function calculateNurseHoursAccounting(
         annualQuotaDays,
         usedDays,
         remainingDays: Math.max(0, annualQuotaDays - usedDays),
-        annualQuotaHours,
         usedHours,
-        remainingHours: Math.max(0, annualQuotaHours - usedHours),
       };
     });
 

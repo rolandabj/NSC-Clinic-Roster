@@ -82,6 +82,16 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   }
   check('the page did not break', errors.length === 0, errors.slice(0, 2).join(' | '));
 
+  // An allowance is in days, as typed: 48 stays 48 (it opened as 6 before 14-10-2026).
+  await page.getByRole('button', { name: 'Edit Amy' }).click();
+  const amyQuota = page.getByRole('dialog', { name: 'Edit Amy' });
+  await amyQuota.getByLabel(/^Annual Leave/).fill('48');
+  await amyQuota.getByRole('button', { name: 'Save changes' }).click();
+  await amyQuota.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
+  await page.getByRole('button', { name: 'Edit Amy' }).click();
+  check('an allowance of 48 days opens as 48', (await page.getByRole('dialog', { name: 'Edit Amy' }).getByLabel(/^Annual Leave/).inputValue()) === '48');
+  await page.keyboard.press('Escape');
+
   // 4. Esc closes the editor; on a phone it fits.
   await page.getByRole('button', { name: 'Edit Amy' }).click();
   const amy = page.getByRole('dialog', { name: 'Edit Amy' });
