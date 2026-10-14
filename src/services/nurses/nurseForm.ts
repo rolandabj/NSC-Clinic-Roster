@@ -34,9 +34,10 @@ export function checkNurseForm(
   const others = nurses.filter((n) => n.id !== editingId);
   const same = (a: string | undefined, b: string) => (a || '').trim().toLowerCase() === b;
 
-  if (!form.fullName.trim()) errors.fullName = "Enter the nurse's full name.";
+  // Records saved by older versions may miss the email, the code or the date of birth.
+  if (!(form.fullName || '').trim()) errors.fullName = "Enter the nurse's full name.";
 
-  const gmail = form.gmail.trim().toLowerCase();
+  const gmail = (form.gmail || '').trim().toLowerCase();
   if (!gmail) errors.gmail = 'Enter an email address. Rosters and the private page are sent to it.';
   else if (!EMAIL.test(gmail)) errors.gmail = 'Enter an email address like name@gmail.com.';
   else {
@@ -44,7 +45,7 @@ export function checkNurseForm(
     if (clash) errors.gmail = `${clash.fullName} already has this email address.`;
   }
 
-  const code = form.employeeCode.trim().toLowerCase();
+  const code = (form.employeeCode || '').trim().toLowerCase();
   if (code) {
     const clash = others.find((n) => same(n.employeeCode, code));
     if (clash) errors.employeeCode = `${clash.fullName} already has this employee code.`;
@@ -69,4 +70,12 @@ export function movePreference(prefs: NursePreference[], from: number, to: numbe
   const [moved] = list.splice(from, 1);
   list.splice(to, 0, moved);
   return list.map((pref, i) => ({ ...pref, rank: i + 1 }));
+}
+
+/** The first N-101, N-102 ... that no nurse has, offered to a new nurse. */
+export function nextEmployeeCode(nurses: Pick<Nurse, 'employeeCode'>[]): string {
+  const taken = new Set(nurses.map((n) => (n.employeeCode || '').trim().toUpperCase()));
+  let n = 101;
+  while (taken.has(`N-${n}`)) n++;
+  return `N-${n}`;
 }

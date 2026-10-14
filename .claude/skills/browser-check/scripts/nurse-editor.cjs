@@ -50,6 +50,8 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   check('the new nurse is saved with the typed date', saved && saved.dateOfBirth === '1990-03-02' && saved.contractPercent === 80, JSON.stringify(saved || {}).slice(0, 120));
 
   // 3. Preferences ordered from the keyboard.
+  // An older record (no email, no code): the list shows it after the next save reloads it.
+  await page.evaluate(() => window.__repo.col('nurses').set('old', { id: 'old', fullName: 'Old Record', seniorityLevelId: 'jun', contractPercent: 100, capabilityIds: [], isClinicNurse: true, preferences: [], active: true }));
   await page.getByRole('button', { name: 'Edit Mary' }).click();
   const mary = page.getByRole('dialog', { name: 'Edit Mary' });
   await mary.getByLabel('Add a doctor or specialty').selectOption({ label: 'Dr Ray (ENT)' });
@@ -67,6 +69,18 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await mary.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
   const prefs = await page.evaluate(() => window.__repo.col('nurses').get('mary').preferences.map((p) => `${p.rank}:${p.refId}`).join(','));
   check('the new order is saved', prefs === '1:ray,2:lee', prefs);
+
+  // An older record without an email or a code opens, and says what is missing (Checkpoint 6).
+  await page.getByRole('button', { name: 'Edit Old Record' }).click();
+  const old = page.getByRole('dialog', { name: 'Edit Old Record' });
+  await old.waitFor({ timeout: 5000 }).catch(() => {});
+  check('a nurse saved without an email or a code opens', (await old.count()) === 1);
+  if (await old.count()) {
+    await old.getByRole('button', { name: 'Save changes' }).click();
+    check('and Save says the email and the date of birth are missing', /2 fields need fixing/.test(await old.innerText()));
+    await page.keyboard.press('Escape');
+  }
+  check('the page did not break', errors.length === 0, errors.slice(0, 2).join(' | '));
 
   // 4. Esc closes the editor; on a phone it fits.
   await page.getByRole('button', { name: 'Edit Amy' }).click();

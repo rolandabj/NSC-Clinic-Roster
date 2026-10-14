@@ -41,7 +41,7 @@ import { BulkImportModal } from '../modals/BulkImportModal';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import { revokeNurseLink } from '../../services/publish/nurseRosterService';
 import { filterNurses, nurseCounts, type NurseFilters } from '../../services/nurses/nurseList';
-import { checkNurseForm, movePreference } from '../../services/nurses/nurseForm';
+import { checkNurseForm, movePreference, nextEmployeeCode } from '../../services/nurses/nurseForm';
 import { localTodayIso } from '../../utils/dateUtils';
 import { Badge, Button, Checkbox, DataTable, DateInput, Dialog, EmptyState, Field, IconButton, Input, Notice, PageHeader, Select, Textarea, cx, type Column } from '../ui';
 
@@ -166,7 +166,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
     setFormData({
       fullName: '',
       gmail: '',
-      employeeCode: `N-${100 + nurses.length + 1}`,
+      employeeCode: nextEmployeeCode(nurses),
       seniorityLevelId: defaultSeniority,
       contractPercent: 100,
       dateOfBirth: '',
@@ -201,11 +201,12 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
     setFormData({
       id: nurse.id,
       fullName: nurse.fullName,
-      gmail: nurse.gmail,
-      employeeCode: nurse.employeeCode,
+      // Records saved by older versions may miss these.
+      gmail: nurse.gmail ?? '',
+      employeeCode: nurse.employeeCode ?? '',
       seniorityLevelId: nurse.seniorityLevelId,
       contractPercent: nurse.contractPercent,
-      dateOfBirth: nurse.dateOfBirth,
+      dateOfBirth: nurse.dateOfBirth ?? '',
       capabilityIds: nurse.capabilityIds || [],
       isClinicNurse: nurse.isClinicNurse !== false,
       preferences: nurse.preferences || [],

@@ -88,6 +88,23 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 5 });
   await page.mouse.up();
   check('dragging across days still opens the leave', (await leaveDialogDates()) === '2026-10-12 to 2026-10-14');
+  // A key press right after a drag is not swallowed (Checkpoint 6).
+  const k1 = await day('Mary, Mon 12-10-2026: no leave').boundingBox();
+  const k2 = await day('Mary, Tue 13-10-2026: no leave').boundingBox();
+  await page.mouse.move(k1.x + 5, k1.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(k2.x + 5, k2.y + 5, { steps: 3 });
+  await page.mouse.up();
+  await leaveDialogDates();
+  await day('Mary, Thu 22-10-2026: no leave').focus();
+  await page.keyboard.press('Enter');
+  check('after a drag, Enter on a day starts a leave', /Leave for Mary starts Thu 22-10-2026/.test(await page.locator('main').innerText()));
+  await page.keyboard.press('Escape');
+  // A leave over another leave is refused, naming the day (Checkpoint 6).
+  await day('Nina, Sun 25-10-2026: no leave').click();
+  await day('Nina, Wed 28-10-2026: no leave').click();
+  await page.waitForTimeout(300);
+  check('a leave over another leave is refused, naming the day', (await page.getByRole('dialog').count()) === 0 && /already has leave on Mon 26-10-2026/.test(await page.locator('body').innerText()));
   await day('Sara, Mon 26-10-2026: no leave').click();
   check('after a drag, the next click starts a leave', /Leave for Sara starts Mon 26-10-2026/.test(await page.locator('main').innerText()));
   await page.keyboard.press('Escape');

@@ -9,6 +9,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { authService } from '../../services/auth/authService';
+import { countPendingApprovals } from '../../services/requests/staffRequestService';
 import { getRepository } from '../../services/repository';
 import type { DutyWindow, Nurse } from '../../types';
 import type { AddressChange, ClinicContextState } from '../../types/navigation';
@@ -66,7 +67,15 @@ export const RequestsView: React.FC<RequestsViewProps> = ({ tab, onAddressChange
         )}
       </TabPanel>
       <TabPanel idPrefix="requests" id="all" value={open}>
-        {open === 'all' && <AllRequestsPanel currentUser={currentUser || undefined} nurses={nurses} dutyWindows={dutyWindows} />}
+        {open === 'all' && (
+          <AllRequestsPanel
+            currentUser={currentUser || undefined}
+            nurses={nurses}
+            dutyWindows={dutyWindows}
+            // A decision here changes the number waiting beside Requests in the menu (Checkpoint 6).
+            onChanged={() => countPendingApprovals().then(decided).catch(() => {})}
+          />
+        )}
       </TabPanel>
     </div>
   );

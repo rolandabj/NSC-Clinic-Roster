@@ -4,6 +4,7 @@ import { leaveApprovalFields } from '../../services/engine/leaveStatus';
 import { confirmDialog, notify, type NoticeTone } from '../common/dialogs';
 import { Button, IconButton, Notice, PageHeader, Tabs, cx } from '../ui';
 import { moveInGrid, pickStep, type GridCell } from '../../services/availability/leaveGridPick';
+import { leaveClash } from '../../services/availability/leaveClash';
 import { readableTextOn } from '../../utils/colorContrast';
 import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo, useId, useRef } from 'react';
@@ -99,6 +100,10 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   const [gridFocus, setGridFocus] = useState<[number, number]>([0, 0]);
   const [gridStatus, setGridStatus] = useState('');
   const dragEndedRef = useRef(false);
+  // Fewer nurses after a reload: the Tab stop moves to the last row, so the grid keeps it.
+  useEffect(() => {
+    setGridFocus(([r, c]) => [Math.max(0, Math.min(r, nurses.length - 1)), c]);
+  }, [nurses.length]);
   // Another month: a leave half picked is dropped, and the Tab stop stays on the grid.
   useEffect(() => {
     setPickStart(null);
@@ -326,6 +331,12 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     const end = editingLeaveEntry.endDate || start;
     if (start > end) {
       triggerToast('Start date must be before or equal to end date.', 'error');
+      return;
+    }
+    // A leave must not cover another leave or a pinned day of the same nurse (Checkpoint 6).
+    const clash = leaveClash(editingLeaveEntry.nurseId, start, end, leaveEntries, locks, editingLeaveEntry.id);
+    if (clash) {
+      triggerToast(clash, 'error');
       return;
     }
 
@@ -663,6 +674,13 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   // Leave by click or by drag (Phase 6, slice 5; WCAG 2.5.7). A click on an empty day starts
   // the leave, a second click on the same row ends it; dragging across days still works.
   const openLeaveRange = (nurseId: string, from: number, to: number) => {
+    // The days between must be free too (Checkpoint 6).
+    const clash = leaveClash(nurseId, getIsoDate(from), getIsoDate(to), leaveEntries, locks);
+    if (clash) {
+      setGridStatus(clash);
+      triggerToast(clash, 'warning');
+      return;
+    }
     setEditingLeaveEntry({
       nurseId,
       leaveTypeId: leaveTypes[0]?.id || '',
@@ -697,6 +715,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   };
 
   const onGridKey = (e: React.KeyboardEvent, row: number, col: number) => {
+    // A key press is never the click that follows a drag.
+    dragEndedRef.current = false;
     if (e.key === 'Escape' && pickStart) {
       e.preventDefault();
       e.stopPropagation();

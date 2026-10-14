@@ -69,6 +69,12 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   const grid = await page.locator('main').innerText();
   check('the old approval tabs are gone', !/Pending Approvals|All requests/.test(grid));
   check('it points to Requests while some wait', /1 request is waiting for a decision/.test(grid) && (await page.getByRole('link', { name: 'Open Requests' }).count()) === 1);
+  // A decision on the All tab lowers the count in the menu too (Checkpoint 6).
+  await page.getByRole('link', { name: 'Open Requests' }).click();
+  await page.getByRole('tab', { name: 'All day off and shift requests' }).click();
+  await page.getByRole('main').getByRole('button', { name: 'Approve' }).first().click();
+  await page.waitForTimeout(1000);
+  check('a decision on the All tab updates the menu count', (await menu(page).getByRole('link', { name: 'Requests', exact: true }).count()) === 1, await menu(page).innerText());
   await page.close();
 
   // 5. A manager sees Requests and their own "My requests"; a nurse sees no Requests.

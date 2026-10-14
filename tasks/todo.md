@@ -58,10 +58,10 @@ Main moves only when the owner says "push to main".
 - [x] Checkpoint 5
 
 ## Phase 6: planner screens
-- [ ] Nurses and Doctors lists and editors (Nurses done, items 75 and 76; Doctors done, item 77)
+- [x] Nurses and Doctors lists and editors (items 75 to 77)
 - [x] Availability split into Leave and days off, and Requests (item 78)
 - [x] Leave grid without dragging (item 79)
-- [ ] Checkpoint 6
+- [x] Checkpoint 6 (item 80)
 
 ## Phase 7: publishing, History and dialogs
 - [ ] Every dialog on the shared `Dialog`

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkNurseForm, movePreference } from '../../src/services/nurses/nurseForm';
+import { checkNurseForm, movePreference, nextEmployeeCode } from '../../src/services/nurses/nurseForm';
 
 const TODAY = '2026-10-14';
 const others = [
@@ -67,4 +67,18 @@ test('moving a preference keeps the ranks in order', () => {
   // Past either end nothing moves.
   assert.equal(movePreference(prefs, 0, -1), prefs);
   assert.equal(movePreference(prefs, 2, 3), prefs);
+});
+
+test('a record saved without an email, a code or a date of birth is checked without breaking', () => {
+  const errors = checkNurseForm({ fullName: 'Old Record', gmail: undefined, employeeCode: undefined, contractPercent: 100, dateOfBirth: undefined, leaveQuotas: {} } as any, others, 'old', TODAY);
+  assert.equal(errors.gmail, 'Enter an email address. Rosters and the private page are sent to it.');
+  assert.equal(errors.dateOfBirth, 'Enter the date of birth, like 18-11-1990.');
+  assert.equal(errors.employeeCode, undefined);
+});
+
+test('a new nurse is offered the first free employee code', () => {
+  const nurses = [{ employeeCode: 'N-101' }, { employeeCode: 'N-103' }, { employeeCode: 'n-102' }, { employeeCode: 'X-9' }, {}] as any[];
+  assert.equal(nextEmployeeCode(nurses), 'N-104');
+  assert.equal(nextEmployeeCode([]), 'N-101');
+  assert.equal(nextEmployeeCode([{ employeeCode: 'N-101' }, { employeeCode: 'N-103' }] as any[]), 'N-102');
 });

@@ -7,7 +7,7 @@
  * question with an optional note for the nurse. Planners and managers (canApprove() in
  * firestore.rules) see it.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check, RefreshCw, X } from 'lucide-react';
 import { UserProfile } from '../../services/auth/authService';
 import { listPendingApprovals, decideRequest } from '../../services/requests/staffRequestService';
@@ -43,10 +43,14 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({ curren
   const [decision, setDecision] = useState<{ item: Waiting; decision: 'APPROVED' | 'REJECTED' } | null>(null);
   const [note, setNote] = useState('');
 
+  // Only the latest load is shown: one started before the shift names arrived may finish last.
+  const loadRun = useRef(0);
   const load = async () => {
+    const run = ++loadRun.current;
     setIsLoading(true);
     try {
       const data = await listPendingApprovals();
+      if (run !== loadRun.current) return undefined;
       setLeaves(
         data.leaveRequests.map((l) => ({ id: l.id, kind: 'LEAVE', nurseName: l.nurseName, nurseCode: l.nurseCode, what: waitingLeaveText(l), note: l.note }))
       );
@@ -58,11 +62,12 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({ curren
       onLoaded?.(waiting);
       return waiting;
     } catch (err) {
+      if (run !== loadRun.current) return undefined;
       console.error('[ApprovalsQueuePanel] fetch error:', err);
       setLoadError(true);
       return undefined;
     } finally {
-      setIsLoading(false);
+      if (run === loadRun.current) setIsLoading(false);
     }
   };
 

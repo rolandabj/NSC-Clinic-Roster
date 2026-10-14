@@ -453,7 +453,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       });
 
       triggerNotification(
-        `Expanded recurring patterns: ${result.createdCount} sessions populated across ${expandRange.startDate} to ${expandRange.endDate}.`
+        `Usual weeks put on dates: ${result.createdCount} ${result.createdCount === 1 ? 'clinic' : 'clinics'} from ${formatDate(expandRange.startDate)} to ${formatDate(expandRange.endDate)}.`
       );
       setIsExpandModalOpen(false);
       loadData();
@@ -468,8 +468,8 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
     await repo.update('doctorSessions', sess.id, { cancelled: nextCancelled });
     triggerNotification(
       nextCancelled
-        ? `Session cancelled for Dr. ${doctors.find((d) => d.id === sess.doctorId)?.fullName} on ${sess.date}.`
-        : `Session restored on ${sess.date}.`
+        ? `The clinic of ${doctors.find((d) => d.id === sess.doctorId)?.fullName || 'the doctor'} on ${formatDayDate(sess.date)} cancelled.`
+        : `The clinic on ${formatDayDate(sess.date)} restored.`
     );
     loadData();
   };
