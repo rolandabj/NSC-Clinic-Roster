@@ -1,5 +1,6 @@
 // Test page only: an in memory database with live listeners, as window.__repo.
-// window.__repo.col('assignments') reads what was saved; failWrites = true makes saves fail.
+// window.__repo.col('assignments') reads what was saved; failWrites = true makes saves fail,
+// failReads = true makes reads fail as they do without a connection.
 import { seed } from './seed';
 
 type Listener = { col: string; filter?: { field: string; value: any }; cb: (items: any[], info: any) => void };
@@ -9,6 +10,7 @@ class MemoryRepo {
   data: Record<string, Map<string, any>> = {};
   listeners: Listener[] = [];
   failWrites = false;
+  failReads = false;
   writes = 0;
 
   constructor(initial: Record<string, any[]>) {
@@ -28,10 +30,15 @@ class MemoryRepo {
     if (this.failWrites) throw new Error('Quota used up (test)');
     this.writes++;
   }
+  read() {
+    if (this.failReads) throw Object.assign(new Error('No connection (test)'), { code: 'unavailable' });
+  }
   async list(c: string, filter?: any) {
+    this.read();
     return this.items(c, filter);
   }
   async get(c: string, id: string) {
+    this.read();
     const x = this.col(c).get(id);
     return x ? clone(x) : null;
   }

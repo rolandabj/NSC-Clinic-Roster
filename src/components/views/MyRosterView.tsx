@@ -37,6 +37,8 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
   const [showEarlier, setShowEarlier] = useState(false);
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [status, setStatus] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const [scheduleId, setScheduleId] = useState('');
 
   useEffect(() => {
@@ -45,17 +47,34 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
       setState({ kind: 'gone' });
       return;
     }
-    setState({ kind: 'loading' });
+    // Refresh keeps the shifts on screen while it loads, so focus and the scroll position stay put.
+    setState((prev) => (prev.kind === 'ready' ? prev : { kind: 'loading' }));
+    if (attempt > 0) setRefreshing(true);
     getRepository()
       .get('nurseRosters', token)
       .then((doc) => {
         if (cancelled) return;
         setState(doc && !doc.revoked ? { kind: 'ready', doc } : { kind: 'gone' });
+        if (attempt > 0) {
+          setRefreshFailed(false);
+          setStatus('Your shifts are up to date.');
+          setTimeout(() => setStatus(''), 4000);
+        }
       })
       .catch((err: any) => {
         if (cancelled) return;
         // The rules refuse a revoked or unknown link; anything else is most likely the connection.
-        setState(err?.code === 'permission-denied' || err?.code === 'not-found' ? { kind: 'gone' } : { kind: 'error' });
+        const gone = err?.code === 'permission-denied' || err?.code === 'not-found';
+        if (gone) {
+          setState({ kind: 'gone' });
+          return;
+        }
+        // A failed refresh keeps the shifts that loaded before and says so.
+        setState((prev) => (prev.kind === 'ready' ? prev : { kind: 'error' }));
+        if (attempt > 0) setRefreshFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setRefreshing(false);
       });
     return () => {
       cancelled = true;
@@ -321,10 +340,15 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
                   ))}
                 </select>
               </label>
-              <Button variant="ghost" size="lg" onClick={() => setAttempt((n) => n + 1)}>
+              <Button variant="ghost" size="lg" busy={refreshing} disabled={refreshing} onClick={() => setAttempt((n) => n + 1)}>
                 Refresh
               </Button>
             </div>
+            {refreshFailed && (
+              <Notice live tone="warning" title="Couldn't refresh">
+                These are the shifts you loaded earlier. Check your internet connection and try again.
+              </Notice>
+            )}
             <PublishedRosterSheet key={sheet.scheduleId} sheet={sheet} clinicName={state.doc.clinicName} timezone={state.doc.timezone} myNurseId={state.doc.nurseId} />
           </>
         ) : (

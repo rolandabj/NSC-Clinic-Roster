@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { CalendarPlus, CircleCheck, CircleX, Clock, History, Plus } from 'lucide-react';
+import { CalendarPlus, CircleCheck, CircleX, Clock, History, Plus, RotateCcw } from 'lucide-react';
 import { UserProfile } from '../../services/auth/authService';
 import {
   listMyRequests,
@@ -60,6 +60,8 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
   const [myLeaves, setMyLeaves] = useState<LeaveEntry[]>([]);
   const [myAvailability, setMyAvailability] = useState<AvailabilityRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // Set when the requests could not be loaded: the empty list would then be wrong, and so would the checks against it.
+  const [loadError, setLoadError] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [showPast, setShowPast] = useState(false);
 
@@ -76,7 +78,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
   const [leaveStartDate, setLeaveStartDate] = useState(initialDates.leaveStartDate);
   const [leaveEndDate, setLeaveEndDate] = useState(initialDates.leaveEndDate);
   const [leaveNote, setLeaveNote] = useState('');
-  const [leaveErrors, setLeaveErrors] = useState<{ startDate?: string; endDate?: string }>({});
+  const [leaveErrors, setLeaveErrors] = useState<{ leaveTypeId?: string; startDate?: string; endDate?: string }>({});
   const leaveBox = useRef<HTMLFormElement>(null);
   useFocusFirstError(leaveErrors, leaveBox);
 
@@ -97,9 +99,10 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
       const { leaves, availability } = await listMyRequests(currentUser);
       setMyLeaves(leaves);
       setMyAvailability(availability);
+      setLoadError(false);
     } catch (err: any) {
       console.error('[NurseSelfService] fetch error:', err);
-      triggerToast('Could not load your requests. Try again.', 'error');
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -111,7 +114,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
 
   const handleSubmitLeave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const errors = checkLeaveRequest({ startDate: leaveStartDate, endDate: leaveEndDate }, today, myLeaves);
+    const errors = checkLeaveRequest({ leaveTypeId, startDate: leaveStartDate, endDate: leaveEndDate }, today, myLeaves);
     setLeaveErrors(errors);
     if (Object.keys(errors).length) return;
     setIsBusy(true);
@@ -262,6 +265,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
             variant="primary"
             size="lg"
             icon={Plus}
+            disabled={isLoading || loadError}
             onClick={() => {
               setLeaveErrors({});
               setIsLeaveModalOpen(true);
@@ -272,6 +276,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
           <Button
             size="lg"
             icon={CalendarPlus}
+            disabled={isLoading || loadError}
             onClick={() => {
               setDayErrors({});
               setIsAvailModalOpen(true);
@@ -290,6 +295,19 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
           <p className="text-ink-muted" role="status">
             Loading your requests…
           </p>
+        ) : loadError ? (
+          <Notice
+            live
+            tone="danger"
+            title="Your requests couldn't be loaded"
+            action={
+              <Button icon={RotateCcw} onClick={fetchMyData}>
+                Try again
+              </Button>
+            }
+          >
+            Check your internet connection. You can send a new request once they have loaded.
+          </Notice>
         ) : list.upcoming.length === 0 ? (
           <p className="rounded-lg border border-line bg-surface p-4 text-ink-muted">You have no requests for the days coming up.</p>
         ) : (
@@ -321,7 +339,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
         }
       >
         <form id="leave-request" ref={leaveBox} onSubmit={handleSubmitLeave} noValidate className="space-y-4">
-          <Field label="Kind of leave">
+          <Field label="Kind of leave" error={leaveErrors.leaveTypeId}>
             {(f) => (
               <Select {...f} value={leaveTypeId} onChange={(e) => setLeaveTypeId(e.target.value)}>
                 {leaveTypes.map((lt) => (

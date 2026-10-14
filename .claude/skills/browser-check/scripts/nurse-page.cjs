@@ -35,6 +35,16 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   await page.waitForTimeout(300);
   check('Copy as text says it is done', /Shifts copied/.test(await page.getByRole('status').first().innerText()));
   check('the team schedule is under them', (await page.getByRole('heading', { name: 'Team schedule' }).count()) === 1);
+  // A failed Refresh keeps the shifts on screen and says so; the next one clears the message (Checkpoint 5).
+  await page.evaluate(() => { window.__repo.failReads = true; });
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await page.getByText("Couldn't refresh").waitFor({ timeout: 5000 }).catch(() => {});
+  check('a failed refresh says so', (await page.getByText("Couldn't refresh").count()) === 1);
+  check('a failed refresh keeps the shifts on screen', (await page.getByRole('region', { name: 'Next shift' }).count()) === 1);
+  await page.evaluate(() => { window.__repo.failReads = false; });
+  await page.getByRole('button', { name: 'Refresh' }).click();
+  await page.waitForTimeout(500);
+  check('a refresh that works clears the message', (await page.getByText("Couldn't refresh").count()) === 0);
   // Phone sizes: buttons at least 44 px high; in the nurse's own part text is 16 px, and nothing is under 14 px (the full date under a card).
   const sizes = await page.evaluate(() => {
     const main = document.querySelector('main');

@@ -85,10 +85,12 @@ type Errors<K extends string> = Partial<Record<K, string>>;
 
 /** Checks before a leave request is sent; an empty object means it can go. */
 export function checkLeaveRequest(
-  r: { startDate: string; endDate: string },
+  r: { leaveTypeId?: string; startDate: string; endDate: string },
   today: string,
   existing: LeaveEntry[]
-): Errors<'startDate' | 'endDate'> {
+): Errors<'leaveTypeId' | 'startDate' | 'endDate'> {
+  // An empty kind means the clinic has no kinds of leave yet (or they did not load): the request would read as plain "Leave".
+  if (r.leaveTypeId === '') return { leaveTypeId: 'No kinds of leave to choose from. Try again later, or ask your planner.' };
   const errors: Errors<'startDate' | 'endDate'> = {};
   if (!r.startDate) errors.startDate = 'Enter the first day, like 18-11-2026.';
   if (!r.endDate) errors.endDate = 'Enter the last day, like 18-11-2026.';

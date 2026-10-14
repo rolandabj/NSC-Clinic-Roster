@@ -55,7 +55,7 @@ Main moves only when the owner says "push to main".
 - [x] My roster and My requests for phones
 - [x] Read receipt, shared roster and viewer Dashboard for phones
 - [x] `POST /api/requests/:id/notify` with tests, and the Settings switch
-- [ ] Checkpoint 5
+- [x] Checkpoint 5
 
 ## Phase 6: planner screens
 - [ ] Nurses and Doctors lists and editors

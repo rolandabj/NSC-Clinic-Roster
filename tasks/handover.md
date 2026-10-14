@@ -9,9 +9,9 @@ Start a new chat by reading this file, then `CLAUDE.md` and `PROJECT_GUIDE.md`.
 |---|---|
 | Working branch | `claude/ui-overhaul` (main fast forwards to it) |
 | On main | Everything up to Phase 5 slice 4 (guide items 42 to 72) |
-| Done | Phases 0 to 4 with Checkpoints 1 to 4, and Phase 5 slices 1 to 4 |
-| Next | Checkpoint 5 (a review of Phase 5), then Phase 6, each when the owner says go |
-| Unit tests | 424 passing, and 96 Firestore rules checks in the emulator |
+| Done | Phases 0 to 5 with Checkpoints 1 to 5 (Checkpoint 5 is guide item 73, on the working branch) |
+| Next | Phase 6, when the owner says go |
+| Unit tests | 427 passing, and 96 Firestore rules checks in the emulator |
 | Firestore rules | Not changed by the overhaul, so there is nothing to publish by hand |
 | HawkScan | Never run: the session has no `HAWK_API_KEY`. The owner knows |
 
@@ -88,9 +88,7 @@ branch main).
 
 ## 5. What comes next
 
-1. **Checkpoint 5**: review all of Phase 5 (a code review of items 68 to 71, the audit at 390 and
-   1366 px with `ui-audit.cjs`, and the nurse scripts `nurse-page.cjs`, `my-requests.cjs` and
-   `public-pages.cjs`), fix what it finds, and give the owner screenshots and numbers.
+1. **Checkpoint 5**: done (guide item 73). Six faults fixed; the audit at 390 and 1366 px is clean.
 2. **Phase 6, the planner screens** (see `tasks/plan.md`):
    * Nurses and Doctors as lists with search and filters, and editors that check each field.
    * Availability split into "Leave and days off" and "Requests".

@@ -31,7 +31,14 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   const button = ack.getByRole('button', { name: 'I have my roster' });
   const box = await button.boundingBox();
   check('read receipt: the button is at least 44 px high and spans the card', box && box.height >= 44 && box.width > 250, JSON.stringify(box));
+  // Without a connection it says so and offers Try again, rather than "This link no longer works" (Checkpoint 5).
+  await ack.context().setOffline(true);
   await button.click();
+  await ack.getByRole('heading', { name: 'No internet connection' }).waitFor({ timeout: 5000 }).catch(() => {});
+  check('read receipt: offline, it says there is no connection', (await ack.getByRole('heading', { name: 'No internet connection' }).count()) === 1);
+  check('read receipt: offline, it does not say the link is dead', (await ack.getByText('This link no longer works').count()) === 0);
+  await ack.context().setOffline(false);
+  await ack.getByRole('button', { name: 'Try again' }).click();
   await ack.getByRole('heading', { name: 'Thank you' }).waitFor({ timeout: 10000 }).catch(() => {});
   check('read receipt: pressing it thanks the nurse', (await ack.getByRole('heading', { name: 'Thank you' }).count()) === 1);
   check('read receipt: no sideways scroll', !(await layout(ack)).wide);

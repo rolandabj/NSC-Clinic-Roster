@@ -71,7 +71,7 @@ in `/opt/pw-browsers`; never run `playwright install`.
    - Dialogs: `getByRole('dialog', { name: '...' })`. Confirmations are `alertdialog`;
      use exact button names there.
    - What the app saved: `page.evaluate(() => [...window.__repo.col('assignments').values()])`.
-   - A failed save (daily quota): `page.evaluate(() => { window.__repo.failWrites = true; })`.
+   - A failed save (daily quota): `page.evaluate(() => { window.__repo.failWrites = true; })`. A lost connection: `window.__repo.failReads = true` makes reads fail.
    - Take screenshots, look at them with Read, and report page errors and console errors.
 5. **Stop**: `bash .claude/skills/browser-check/scripts/stop.sh` stops both servers and deletes
    `_preview/`. Do this before committing.

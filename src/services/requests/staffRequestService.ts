@@ -283,7 +283,8 @@ export async function decideRequest(
       reviewedByUserId: reviewerId,
       reviewedByUserName: reviewerName,
       reviewedAt: now,
-      reviewNotes: notes || existing.reviewNotes,
+      // A note belongs to one decision: approving after a decline must not carry the decline's note to the nurse.
+      reviewNotes: notes ?? '',
     });
 
     await repo.create('audit', {
@@ -307,7 +308,7 @@ export async function decideRequest(
     reviewedByUserId: reviewerId,
     reviewedByUserName: reviewerName,
     reviewedAt: now,
-    reviewNotes: notes || existing.reviewNotes,
+    reviewNotes: notes ?? '',
   });
 
   await syncDayOffLock(existing, existing.available === false && decision === 'APPROVED');

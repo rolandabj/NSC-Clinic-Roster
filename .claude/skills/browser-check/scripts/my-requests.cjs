@@ -76,6 +76,20 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await page.waitForTimeout(1000);
   check('a waiting request can be cancelled', (await cards()).length === before - 1);
 
+  // 5. When the requests cannot be loaded the page says so, with Try again, and sending waits (Checkpoint 5).
+  await page.evaluate(() => { window.__repo.failReads = true; });
+  await page.getByRole('button', { name: 'Ask for a day off or a shift' }).click();
+  await day.getByLabel('Day', { exact: true }).fill('28-11-2026');
+  await day.getByRole('button', { name: 'Send request' }).click();
+  await day.waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
+  await page.getByText("Your requests couldn't be loaded").waitFor({ timeout: 5000 }).catch(() => {});
+  check('a failed load says so, not "no requests"', (await page.getByText("Your requests couldn't be loaded").count()) === 1 && (await page.getByText('You have no requests').count()) === 0);
+  check('no new request can be sent until they load', await page.getByRole('button', { name: 'Ask for leave' }).isDisabled());
+  await page.evaluate(() => { window.__repo.failReads = false; });
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await page.waitForTimeout(800);
+  check('Try again loads them', (await cards()).some((t) => /28-11-2026/.test(t)) && !(await page.getByRole('button', { name: 'Ask for leave' }).isDisabled()));
+
   const sizes = await page.evaluate(() => ({
     low: [...document.querySelectorAll('main button')].filter((b) => b.getBoundingClientRect().height < 44 && b.getBoundingClientRect().height > 0).map((b) => b.textContent.trim()),
     wide: document.documentElement.scrollWidth > window.innerWidth + 1,

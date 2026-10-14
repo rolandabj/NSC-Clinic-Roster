@@ -79,7 +79,8 @@ export function createRequestsRouter(deps: RequestNotifyDeps = defaultDeps) {
         res.status(409).json({ error: 'NotDecided', message: 'This request is still Waiting. Only an approved or declined request can be emailed.' });
         return;
       }
-      const decidedAt = Date.parse(String(request.reviewedAt || ''));
+      // Firestore's own save time, not reviewedAt: that comes from the planner's computer, whose clock may be wrong.
+      const decidedAt = Date.parse(String(request._updateTime || request.reviewedAt || ''));
       if (!Number.isFinite(decidedAt) || deps.now() - decidedAt > RECENT_DECISION_MS) {
         res.status(409).json({ error: 'NotRecent', message: 'Only a decision made in the last 15 minutes can be emailed.' });
         return;

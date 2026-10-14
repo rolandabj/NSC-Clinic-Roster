@@ -183,6 +183,21 @@ test('a request still waiting, an old decision or an unknown request is not emai
   assert.equal(waiting.sent.length + old.sent.length + unknown.sent.length + badKind.sent.length, 0);
 });
 
+test('the 15 minutes count from when Firestore saved the decision, not the planner\'s own clock', async () => {
+  // The planner's computer is 40 minutes slow: the decision was saved a minute ago.
+  const slowClock = await call(editor, '/api/requests/r1/notify', { kind: 'day' }, clinicData({
+    'availabilityRequests/r1': { id: 'r1', nurseId: 'n1', date: '2026-11-18', available: false, status: 'APPROVED', reviewedAt: new Date(NOW - 41 * 60_000).toISOString(), _updateTime: decidedAt },
+  }));
+  assert.equal(slowClock.status, 200);
+  assert.equal(slowClock.sent.length, 1);
+  // The planner's computer is ahead: the decision was saved an hour ago.
+  const fastClock = await call(editor, '/api/requests/r1/notify', { kind: 'day' }, clinicData({
+    'availabilityRequests/r1': { id: 'r1', nurseId: 'n1', date: '2026-11-18', available: false, status: 'APPROVED', reviewedAt: new Date(NOW + 5 * 60_000).toISOString(), _updateTime: new Date(NOW - 60 * 60_000).toISOString() },
+  }));
+  assert.equal(fastClock.status, 409);
+  assert.equal(fastClock.sent.length, 0);
+});
+
 test('a nurse without an email address gets nothing, and the planner is told', async () => {
   const r = await call(editor, '/api/requests/r1/notify', { kind: 'day' }, clinicData({ 'nurses/n1': { id: 'n1', fullName: 'Mary Lee' } }));
   assert.equal(r.status, 422);
@@ -266,6 +281,39 @@ test('approving or declining a request asks the server to email the nurse', asyn
     ['/api/requests/r1/notify', 'day', 'Bearer planner-token'],
   ]);
   assert.deepEqual(Object.keys(asked[0].body), ['kind'], 'the browser sends no email text and no address');
+});
+
+test('a new decision without a note clears the note of the decision before', async (t) => {
+  const { repositoryManager } = await import('../../src/services/repository');
+  const { decideRequest } = await import('../../src/services/requests/staffRequestService');
+  const { authService } = await import('../../src/services/auth/authService');
+  const docs = new Map<string, any>([
+    ['leaveEntries/l1', { id: 'l1', nurseId: 'n1', startDate: '2026-11-20', endDate: '2026-11-22', status: 'PENDING' }],
+    ['availabilityRequests/r1', { id: 'r1', nurseId: 'n1', date: '2026-11-18', available: true, status: 'PENDING' }],
+  ]);
+  const repo = {
+    get: async (c: string, id: string) => docs.get(`${c}/${id}`) ?? null,
+    update: async (c: string, id: string, data: any) => { docs.set(`${c}/${id}`, { ...docs.get(`${c}/${id}`), ...data }); },
+    create: async (_c: string, data: any) => data,
+    list: async () => [],
+    remove: async () => {},
+  };
+  const previous = (repositoryManager as any).activeRepo;
+  (repositoryManager as any).activeRepo = repo;
+  t.after(() => { (repositoryManager as any).activeRepo = previous; });
+  t.mock.method(authService, 'getFreshToken', async () => 'planner-token');
+  t.mock.method(globalThis, 'fetch', async () => new Response('{}', { status: 200 }));
+  const planner = { uid: 'u1', name: 'Sam', email: 'sam@example.com', role: 'EDITOR', appRole: 'EDITOR' } as any;
+
+  // Declined with a note, then approved without one: the nurse must not read "Not enough cover" on an approval.
+  await decideRequest(planner, 'LEAVE', 'l1', 'REJECTED', 'Not enough cover.');
+  await decideRequest(planner, 'LEAVE', 'l1', 'APPROVED');
+  await decideRequest(planner, 'AVAILABILITY', 'r1', 'REJECTED', 'Full that day.');
+  await decideRequest(planner, 'AVAILABILITY', 'r1', 'APPROVED');
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(docs.get('leaveEntries/l1').reviewNotes, '');
+  assert.equal(docs.get('availabilityRequests/r1').reviewNotes, '');
 });
 
 test('a failed email request never fails the decision', async (t) => {

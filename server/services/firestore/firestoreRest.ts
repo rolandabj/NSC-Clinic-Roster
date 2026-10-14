@@ -46,14 +46,17 @@ function documentUrl(collection: string, id: string): string {
 }
 
 /** Reads one document, with the caller's ID token when one is given (null when missing or refused). */
-async function readDocument(collection: string, id: string, idToken?: string): Promise<Record<string, any> | null> {
+async function readDocument(collection: string, id: string, idToken?: string, withSaveTime = false): Promise<Record<string, any> | null> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (idToken) headers.Authorization = `Bearer ${idToken}`;
   const res = await fetch(documentUrl(collection, id), { headers, signal: AbortSignal.timeout(10_000) });
   if (res.status === 404 || res.status === 403) return null;
   if (!res.ok) throw new Error(`Firestore returned ${res.status}`);
   const json: any = await res.json();
-  return { id, ...fromFirestoreFields(json?.fields || {}) };
+  const doc: Record<string, any> = { id, ...fromFirestoreFields(json?.fields || {}) };
+  // When Firestore last saved the document, by its own clock. Set after the fields, so no field can stand in for it.
+  if (withSaveTime) doc._updateTime = typeof json?.updateTime === 'string' ? json.updateTime : undefined;
+  return doc;
 }
 
 /**
@@ -68,9 +71,10 @@ export async function getPublicDocument(collection: string, id: string): Promise
 /**
  * Reads one document as the signed in caller, with their own ID token, so the
  * security rules decide exactly as they do in that person's browser. Returns
- * null when it does not exist or the rules refuse it.
+ * null when it does not exist or the rules refuse it. `_updateTime` is when
+ * Firestore last saved the document (an ISO time from Firestore's clock).
  */
 export async function getDocumentAs(collection: string, id: string, idToken: string): Promise<Record<string, any> | null> {
   if (!idToken) return null;
-  return readDocument(collection, id, idToken);
+  return readDocument(collection, id, idToken, true);
 }

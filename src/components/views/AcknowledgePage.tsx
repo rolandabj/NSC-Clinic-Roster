@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from 'react';
-import { CalendarCheck, CircleCheck, Loader2, TriangleAlert } from 'lucide-react';
+import { CalendarCheck, CircleCheck, Loader2, TriangleAlert, WifiOff } from 'lucide-react';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { Button } from '../ui';
 import { PublicMessage, PublicPageFrame } from '../common/PublicPageFrame';
@@ -21,12 +21,18 @@ interface AcknowledgePageProps {
 export const AcknowledgePage: React.FC<AcknowledgePageProps> = ({ token, clinicName }) => {
   // Nothing is confirmed until the nurse presses the button: email apps that open links
   // to scan them must not confirm on their behalf.
-  const [state, setState] = useState<'ask' | 'working' | 'done' | 'failed'>('ask');
+  const [state, setState] = useState<'ask' | 'working' | 'done' | 'failed' | 'offline'>('ask');
+  const offline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
 
   const confirm = async () => {
+    // Without a connection the link cannot be checked: say so, rather than that the link no longer works.
+    if (offline()) {
+      setState('offline');
+      return;
+    }
     setState('working');
     const ok = await RosterPublishService.acknowledgeByToken(token);
-    setState(ok ? 'done' : 'failed');
+    setState(ok ? 'done' : offline() ? 'offline' : 'failed');
   };
 
   return (
@@ -53,6 +59,20 @@ export const AcknowledgePage: React.FC<AcknowledgePageProps> = ({ token, clinicN
         {state === 'failed' && (
           <PublicMessage live icon={<TriangleAlert className="size-10 text-warning" aria-hidden="true" />} title="This link no longer works">
             It may belong to an older roster. Use the link in your most recent roster email, or ask the clinic office.
+          </PublicMessage>
+        )}
+        {state === 'offline' && (
+          <PublicMessage
+            live
+            icon={<WifiOff className="size-10 text-warning" aria-hidden="true" />}
+            title="No internet connection"
+            action={
+              <Button variant="primary" size="lg" onClick={confirm} className="w-full sm:w-auto">
+                Try again
+              </Button>
+            }
+          >
+            Your confirmation was not sent. Connect to the internet, then try again.
           </PublicMessage>
         )}
         {state === 'working' && (

@@ -42,6 +42,13 @@ test('leave: the dates must be given, in order, and not already passed', () => {
   assert.deepEqual(checkLeaveRequest({ startDate: '2026-11-15', endDate: '2026-11-16' }, TODAY, []), {});
 });
 
+test('leave: a request without a kind of leave is refused', () => {
+  assert.deepEqual(checkLeaveRequest({ leaveTypeId: '', startDate: '2026-11-20', endDate: '2026-11-21' }, TODAY, []), {
+    leaveTypeId: 'No kinds of leave to choose from. Try again later, or ask your planner.',
+  });
+  assert.deepEqual(checkLeaveRequest({ leaveTypeId: 'lt1', startDate: '2026-11-20', endDate: '2026-11-21' }, TODAY, []), {});
+});
+
 test('leave: days already asked for (waiting or approved) are refused, declined ones are not', () => {
   const existing = [leave({ status: 'PENDING', approved: false }), leave({ id: 'l9', startDate: '2026-12-01', endDate: '2026-12-01', status: 'REJECTED', approved: false })];
   assert.deepEqual(checkLeaveRequest({ startDate: '2026-11-21', endDate: '2026-11-25' }, TODAY, existing), {
