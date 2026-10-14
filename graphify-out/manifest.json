@@ -108,9 +108,9 @@
     "semantic_hash": "5e21b5b122c895dce73f2e1445074004"
   },
   "src/components/layout/AppShell.tsx": {
-    "mtime": 1791950940.5668406,
-    "seen": 1791951702.5077336,
-    "ast_hash": "1ee6f36e6078bd17274eb2d7c0b09eb2",
+    "mtime": 1791953851.745424,
+    "seen": 1791954260.3661096,
+    "ast_hash": "c13ef50656e7884f538fb77882880da0",
     "semantic_hash": ""
   },
   "src/components/layout/LocalModeBanner.tsx": {
@@ -120,9 +120,9 @@
     "semantic_hash": ""
   },
   "src/components/layout/Sidebar.tsx": {
-    "mtime": 1791950940.5668406,
-    "seen": 1791951702.5077355,
-    "ast_hash": "c94bbf4de469819e52682ba1d4e5359f",
+    "mtime": 1791953785.9249737,
+    "seen": 1791954260.3661125,
+    "ast_hash": "7717f6979eb83bd6970f5a966ea5592b",
     "semantic_hash": ""
   },
   "src/components/layout/TopBar.tsx": {
@@ -246,9 +246,9 @@
     "semantic_hash": ""
   },
   "src/components/views/ApprovalsQueuePanel.tsx": {
-    "mtime": 1791950940.5828934,
-    "seen": 1791951702.507794,
-    "ast_hash": "55f704baa5684651e91cb0b2560bfcf5",
+    "mtime": 1791954205.6684103,
+    "seen": 1791954260.3661823,
+    "ast_hash": "5db26fec3bbbaa0115d102186d7e1001",
     "semantic_hash": ""
   },
   "src/components/views/AuditTrailView.tsx": {
@@ -258,15 +258,15 @@
     "semantic_hash": "4c2c62984ee0483cd6eae5986a19910b"
   },
   "src/components/views/AvailabilityView.tsx": {
-    "mtime": 1791950940.5828934,
-    "seen": 1791951702.507796,
-    "ast_hash": "802458b45b45d5ed2d01acff8d6d47f5",
+    "mtime": 1791954205.6709604,
+    "seen": 1791954260.3661852,
+    "ast_hash": "497fad2b2507b41f07b4ba285e0a28fd",
     "semantic_hash": ""
   },
   "src/components/views/DashboardView.tsx": {
-    "mtime": 1791950940.5828934,
-    "seen": 1791951702.507797,
-    "ast_hash": "a18a3248e81c0a73ef713ada2cf04c1b",
+    "mtime": 1791954205.6691277,
+    "seen": 1791954260.3661869,
+    "ast_hash": "e05ab7b6ea6afcd6a6c86833cdde8359",
     "semantic_hash": ""
   },
   "src/components/views/DoctorsView.tsx": {
@@ -438,9 +438,9 @@
     "semantic_hash": "8c082c0093e4ad9e0581005a21e72308"
   },
   "src/services/auth/access.ts": {
-    "mtime": 1791950940.5908406,
-    "seen": 1791951702.5078568,
-    "ast_hash": "f31570e8095f773b7e65a286b794945e",
+    "mtime": 1791953752.6794107,
+    "seen": 1791954260.3662558,
+    "ast_hash": "ae27a3719818cf5a303393d9ea1c573c",
     "semantic_hash": ""
   },
   "src/services/auth/authService.ts": {
@@ -648,9 +648,9 @@
     "semantic_hash": ""
   },
   "src/types/navigation.ts": {
-    "mtime": 1791950940.5948408,
-    "seen": 1791951702.5079372,
-    "ast_hash": "804e8f42e7ac81447740e67e3268e492",
+    "mtime": 1791953752.6788852,
+    "seen": 1791954260.366352,
+    "ast_hash": "dd47543d22b47d1fbd075d587e312bac",
     "semantic_hash": ""
   },
   "src/types/settings.ts": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791953561.0608497,
-    "seen": 1791953610.2214282,
-    "ast_hash": "81c46dfea29aa1c9dd5a113268685067",
+    "mtime": 1791954252.1884499,
+    "seen": 1791954260.36654,
+    "ast_hash": "503aae0991cb41fb6b823b0272b2383c",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1092,9 +1092,9 @@
     "semantic_hash": ""
   },
   "src/components/views/AllRequestsPanel.tsx": {
-    "mtime": 1791362587.9600093,
-    "seen": 1791365225.1339998,
-    "ast_hash": "73af576ac475aa5dedb322e04126e201",
+    "mtime": 1791954145.4398258,
+    "seen": 1791954260.3661811,
+    "ast_hash": "e52f125c88cf9b852c88e263a8e900fb",
     "semantic_hash": ""
   },
   "tests/unit/sharing.test.ts": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791953470.9079,
-    "seen": 1791953542.0494034,
-    "ast_hash": "963973c4b0e0146ca78f528b9a3b5f05",
+    "mtime": 1791954183.4395208,
+    "seen": 1791954260.3665485,
+    "ast_hash": "f7ff1b5add49407db0e490440af397b3",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1620,9 +1620,9 @@
     "semantic_hash": ""
   },
   "tests/unit/permissions.test.ts": {
-    "mtime": 1791950940.6001878,
-    "seen": 1791951702.507999,
-    "ast_hash": "ac37fd52b958923625505b79b7781f43",
+    "mtime": 1791953734.1168058,
+    "seen": 1791954260.3664238,
+    "ast_hash": "d0ebca10611e4fdc569f9c23592579da",
     "semantic_hash": ""
   },
   "tests/unit/authPrivileges.test.ts": {
@@ -1770,15 +1770,15 @@
     "semantic_hash": ""
   },
   "src/components/layout/screenTitles.ts": {
-    "mtime": 1791950940.5668406,
-    "seen": 1791951702.507738,
-    "ast_hash": "9f19c97ee96cc1d23aa8067d3c393b56",
+    "mtime": 1791953752.6797318,
+    "seen": 1791954260.3661156,
+    "ast_hash": "cad3219a79f4013a5c6b131f8a0dbfbb",
     "semantic_hash": ""
   },
   "tests/unit/screenTitles.test.ts": {
-    "mtime": 1791950940.6001878,
-    "seen": 1791951702.508014,
-    "ast_hash": "d1d6d7bfa145209c6f33f52f8d812004",
+    "mtime": 1791953734.1171024,
+    "seen": 1791954260.3664405,
+    "ast_hash": "e0f04c5e4ec4a0826204d13a318cfc56",
     "semantic_hash": ""
   },
   "src/services/navigation/address.ts": {
@@ -2190,9 +2190,9 @@
     "semantic_hash": ""
   },
   "tasks/handover.md": {
-    "mtime": 1791953470.9134653,
-    "seen": 1791953542.0493996,
-    "ast_hash": "5fcce9f9e14b68c9c8764f50700c071e",
+    "mtime": 1791954183.444817,
+    "seen": 1791954260.3665452,
+    "ast_hash": "7b7e82795f177feb8f719eb4bd197179",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/nurses-list.cjs": {
@@ -2247,6 +2247,30 @@
     "mtime": 1791953123.6029704,
     "seen": 1791953542.0492873,
     "ast_hash": "5bc593e149e0fd72286bba23cac39fe6",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/requests.cjs": {
+    "mtime": 1791954007.0073562,
+    "seen": 1791954260.3660393,
+    "ast_hash": "5083504546d5362c243b1f0eb76e6e73",
+    "semantic_hash": ""
+  },
+  "src/components/views/RequestsView.tsx": {
+    "mtime": 1791953834.7189682,
+    "seen": 1791954260.3661993,
+    "ast_hash": "caf1a2b21f9e26e537378d3c330efdfd",
+    "semantic_hash": ""
+  },
+  "src/services/requests/waitingRequests.ts": {
+    "mtime": 1791953752.6839883,
+    "seen": 1791954260.3663335,
+    "ast_hash": "33ae780c7a3d090285628ccd54dc8309",
+    "semantic_hash": ""
+  },
+  "tests/unit/waitingRequests.test.ts": {
+    "mtime": 1791953734.120988,
+    "seen": 1791954260.3664482,
+    "ast_hash": "9d89cedb83780f57650b3dab2eddb109",
     "semantic_hash": ""
   }
 }

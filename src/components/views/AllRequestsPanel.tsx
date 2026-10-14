@@ -155,7 +155,7 @@ export const AllRequestsPanel: React.FC<AllRequestsPanelProps> = ({ currentUser,
       <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h3 className="text-sm font-bold text-slate-900">All day off and shift requests</h3>
+            <h2 className="text-sm font-bold text-slate-900">All day off and shift requests</h2>
             <p className="text-xs text-slate-500 mt-0.5">
               Every request, whether it is waiting, approved or declined. Approving a day off pins it on the roster; declining,
               putting it back to waiting or deleting it removes that pin, so the nurse can be given a shift that day.

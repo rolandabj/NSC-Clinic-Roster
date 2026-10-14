@@ -57,6 +57,14 @@ test('each role opens the screens it may use: planners all, everyone else the vi
   }
 });
 
+test('Requests opens for the people who decide requests: planners and managers, not nurses', () => {
+  assert.equal(canAccessRoute(person('OWNER'), 'requests'), true);
+  assert.equal(canAccessRoute(person('EDITOR'), 'requests'), true);
+  assert.equal(canAccessRoute(person('VIEWER', { isManager: true }), 'requests'), true);
+  assert.equal(canAccessRoute(person('VIEWER', { linkedNurseId: 'mary' }), 'requests'), false);
+  assert.equal(canAccessRoute(null, 'requests'), false);
+});
+
 test('only planners approve swaps, because only editors may save them', () => {
   assert.equal(computePrivileges('EDITOR').canApproveSwaps, true);
   assert.equal(computePrivileges('VIEWER', true).canApproveSwaps, false);

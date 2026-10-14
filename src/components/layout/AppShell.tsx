@@ -24,6 +24,8 @@ import { quotaTracker } from '../../services/firebase/quotaTracker';
 import { TriangleAlert, X } from 'lucide-react';
 import { IconButton } from '../ui';
 import { screenTitle } from './screenTitles';
+import { countPendingApprovals } from '../../services/requests/staffRequestService';
+import { canApproveRequests } from '../../services/auth/access';
 import { addressHash, readAddress } from '../../services/navigation/address';
 import { LoadErrorBoundary } from '../common/LoadErrorBoundary';
 import { chooseScheduleToOpen } from '../../services/schedule/openSchedule';
@@ -35,6 +37,7 @@ import { AppContext, AppContextValue } from '../common/AppContext';
 // Screens load on demand, so the first page does not download the whole app.
 const SchedulesView = lazy(() => import('../views/SchedulesView').then((m) => ({ default: m.SchedulesView })));
 const AvailabilityView = lazy(() => import('../views/AvailabilityView').then((m) => ({ default: m.AvailabilityView })));
+const RequestsView = lazy(() => import('../views/RequestsView').then((m) => ({ default: m.RequestsView })));
 const NursesView = lazy(() => import('../views/NursesView').then((m) => ({ default: m.NursesView })));
 const DoctorsView = lazy(() => import('../views/DoctorsView').then((m) => ({ default: m.DoctorsView })));
 const HistoryView = lazy(() => import('../views/HistoryView').then((m) => ({ default: m.HistoryView })));
@@ -68,6 +71,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       'dashboard',
       'schedules',
       'availability',
+      'requests',
       'nurses',
       'doctors',
       'history',
@@ -368,10 +372,28 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   };
   useEffect(() => syncAddress(currentRoute), [currentRoute]);
 
-  // The browser tab names the screen shown ("Rosters · NSC Clinic Roster").
+  // The browser tab names the screen shown ("Rosters · NSC Clinic Roster"); Availability is
+  // "My requests" for anyone who is not a planner.
   useEffect(() => {
-    document.title = screenTitle(currentRoute);
+    document.title = screenTitle(currentRoute, undefined, authService.getCurrentUser());
   }, [currentRoute]);
+
+  // The number of requests waiting, beside Requests in the menu, for the people who decide
+  // them. It is read again on each screen change, and the Requests screen reports it too.
+  const [waitingRequests, setWaitingRequests] = useState(0);
+  useEffect(() => {
+    if (!canApproveRequests(authService.getCurrentUser())) {
+      setWaitingRequests(0);
+      return;
+    }
+    let cancelled = false;
+    countPendingApprovals()
+      .then((n) => !cancelled && setWaitingRequests(n))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [currentRoute, dataVersion]);
 
   // "Skip to main content" moves the keyboard past the menu and the top bar. It is a button,
   // because a link to #main would change the address, which picks the screen.
@@ -453,6 +475,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
         );
       case 'availability':
         return <AvailabilityView context={clinicContext} />;
+      case 'requests':
+        return <RequestsView context={clinicContext} tab={routeParams.tab} onAddressChange={updateAddress} onWaitingChange={setWaitingRequests} />;
       case 'nurses':
         return <NursesView context={clinicContext} nurseId={routeParams.nurse} onAddressChange={updateAddress} />;
       case 'doctors':
@@ -532,6 +556,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
             clinicName={clinicContext.clinicName}
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={toggleSidebarCollapse}
+            waitingRequests={waitingRequests}
           />
         </div>
 
@@ -540,7 +565,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
           <div className="fixed inset-0 z-50 flex lg:hidden">
             <div className="absolute inset-0 bg-ink/50" aria-hidden="true" onClick={() => setIsMenuOpen(false)} />
             <div ref={menuRef} role="dialog" aria-modal="true" aria-label="Menu" className="animate-in slide-in-from-left relative flex h-full shadow-dialog">
-              <Sidebar currentRoute={currentRoute} onNavigate={navigateTo} clinicName={clinicContext.clinicName} onClose={() => setIsMenuOpen(false)} />
+              <Sidebar currentRoute={currentRoute} onNavigate={navigateTo} clinicName={clinicContext.clinicName} onClose={() => setIsMenuOpen(false)} waitingRequests={waitingRequests} />
             </div>
           </div>
         )}

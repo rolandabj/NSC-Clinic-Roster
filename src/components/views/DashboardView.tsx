@@ -83,7 +83,7 @@ interface PlannerData {
 /** Everything a nurse or viewer's dashboard shows. */
 interface ViewerData {
   today: string;
-  /** Requests waiting for approval (managers only; null for others). */
+  /** Requests waiting for a decision (managers only; null for others). */
   pendingRequests: number | null;
   myShifts: NurseRosterShift[] | null;
   myLeaveDays: string[];
@@ -426,7 +426,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
 
   const shortcuts: { route: AppRoute; label: string; hint: string; icon: React.ReactNode }[] = (
     [
-      { route: 'availability', label: 'Leave and requests', hint: 'Leave, days off and shift requests', icon: <CalendarRange className="w-4 h-4" /> },
+      { route: 'requests', label: 'Requests', hint: 'Leave, days off and shifts nurses asked for', icon: <Inbox className="w-4 h-4" /> },
+      { route: 'availability', label: 'Leave and days off', hint: 'The leave grid and pinned days', icon: <CalendarRange className="w-4 h-4" /> },
       { route: 'nurses', label: 'Nurses', hint: 'Contracts, skills and usual doctors', icon: <Users className="w-4 h-4" /> },
       { route: 'doctors', label: 'Doctors', hint: 'Weekly clinic sessions', icon: <Stethoscope className="w-4 h-4" /> },
       { route: 'publish', label: 'Publish', hint: 'Emails, read receipts and private links', icon: <Send className="w-4 h-4" /> },
@@ -508,13 +509,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
                   </span>
                   <div>
                     <p className="text-slate-800">
-                      {viewer.pendingRequests} leave or shift request{viewer.pendingRequests === 1 ? '' : 's'} waiting for approval
+                      {viewer.pendingRequests} leave or shift request{viewer.pendingRequests === 1 ? '' : 's'} waiting for a decision
                     </p>
                     <a
-                      href="#availability"
+                      href="#requests"
                       onClick={(e) => {
                         e.preventDefault();
-                        onNavigate('availability');
+                        onNavigate('requests');
                       }}
                       className="font-semibold text-indigo-700 hover:underline"
                     >
@@ -594,9 +595,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
       key: 'requests',
       tone: 'amber',
       icon: <Inbox className="w-4 h-4" />,
-      text: `${d.pendingRequests} leave or shift request${d.pendingRequests === 1 ? '' : 's'} waiting for approval`,
+      text: `${d.pendingRequests} leave or shift request${d.pendingRequests === 1 ? '' : 's'} waiting for a decision`,
       action: 'Review',
-      onClick: () => onNavigate('availability'),
+      onClick: () => onNavigate('requests'),
     });
   }
   if (d.receipts && d.receipts.confirmed < d.receipts.sent) {

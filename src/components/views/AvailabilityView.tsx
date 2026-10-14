@@ -2,6 +2,7 @@ import { leaveCreditInRange } from '../../services/hours/hoursPolicy';
 import { planHolidayLeaveTidy, saveHolidayLeave, withHolidaysAtZero } from '../../services/hours/holidayLeave';
 import { leaveApprovalFields } from '../../services/engine/leaveStatus';
 import { confirmDialog, notify, type NoticeTone } from '../common/dialogs';
+import { Notice, Tabs } from '../ui';
 import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo, useId } from 'react';
 import { useDialogA11y } from '../common/useDialogA11y';
@@ -50,8 +51,6 @@ import { formatDate } from '../../utils/dateUtils';
 import { countPendingApprovals, decideRequest } from '../../services/requests/staffRequestService';
 import { canApproveRequests, canEditClinicData } from '../../services/auth/access';
 import { authService } from '../../services/auth/authService';
-import { ApprovalsQueuePanel } from './ApprovalsQueuePanel';
-import { AllRequestsPanel } from './AllRequestsPanel';
 import { NurseSelfServicePanel } from './NurseSelfServicePanel';
 
 interface AvailabilityViewProps {
@@ -66,9 +65,12 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   // Planners and managers approve requests and see every request, decided or not
   // (canApprove() in firestore.rules); the owner is a planner.
   const canManageRequests = canApproveRequests(currentUser);
-  // A nurse (no planner or manager rights) has only the tab with their own requests.
-  const onlyOwnRequests = !canEdit && !canManageRequests;
-  const [activeTab, setActiveTab] = useState<'calendar' | 'self-service' | 'approvals' | 'requests'>(canEdit ? 'calendar' : 'self-service');
+  // Anyone who is not a planner sees only their own requests ("My requests"); deciding
+  // requests moved to the Requests screen (UI overhaul Phase 6, slice 4).
+  const onlyOwnRequests = !canEdit;
+  // A planner who is also a nurse can ask for their own leave from a second tab.
+  const ownRequestsTab = canEdit && !!currentUser?.linkedNurseId;
+  const [activeTab, setActiveTab] = useState<'calendar' | 'self-service'>(canEdit ? 'calendar' : 'self-service');
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
 
   const [nurses, setNurses] = useState<Nurse[]>([]);
@@ -687,7 +689,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Availability, Leave &amp; Locks</h1>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Leave and days off</h1>
           <p className="text-xs text-slate-500 mt-0.5">
             Record approved staff leave (Annual, Sick, Birthday) and pinned days. Drag across dates to record leave quickly. Leave counts 0 h on public holidays: the period hours already leave them out.
           </p>
@@ -767,80 +769,39 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
         )}
       </div>
 
-      {/* Sub Navigation Ribbon */}
-      <div className="flex border-b border-slate-200 overflow-x-auto gap-2 pb-px">
-        {canEdit && (
-        <button
-          onClick={() => setActiveTab('calendar')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'calendar'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
-          }`}
+      {/* Requests moved to their own screen (Phase 6, slice 4): a pointer when some wait. */}
+      {canManageRequests && pendingApprovalsCount > 0 && (
+        <Notice
+          tone="warning"
+          title={`${pendingApprovalsCount} ${pendingApprovalsCount === 1 ? 'request is' : 'requests are'} waiting for a decision`}
+          action={
+            <a href="#requests" className="inline-flex h-9 items-center rounded-md border border-line-strong bg-surface px-3.5 text-sm font-semibold text-ink hover:bg-sunken">
+              Open Requests
+            </a>
+          }
         >
-          <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
-          <span>31-Day Master Grid</span>
-        </button>
-        )}
+          Leave, days off and shifts that nurses asked for are decided in Requests.
+        </Notice>
+      )}
 
-        <button
-          onClick={() => setActiveTab('self-service')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
-            activeTab === 'self-service'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5" aria-hidden="true" />
-          <span>My Availability &amp; Leave Requests</span>
-        </button>
-
-        {canManageRequests && (
-          <button
-            onClick={() => setActiveTab('approvals')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
-              activeTab === 'approvals'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
-            }`}
-          >
-            <CalendarCheck2 className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Pending Approvals</span>
-            {pendingApprovalsCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-white font-bold text-[10px] animate-pulse">
-                {pendingApprovalsCount}
-              </span>
-            )}
-          </button>
-        )}
-
-        {canManageRequests && (
-          <button
-            onClick={() => setActiveTab('requests')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold border-b-2 transition-colors cursor-pointer ${
-              activeTab === 'requests'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
-            }`}
-          >
-            <ListChecks className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>All requests</span>
-          </button>
-        )}
-      </div>
+      {ownRequestsTab && (
+        <Tabs
+          label="Leave and days off"
+          idPrefix="availability"
+          value={activeTab}
+          onChange={(id: string) => setActiveTab(id as 'calendar' | 'self-service')}
+          panelId="availability-panel"
+          tabs={[
+            { id: 'calendar', label: 'Leave grid' },
+            { id: 'self-service', label: 'My requests' },
+          ]}
+        />
+      )}
       </>
       )}
 
-      {/* VIEW PANEL: EVERY REQUEST, DECIDED OR NOT */}
-      {activeTab === 'requests' && canManageRequests && (
-        <AllRequestsPanel currentUser={currentUser || undefined} nurses={nurses} dutyWindows={dutyWindows} onChanged={loadData} />
-      )}
-
-      {/* VIEW PANEL 1: MANAGER APPROVALS QUEUE */}
-      {activeTab === 'approvals' && canManageRequests && (
-        <ApprovalsQueuePanel currentUser={currentUser || undefined} onRequestDecided={loadData} />
-      )}
-
+      {/* With the My requests tab, both views sit in its one tab panel. */}
+      <div id="availability-panel" role={ownRequestsTab ? 'tabpanel' : undefined} aria-labelledby={ownRequestsTab ? `availability-tab-${activeTab}` : undefined}>
       {/* VIEW PANEL 2: NURSE SELF-SERVICE PORTAL */}
       {activeTab === 'self-service' && (
         <NurseSelfServicePanel
@@ -1155,6 +1116,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       </div>
         </div>
       )}
+      </div>
 
       {/* --- MODAL 1: RECORD / EDIT LEAVE ENTRY --- */}
       {isLeaveModalOpen && editingLeaveEntry && (
@@ -1336,7 +1298,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                       : 'bg-slate-200 text-slate-600'
                   }`}
                 >
-                  {editingLeaveEntry.approved !== false ? 'Approved ✓' : 'Pending'}
+                  {editingLeaveEntry.approved !== false ? 'Approved ✓' : 'Waiting'}
                 </button>
               </div>
 

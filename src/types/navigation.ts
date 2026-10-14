@@ -4,6 +4,7 @@ export type AppRoute =
   | 'dashboard'
   | 'schedules'
   | 'availability'
+  | 'requests'
   | 'nurses'
   | 'doctors'
   | 'history'

@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   CalendarRange,
   CalendarCheck2,
+  Inbox,
   Users,
   Stethoscope,
   History,
@@ -18,7 +19,7 @@ import { AppRoute } from '../../types/navigation';
 import { authService, UserProfile } from '../../services/auth/authService';
 import { canAccessRoute } from '../../services/auth/access';
 import { IconButton, cx } from '../ui';
-import { APP_NAME, SCREEN_NAMES } from './screenTitles';
+import { APP_NAME, SCREEN_NAMES, screenName } from './screenTitles';
 
 interface SidebarProps {
   currentRoute: AppRoute;
@@ -29,6 +30,8 @@ interface SidebarProps {
   onToggleCollapse?: () => void;
   /** Shown as the slide in menu on narrow screens: a Close button replaces the collapse toggle. */
   onClose?: () => void;
+  /** Requests waiting for a decision, shown beside Requests for the people who decide them. */
+  waitingRequests?: number;
 }
 
 // Plain English labels (the app is English only since 07-10-2026), from the screens' names.
@@ -36,6 +39,7 @@ export const NAV_ITEMS: { id: AppRoute; label: string; icon: React.ElementType }
   { id: 'dashboard', label: SCREEN_NAMES.dashboard, icon: LayoutDashboard },
   { id: 'schedules', label: SCREEN_NAMES.schedules, icon: CalendarRange },
   { id: 'availability', label: SCREEN_NAMES.availability, icon: CalendarCheck2 },
+  { id: 'requests', label: SCREEN_NAMES.requests, icon: Inbox },
   { id: 'nurses', label: SCREEN_NAMES.nurses, icon: Users },
   { id: 'doctors', label: SCREEN_NAMES.doctors, icon: Stethoscope },
   { id: 'history', label: SCREEN_NAMES.history, icon: History },
@@ -52,6 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isCollapsed = false,
   onToggleCollapse,
   onClose,
+  waitingRequests = 0,
 }) => {
   const [user, setUser] = useState<UserProfile | null>(() => authService.getCurrentUser());
 
@@ -88,6 +93,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {visibleItems.map((item) => {
             const Icon = item.icon;
             const isActive = currentRoute === item.id;
+            // Availability is "My requests" for anyone who is not a planner (Phase 6, slice 4).
+            const name = screenName(item.id, user);
+            const count = item.id === 'requests' ? waitingRequests : 0;
+            const label = count > 0 ? `${name}, ${count} waiting` : name;
             return (
               <li key={item.id}>
                 <a
@@ -98,8 +107,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     e.preventDefault();
                     onNavigate(item.id);
                   }}
-                  title={isCollapsed ? item.label : undefined}
-                  aria-label={isCollapsed ? item.label : undefined}
+                  title={isCollapsed ? label : undefined}
+                  aria-label={isCollapsed || count > 0 ? label : undefined}
                   aria-current={isActive ? 'page' : undefined}
                   className={cx(
                     'flex h-9 items-center gap-2.5 rounded-md text-sm transition-colors duration-150 pointer-coarse:h-11',
@@ -108,7 +117,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   )}
                 >
                   <Icon className="size-[18px] shrink-0" aria-hidden="true" />
-                  {!isCollapsed && <span className="truncate">{item.label}</span>}
+                  {!isCollapsed && <span className="truncate">{name}</span>}
+                  {count > 0 &&
+                    (isCollapsed ? (
+                      <span aria-hidden="true" className="absolute ml-5 -mt-5 size-2.5 rounded-full bg-warning" />
+                    ) : (
+                      <span aria-hidden="true" className="ml-auto rounded-full bg-warning-soft px-2 text-xs font-semibold text-warning">
+                        {count}
+                      </span>
+                    ))}
                 </a>
               </li>
             );

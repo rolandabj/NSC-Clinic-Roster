@@ -63,6 +63,8 @@ export function roleLabel(user?: UserProfile | null): string {
 const VIEWER_ROUTES: AppRoute[] = ['dashboard', 'availability', 'history', 'reports', 'published'];
 
 export function canAccessRoute(user: UserProfile | null | undefined, route: AppRoute): boolean {
+  // Requests is for the people who decide them (UI overhaul Phase 6, slice 4).
+  if (route === 'requests') return canApproveRequests(user);
   if (canEditClinicData(user)) return true;
   return VIEWER_ROUTES.includes(route);
 }

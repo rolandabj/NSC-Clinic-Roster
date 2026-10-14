@@ -11,7 +11,7 @@ Start a new chat by reading this file, then `CLAUDE.md` and `PROJECT_GUIDE.md`.
 | On main | Everything up to Phase 5 slice 4 (guide items 42 to 72) |
 | Done | Phases 0 to 5 with Checkpoints 1 to 5 (Checkpoint 5 is guide item 73, on main) |
 | Next | Phase 6, when the owner says go |
-| Unit tests | 446 passing, and 98 Firestore rules checks in the emulator |
+| Unit tests | 451 passing, and 98 Firestore rules checks in the emulator |
 | Firestore rules | Not changed by the overhaul, so there is nothing to publish by hand |
 | HawkScan | Never run: the session has no `HAWK_API_KEY`. The owner knows |
 
@@ -93,7 +93,7 @@ branch main).
    * Nurses and Doctors as lists with search and filters, and editors that check each field.
    * Availability split into "Leave and days off" and "Requests".
    * A leave grid that works without dragging.
-   * The planner screens still say "Pending" where nurses see "Waiting"; change them to Waiting.
+   * The planner screens still say "Pending" where nurses see "Waiting"; change them to Waiting (done, item 78).
    * Nurses has 4 serious axe problems and the planner's Availability screen has 9; fix them in
      this phase.
 3. Phases 7 to 9 as in the plan: dialogs, publishing and History; Settings, Reports and Audit;
