@@ -100,6 +100,7 @@ async function call(user: User | null, path: string, body: unknown, docs = clini
       sent.push(payload);
       return { success: true, provider: 'GOOGLE', messageId: 'm1', recipients: [String(payload.to)], status: 'MOCK_SENT' };
     },
+    markEmailed: async () => {},
     now: () => NOW,
   });
   const app = express();
@@ -209,6 +210,7 @@ test('the same decision is emailed once', async () => {
   const router = createRequestsRouter({
     readDocument: async (c, id) => clinicData()[`${c}/${id}`] ?? null,
     send: async (p) => { sent.push(p); return { success: true, provider: 'GOOGLE', messageId: 'm', recipients: [], status: 'MOCK_SENT' }; },
+    markEmailed: async () => {},
     now: () => NOW,
   });
   const app = express();
@@ -223,6 +225,74 @@ test('the same decision is emailed once', async () => {
     }).then((res) => res.json());
     assert.equal((await post()).data.status, 'MOCK_SENT');
     assert.equal((await post()).data.status, 'ALREADY_SENT');
+    assert.equal(sent.length, 1);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+test('the mark on the request stops a second email after the server restarts, and a new decision is emailed', async () => {
+  const docs = clinicData();
+  const sent: SendEmailPayload[] = [];
+  const marks: Array<[string, string, string]> = [];
+  const post = async (path: string) => {
+    // A new router each time: a restarted server remembers nothing of its own.
+    const router = createRequestsRouter({
+      readDocument: async (c, id) => (docs[`${c}/${id}`] ? { ...docs[`${c}/${id}`] } : null),
+      send: async (p) => { sent.push(p); return { success: true, provider: 'GOOGLE', messageId: 'm', recipients: [], status: 'MOCK_SENT' }; },
+      markEmailed: async (c, id, mark, token) => {
+        marks.push([`${c}/${id}`, mark, token]);
+        docs[`${c}/${id}`] = { ...docs[`${c}/${id}`], decisionEmailedFor: mark };
+      },
+      now: () => NOW,
+    });
+    const app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => { (req as any).user = { uid: 'u1', role: 'EDITOR' }; (req as any).firebaseIdToken = 'caller-token'; next(); });
+    app.use('/api/requests', router);
+    const server = app.listen(0);
+    const { port } = server.address() as AddressInfo;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"kind":"day"}' });
+      return (await res.json()).data?.status;
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  };
+
+  assert.equal(await post('/api/requests/r1/notify'), 'MOCK_SENT');
+  assert.deepEqual(marks, [['availabilityRequests/r1', `APPROVED/${decidedAt}`, 'caller-token']], 'the mark is saved with the caller\'s own token');
+  assert.equal(await post('/api/requests/r1/notify'), 'ALREADY_SENT');
+  assert.equal(sent.length, 1);
+
+  // The planner changes their mind: a new decision is a new email.
+  const later = new Date(NOW - 30_000).toISOString();
+  docs['availabilityRequests/r1'] = { ...docs['availabilityRequests/r1'], status: 'REJECTED', reviewedAt: later };
+  assert.equal(await post('/api/requests/r1/notify'), 'MOCK_SENT');
+  assert.equal(sent.length, 2);
+});
+
+test('an email that went out still counts as sent when its mark cannot be saved', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const sent: SendEmailPayload[] = [];
+  const router = createRequestsRouter({
+    readDocument: async (c, id) => clinicData()[`${c}/${id}`] ?? null,
+    send: async (p) => { sent.push(p); return { success: true, provider: 'GOOGLE', messageId: 'm', recipients: [], status: 'MOCK_SENT' }; },
+    markEmailed: async () => { throw new Error('Firestore returned 503'); },
+    now: () => NOW,
+  });
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => { (req as any).user = { uid: 'u1', role: 'EDITOR' }; next(); });
+  app.use('/api/requests', router);
+  const server = app.listen(0);
+  const { port } = server.address() as AddressInfo;
+  try {
+    const post = () => fetch(`http://127.0.0.1:${port}/api/requests/r1/notify`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"kind":"day"}',
+    }).then((res) => res.json());
+    assert.equal((await post()).data.status, 'MOCK_SENT');
+    assert.equal((await post()).data.status, 'ALREADY_SENT', 'this server still remembers it');
     assert.equal(sent.length, 1);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));

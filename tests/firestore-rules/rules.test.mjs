@@ -77,6 +77,8 @@ await t('viewer files own availability', true, setDoc(doc(viewer, 'availabilityR
 await t('viewer cannot decide own availability request', false, updateDoc(doc(viewer, 'availabilityRequests/a1'), { status: 'APPROVED' }));
 await t('editor decides an availability request', true, updateDoc(doc(editor, 'availabilityRequests/a1'), { status: 'APPROVED', reviewedBy: 'editor@x.com' }));
 await t('manager decides an availability request', true, updateDoc(doc(manager, 'availabilityRequests/a1'), { status: 'REJECTED', reviewedBy: 'mgr@x.com' }));
+await t('manager saves the emailed mark on a request', true, updateDoc(doc(manager, 'availabilityRequests/a1'), { decisionEmailedFor: 'REJECTED/2026-11-01T10:00:00.000Z' }));
+await t('viewer cannot save the emailed mark on their own request', false, updateDoc(doc(viewer, 'availabilityRequests/a1'), { decisionEmailedFor: 'x' }));
 await t('editor writes audit entries', true, setDoc(doc(editor, 'audit/a2'), { action: 'APPROVE' }));
 await t('editor cannot change an audit entry', false, updateDoc(doc(editor, 'audit/a2'), { action: 'CHANGED' }));
 await t('editor without nurse link cannot be blocked: editor files any leave', true, setDoc(doc(editor, 'leaveEntries/l3'), { nurseId: 'n2', status: 'APPROVED', approved: true }));

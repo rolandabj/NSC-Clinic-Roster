@@ -82,6 +82,8 @@ export interface AvailabilityRequest {
   reviewedByUserName?: string;
   reviewedAt?: string;
   reviewNotes?: string;
+  /** Set by the server when the decision email went out: "<status>/<reviewedAt>" of that decision. */
+  decisionEmailedFor?: string;
 }
 
 export type EmailLogKind = 'PUBLISH' | 'CHANGE' | 'TEST' | 'REMINDER';
@@ -291,6 +293,8 @@ export interface LeaveEntry {
   reviewedByUserName?: string;
   reviewedAt?: string;
   reviewNotes?: string;
+  /** Set by the server when the decision email went out: "<status>/<reviewedAt>" of that decision. */
+  decisionEmailedFor?: string;
 }
 
 // 11. LockEntry ("non-changeable day")

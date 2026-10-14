@@ -8,23 +8,27 @@
  * server to tell the nurse. The server reads the request, the nurse and the clinic's
  * email settings with the caller's own token (the Firestore rules apply as in their
  * browser), writes the email itself and sends it to that nurse only. Nothing in the
- * email, and not the recipient, comes from the request body.
+ * email, and not the recipient, comes from the request body. After sending, it saves
+ * which decision was emailed on the request (decisionEmailedFor), so it is sent once.
  */
 
 import { Router, Request, Response } from 'express';
 import { EmailService, isGoogleAccountEmail, SendEmailPayload, SendEmailResult } from '../services/email/emailService';
-import { getDocumentAs } from '../services/firestore/firestoreRest';
+import { getDocumentAs, setTextFieldsAs } from '../services/firestore/firestoreRest';
 import { decisionEmail, DecidedRequest } from '../../src/services/requests/decisionEmail';
 
 export interface RequestNotifyDeps {
   readDocument(collection: string, id: string, idToken: string): Promise<Record<string, any> | null>;
   send(payload: SendEmailPayload): Promise<SendEmailResult>;
+  /** Saves on the request which decision was emailed, so a restarted server does not send it again. */
+  markEmailed(collection: string, id: string, mark: string, idToken: string): Promise<void>;
   now(): number;
 }
 
 const defaultDeps: RequestNotifyDeps = {
   readDocument: getDocumentAs,
   send: (payload) => EmailService.send(payload),
+  markEmailed: (collection, id, mark, idToken) => setTextFieldsAs(collection, id, { decisionEmailedFor: mark }, idToken),
   now: () => Date.now(),
 };
 
@@ -37,7 +41,8 @@ const COLLECTION = { leave: 'leaveEntries', day: 'availabilityRequests' } as con
 
 export function createRequestsRouter(deps: RequestNotifyDeps = defaultDeps) {
   const router = Router();
-  // Decisions already emailed by this server, so a repeated call sends nothing.
+  // Decisions already emailed by this server, so a repeated call sends nothing even while
+  // the mark on the request is being saved (or could not be saved).
   const sent = new Set<string>();
 
   router.post('/:id/notify', async (req: Request, res: Response) => {
@@ -85,8 +90,10 @@ export function createRequestsRouter(deps: RequestNotifyDeps = defaultDeps) {
         res.status(409).json({ error: 'NotRecent', message: 'Only a decision made in the last 15 minutes can be emailed.' });
         return;
       }
-      const key = `${kind}/${id}/${status}/${request.reviewedAt}`;
-      if (sent.has(key)) {
+      // Which decision this is: a new decision has a new reviewedAt, so it is emailed again.
+      const mark = `${status}/${request.reviewedAt}`;
+      const key = `${kind}/${id}/${mark}`;
+      if (sent.has(key) || request.decisionEmailedFor === mark) {
         res.json({ data: { status: 'ALREADY_SENT' } });
         return;
       }
@@ -131,6 +138,12 @@ export function createRequestsRouter(deps: RequestNotifyDeps = defaultDeps) {
       }
       sent.add(key);
       if (sent.size > SENT_MEMORY) sent.delete(sent.values().next().value as string);
+      // The email went out: a failed mark only means a restarted server could send it once more.
+      try {
+        await deps.markEmailed(COLLECTION[kind], id, mark, token);
+      } catch (err: any) {
+        console.warn('[RequestsAPI] The emailed mark was not saved:', err?.message || err);
+      }
       res.json({ data: { status: result.status } });
     } catch (err: any) {
       console.error('[RequestsAPI] notify failed:', err?.message || err);

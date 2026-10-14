@@ -6,6 +6,7 @@
  * The server has no service account, so it reads documents that the security
  * rules let anyone read (by their id) through the public REST API, without
  * credentials. The rules apply exactly as they do for a signed out browser.
+ * Reads and writes for a signed in caller use that caller's own ID token.
  */
 
 import { getFirebaseProjectConfig } from '../auth/firebaseIdentityService';
@@ -77,4 +78,25 @@ export async function getPublicDocument(collection: string, id: string): Promise
 export async function getDocumentAs(collection: string, id: string, idToken: string): Promise<Record<string, any> | null> {
   if (!idToken) return null;
   return readDocument(collection, id, idToken, true);
+}
+
+/**
+ * Sets text fields on one existing document as the signed in caller, with their own
+ * ID token, so the security rules decide exactly as in that person's browser. Only
+ * the named fields change. Throws when the write is refused or fails.
+ */
+export async function setTextFieldsAs(collection: string, id: string, fields: Record<string, string>, idToken: string): Promise<void> {
+  if (!idToken) throw new Error('Sign in required.');
+  const names = Object.keys(fields);
+  const params = new URLSearchParams();
+  for (const name of names) params.append('updateMask.fieldPaths', name);
+  params.append('currentDocument.exists', 'true');
+  const body = { fields: Object.fromEntries(names.map((name) => [name, { stringValue: fields[name] }])) };
+  const res = await fetch(`${documentUrl(collection, id)}?${params}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`Firestore returned ${res.status}`);
 }
