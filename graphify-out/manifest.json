@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1791915913.144426,
-    "seen": 1791915963.8763483,
-    "ast_hash": "1751b075fe2b81e77c6592492618ea17",
+    "mtime": 1791950664.857035,
+    "seen": 1791950762.4163213,
+    "ast_hash": "542a59f9ea4269ec9e256c770213eb13",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791898283.747253,
-    "seen": 1791899950.2467897,
-    "ast_hash": "c17a152307b506227957ed52a95a1a89",
+    "mtime": 1791950664.8531177,
+    "seen": 1791950762.41634,
+    "ast_hash": "531a3977c110b618715a7c0ab3003575",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1806,9 +1806,9 @@
     "semantic_hash": ""
   },
   "tasks/summary.md": {
-    "mtime": 1791898283.747253,
-    "seen": 1791899950.246789,
-    "ast_hash": "6ced904b0a84d84720c8f88eeaf51a71",
+    "mtime": 1791950751.0097644,
+    "seen": 1791950762.4163384,
+    "ast_hash": "42c9ba585a546d7f37134fb5a425abd4",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/grid-flow.cjs": {
@@ -2187,6 +2187,12 @@
     "mtime": 1791915840.9470813,
     "seen": 1791915963.876238,
     "ast_hash": "ae9c67c66be23195d8c5feaa7778f065",
+    "semantic_hash": ""
+  },
+  "tasks/handover.md": {
+    "mtime": 1791950751.0092359,
+    "seen": 1791950762.4163322,
+    "ast_hash": "dbc44511862410e7a754e1be83b25059",
     "semantic_hash": ""
   }
 }

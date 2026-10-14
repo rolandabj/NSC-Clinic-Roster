@@ -45,16 +45,16 @@ Main moves only when the owner says "push to main".
 - [x] Checkpoint 3 with timings against the targets (all targets met except the longest task while loading, which is the browser's own layout work; three review fixes)
 
 ## Phase 4: roster screen layout, words and accessibility
-- [ ] Tabs above the content, one problem count, no duplicates (one problem count done)
-- [ ] Toolbar regrouped
-- [ ] Grid cells, marks, spoken names, keyboard reach
-- [ ] Read only day view on phones (under 700 px wide or under 500 px high); tablets edit, held either way (owner, 13-10-2026)
-- [ ] Checkpoint 4
+- [x] Tabs above the content, one problem count, no duplicates
+- [x] Toolbar regrouped
+- [x] Grid cells, marks, spoken names, keyboard reach
+- [x] Read only day view on phones (under 700 px wide or under 500 px high); tablets edit, held either way (owner, 13-10-2026)
+- [x] Checkpoint 4
 
 ## Phase 5: nurse screens for phones, request decision emails
-- [ ] My roster and My requests for phones
-- [ ] Read receipt, shared roster and viewer Dashboard for phones
-- [ ] `POST /api/requests/:id/notify` with tests, and the Settings switch
+- [x] My roster and My requests for phones
+- [x] Read receipt, shared roster and viewer Dashboard for phones
+- [x] `POST /api/requests/:id/notify` with tests, and the Settings switch
 - [ ] Checkpoint 5
 
 ## Phase 6: planner screens

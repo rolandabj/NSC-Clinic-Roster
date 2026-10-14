@@ -1,5 +1,8 @@
 # UI overhaul: summary and next steps
 
+**For a new chat, read `tasks/handover.md` first**: it is up to date as of the end of Phase 5
+(14-10-2026). The rest of this summary stops at Phase 3.
+
 As of 13-10-2026. Phases 0, 1 and 2 of the ten phase plan are done and on main. Phase 3, roster
 grid speed and structure, is done and on main too (Checkpoint 3). Phase 4 is next.
 
