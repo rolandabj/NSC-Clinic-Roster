@@ -41,6 +41,8 @@ import { BulkImportModal } from '../modals/BulkImportModal';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import { revokeNurseLink } from '../../services/publish/nurseRosterService';
+import { filterNurses, nurseCounts, type NurseFilters } from '../../services/nurses/nurseList';
+import { Badge, Button, DataTable, EmptyState, Field, Input, PageHeader, Select, type Column } from '../ui';
 
 interface NursesViewProps {
   context: ClinicContextState;
@@ -353,19 +355,39 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
     }
   };
 
-  const handleDeleteNurse = async (id: string, name: string) => {
+  // Leaving the clinic: inactive keeps the nurse's history and leaves them out of new rosters.
+  const handleMakeInactive = async (id: string, name: string) => {
+    try {
+      await repo.update('nurses', id, { active: false, updatedAt: new Date().toISOString() });
+      // An inactive nurse no longer has a private page.
+      await revokeNurseLink(repo, id).catch((err) => console.warn('Could not stop the private link:', err));
+      triggerNotification(`${name} is inactive. New rosters leave them out.`);
+      setIsModalOpen(false);
+      loadAllData();
+    } catch (err: any) {
+      notify(`Could not make ${name} inactive: ${err.message}`, 'error');
+    }
+  };
+
+  const handleDeleteNurse = async (id: string, name: string, active: boolean) => {
     const ok = await confirmDialog({
-      title: 'Remove nurse?',
-      message: `Remove nurse "${name}" from roster database?`,
-      confirmLabel: 'Remove nurse',
+      title: `Remove ${name} for good?`,
+      message: active
+        ? `This deletes ${name} and turns off the page they use to see their shifts. It cannot be undone. If they are leaving the clinic, make them inactive instead: their history stays and new rosters leave them out.`
+        : `This deletes ${name}. It cannot be undone.`,
+      confirmLabel: 'Remove for good',
       danger: true,
     });
-    if (ok) {
-      // Her private link stops working too (it would otherwise keep showing her shifts).
+    if (!ok) return;
+    try {
+      // Their private link stops working too (it would otherwise keep showing their shifts).
       await revokeNurseLink(repo, id).catch((err) => console.warn('Could not stop the private link:', err));
       await repo.remove('nurses', id);
-      triggerNotification(`Nurse ${name} removed.`);
+      triggerNotification(`${name} is removed.`);
+      setIsModalOpen(false);
       loadAllData();
+    } catch (err: any) {
+      notify(`Could not remove ${name}: ${err.message}`, 'error');
     }
   };
 
@@ -416,318 +438,213 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
     setFormData({ ...formData, capabilityIds: Array.from(current) });
   };
 
-  // Filtering
-  const filteredNurses = nurses.filter((n) => {
-    const matchesSearch =
-      n.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      n.gmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      n.employeeCode.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredNurses = filterNurses(nurses, { query: searchQuery, levelId: selectedSeniorityFilter, status: activeStatusFilter });
+  const counts = nurseCounts(nurses);
+  const filtersOn = searchQuery.trim() !== '' || selectedSeniorityFilter !== 'ALL' || activeStatusFilter !== 'ALL';
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedSeniorityFilter('ALL');
+    setActiveStatusFilter('ALL');
+  };
 
-    const matchesSeniority =
-      selectedSeniorityFilter === 'ALL' || n.seniorityLevelId === selectedSeniorityFilter;
+  // A preference as the list shows it: "#1 Dr Lee (CARD)" or "#2 CARD".
+  const preferenceLabel = (pref: NursePreference) => {
+    const doc = doctors.find((d) => d.id === pref.refId);
+    if (doc) {
+      const spec = specialties.find((s) => doc.specialtyIds?.includes(s.id));
+      return `#${pref.rank} ${doc.fullName}${spec ? ` (${spec.code || spec.name})` : ''}`;
+    }
+    const sp = specialties.find((s) => s.id === pref.refId);
+    return `#${pref.rank} ${sp?.name || sp?.code || pref.refId}`;
+  };
 
-    const matchesActive =
-      activeStatusFilter === 'ALL' ||
-      (activeStatusFilter === 'ACTIVE' && n.active) ||
-      (activeStatusFilter === 'INACTIVE' && !n.active);
-
-    return matchesSearch && matchesSeniority && matchesActive;
-  });
+  const columns: Column<Nurse>[] = [
+    {
+      key: 'name',
+      header: 'Nurse',
+      sortValue: (n) => n.fullName,
+      cell: (n) => (
+        <span className="block">
+          <span className="block">{n.fullName}</span>
+          {n.employeeCode && <span className="block text-xs font-normal text-ink-muted">{n.employeeCode}</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'level',
+      header: 'Level',
+      sortValue: (n) => seniorityLevels.find((s) => s.id === n.seniorityLevelId)?.name,
+      cell: (n) => {
+        const level = seniorityLevels.find((s) => s.id === n.seniorityLevelId);
+        if (!level) return <span className="text-ink-muted">Not set</span>;
+        return (
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: level.color }} />
+            {level.name}
+            {/* The mark only when the level's own name does not already say it. */}
+            {level.isSenior && !/senior/i.test(level.name) && <Badge tone="info">Senior</Badge>}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      sortValue: (n) => n.gmail,
+      cell: (n) => (n.gmail ? <span className="break-all">{n.gmail}</span> : <span className="text-ink-muted">None</span>),
+    },
+    {
+      key: 'contract',
+      header: 'Contract',
+      align: 'right',
+      sortValue: (n) => n.contractPercent,
+      cell: (n) => (
+        <span className="whitespace-nowrap">
+          {n.contractPercent} %<span className="text-ink-muted">, {n.contractPercent >= 100 ? 'full time' : 'part time'}</span>
+        </span>
+      ),
+    },
+    {
+      key: 'skills',
+      header: 'Skills',
+      cell: (n) => {
+        if (isExclusiveNurseClinic(n, clinicalRoles)) return <Badge tone="success" icon={Stethoscope}>Nurse clinic only</Badge>;
+        const phl = n.capabilityIds?.includes('role-phl');
+        if (!phl && !n.isClinicNurse) return <span className="text-ink-muted">None</span>;
+        return (
+          <span className="flex flex-wrap gap-1">
+            {phl && <Badge tone="danger" icon={Droplets}>Blood and IV</Badge>}
+            {n.isClinicNurse && <Badge tone="info">Clinic nurse</Badge>}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'preferences',
+      header: 'Preferences',
+      cell: (n) => {
+        if (isExclusiveNurseClinic(n, clinicalRoles)) return <span className="text-ink-muted">No doctors</span>;
+        const prefs = [...(n.preferences || [])].sort((a, b) => a.rank - b.rank);
+        if (prefs.length === 0) return <span className="text-ink-muted">None, goes where needed</span>;
+        return (
+          <span className="block max-w-64">
+            {prefs.slice(0, 2).map((p) => (
+              <span key={`${p.kind}-${p.refId}`} className="block truncate">
+                {preferenceLabel(p)}
+              </span>
+            ))}
+            {prefs.length > 2 && <span className="block text-ink-muted">and {prefs.length - 2} more</span>}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortValue: (n) => (n.active ? 'Active' : 'Inactive'),
+      cell: (n) => <Badge tone={n.active ? 'success' : 'neutral'}>{n.active ? 'Active' : 'Inactive'}</Badge>,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      hideHeader: true,
+      phone: 'actions',
+      align: 'right',
+      cell: (n) => (
+        <Button size="sm" icon={Edit2} onClick={() => handleOpenEdit(n)} aria-label={`Edit ${n.fullName}`}>
+          Edit
+        </Button>
+      ),
+    },
+  ];
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Nursing Staff &amp; Profiles</h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Manage nurse identities, seniority designations, Gmail notification accounts, clinical capabilities (e.g. Blood Collection &amp; IV), and ordered pairing preferences.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsBulkImportOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
-            title="Bulk import nurses from CSV"
-          >
-            <Upload className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-            <span>Bulk CSV Import</span>
-          </button>
+    <div className="mx-auto max-w-7xl space-y-5 p-4 text-ink sm:p-6">
+      <PageHeader
+        title="Nurses"
+        meta={
+          <span>
+            {counts.total} {counts.total === 1 ? 'nurse' : 'nurses'}, {counts.active} active
+          </span>
+        }
+        actions={
+          <>
+            <Button icon={Upload} onClick={() => setIsBulkImportOpen(true)}>
+              Import from CSV
+            </Button>
+            <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
+              Add nurse
+            </Button>
+          </>
+        }
+      />
 
-          <button
-            onClick={handleOpenAdd}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition-colors shadow-xs cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Add Nurse</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Filter / Search Bar */}
-      <div className="bg-white border border-slate-200 rounded p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="flex flex-1 items-center gap-2 min-w-[240px] max-w-md">
-          <div className="relative w-full">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-            <input aria-label="Search nurses"
-              type="text"
-              placeholder="Search by nurse name, employee code or Gmail..."
+      <search aria-label="Find nurses" className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-surface p-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-end">
+        <Field label="Search">
+          {(f) => (
+            <Input
+              {...f}
+              type="search"
+              placeholder="Name, employee code or email"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
             />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1">
-            <span className="text-slate-500">Seniority:</span>
-            <select aria-label="Seniority"
-              value={selectedSeniorityFilter}
-              onChange={(e) => setSelectedSeniorityFilter(e.target.value)}
-              className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
-            >
-              <option value="ALL">All Levels ({nurses.length})</option>
+          )}
+        </Field>
+        <Field label="Level">
+          {(f) => (
+            <Select {...f} value={selectedSeniorityFilter} onChange={(e) => setSelectedSeniorityFilter(e.target.value)}>
+              <option value="ALL">All levels</option>
               {seniorityLevels.map((lvl) => (
                 <option key={lvl.id} value={lvl.id}>
-                  {lvl.name} {lvl.isSenior ? '(Senior)' : ''}
+                  {lvl.name}
                 </option>
               ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <span className="text-slate-500">Status:</span>
-            <select aria-label="Status"
-              value={activeStatusFilter}
-              onChange={(e) => setActiveStatusFilter(e.target.value as any)}
-              className="px-2 py-1 border border-slate-200 rounded text-xs bg-white text-slate-700"
-            >
-              <option value="ALL">All Status</option>
-              <option value="ACTIVE">Active Staff</option>
+            </Select>
+          )}
+        </Field>
+        <Field label="Status">
+          {(f) => (
+            <Select {...f} value={activeStatusFilter} onChange={(e) => setActiveStatusFilter(e.target.value as NurseFilters['status'])}>
+              <option value="ALL">Active and inactive</option>
+              <option value="ACTIVE">Active</option>
               <option value="INACTIVE">Inactive</option>
-            </select>
-          </div>
-        </div>
-      </div>
+            </Select>
+          )}
+        </Field>
+      </search>
 
-      {/* Nurses Table */}
-      <div className="bg-white border border-slate-200 rounded overflow-hidden shadow-xs">
-        <table className="w-full text-xs text-left">
-          <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-medium">
-            <tr>
-              <th className="py-2.5 px-3">Nurse / Code</th>
-              <th className="py-2.5 px-3">Seniority Level</th>
-              <th className="py-2.5 px-3">Gmail Notification Account</th>
-              <th className="py-2.5 px-3">Contract / Target</th>
-              <th className="py-2.5 px-3">Capabilities</th>
-              <th className="py-2.5 px-3">Preferences</th>
-              <th className="py-2.5 px-3">Date of Birth</th>
-              <th className="py-2.5 px-3">Status</th>
-              <th className="py-2.5 px-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredNurses.map((nurse) => {
-              const seniority = seniorityLevels.find((s) => s.id === nurse.seniorityLevelId);
-              const hasPhl = nurse.capabilityIds?.includes('role-phl');
-              const isExclusiveNC = isExclusiveNurseClinic(nurse, clinicalRoles);
+      <p className="sr-only" role="status" aria-live="polite">
+        {filtersOn ? `${filteredNurses.length} of ${counts.total} nurses shown.` : ''}
+      </p>
 
-              return (
-                <tr key={nurse.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-2.5 px-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-[11px] shrink-0">
-                        {nurse.fullName.charAt(0)}
-                      </div>
-                      <div>
-                        <span className="font-semibold text-slate-900 block">
-                          {nurse.fullName}
-                        </span>
-                        <span className="font-mono text-[10px] text-slate-400">
-                          {nurse.employeeCode}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td className="py-2.5 px-3">
-                    {seniority ? (
-                      <span
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium"
-                        style={{
-                          backgroundColor: `${seniority.color}15`,
-                          color: seniority.color,
-                        }}
-                      >
-                        {seniority.isSenior && <Shield className="w-3 h-3 shrink-0" />}
-                        <span>{seniority.name}</span>
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 font-mono text-[11px]">—</span>
-                    )}
-                  </td>
-
-                  <td className="py-2.5 px-3 font-mono text-slate-700">
-                    <div className="flex items-center gap-1.5">
-                      <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="truncate max-w-[180px]">{nurse.gmail}</span>
-                    </div>
-                  </td>
-
-                  <td className="py-2.5 px-3 font-mono">
-                    <div className="flex items-baseline gap-1">
-                      <span className="font-bold text-slate-800">{nurse.contractPercent}%</span>
-                      <span className="text-[10px] text-slate-500">
-                        ({nurse.contractPercent === 100 ? 'Full-Time' : 'Part-Time'})
-                      </span>
-                    </div>
-                  </td>
-
-                  <td className="py-2.5 px-3">
-                    <div className="flex items-center gap-1">
-                      {isExclusiveNC ? (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 font-medium text-[10px] border border-emerald-200"
-                          title="Exclusively dedicated to Nurse Clinic (no doctor pairings)"
-                        >
-                          <Stethoscope className="w-3 h-3 text-emerald-600" />
-                          <span>Exclusive NC</span>
-                        </span>
-                      ) : (
-                        <>
-                          {hasPhl && (
-                            <span
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 font-mono text-[10px] font-semibold border border-rose-200"
-                              title="Qualified for Blood Collection & IV (PHL) quota"
-                            >
-                              <Droplets className="w-3 h-3 text-rose-600" />
-                              <span>PHL</span>
-                            </span>
-                          )}
-                          {nurse.isClinicNurse && (
-                            <span
-                              className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 font-mono text-[10px] border border-blue-200"
-                              title="General Clinic Nurse"
-                            >
-                              Clinic
-                            </span>
-                          )}
-                          {!hasPhl && !nurse.isClinicNurse && (
-                            <span className="text-slate-400 text-[11px]">—</span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </td>
-
-                  <td className="py-2.5 px-3">
-                    {isExclusiveNC ? (
-                      <span className="text-emerald-700 text-[10px] font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
-                        Dedicated NC (No doctor pairings)
-                      </span>
-                    ) : nurse.preferences && nurse.preferences.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 max-w-[200px]">
-                        {nurse.preferences.slice(0, 2).map((pref, i) => {
-                          const doc = doctors.find((d) => d.id === pref.refId);
-                          const sp = specialties.find((s) => s.id === pref.refId);
-                          const docSpec = doc
-                            ? specialties.find((s) => doc.specialtyIds?.includes(s.id))
-                            : undefined;
-                          const label = doc
-                            ? `${doc.fullName.split(' ')[1] || doc.fullName}${docSpec ? ` (${docSpec.code || docSpec.name})` : ''}`
-                            : sp?.code || pref.refId;
-                          return (
-                            <span
-                              key={i}
-                              className="px-1.5 py-0.2 bg-slate-100 rounded text-[10px] font-mono text-slate-700 border border-slate-200"
-                            >
-                              #{pref.rank} {label}
-                            </span>
-                          );
-                        })}
-                        {nurse.preferences.length > 2 && (
-                          <span className="text-[10px] text-slate-400 font-mono">
-                            +{nurse.preferences.length - 2}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-slate-500 text-[10px] italic">General Float Pool</span>
-                    )}
-                  </td>
-
-                  <td className="py-2.5 px-3 font-mono text-slate-600">
-                    <span title="Drives automatic Birthday Leave entitlement">
-                      {nurse.dateOfBirth}
-                    </span>
-                  </td>
-
-                  <td className="py-2.5 px-3">
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                        nurse.active
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-slate-100 text-slate-500'
-                      }`}
-                    >
-                      {nurse.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-
-                  <td className="py-2.5 px-3 text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <button
-                        onClick={() => handleOpenEdit(nurse)}
-                        className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
-                        title="Edit profile"
-                        aria-label={`Edit ${nurse.fullName}`}
-                      >
-                        <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteNurse(nurse.id, nurse.fullName)}
-                        className="p-1 hover:bg-red-50 rounded text-red-600 cursor-pointer"
-                        title="Delete nurse"
-                        aria-label={`Delete ${nurse.fullName}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {filteredNurses.length === 0 && (
-              <tr>
-                <td colSpan={9} className="py-12 px-4 text-center">
-                  <div className="max-w-xs mx-auto space-y-3">
-                    <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
-                      <Users className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800">No Nurses Registered</h4>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        {nurses.length === 0
-                          ? 'The nurse directory is currently empty. Click "Add Nurse" to register clinical staff.'
-                          : 'No nurses matched your current filter criteria.'}
-                      </p>
-                    </div>
-                    {nurses.length === 0 && (
-                      <button
-                        onClick={handleOpenAdd}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold cursor-pointer shadow-xs"
-                      >
-                        <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                        <span>Add First Nurse</span>
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
+        <DataTable
+          caption="Nurses"
+          rows={filteredNurses}
+          rowKey={(n) => n.id}
+          columns={columns}
+          initialSort={{ key: 'name', direction: 'ascending' }}
+          empty={
+            nurses.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="No nurses yet"
+                action={
+                  <Button variant="primary" icon={Plus} onClick={handleOpenAdd}>
+                    Add nurse
+                  </Button>
+                }
+              >
+                Add the clinic's nurses, or import them from a CSV file.
+              </EmptyState>
+            ) : (
+              <EmptyState icon={Search} title="No nurse matches" action={<Button onClick={clearFilters}>Clear the search and filters</Button>}>
+                Try another name, or show all levels and both active and inactive nurses.
+              </EmptyState>
+            )
+          }
+        />
       </div>
 
       {/* NURSE PROFILE MODAL */}
@@ -1327,6 +1244,36 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
                   />
                 </div>
               </div>
+
+              {/* Leaving the clinic: inactive first, removing for good second (Phase 6). */}
+              {editingNurse && (
+                <section aria-labelledby="nurse-leaving" className="space-y-2 rounded-lg border border-line p-3 text-sm">
+                  <h3 id="nurse-leaving" className="font-semibold text-ink">
+                    Leaving the clinic
+                  </h3>
+                  <p className="text-ink-muted">
+                    {editingNurse.active
+                      ? 'Make the nurse inactive: their history stays and new rosters leave them out. Remove them only if they were added by mistake.'
+                      : 'This nurse is inactive. Remove them only if they were added by mistake.'}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {editingNurse.active && (
+                      <Button type="button" onClick={() => handleMakeInactive(editingNurse.id, editingNurse.fullName)}>
+                        Make inactive
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      icon={Trash2}
+                      className="text-danger hover:bg-danger-soft"
+                      onClick={() => handleDeleteNurse(editingNurse.id, editingNurse.fullName, editingNurse.active)}
+                    >
+                      Remove for good
+                    </Button>
+                  </div>
+                </section>
+              )}
 
               {/* Modal Footer */}
               <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-2">
