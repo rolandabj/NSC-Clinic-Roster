@@ -52,12 +52,13 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   check('Export has no text under 12 px', (await smallText(ex)).length === 0, (await smallText(ex)).join(' | '));
   await page.keyboard.press('Escape');
 
-  // 3. Share links: the invitations tab says plainly that it gives no access.
+  // 3. Share links: no Invitations tab (removed in slice 6a, the owner's choice); it points to
+  // Settings, Access and permissions instead, with a button for the owner.
   await more('Share links');
   const sh = page.getByRole('dialog', { name: 'Share links' });
   await sh.waitFor({ timeout: 5000 });
-  await sh.getByRole('tab', { name: /^Invitations/ }).click();
-  check('Invitations say they do not give access yet', /An invitation does not give access yet/.test(await sh.innerText()));
+  check('Share has no Invitations tab', (await sh.getByRole('tab').count()) === 0 && !/Invitation/.test(await sh.innerText()));
+  check('Share points to Access and permissions', /Settings, Access and permissions/.test(await sh.innerText()) && (await sh.getByRole('button', { name: 'Open Access and permissions' }).count()) === 1);
   check('Share has no text under 12 px', (await smallText(sh)).length === 0, (await smallText(sh)).join(' | '));
   await page.keyboard.press('Escape');
 

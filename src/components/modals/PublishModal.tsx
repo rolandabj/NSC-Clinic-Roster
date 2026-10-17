@@ -3,32 +3,16 @@
  * SPDX-License-Identifier: Apache-2.0
  * 
  * Publish dialog: checks the roster for problems, saves a new version,
- * previews each nurse's email and sends them.
+ * previews each nurse's email and sends them. On the shared Dialog, with its steps
+ * shown, since Phase 7, slice 6a.
  */
 
 import type { HoursHistory } from '../../services/hours/hoursBalance';
 
 import React, { useState, useEffect, useId, useRef } from 'react';
-import { useDialogA11y } from '../common/useDialogA11y';
 import { notify } from '../common/dialogs';
-import {
-  X,
-  Send,
-  ShieldCheck,
-  ShieldAlert,
-  AlertTriangle,
-  CheckCircle2,
-  Mail,
-  User,
-  Eye,
-  Check,
-  RotateCcw,
-  Sparkles,
-  Info,
-  Clock,
-  Layers,
-  Lock,
-} from 'lucide-react';
+import { AlertTriangle, Check, ChevronRight, Mail, RotateCcw, Send, XCircle } from 'lucide-react';
+import { Badge, Button, Checkbox, Dialog, Field, Input, Notice, Select, Textarea, cx } from '../ui';
 import { v4 as uuidv4 } from 'uuid';
 import {
   Schedule,
@@ -46,8 +30,6 @@ import {
   LeaveType,
   PublishLog,
   EmailRecipientLog,
-  Acknowledgment,
-  ShareLink,
   WorkingHoursPeriod,
   LockEntry,
 } from '../../types';
@@ -57,11 +39,10 @@ import { ScheduleValidator, ValidationReport } from '../../services/validation/S
 import { computeScheduleDiff, ScheduleVersionDiff } from '../../services/history/diffEngine';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { recipientsForLog } from '../../services/publish/emailLogSize';
-import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
+import { EmailSettingsConfig } from '../../types/settings';
 import { getRepository } from '../../services/repository';
 import { syncPublicRoster } from '../../services/publish/publicRosterService';
 import { ensureNurseLink, syncNurseRosters, nurseLinkUrl } from '../../services/publish/nurseRosterService';
-import { escapeHtml } from '../../utils/escapeHtml';
 import { EmailHtmlPreview } from '../common/EmailHtmlPreview';
 import { cachedEmailSettings, loadEmailSettings } from '../../services/settings/emailSettingsStore';
 import { checkEmailReadiness } from '../../services/email/emailReadiness';
@@ -339,20 +320,15 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     }
   }, [isOpen, schedule.id, initialMode]);
 
-  const titleId = useId();
-  // Esc does nothing while emails are being sent, so a stray key press can't hide a running publish.
-  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, () => {
-    if (currentStep !== 'SENDING') onClose();
-  });
+  const noEmailId = useId();
 
   if (!isOpen) return null;
 
   // Shown at the top of the preview and send steps when the clinic's email setting is in test mode.
   const testModeBanner = emailConfig.mockMode ? (
-    <div role="status" className="p-3 rounded border border-amber-300 bg-amber-50 text-amber-900 flex items-center gap-2 text-xs font-semibold">
-      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
-      <span>{TEST_MODE_TEXT} You can change this in Settings, Email.</span>
-    </div>
+    <Notice tone="warning" title={TEST_MODE_TEXT}>
+      You can change this in Settings, Email.
+    </Notice>
   ) : null;
 
   // Selected nurse for preview
@@ -655,7 +631,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         action: 'PUBLISH',
         entity: 'Schedule',
         entityId: schedule.id,
-        note: `Published v${run.version.number} (${publishKind}): ${sent} emailed, ${simulated} simulated, ${failed} failed.`,
+        note: `Published version ${run.version.number} (${publishKind === 'CHANGE' ? 'changes only' : 'the whole roster'}): ${sent} emailed, ${simulated} in test mode, ${failed} not sent.`,
         timestamp: new Date().toISOString(),
       })
       .catch(() => {});
@@ -722,608 +698,464 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     return config;
   };
 
+  const STEPS: { id: Step; label: string }[] = [
+    { id: 'VALIDATION', label: 'Check' },
+    { id: 'DETAILS', label: 'Message' },
+    { id: 'PREVIEW', label: 'Preview' },
+    { id: 'SENDING', label: 'Send' },
+    { id: 'DONE', label: 'Done' },
+  ];
+  const stepIndex = STEPS.findIndex((st) => st.id === currentStep);
+  const nextNumber = (schedule.activeVersionNumber || 1) + 1;
+  const withEmail = nurses.filter((n) => n.active && n.gmail);
+  const noEmail = nurses.filter((n) => n.active && !n.gmail);
+  const changedIds = new Set(
+    Object.entries(computedDiff?.changesByNurse || {})
+      .filter(([, list]) => list.length > 0)
+      .map(([id]) => id)
+  );
+  const toggleNurse = (id: string) =>
+    setSelectedNurseIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const nursesWord = (n: number) => `${n} ${n === 1 ? 'nurse' : 'nurses'}`;
+  const failedCount = sendResults.filter((r) => r.status === 'FAILED').length;
+
+  const footer = (() => {
+    switch (currentStep) {
+      case 'VALIDATION':
+        return (
+          <>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
+              busy={isClinicCheckPending}
+              disabled={
+                !isOwner ||
+                isClinicCheckPending ||
+                (validationReport?.errorCount ?? 0) > 0 ||
+                ((validationReport?.warnCount ?? 0) > 0 && !acknowledgeWarnings)
+              }
+              onClick={() => setCurrentStep('DETAILS')}
+            >
+              {isClinicCheckPending ? 'Checking the roster…' : 'Continue'}
+            </Button>
+          </>
+        );
+      case 'DETAILS':
+        return (
+          <>
+            <Button onClick={() => setCurrentStep('VALIDATION')}>Back</Button>
+            <Button variant="primary" disabled={!versionNote.trim()} onClick={() => setCurrentStep('PREVIEW')}>
+              Preview the emails
+            </Button>
+          </>
+        );
+      case 'PREVIEW':
+        return (
+          <>
+            <Button onClick={() => setCurrentStep('DETAILS')}>Back</Button>
+            <Button variant="primary" icon={Send} onClick={handlePublishAndSend}>
+              {selectedNurseIds.size > 0 ? `Publish and email ${nursesWord(selectedNurseIds.size)}` : 'Publish without emails'}
+            </Button>
+          </>
+        );
+      case 'SENDING':
+        return (
+          <Button variant="primary" busy disabled>
+            Sending…
+          </Button>
+        );
+      case 'DONE':
+        return (
+          <>
+            {failedCount > 0 && (
+              <Button icon={RotateCcw} onClick={handleRetryFailed}>
+                Send the {failedCount} not sent again
+              </Button>
+            )}
+            <Button variant="primary" onClick={onClose}>
+              Done
+            </Button>
+          </>
+        );
+    }
+  })();
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden text-xs"
-      >
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-              <Send className="w-4 h-4" aria-hidden="true" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 id={titleId} className="text-base font-bold text-slate-900">
-                  {publishKind === 'CHANGE' ? 'Publish roster changes' : 'Publish roster'}
-                </h2>
+    <Dialog
+      open
+      onClose={onClose}
+      // Closing while emails go out would leave the rest of the nurses without their email.
+      closeDisabled={currentStep === 'SENDING'}
+      size="lg"
+      title={publishKind === 'CHANGE' ? `Publish the changes to ${schedule.name}` : `Publish ${schedule.name}`}
+      description={
+        <span className="flex flex-wrap items-center gap-2">
+          <span>{createdVersion ? `Published as version ${createdVersion.number}.` : `It will be version ${nextNumber}.`}</span>
+          <Badge tone={emailConfig.mockMode ? 'warning' : 'neutral'} icon={Mail}>
+            {emailConfig.mockMode ? 'Test mode: nothing is emailed' : 'Emails go from the clinic account'}
+          </Badge>
+        </span>
+      }
+      footer={footer}
+    >
+      <div className="space-y-4 text-sm">
+        <ol className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm" aria-label="Steps">
+          {STEPS.map((st, i) => (
+            <li key={st.id} className="flex items-center gap-1" aria-current={i === stepIndex ? 'step' : undefined}>
+              {i > 0 && <ChevronRight aria-hidden="true" className="size-4 text-ink-muted" />}
+              <span
+                className={cx(
+                  'flex items-center gap-1.5 rounded-full px-2 py-0.5',
+                  i === stepIndex ? 'bg-brand-soft font-semibold text-brand-strong' : i < stepIndex ? 'text-ink' : 'text-ink-muted'
+                )}
+              >
+                {i < stepIndex ? (
+                  <Check aria-hidden="true" className="size-4 text-success" />
+                ) : (
+                  <span aria-hidden="true" className="tabular-nums">
+                    {i + 1}.
+                  </span>
+                )}
+                {st.label}
+                {i < stepIndex && <span className="sr-only"> (done)</span>}
+              </span>
+            </li>
+          ))}
+        </ol>
+
+        {emailIssue && (
+          <Notice tone="danger" title="Email needs attention" live>
+            <p>{emailIssue}</p>
+            <p className="mt-1">Check Settings, Email, then try again.</p>
+          </Notice>
+        )}
+
+        {!isOwner && (
+          <Notice tone="danger" title="You can't publish rosters">
+            Only the clinic owner and people who can edit rosters can publish. Ask one of them to publish this roster.
+          </Notice>
+        )}
+
+        {/* Step 1: the roster check. */}
+        {currentStep === 'VALIDATION' && isOwner && validationReport && (
+          <div className="space-y-3">
+            <p className="text-ink-muted">Before nurses are emailed, the roster is checked against the clinic's rules. Problems that must be fixed stop publishing.</p>
+            <dl className="grid grid-cols-3 gap-3">
+              <div className={cx('rounded-lg border p-3', validationReport.errorCount > 0 ? 'border-danger-line bg-danger-soft' : 'border-line bg-sunken')}>
+                <dt className={validationReport.errorCount > 0 ? 'text-danger' : 'text-ink-muted'}>Must fix</dt>
+                <dd className="text-2xl font-semibold text-ink tabular-nums">{validationReport.errorCount}</dd>
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] text-slate-500 font-mono">
-                  {schedule.name} · will be version {(schedule.activeVersionNumber || 1) + 1}
-                </span>
-                <span className="text-slate-300">·</span>
-                <span
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
-                    emailConfig.mockMode ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-slate-50 text-slate-700 border-slate-200'
-                  }`}
-                >
-                  <Mail className="w-3 h-3" aria-hidden="true" />
-                  <span>{emailConfig.mockMode ? TEST_MODE_TEXT : 'Emails are sent from the clinic account'}</span>
-                </span>
+              <div className={cx('rounded-lg border p-3', validationReport.warnCount > 0 ? 'border-warning-line bg-warning-soft' : 'border-line bg-sunken')}>
+                <dt className={validationReport.warnCount > 0 ? 'text-warning' : 'text-ink-muted'}>To check</dt>
+                <dd className="text-2xl font-semibold text-ink tabular-nums">{validationReport.warnCount}</dd>
               </div>
-            </div>
+              <div className="rounded-lg border border-line bg-sunken p-3">
+                <dt className="text-ink-muted">Nurses to email</dt>
+                <dd className="text-2xl font-semibold text-ink tabular-nums">{selectedNurseIds.size}</dd>
+              </div>
+            </dl>
+
+            {validationReport.errorCount > 0 && (
+              <Notice
+                tone="danger"
+                title={`Must fix (${validationReport.errorCount}) before publishing`}
+                action={
+                  onShowProblems && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        onClose();
+                        onShowProblems();
+                      }}
+                    >
+                      Show problems
+                    </Button>
+                  )
+                }
+              >
+                <ul className="list-disc space-y-1 pl-5">
+                  {validationReport.findings
+                    .filter((f) => f.severity === 'ERROR')
+                    .slice(0, 5)
+                    .map((f, i) => (
+                      <li key={i}>{f.message}</li>
+                    ))}
+                </ul>
+                {validationReport.errorCount > 5 && <p className="mt-1">And {validationReport.errorCount - 5} more.</p>}
+              </Notice>
+            )}
+
+            {validationReport.errorCount === 0 && validationReport.warnCount > 0 && (
+              <Notice tone="warning" title={`To check (${validationReport.warnCount})`}>
+                <ul className="list-disc space-y-1 pl-5">
+                  {validationReport.findings
+                    .filter((f) => f.severity === 'WARN')
+                    .slice(0, 4)
+                    .map((f, i) => (
+                      <li key={i}>{f.message}</li>
+                    ))}
+                </ul>
+                {validationReport.warnCount > 4 && <p className="mt-1">And {validationReport.warnCount - 4} more.</p>}
+                <Checkbox
+                  className="mt-3"
+                  checked={acknowledgeWarnings}
+                  onChange={(e) => setAcknowledgeWarnings(e.target.checked)}
+                  label={`I have checked ${validationReport.warnCount === 1 ? 'this problem' : `these ${validationReport.warnCount} problems`} and want to publish`}
+                />
+              </Notice>
+            )}
+
+            {validationReport.errorCount === 0 && validationReport.warnCount === 0 && (
+              <Notice tone="success" title="No problems found">
+                The roster is ready to publish.
+              </Notice>
+            )}
           </div>
+        )}
 
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={currentStep === 'SENDING'}
-            aria-label="Close"
-            title={currentStep === 'SENDING' ? 'Wait until sending finishes' : 'Close'}
-            className="p-1.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        {/* Wizard Step Breadcrumbs */}
-        <div className="px-6 py-2.5 bg-slate-100/70 border-b border-slate-200 flex items-center gap-2 text-[11px] font-semibold text-slate-500">
-          <span className={currentStep === 'VALIDATION' ? 'text-indigo-600 font-bold' : ''}>
-            1. Check
-          </span>
-          <span>›</span>
-          <span className={currentStep === 'DETAILS' ? 'text-indigo-600 font-bold' : ''}>
-            2. Message
-          </span>
-          <span>›</span>
-          <span className={currentStep === 'PREVIEW' ? 'text-indigo-600 font-bold' : ''}>
-            3. Preview
-          </span>
-          <span>›</span>
-          <span className={currentStep === 'SENDING' ? 'text-indigo-600 font-bold' : ''}>
-            4. Send
-          </span>
-          <span>›</span>
-          <span className={currentStep === 'DONE' ? 'text-emerald-600 font-bold' : ''}>
-            5. Done
-          </span>
-        </div>
-
-        {/* Modal Content */}
-        <div className="p-6 overflow-y-auto space-y-4 flex-1">
-          {emailIssue && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">
-            <p className="font-semibold">Email needs attention</p><p className="mt-1">{emailIssue}</p>
-            <p className="mt-2 text-xs">Check Settings, Email. Retry after correcting the issue.</p>
-          </div>}
-          {/* OWNER CHECK */}
-          {!isOwner && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-900 space-y-2">
-              <div className="flex items-center gap-2 font-bold text-sm text-rose-800">
-                <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0" />
-                <span>You can't publish rosters</span>
-              </div>
-              <p className="text-xs leading-relaxed">
-                Only the clinic owner and people who can edit rosters can publish. Ask one of them to publish this roster.
-              </p>
-            </div>
-          )}
-
-          {/* STEP 1: CHECK FOR PROBLEMS */}
-          {currentStep === 'VALIDATION' && isOwner && (
-            <div className="space-y-4">
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-1">
-                <h3 className="font-bold text-slate-800 text-xs">Check the roster before publishing</h3>
-                <p className="text-slate-500 text-[11px]">
-                  Before nurses are emailed, the roster is checked against the clinic's rules. Problems that must be fixed stop publishing.
-                </p>
-              </div>
-
-              {validationReport && (
-                <div className="space-y-3">
-                  {/* Stat cards */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div
-                      className={`p-3 rounded border text-center ${
-                        validationReport.errorCount > 0
-                          ? 'border-rose-300 bg-rose-50 text-rose-900'
-                          : 'border-emerald-300 bg-emerald-50 text-emerald-900'
-                      }`}
-                    >
-                      <div className="text-2xl font-bold font-mono">{validationReport.errorCount}</div>
-                      <div className="text-[10px] font-semibold uppercase mt-0.5">
-                        {validationReport.errorCount > 0 ? 'Must fix before publishing' : 'Nothing that must be fixed'}
-                      </div>
-                    </div>
-
-                    <div
-                      className={`p-3 rounded border text-center ${
-                        validationReport.warnCount > 0
-                          ? 'border-amber-300 bg-amber-50 text-amber-900'
-                          : 'border-slate-200 bg-slate-50 text-slate-700'
-                      }`}
-                    >
-                      <div className="text-2xl font-bold font-mono">{validationReport.warnCount}</div>
-                      <div className="text-[10px] font-semibold uppercase mt-0.5">To check</div>
-                    </div>
-
-                    <div className="p-3 rounded border border-slate-200 bg-slate-50 text-slate-700 text-center">
-                      <div className="text-2xl font-bold font-mono">{selectedNurseIds.size}</div>
-                      <div className="text-[10px] font-semibold uppercase mt-0.5">Nurses to email</div>
-                    </div>
-                  </div>
-
-                  {/* Findings breakdown */}
-                  {validationReport.errorCount > 0 && (
-                    <div className="p-3 bg-rose-50 border border-rose-200 rounded text-rose-900 space-y-2 text-xs">
-                      <div className="font-bold flex items-center gap-1.5">
-                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                        <span>Must fix ({validationReport.errorCount}):</span>
-                      </div>
-                      <ul className="list-disc pl-5 space-y-1 text-[11px]">
-                        {validationReport.findings
-                          .filter((f) => f.severity === 'ERROR')
-                          .slice(0, 5)
-                          .map((f, i) => (
-                            <li key={i}>{f.message}</li>
-                          ))}
-                      </ul>
-                      {validationReport.errorCount > 5 && (
-                        <p className="text-[11px]">and {validationReport.errorCount - 5} more.</p>
-                      )}
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                        <p className="font-semibold text-rose-800 text-[11px]">
-                          You can't publish until these are fixed on the roster.
-                        </p>
-                        {onShowProblems && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onClose();
-                              onShowProblems();
-                            }}
-                            className="px-3 py-1 rounded border border-rose-300 bg-white hover:bg-rose-100 text-rose-800 font-semibold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-                          >
-                            Show problems
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {validationReport.errorCount === 0 && validationReport.warnCount > 0 && (
-                    <div className="p-3 bg-amber-50 border border-amber-200 rounded text-amber-900 space-y-2 text-xs">
-                      <div className="font-bold flex items-center gap-1.5">
-                        <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>To check ({validationReport.warnCount}):</span>
-                      </div>
-                      <ul className="list-disc pl-5 space-y-1 text-[11px]">
-                        {validationReport.findings
-                          .filter((f) => f.severity === 'WARN')
-                          .slice(0, 4)
-                          .map((f, i) => (
-                            <li key={i}>{f.message}</li>
-                          ))}
-                      </ul>
-                      <div className="pt-2 border-t border-amber-200">
-                        <label className="flex items-center gap-2 cursor-pointer font-bold text-amber-950">
-                          <input
-                            type="checkbox"
-                            checked={acknowledgeWarnings}
-                            onChange={(e) => setAcknowledgeWarnings(e.target.checked)}
-                            className="rounded text-indigo-600"
-                          />
-                          <span>I have checked {validationReport.warnCount === 1 ? 'this problem' : `these ${validationReport.warnCount} problems`} and want to publish</span>
-                        </label>
-                      </div>
-                    </div>
-                  )}
-
-                  {validationReport.errorCount === 0 && validationReport.warnCount === 0 && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-emerald-900 flex items-center gap-2 text-xs">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>No problems found. The roster is ready to publish.</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* STEP 2: VERSION NOTE & MODE */}
-          {currentStep === 'DETAILS' && (
-            <div className="space-y-4">
-              {/* Mode Selector */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-2">
-                <span className="font-bold text-slate-800 text-xs block">What to send:</span>
-                <div className="grid grid-cols-2 gap-3">
+        {/* Step 2: what to send, the notes and who gets it. */}
+        {currentStep === 'DETAILS' && (
+          <div className="space-y-4">
+            <fieldset className="space-y-2">
+              <legend className="font-semibold text-ink">What to send</legend>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {[
+                  { kind: 'PUBLISH' as const, title: 'The whole roster', hint: 'Each nurse gets all their shifts for the period.' },
+                  { kind: 'CHANGE' as const, title: 'Changes only', hint: 'Each nurse sees which of their shifts changed since the last published roster.' },
+                ].map((o) => (
                   <label
-                    className={`p-3 rounded border cursor-pointer flex flex-col gap-1 transition-colors ${
-                      publishKind === 'PUBLISH'
-                        ? 'border-indigo-600 bg-indigo-50/50 text-indigo-950'
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
-                    }`}
+                    key={o.kind}
+                    className={cx(
+                      'flex cursor-pointer gap-2 rounded-lg border p-3',
+                      publishKind === o.kind ? 'border-brand bg-brand-soft' : 'border-line hover:bg-sunken'
+                    )}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold">Whole roster</span>
-                      <input
-                        type="radio"
-                        name="publishKind"
-                        checked={publishKind === 'PUBLISH'}
-                        onChange={() => setPublishKind('PUBLISH')}
-                        className="text-indigo-600"
-                      />
-                    </div>
-                    <span className="text-[11px] text-slate-500">
-                      Each nurse gets all their shifts for the period.
+                    <input
+                      type="radio"
+                      name="publishKind"
+                      className="mt-0.5 size-4 accent-brand"
+                      checked={publishKind === o.kind}
+                      onChange={() => setPublishKind(o.kind)}
+                    />
+                    <span>
+                      <span className="block font-semibold text-ink">{o.title}</span>
+                      <span className="block text-ink-muted">{o.hint}</span>
                     </span>
                   </label>
-
-                  <label
-                    className={`p-3 rounded border cursor-pointer flex flex-col gap-1 transition-colors ${
-                      publishKind === 'CHANGE'
-                        ? 'border-indigo-600 bg-indigo-50/50 text-indigo-950'
-                        : 'border-slate-200 bg-white hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold">Changes only</span>
-                      <input
-                        type="radio"
-                        name="publishKind"
-                        checked={publishKind === 'CHANGE'}
-                        onChange={() => setPublishKind('CHANGE')}
-                        className="text-indigo-600"
-                      />
-                    </div>
-                    <span className="text-[11px] text-slate-500">
-                      Each nurse sees which of their shifts changed since the last published roster.
-                    </span>
-                  </label>
-                </div>
+                ))}
               </div>
+            </fieldset>
 
-              {/* Version Note */}
-              <div className="space-y-1">
-                <label className="block font-bold text-slate-800 text-xs">
-                  Note for this version <span className="text-rose-500" aria-hidden="true">*</span>
-                </label>
-                <input
-                  type="text"
+            <Field label="Note for this version" hint="Kept with this version in History.">
+              {(f) => (
+                <Input
+                  {...f}
                   required
-                  aria-label="Note for this version"
-                  placeholder="For example: October roster, agreed with the clinic lead"
+                  placeholder="For example: November roster, agreed with the clinic lead"
                   value={versionNote}
                   onChange={(e) => setVersionNote(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded font-medium text-xs focus:ring-1 focus:ring-indigo-500"
                 />
-                <p className="text-[11px] text-slate-400">
-                  Kept with this version in the roster's history.
-                </p>
-              </div>
+              )}
+            </Field>
 
-              {/* General Broadcast Note */}
-              <div className="space-y-1">
-                <label className="block font-bold text-slate-800 text-xs">
-                  Message to all nurses (optional):
-                </label>
-                <textarea
+            <Field label="Message to all nurses" optional>
+              {(f) => (
+                <Textarea
+                  {...f}
                   rows={2}
-                  aria-label="Message to all nurses (optional)"
                   placeholder="For example: Thursday clinics start at 15:00 this month. Ask the planner about swaps."
                   value={generalBroadcastNote}
                   onChange={(e) => setGeneralBroadcastNote(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-indigo-500"
                 />
-              </div>
-
-              {/* Link to the roster online */}
-              <div className="pt-2 border-t border-slate-200 space-y-1">
-                <label className="flex items-start gap-2 cursor-pointer font-medium text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={includeLink}
-                    onChange={(e) => setIncludeLink(e.target.checked)}
-                    className="rounded text-indigo-600 mt-0.5"
-                  />
-                  <span>
-                    Include a link to view the roster online
-                    <span className="block text-[11px] font-normal text-slate-500">
-                      {hasPublicLink
-                        ? 'Uses the roster\'s existing share link. Anyone who has the link can open it.'
-                        : 'Creates a share link for this roster. Anyone who has the link can open it; you can remove it later in Share.'}
-                    </span>
-                  </span>
-                </label>
-              </div>
-
-              {/* Recipients */}
-              {(() => {
-                const withEmail = nurses.filter((n) => n.active && n.gmail);
-                const noEmail = nurses.filter((n) => n.active && !n.gmail);
-                const changedIds = new Set(
-                  Object.entries(computedDiff?.changesByNurse || {})
-                    .filter(([, list]) => list.length > 0)
-                    .map(([id]) => id)
-                );
-                const toggle = (id: string) =>
-                  setSelectedNurseIds((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(id)) next.delete(id);
-                    else next.add(id);
-                    return next;
-                  });
-                return (
-                  <div className="pt-2 border-t border-slate-200 space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-800 text-xs">
-                        Send to {selectedNurseIds.size} of {withEmail.length} nurses
-                      </span>
-                      <span className="flex gap-2 text-[11px]">
-                        <button type="button" className="text-indigo-700 underline cursor-pointer" onClick={() => setSelectedNurseIds(new Set(withEmail.map((n) => n.id)))}>
-                          All
-                        </button>
-                        {computedDiff && (
-                          <button type="button" className="text-indigo-700 underline cursor-pointer" onClick={() => setSelectedNurseIds(new Set(withEmail.filter((n) => changedIds.has(n.id)).map((n) => n.id)))}>
-                            Only nurses with changes ({withEmail.filter((n) => changedIds.has(n.id)).length})
-                          </button>
-                        )}
-                        <button type="button" className="text-indigo-700 underline cursor-pointer" onClick={() => setSelectedNurseIds(new Set())}>
-                          None
-                        </button>
-                      </span>
-                    </div>
-                    <div className="max-h-40 overflow-y-auto border border-slate-200 rounded divide-y divide-slate-100">
-                      {withEmail.map((n) => (
-                        <label key={n.id} className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-slate-50">
-                          <input type="checkbox" checked={selectedNurseIds.has(n.id)} onChange={() => toggle(n.id)} className="rounded" />
-                          <span className="text-slate-800">{n.fullName}</span>
-                          <span className="text-slate-400 text-[11px] truncate">{n.gmail}</span>
-                          {changedIds.has(n.id) && <span className="ml-auto text-[10px] text-amber-700">changed</span>}
-                        </label>
-                      ))}
-                      {noEmail.map((n) => (
-                        <label key={n.id} className="flex items-center gap-2 px-2 py-1 bg-slate-50 text-slate-400 cursor-not-allowed">
-                          <input type="checkbox" checked={false} disabled className="rounded" aria-describedby={`${titleId}-noemail`} />
-                          <span>{n.fullName}</span>
-                          <span className="ml-auto text-[10px] font-semibold text-amber-700">No email address</span>
-                        </label>
-                      ))}
-                    </div>
-                    {noEmail.length > 0 && (
-                      <p id={`${titleId}-noemail`} className="text-[11px] text-amber-800">
-                        {noEmail.length} nurse{noEmail.length === 1 ? ' has' : 's have'} no email address and won't be emailed. Add it in Nurses.
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* STEP 3: PREVIEW EACH NURSE'S EMAIL */}
-          {currentStep === 'PREVIEW' && (
-            <div className="space-y-4">
-              {testModeBanner}
-              {/* Nurse selector toolbar */}
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50 border border-slate-200 rounded">
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-indigo-600" />
-                  <span className="font-bold text-slate-800 text-xs">Preview the email for:</span>
-                  <select
-                    aria-label="Preview the email for"
-                    value={previewNurseId}
-                    onChange={(e) => setPreviewNurseId(e.target.value)}
-                    className="px-2.5 py-1 border border-slate-300 rounded bg-white text-xs font-semibold text-slate-800"
-                  >
-                    {nurses
-                      .filter((n) => n.active && n.gmail)
-                      .map((n) => (
-                        <option key={n.id} value={n.id}>
-                          {n.fullName} ({n.gmail})
-                        </option>
-                      ))}
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-2 text-[11px] text-slate-600">
-                  <span>
-                    <strong>{selectedNurseIds.size} nurse{selectedNurseIds.size === 1 ? '' : 's'}</strong>{' '}
-                    {emailConfig.mockMode ? 'would be emailed (test mode)' : 'will be emailed'}
-                  </span>
-                </div>
-              </div>
-
-              {/* HTML Preview Box */}
-              {previewPayload && (
-                <div className="border border-slate-300 rounded-lg overflow-hidden bg-slate-100">
-                  <div className="p-2.5 bg-slate-200/80 border-b border-slate-300 flex items-center justify-between text-[11px] font-mono text-slate-600">
-                    <span className="truncate max-w-md">Subject: <strong>{previewPayload.subject}</strong></span>
-                  </div>
-
-                  <div className="p-4 max-h-[360px] overflow-y-auto bg-slate-50">
-                    <EmailHtmlPreview html={previewPayload.html} className="h-[320px]" />
-                  </div>
-                </div>
               )}
-            </div>
-          )}
+            </Field>
 
-          {/* STEP 4: SENDING PROGRESS */}
-          {currentStep === 'SENDING' && (
-            <div className="space-y-4 py-4">
-              {testModeBanner}
-              <div className="flex items-center justify-between font-mono text-xs">
-                <span className="font-bold text-slate-800">
-                  {emailConfig.mockMode ? 'Pretending to send emails' : 'Sending emails'}…
-                </span>
-                <span className="font-bold text-indigo-600 text-sm">{progressPercent}%</span>
+            <Checkbox
+              checked={includeLink}
+              onChange={(e) => setIncludeLink(e.target.checked)}
+              label="Include a link to view the roster online"
+              hint={
+                hasPublicLink
+                  ? "Uses the roster's share link. Anyone who has the link can open it."
+                  : 'Makes a share link for this roster. Anyone who has the link can open it; you can remove it later in Share links.'
+              }
+            />
+
+            <fieldset className="space-y-2">
+              <legend className="font-semibold text-ink">
+                Send to {selectedNurseIds.size} of {nursesWord(withEmail.length)}
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setSelectedNurseIds(new Set(withEmail.map((n) => n.id)))}>
+                  All
+                </Button>
+                {computedDiff && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setSelectedNurseIds(new Set(withEmail.filter((n) => changedIds.has(n.id)).map((n) => n.id)))}
+                  >
+                    Only nurses with changes ({withEmail.filter((n) => changedIds.has(n.id)).length})
+                  </Button>
+                )}
+                <Button size="sm" variant="ghost" onClick={() => setSelectedNurseIds(new Set())}>
+                  None
+                </Button>
               </div>
-
-              <div className="w-full h-3 rounded-full bg-slate-200 overflow-hidden">
-                <div
-                  className="h-full bg-indigo-600 transition-all duration-150"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-
-              <ul className="border border-slate-200 rounded p-3 bg-white text-[11px] space-y-1 max-h-48 overflow-y-auto" aria-live="polite">
-                {sendLogs.map((log, i) => (
-                  <li key={i} className={log.startsWith('✗') ? 'text-rose-700' : log.startsWith('⚠') ? 'text-amber-700' : 'text-slate-700'}>
-                    {log}
+              <ul className="max-h-48 divide-y divide-line overflow-y-auto rounded-lg border border-line" aria-label="Nurses to email">
+                {withEmail.map((n) => (
+                  <li key={n.id} className="flex items-center gap-2 px-3 py-1.5">
+                    <Checkbox
+                      checked={selectedNurseIds.has(n.id)}
+                      onChange={() => toggleNurse(n.id)}
+                      label={
+                        <span>
+                          {n.fullName} <span className="text-ink-muted">{n.gmail}</span>
+                        </span>
+                      }
+                    />
+                    {changedIds.has(n.id) && (
+                      <Badge tone="warning" className="ml-auto">
+                        Changed
+                      </Badge>
+                    )}
+                  </li>
+                ))}
+                {noEmail.map((n) => (
+                  <li key={n.id} className="flex items-center gap-2 bg-sunken px-3 py-1.5 text-ink-muted">
+                    <span>{n.fullName}</span>
+                    <Badge tone="warning" className="ml-auto">
+                      No email address
+                    </Badge>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
+              {noEmail.length > 0 && (
+                <p id={noEmailId} className="text-warning">
+                  {noEmail.length === 1 ? '1 nurse has' : `${noEmail.length} nurses have`} no email address and won't be emailed. Add it in Nurses.
+                </p>
+              )}
+            </fieldset>
+          </div>
+        )}
 
-          {/* STEP 5: DONE */}
-          {currentStep === 'DONE' && createdVersion && (() => {
+        {/* Step 3: each nurse's email as they will get it. */}
+        {currentStep === 'PREVIEW' && (
+          <div className="space-y-3">
+            {testModeBanner}
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <Field label="Preview the email for" className="w-full sm:w-80">
+                {(f) => (
+                  <Select {...f} value={previewNurseId} onChange={(e) => setPreviewNurseId(e.target.value)}>
+                    {withEmail.map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.fullName} ({n.gmail})
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <p className="text-ink-muted">
+                {nursesWord(selectedNurseIds.size)} {emailConfig.mockMode ? 'would be emailed (test mode)' : 'will be emailed'}
+              </p>
+            </div>
+            {previewPayload && (
+              <div className="overflow-hidden rounded-lg border border-line">
+                <p className="truncate border-b border-line bg-sunken px-3 py-2">
+                  Subject: <strong>{previewPayload.subject}</strong>
+                </p>
+                <EmailHtmlPreview html={previewPayload.html} className="h-80" />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 4: sending. */}
+        {currentStep === 'SENDING' && (
+          <div className="space-y-3">
+            {testModeBanner}
+            <div className="flex items-center justify-between font-semibold text-ink">
+              <span>{emailConfig.mockMode ? 'Pretending to send the emails' : 'Sending the emails'}…</span>
+              <span className="tabular-nums">{progressPercent}%</span>
+            </div>
+            <div
+              className="h-2 w-full overflow-hidden rounded-full bg-line"
+              role="progressbar"
+              aria-label="Emails sent"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={progressPercent}
+            >
+              <div className="h-full bg-brand transition-all duration-150" style={{ width: `${progressPercent}%` }} />
+            </div>
+            <p className="text-ink-muted">Keep this window open until sending finishes.</p>
+            <ul className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-line p-3" aria-live="polite" aria-label="Sending">
+              {sendLogs.map((log, i) => {
+                const mark = log.charAt(0);
+                const text = /^[✓✗⚠] /.test(log) ? log.slice(2) : log;
+                return (
+                  <li key={i} className={cx('flex items-start gap-1.5', mark === '✗' ? 'text-danger' : mark === '⚠' ? 'text-warning' : 'text-ink')}>
+                    {mark === '✓' && <Check aria-label="Sent:" className="mt-0.5 size-4 shrink-0 text-success" />}
+                    {mark === '✗' && <XCircle aria-label="Not sent:" className="mt-0.5 size-4 shrink-0" />}
+                    {mark === '⚠' && <AlertTriangle aria-label="Note:" className="mt-0.5 size-4 shrink-0" />}
+                    <span>{text}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+
+        {/* Step 5: done. */}
+        {currentStep === 'DONE' &&
+          createdVersion &&
+          (() => {
             const failed = sendResults.filter((r) => r.status === 'FAILED');
             const sent = sendResults.length - failed.length;
             const testMode = sendResults.length > 0 && sendResults.every((r) => r.status === 'MOCK_SENT' || r.status === 'FAILED') && sent > 0;
+            const emails = (n: number) => `${n} ${n === 1 ? 'email' : 'emails'}`;
             return (
-              <div className="space-y-4 py-2">
-                <div className="text-center space-y-1">
-                  <div
-                    className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto ${
-                      failed.length === 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-700'
-                    }`}
-                  >
-                    {failed.length === 0 ? <CheckCircle2 className="w-8 h-8" /> : <ShieldAlert className="w-8 h-8" />}
-                  </div>
-                  <h3 className="text-base font-bold text-slate-900">
-                    {failed.length === 0
+              <div className="space-y-3">
+                <Notice
+                  tone={failed.length === 0 ? 'success' : 'warning'}
+                  live
+                  title={
+                    failed.length === 0
                       ? testMode
-                        ? `Published version ${createdVersion.number} (test mode: ${sent} email${sent === 1 ? '' : 's'} not actually sent)`
-                        : `Published version ${createdVersion.number} and emailed ${sent} nurse${sent === 1 ? '' : 's'}`
-                      : `Published version ${createdVersion.number}: ${failed.length} email${failed.length === 1 ? '' : 's'} not sent`}
-                  </h3>
-                  <p className="text-xs text-slate-600">Nurses can confirm they've seen it. Replies show on the Publish page.</p>
-                </div>
-
+                        ? `Published version ${createdVersion.number} (test mode: ${emails(sent)} not really sent)`
+                        : `Published version ${createdVersion.number} and emailed ${nursesWord(sent)}`
+                      : `Published version ${createdVersion.number}: ${emails(failed.length)} not sent`
+                  }
+                >
+                  Nurses can confirm they have seen it. Their replies show on the Publish screen.
+                </Notice>
                 {failed.length > 0 && (
-                  <div className="p-3 rounded border border-rose-200 bg-rose-50 text-xs text-rose-900 space-y-1">
-                    <p className="font-semibold">Not sent:</p>
-                    <ul className="list-disc pl-5 space-y-0.5">
+                  <Notice tone="danger" title="Not sent">
+                    <ul className="list-disc space-y-0.5 pl-5">
                       {failed.map((r) => (
                         <li key={r.nurseId}>
                           {r.nurseName} ({r.email || 'no email'}): {r.errorMessage || 'unknown error'}
                         </li>
                       ))}
                     </ul>
-                  </div>
+                  </Notice>
                 )}
-
                 {publishWarnings.length > 0 && (
-                  <div className="p-3 rounded border border-amber-200 bg-amber-50 text-xs text-amber-900 space-y-1">
+                  <Notice tone="warning" title="Also note">
                     {publishWarnings.map((w, i) => (
                       <p key={i}>{w}</p>
                     ))}
-                  </div>
+                  </Notice>
                 )}
               </div>
             );
           })()}
-        </div>
-
-        {/* Footer Actions */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          {currentStep === 'VALIDATION' && (
-            <>
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-3.5 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded font-medium cursor-pointer"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                disabled={
-                  !isOwner ||
-                  isClinicCheckPending ||
-                  (validationReport?.errorCount ?? 0) > 0 ||
-                  ((validationReport?.warnCount ?? 0) > 0 && !acknowledgeWarnings)
-                }
-                onClick={() => setCurrentStep('DETAILS')}
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer disabled:opacity-40 shadow-xs"
-              >
-                <span>{isClinicCheckPending ? 'Checking the roster…' : 'Continue'}</span>
-              </button>
-            </>
-          )}
-
-          {currentStep === 'DETAILS' && (
-            <>
-              <button
-                type="button"
-                onClick={() => setCurrentStep('VALIDATION')}
-                className="px-3.5 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded font-medium cursor-pointer"
-              >
-                Back
-              </button>
-
-              <button
-                type="button"
-                disabled={!versionNote.trim()}
-                onClick={() => setCurrentStep('PREVIEW')}
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer disabled:opacity-40 shadow-xs"
-              >
-                <span>Preview emails</span>
-              </button>
-            </>
-          )}
-
-          {currentStep === 'PREVIEW' && (
-            <>
-              <button
-                type="button"
-                onClick={() => setCurrentStep('DETAILS')}
-                className="px-3.5 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded font-medium cursor-pointer"
-              >
-                Back
-              </button>
-
-              <button
-                type="button"
-                onClick={handlePublishAndSend}
-                className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs transition-colors"
-              >
-                <Send className="w-4 h-4" aria-hidden="true" />
-                <span>Publish and email {selectedNurseIds.size} nurse{selectedNurseIds.size === 1 ? '' : 's'}</span>
-              </button>
-            </>
-          )}
-
-          {currentStep === 'DONE' && (
-            <div className="w-full flex items-center justify-end gap-2">
-              {sendResults.some((r) => r.status === 'FAILED') && (
-                <button
-                  type="button"
-                  onClick={handleRetryFailed}
-                  className="px-4 py-2 border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 rounded font-bold cursor-pointer"
-                >
-                  Retry the {sendResults.filter((r) => r.status === 'FAILED').length} not sent
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-5 py-2 bg-slate-900 hover:bg-black text-white rounded font-bold cursor-pointer shadow-xs"
-              >
-                Done
-              </button>
-            </div>
-          )}
-        </div>
       </div>
-    </div>
+    </Dialog>
   );
 };

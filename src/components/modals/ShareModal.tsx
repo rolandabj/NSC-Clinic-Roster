@@ -2,25 +2,26 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  * 
- * Share dialog: links to view the published roster, and invitations for colleagues.
+ * Share dialog: links to view the published roster. The Invitations tab, which saved invitations
+ * nothing read, was removed in Phase 7, slice 6a (the owner's choice): access is given in Settings,
+ * Access and permissions.
  */
 
 import React, { useState, useEffect } from 'react';
-import { Check, Copy, Eye, Mail, RotateCcw, Share2, Trash2 } from 'lucide-react';
+import { Check, Copy, Eye, RotateCcw, Share2, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { syncPublicRoster, removePublicRoster } from '../../services/publish/publicRosterService';
 import { ensurePublicRosters } from '../../services/publish/publicRosterService';
 import { authService } from '../../services/auth/authService';
-import { canEditClinicData } from '../../services/auth/access';
+import { canEditClinicData, permissionsFor } from '../../services/auth/access';
 import {
   Schedule,
   ScheduleVersion,
   ShareLink,
-  Invitation,
 } from '../../types';
 import { getRepository } from '../../services/repository';
 import { formatDate } from '../../utils/dateUtils';
-import { Badge, Button, Dialog, EmptyState, Field, IconButton, Input, Notice, Select, TabPanel, Tabs, Textarea } from '../ui';
+import { Badge, Button, Dialog, EmptyState, Field, IconButton, Notice, Textarea } from '../ui';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 
 interface ShareModalProps {
@@ -31,8 +32,6 @@ interface ShareModalProps {
   onOpenPreview: (token: string) => void;
 }
 
-type TabType = 'view_links' | 'invite_editors';
-
 export const ShareModal: React.FC<ShareModalProps> = ({
   schedule,
   latestPublishedVersion,
@@ -40,17 +39,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   onClose,
   onOpenPreview,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('view_links');
+  // Access to the app is given in Settings, Access and permissions, which only the owner opens.
+  const isOwner = permissionsFor(authService.getCurrentUser()).isOwner;
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
-  const [invitations, setInvitations] = useState<Invitation[]>([]);
 
   // New link state
   const [isPublic, setIsPublic] = useState(true);
   const [allowedEmailsInput, setAllowedEmailsInput] = useState('');
-
-  // New invitation state
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'EDITOR' | 'VIEWER'>('EDITOR');
 
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
@@ -58,15 +53,11 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   const loadData = async () => {
     try {
-      const [links, invites] = await Promise.all([
-        repo.list('shareLinks'),
-        repo.list('invitations'),
-      ]);
+      const links = await repo.list('shareLinks');
       const schedLinks = links.filter((l) => l.scheduleId === schedule.id);
       setShareLinks(schedLinks);
       // Links made before public snapshots existed get one now (editors only).
       if (canEditClinicData(authService.getCurrentUser())) void ensurePublicRosters(schedLinks);
-      setInvitations(invites.filter((i) => i.scheduleId === schedule.id));
     } catch (err) {
       console.error('Error loading share links:', err);
     }
@@ -184,62 +175,16 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     triggerToast('Link copied.');
   };
 
-  // --- INVITE EDITOR / VIEWER ---
-  const handleSendInvitation = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteEmail.trim() || !inviteEmail.includes('@')) {
-      notify('Enter an email address like name@gmail.com.', 'warning');
-      return;
-    }
-
-    try {
-      const newInvite: Invitation = {
-        id: uuidv4(),
-        scheduleId: schedule.id,
-        email: inviteEmail.trim().toLowerCase(),
-        role: inviteRole,
-        status: 'PENDING',
-        createdAt: new Date().toISOString(),
-      };
-
-      await repo.create('invitations', newInvite);
-      // No email is sent from here: the person signs in with Google and the owner approves them.
-      triggerToast(`Invitation saved for ${newInvite.email}. No email is sent: ask them to sign in to the app, then approve them in Settings, Access & permissions.`);
-      setInviteEmail('');
-      loadData();
-    } catch (err: any) {
-      notify(`Couldn't save the invitation: ${err.message}`, 'error');
-    }
-  };
-
-  const handleRemoveInvitation = async (invId: string) => {
-    await repo.remove('invitations', invId);
-    triggerToast('Invitation removed.');
-    loadData();
-  };
-
   return (
     <Dialog
       open
       onClose={onClose}
       size="lg"
       title="Share links"
-      description={`${schedule.name}: links to the published roster, and invitations.`}
+      description={`${schedule.name}: links that let people look at the published roster.`}
       footer={<Button onClick={onClose}>Close</Button>}
     >
       <div className="space-y-4 text-sm">
-        <Tabs
-          label="Share"
-          idPrefix="share"
-          value={activeTab}
-          onChange={(id) => setActiveTab(id as TabType)}
-          tabs={[
-            { id: 'view_links', label: 'Links to view', count: shareLinks.length },
-            { id: 'invite_editors', label: 'Invitations', count: invitations.length },
-          ]}
-        />
-
-        <TabPanel idPrefix="share" id="view_links" value={activeTab}>
           <div className="space-y-4">
             <Notice tone="info" title="Links only show the published roster">
               {latestPublishedVersion ? `People with a link see version ${latestPublishedVersion.number}, the last one you published.` : 'Nothing has been published yet.'}{' '}
@@ -313,53 +258,28 @@ export const ShareModal: React.FC<ShareModalProps> = ({
               </EmptyState>
             )}
           </div>
-        </TabPanel>
-
-        <TabPanel idPrefix="share" id="invite_editors" value={activeTab}>
-          <div className="space-y-4">
-            <Notice tone="warning" title="An invitation does not give access yet">
-              The app saves invitations but does not use them yet. An invited colleague cannot sign in or change the roster because of an invitation.
-              To give someone access, the owner adds them in Settings, under Access and permissions.
-            </Notice>
-            <form onSubmit={handleSendInvitation} className="space-y-3 rounded-lg border border-line p-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Field label="Colleague's email address" className="sm:col-span-2">
-                  {(f) => <Input {...f} type="email" required value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />}
-                </Field>
-                <Field label="What they can do">
-                  {(f) => (
-                    <Select {...f} value={inviteRole} onChange={(e) => setInviteRole(e.target.value as any)}>
-                      <option value="EDITOR">Change the roster</option>
-                      <option value="VIEWER">Only look</option>
-                    </Select>
-                  )}
-                </Field>
-              </div>
-              <Button type="submit" icon={Mail}>
-                Save the invitation
+        <Notice
+          tone="info"
+          title="To give a colleague access to the app"
+          action={
+            isOwner && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  onClose();
+                  window.location.hash = 'settings?tab=access-roles';
+                }}
+              >
+                Open Access and permissions
               </Button>
-            </form>
-            {invitations.length > 0 ? (
-              <ul className="divide-y divide-line rounded-lg border border-line" aria-label="Invitations">
-                {invitations.map((inv) => (
-                  <li key={inv.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
-                    <span className="space-y-0.5">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-ink">{inv.email}</span>
-                        <Badge tone={inv.role === 'EDITOR' ? 'brand' : 'neutral'}>{inv.role === 'EDITOR' ? 'Can change' : 'Only look'}</Badge>
-                        <Badge tone="warning">{inv.status === 'PENDING' ? 'Waiting' : inv.status === 'ACCEPTED' ? 'Accepted' : 'Cancelled'}</Badge>
-                      </span>
-                      <span className="block text-xs text-ink-muted">Invited on {formatDate(inv.createdAt)}</span>
-                    </span>
-                    <IconButton label={`Remove the invitation for ${inv.email}`} icon={Trash2} onClick={() => handleRemoveInvitation(inv.id)} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState icon={Mail} title="No invitations yet" />
-            )}
-          </div>
-        </TabPanel>
+            )
+          }
+        >
+          {isOwner
+            ? 'Add them in Settings, Access and permissions. The links here only let people look at the published roster.'
+            : 'Ask the clinic owner to add them in Settings, Access and permissions. The links here only let people look at the published roster.'}
+        </Notice>
+
       </div>
     </Dialog>
   );

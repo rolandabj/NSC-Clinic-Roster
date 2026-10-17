@@ -33,9 +33,14 @@ export const Dialog: React.FC<{
   role?: 'dialog' | 'alertdialog';
   /** A dialog that opens over another dialog sits one layer higher. */
   stacked?: boolean;
+  /** While emails are going out: Close, Esc and a click outside do nothing. */
+  closeDisabled?: boolean;
   children: React.ReactNode;
-}> = ({ open, onClose, title, description, footer, size = 'md', role = 'dialog', stacked, children }) => {
-  const ref = useDialogA11y<HTMLDivElement>(open, onClose);
+}> = ({ open, onClose, title, description, footer, size = 'md', role = 'dialog', stacked, closeDisabled, children }) => {
+  const close = () => {
+    if (!closeDisabled) onClose();
+  };
+  const ref = useDialogA11y<HTMLDivElement>(open, close);
   const titleId = useId();
   const descriptionId = useId();
   // Content that scrolls can take the focus, so the keyboard can scroll it (WCAG 2.1.1).
@@ -55,7 +60,7 @@ export const Dialog: React.FC<{
     <div
       className={cx('fixed inset-0 flex items-end justify-center bg-ink/50 sm:items-center sm:p-4 print:hidden', stacked ? 'z-[160]' : 'z-[150]')}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) close();
       }}
     >
       <div
@@ -80,7 +85,7 @@ export const Dialog: React.FC<{
               </div>
             )}
           </div>
-          <IconButton label="Close" icon={X} onClick={onClose} className="-mt-1 -mr-2" />
+          <IconButton label="Close" icon={X} onClick={close} disabled={closeDisabled} className="-mt-1 -mr-2" />
         </div>
         <div
           ref={bodyRef}
