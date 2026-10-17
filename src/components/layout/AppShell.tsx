@@ -27,6 +27,8 @@ import { screenTitle } from './screenTitles';
 import { countPendingApprovals } from '../../services/requests/staffRequestService';
 import { canApproveRequests } from '../../services/auth/access';
 import { addressHash, readAddress } from '../../services/navigation/address';
+import { confirmDialog } from '../common/dialogs';
+import { leaveReason } from '../common/leaveGuard';
 import { LoadErrorBoundary } from '../common/LoadErrorBoundary';
 import { chooseScheduleToOpen } from '../../services/schedule/openSchedule';
 import { todayIso } from '../../services/publish/nurseRosterService';
@@ -399,7 +401,13 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   // because a link to #main would change the address, which picks the screen.
   const mainRef = useRef<HTMLElement>(null);
 
-  const navigateTo = (route: AppRoute) => {
+  const navigateTo = async (route: AppRoute) => {
+    // A screen with changes that are not saved (Settings) asks first.
+    const reason = route === currentRoute ? null : leaveReason();
+    if (reason) {
+      const ok = await confirmDialog({ title: 'Leave without saving?', message: reason, confirmLabel: 'Leave without saving', danger: true });
+      if (!ok) return;
+    }
     setIsMenuOpen(false);
     if (route !== 'schedules') {
       setOpenCreateInSchedules(false);

@@ -153,3 +153,27 @@ export const ColourField: React.FC<{ label: string; value: string; onChange: (co
     )}
   </Field>
 );
+
+/**
+ * The foot of a Settings form saved only by Save (Phase 8, slice 1b): whether there are changes
+ * not saved, Cancel (back to what is saved) and Save. It stays at the bottom of the screen.
+ */
+export const SaveBar: React.FC<{ changed: boolean; saving: boolean; onSave: () => void; onCancel: () => void; saveLabel?: string }> = ({
+  changed,
+  saving,
+  onSave,
+  onCancel,
+  saveLabel = 'Save',
+}) => (
+  <div className="sticky bottom-0 -mx-4 mt-6 flex flex-wrap items-center justify-end gap-3 border-t border-line bg-surface px-4 py-3 sm:-mx-6 sm:px-6">
+    <p className="mr-auto text-sm text-ink-muted" role="status">
+      {saving ? 'Saving…' : changed ? 'You have changes that are not saved.' : 'Everything is saved.'}
+    </p>
+    <Button disabled={!changed || saving} onClick={onCancel}>
+      Cancel
+    </Button>
+    <Button variant="primary" busy={saving} disabled={!changed} onClick={onSave}>
+      {saveLabel}
+    </Button>
+  </div>
+);

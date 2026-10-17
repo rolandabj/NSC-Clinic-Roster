@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "src/components/layout/AppShell.tsx": {
-    "mtime": 1791953851.745424,
-    "seen": 1791954260.3661096,
-    "ast_hash": "c13ef50656e7884f538fb77882880da0",
+    "mtime": 1792268182.6799326,
+    "seen": 1792268404.1561658,
+    "ast_hash": "21c578260b8a01ff95b2d83fb9421151",
     "semantic_hash": ""
   },
   "src/components/layout/LocalModeBanner.tsx": {
@@ -318,9 +318,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
-    "mtime": 1792267852.521454,
-    "seen": 1792268041.444949,
-    "ast_hash": "4102bb8022ab697481167beb95babaa3",
+    "mtime": 1792268341.9523065,
+    "seen": 1792268404.1562567,
+    "ast_hash": "c2fb7914121bb77e2e2e47cc5a120369",
     "semantic_hash": ""
   },
   "src/components/views/WorkingHoursPeriodsPanel.tsx": {
@@ -330,10 +330,10 @@
     "semantic_hash": ""
   },
   "src/components/views/settings/ClinicTab.tsx": {
-    "mtime": 1791362587.9657636,
-    "seen": 1791365225.1340213,
-    "ast_hash": "8b6f0493810ad54658a56672a693c65f",
-    "semantic_hash": "8b6f0493810ad54658a56672a693c65f"
+    "mtime": 1792268293.8283498,
+    "seen": 1792268404.1562593,
+    "ast_hash": "accc2965238364806444b6c5d6608702",
+    "semantic_hash": ""
   },
   "src/components/views/settings/DatabaseTab.tsx": {
     "mtime": 1792241053.2697647,
@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "src/components/views/settings/EmailTab.tsx": {
-    "mtime": 1791950940.5868406,
-    "seen": 1791951702.5078158,
-    "ast_hash": "4d3c6b50b5759acf4fabb8cb42cad165",
+    "mtime": 1792268341.9528043,
+    "seen": 1792268404.1562624,
+    "ast_hash": "77a955c4e9be1b8d687c7c2c1cb4f06b",
     "semantic_hash": ""
   },
   "src/components/views/settings/HolidaysTab.tsx": {
@@ -390,9 +390,9 @@
     "semantic_hash": ""
   },
   "src/components/views/settings/shared.tsx": {
-    "mtime": 1792240994.7124124,
-    "seen": 1792241594.8874297,
-    "ast_hash": "236c4f35317b5c02d5759fd10fb1c70a",
+    "mtime": 1792268142.2761858,
+    "seen": 1792268404.1562703,
+    "ast_hash": "9aaee8bc8bf1295605bc40c4c296e505",
     "semantic_hash": ""
   },
   "src/components/workbook/CoverageSheet.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1792268010.2239385,
-    "seen": 1792268041.4452848,
-    "ast_hash": "96f745f086f674ceed47f21b6c99c165",
+    "mtime": 1792268359.0441988,
+    "seen": 1792268404.1566672,
+    "ast_hash": "79c744738a6ba383e05773511f9b2b04",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1792268010.2287228,
-    "seen": 1792268041.4452925,
-    "ast_hash": "c9e66bf5b2889409c93c4a54e0d44573",
+    "mtime": 1792268359.0493803,
+    "seen": 1792268404.15668,
+    "ast_hash": "408f7ec3aa5b51f5caf4fcf1a5d14117",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -2475,6 +2475,24 @@
     "mtime": 1792266828.2762072,
     "seen": 1792267051.9806838,
     "ast_hash": "9a07da10767dd3c84197e668640f0454",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/settings-save.cjs": {
+    "mtime": 1792268212.4860263,
+    "seen": 1792268404.1560946,
+    "ast_hash": "71f6dd9a91a416000ffcd6844a7aeaa0",
+    "semantic_hash": ""
+  },
+  "src/components/common/leaveGuard.ts": {
+    "mtime": 1792268084.5874991,
+    "seen": 1792268404.1561544,
+    "ast_hash": "95f7ce89ddfdf00bcf2e95227a9d600e",
+    "semantic_hash": ""
+  },
+  "tests/unit/leaveGuard.test.ts": {
+    "mtime": 1792268084.5841823,
+    "seen": 1792268404.156478,
+    "ast_hash": "77e7876f35db9256f6728dd740df6263",
     "semantic_hash": ""
   }
 }

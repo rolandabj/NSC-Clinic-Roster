@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Clinic Settings: the tab bar, the data several tabs share (clinic profile,
- * entity lists, email settings) and their
- * auto-save machinery. Each tab's content lives in ./settings/<Name>Tab.tsx.
+ * entity lists, email settings). Clinic and opening hours, and Email, are drafts saved only by
+ * Save, with Cancel and a warning before leaving with unsaved changes (Phase 8, slice 1b). Each tab's content lives in ./settings/<Name>Tab.tsx.
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Building2,
   Clock,
@@ -40,12 +40,13 @@ import {
 import {
   EmailSettingsConfig,
 } from '../../types/settings';
-import { Field, PageHeader, Select, cx } from '../ui';
+import { Badge, Field, PageHeader, Select, cx } from '../ui';
+import { addLeaveGuard, isChanged } from '../common/leaveGuard';
 import { SEED_CLINIC_PROFILE } from '../../services/seed/seedData';
 import { notify } from '../common/dialogs';
 import { AccessManagementPanel } from './AccessManagementPanel';
 import { WorkingHoursPeriodsPanel } from './WorkingHoursPeriodsPanel';
-import { SaveStatus, SettingsTab } from './settings/shared';
+import { SettingsTab } from './settings/shared';
 import { ClinicTab } from './settings/ClinicTab';
 import { DutiesTab } from './settings/DutiesTab';
 import { LeaveTab } from './settings/LeaveTab';
@@ -150,210 +151,103 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const triggerSaveNotification = (msg: string) => notify(msg, 'success');
 
-  // --- 1. Clinic Profile Auto-Save & Persistence ---
+  // --- Clinic and opening hours, and Email: a draft each, saved only by Save (Phase 8, slice 1b) ---
   // The app context shows the clinic's new name and time zone in the menu and the top bar.
   const updateClinic = useAppContext()?.updateClinic;
   const updateClinicRef = useRef(updateClinic);
   updateClinicRef.current = updateClinic;
 
-  const [clinicSaveStatus, setClinicSaveStatus] = useState<SaveStatus>('saved');
-  const clinicDebounceTimerRef = useRef<any>(null);
-  const latestClinicRef = useRef<ClinicProfile | null>(clinic);
-  latestClinicRef.current = clinic;
+  const [clinicDraft, setClinicDraft] = useState<ClinicProfile | null>(null);
+  const [clinicSaving, setClinicSaving] = useState(false);
+  // The draft starts as the saved profile, and again whenever the saved one is loaded.
+  useEffect(() => setClinicDraft(clinic), [clinic]);
+  const clinicChanged = isChanged(clinic, clinicDraft);
 
-  const persistClinicProfile = useCallback(
-    async (targetClinic: ClinicProfile, showNotification = false) => {
-      try {
-        setClinicSaveStatus('saving');
-        const clinicToSave: ClinicProfile = {
-          ...targetClinic,
-          id: targetClinic.id || 'clinic-primary',
-          name: (targetClinic.name || '').trim() || 'Outpatient Clinic',
-          timezone: (targetClinic.timezone || '').trim() || 'Asia/Dubai',
-          address: targetClinic.address || '',
-          phone: targetClinic.phone || '',
-          weekendDays: targetClinic.weekendDays || getWeekendDays(),
-          openTime: targetClinic.openTime || '09:00',
-          closeTime: targetClinic.closeTime || '21:00',
-          updatedAt: new Date().toISOString(),
-        };
-
-        await repo.bulkUpsert('clinics', [clinicToSave]);
-        setClinicWeekendDays(clinicToSave.weekendDays);
-
-        // Persist directly to localStorage for instantaneous recovery on refresh
-        localStorage.setItem('clinic_roster_clinic_profile', JSON.stringify(clinicToSave));
-        localStorage.setItem('clinic_roster_clinic_name', clinicToSave.name);
-        localStorage.setItem('clinic_roster_clinic_timezone', clinicToSave.timezone);
-
-        updateClinicRef.current?.({ name: clinicToSave.name, timezone: clinicToSave.timezone });
-
-        setClinicSaveStatus('saved');
-        if (showNotification) {
-          triggerSaveNotification('Clinic profile updated and saved permanently.');
-        }
-      } catch (err: any) {
-        console.error('Failed to save clinic profile:', err);
-        setClinicSaveStatus('error');
-        // Auto saves fail quietly otherwise, so always say so.
-        notify(`The clinic profile was not saved: ${err?.message || 'unknown error'}`, 'error');
-      }
-    },
-    [repo]
-  );
-
-  const updateClinicField = useCallback(
-    (updates: Partial<ClinicProfile>, immediate = false) => {
-      if (!latestClinicRef.current) return;
-      const nextClinic = { ...latestClinicRef.current, ...updates };
-      setClinic(nextClinic);
-      latestClinicRef.current = nextClinic;
-      setClinicSaveStatus('saving');
-
-      if (clinicDebounceTimerRef.current) {
-        clearTimeout(clinicDebounceTimerRef.current);
-        clinicDebounceTimerRef.current = null;
-      }
-
-      if (immediate) {
-        persistClinicProfile(nextClinic);
-      } else {
-        clinicDebounceTimerRef.current = setTimeout(() => {
-          persistClinicProfile(nextClinic);
-        }, 500);
-      }
-    },
-    [persistClinicProfile]
-  );
-
-  const flushClinicSave = useCallback(() => {
-    if (clinicDebounceTimerRef.current) {
-      clearTimeout(clinicDebounceTimerRef.current);
-      clinicDebounceTimerRef.current = null;
+  const saveClinic = async () => {
+    if (!clinicDraft || clinicSaving) return;
+    setClinicSaving(true);
+    try {
+      const clinicToSave: ClinicProfile = {
+        ...clinicDraft,
+        id: clinicDraft.id || 'clinic-primary',
+        name: (clinicDraft.name || '').trim() || 'Outpatient Clinic',
+        timezone: (clinicDraft.timezone || '').trim() || 'Asia/Dubai',
+        address: clinicDraft.address || '',
+        phone: clinicDraft.phone || '',
+        weekendDays: clinicDraft.weekendDays || getWeekendDays(),
+        openTime: clinicDraft.openTime || '09:00',
+        closeTime: clinicDraft.closeTime || '21:00',
+        updatedAt: new Date().toISOString(),
+      };
+      await repo.bulkUpsert('clinics', [clinicToSave]);
+      setClinicWeekendDays(clinicToSave.weekendDays);
+      // Kept in this browser too, so a reload shows the profile at once.
+      localStorage.setItem('clinic_roster_clinic_profile', JSON.stringify(clinicToSave));
+      localStorage.setItem('clinic_roster_clinic_name', clinicToSave.name);
+      localStorage.setItem('clinic_roster_clinic_timezone', clinicToSave.timezone);
+      updateClinicRef.current?.({ name: clinicToSave.name, timezone: clinicToSave.timezone });
+      setClinic(clinicToSave);
+      triggerSaveNotification('Clinic and opening hours saved.');
+    } catch (err: any) {
+      console.error('Failed to save clinic profile:', err);
+      notify(`The clinic and opening hours were not saved: ${err?.message || 'unknown error'}`, 'error');
+    } finally {
+      setClinicSaving(false);
     }
-    if (latestClinicRef.current) {
-      persistClinicProfile(latestClinicRef.current);
-    }
-  }, [persistClinicProfile]);
-
-  const handleSaveClinicProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!latestClinicRef.current) return;
-    flushClinicSave();
-    triggerSaveNotification('Clinic profile updated and saved permanently.');
   };
 
-  // --- 10. Email Settings Auto-Save ---
-  const [emailSaveStatus, setEmailSaveStatus] = useState<SaveStatus>('saved');
-  const emailDebounceTimerRef = useRef<any>(null);
-  const latestEmailConfigRef = useRef<EmailSettingsConfig>(emailConfig);
-  latestEmailConfigRef.current = emailConfig;
+  const [emailDraft, setEmailDraft] = useState<EmailSettingsConfig>(emailConfig);
+  const [emailSaving, setEmailSaving] = useState(false);
+  useEffect(() => setEmailDraft(emailConfig), [emailConfig]);
+  const emailChanged = isChanged(emailConfig, emailDraft);
 
   // Load the clinic's shared email settings (this browser's copy shows until they arrive)
   useEffect(() => {
-    loadEmailSettings(getRepository()).then((shared) => {
-      setEmailConfig(shared);
-      latestEmailConfigRef.current = shared;
-    });
+    loadEmailSettings(getRepository()).then((shared) => setEmailConfig(shared));
   }, []);
 
-  const persistEmailConfig = useCallback(
-    async (configToSave: EmailSettingsConfig, showNotification = false) => {
-      try {
-        setEmailSaveStatus('saving');
-        // Shared by the whole clinic, so every planner uses the same Sandbox / Live mode
-        await saveEmailSettings(getRepository(), configToSave, authService.getCurrentUser()?.email);
-        setEmailSaveStatus('saved');
-        if (showNotification) {
-          triggerSaveNotification('Email settings saved for everyone.');
-        }
-      } catch (err: any) {
-        console.error('Failed to save email config:', err);
-        setEmailSaveStatus('error');
-        notify(`Email settings were not saved: ${err?.message || err}`, 'error');
-      }
-    },
-    []
-  );
-
-  const updateEmailConfigField = useCallback(
-    (updates: Partial<EmailSettingsConfig>, immediate = false) => {
-      const nextConfig = { ...latestEmailConfigRef.current, ...updates };
-      setEmailConfig(nextConfig);
-      latestEmailConfigRef.current = nextConfig;
-      setEmailSaveStatus('saving');
-
-      if (emailDebounceTimerRef.current) {
-        clearTimeout(emailDebounceTimerRef.current);
-        emailDebounceTimerRef.current = null;
-      }
-
-      if (immediate) {
-        persistEmailConfig(nextConfig);
-      } else {
-        emailDebounceTimerRef.current = setTimeout(() => {
-          persistEmailConfig(nextConfig);
-        }, 500);
-      }
-    },
-    [persistEmailConfig]
-  );
-
-  const flushEmailSave = useCallback(() => {
-    if (emailDebounceTimerRef.current) {
-      clearTimeout(emailDebounceTimerRef.current);
-      emailDebounceTimerRef.current = null;
+  const saveEmail = async () => {
+    if (emailSaving) return;
+    setEmailSaving(true);
+    try {
+      // Shared by the whole clinic, so every planner uses the same test mode or live setting.
+      await saveEmailSettings(getRepository(), emailDraft, authService.getCurrentUser()?.email);
+      setEmailConfig(emailDraft);
+      triggerSaveNotification('Email settings saved for everyone.');
+    } catch (err: any) {
+      console.error('Failed to save email config:', err);
+      notify(`The email settings were not saved: ${err?.message || err}`, 'error');
+    } finally {
+      setEmailSaving(false);
     }
-    persistEmailConfig(latestEmailConfigRef.current);
-  }, [persistEmailConfig]);
-
-  // --- Unified Commit Guard (Tab Switch, Unmount, Page Refresh / Unload) ---
-  const flushAllSettingsRef = useRef<() => void>(() => {});
-
-  const flushAllSettings = useCallback(() => {
-    // 1. Flush Clinic Profile only if timer is active
-    if (clinicDebounceTimerRef.current) {
-      clearTimeout(clinicDebounceTimerRef.current);
-      clinicDebounceTimerRef.current = null;
-      if (latestClinicRef.current) {
-        persistClinicProfile(latestClinicRef.current);
-      }
-    }
-
-    // 2. Flush Email Settings only if timer is active
-    if (emailDebounceTimerRef.current) {
-      clearTimeout(emailDebounceTimerRef.current);
-      emailDebounceTimerRef.current = null;
-      if (latestEmailConfigRef.current) {
-        persistEmailConfig(latestEmailConfigRef.current);
-      }
-    }
-  }, [persistClinicProfile, persistEmailConfig]);
-
-  flushAllSettingsRef.current = flushAllSettings;
-
-  // Global beforeunload listener & unmount commit guard
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      flushAllSettingsRef.current?.();
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      flushAllSettingsRef.current?.();
-    };
-  }, []);
-
-  const handleSaveEmailConfig = (e: React.FormEvent) => {
-    e.preventDefault();
-    flushEmailSave();
-    triggerSaveNotification('Email settings updated.');
   };
 
+  // Unsaved changes: named in the menu, asked about before leaving Settings or closing the tab.
+  const unsavedSections = [clinicChanged ? 'Clinic and opening hours' : '', emailChanged ? 'Email' : ''].filter(Boolean);
+  const unsavedRef = useRef(unsavedSections);
+  unsavedRef.current = unsavedSections;
+  useEffect(() => {
+    const removeGuard = addLeaveGuard(() =>
+      unsavedRef.current.length === 0
+        ? null
+        : unsavedRef.current.length === 1
+          ? `${unsavedRef.current[0]} has changes that are not saved.`
+          : `${unsavedRef.current[0]}, and ${unsavedRef.current[1]}, have changes that are not saved.`
+    );
+    const warn = (e: BeforeUnloadEvent) => {
+      if (unsavedRef.current.length === 0) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => {
+      removeGuard();
+      window.removeEventListener('beforeunload', warn);
+    };
+  }, []);
+
+  // Drafts stay while moving between sections, so nothing is lost on the way.
   const handleTabSwitch = (newTab: SettingsTab) => {
-    flushAllSettings();
     setActiveTab(newTab);
     // A new step for Back, which then returns to the tab before.
     onAddressChange?.({ tab: newTab }, 'push');
@@ -408,7 +302,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   useEffect(() => {
     if (!tab) onAddressChange?.({ tab: activeTab }, 'replace');
     else if (tab !== activeTab) {
-      flushAllSettings();
       setActiveTab(tab as SettingsTab);
     }
   }, [tab]);
@@ -465,6 +358,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       >
                         <Icon className="size-4 shrink-0" aria-hidden="true" />
                         <span>{t.label}</span>
+                        {((t.id === 'clinic' && clinicChanged) || (t.id === 'email' && emailChanged)) && (
+                          <Badge tone="warning" className="ml-auto">
+                            Not saved
+                          </Badge>
+                        )}
                       </a>
                     </li>
                   );
@@ -481,13 +379,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeTab === 'access-roles' && isMasterAdmin && <AccessManagementPanel currentUser={currentUser || undefined} />}
 
         {/* 1. CLINIC PROFILE */}
-        {activeTab === 'clinic' && clinic && (
+        {activeTab === 'clinic' && clinicDraft && (
           <ClinicTab
-            clinic={clinic}
-            clinicSaveStatus={clinicSaveStatus}
-            updateClinicField={updateClinicField}
-            flushClinicSave={flushClinicSave}
-            handleSaveClinicProfile={handleSaveClinicProfile}
+            draft={clinicDraft}
+            onChange={(updates) => setClinicDraft((d) => (d ? { ...d, ...updates } : d))}
+            changed={clinicChanged}
+            saving={clinicSaving}
+            onSave={saveClinic}
+            onCancel={() => setClinicDraft(clinic)}
           />
         )}
 
@@ -559,11 +458,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {activeTab === 'email' && (
           <EmailTab
             context={context}
-            emailConfig={emailConfig}
-            emailSaveStatus={emailSaveStatus}
-            updateEmailConfigField={updateEmailConfigField}
-            flushEmailSave={flushEmailSave}
-            handleSaveEmailConfig={handleSaveEmailConfig}
+            draft={emailDraft}
+            onChange={(updates) => setEmailDraft((d) => ({ ...d, ...updates }))}
+            changed={emailChanged}
+            saving={emailSaving}
+            onSave={saveEmail}
+            onCancel={() => setEmailDraft(emailConfig)}
           />
         )}
 
