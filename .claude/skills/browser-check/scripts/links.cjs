@@ -28,13 +28,13 @@ check('Settings: a link opens its tab; a click adds a step to Back; Back and For
   const page = await open('#settings?tab=email');
   const main = page.getByRole('main');
   await page.getByRole('heading', { name: 'Settings', level: 1 }).waitFor();
-  assert.equal(await main.getByRole('button', { name: 'Email', exact: true }).getAttribute('aria-current'), 'page');
-  await main.getByRole('button', { name: 'Public holidays' }).click();
+  assert.equal(await main.getByRole('link', { name: 'Email', exact: true }).getAttribute('aria-current'), 'page');
+  await main.getByRole('link', { name: 'Public holidays' }).click();
   await page.waitForFunction(() => location.hash === '#settings?tab=holidays');
   await page.goBack();
   await page.waitForFunction(() => location.hash === '#settings?tab=email');
   await page.waitForTimeout(200);
-  assert.equal(await main.getByRole('button', { name: 'Email', exact: true }).getAttribute('aria-current'), 'page');
+  assert.equal(await main.getByRole('link', { name: 'Email', exact: true }).getAttribute('aria-current'), 'page');
   await page.goForward();
   await page.waitForFunction(() => location.hash === '#settings?tab=holidays');
 });

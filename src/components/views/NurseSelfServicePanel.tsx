@@ -257,7 +257,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
 
       {!currentUser?.linkedNurseId ? (
         <Notice tone="warning" title="This account cannot send requests yet.">
-          It is not linked to a nurse. The clinic owner can link it in Settings, Access & permissions.
+          It is not linked to a nurse. The clinic owner can link it in Settings, Access and permissions.
         </Notice>
       ) : (
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

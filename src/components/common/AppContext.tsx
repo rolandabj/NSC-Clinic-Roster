@@ -21,7 +21,7 @@ export interface AppContextValue {
   reportProblems: (count: ProblemCount) => void;
   /** The clinic's profile was saved in Settings. */
   updateClinic: (profile: { name: string; timezone?: string }) => void;
-  /** All clinic data was deleted (Settings, Database and backup). */
+  /** All clinic data was deleted (Settings, Data and backup). */
   clinicDataCleared: () => void;
   /** Goes up by one each time the clinic data is deleted, so screens load it again. */
   dataVersion: number;

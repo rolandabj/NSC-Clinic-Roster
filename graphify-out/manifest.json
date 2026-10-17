@@ -282,9 +282,9 @@
     "semantic_hash": ""
   },
   "src/components/views/NurseSelfServicePanel.tsx": {
-    "mtime": 1791951600.9164083,
-    "seen": 1791951702.507802,
-    "ast_hash": "e2e51988e46e29a37aa23443aef98263",
+    "mtime": 1792267859.3372536,
+    "seen": 1792268041.4449375,
+    "ast_hash": "897cc3de5711342d131f98b377603c3c",
     "semantic_hash": ""
   },
   "src/components/views/NursesView.tsx": {
@@ -318,9 +318,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
-    "mtime": 1791950940.5868406,
-    "seen": 1791951702.5078096,
-    "ast_hash": "e118a7c6500fc6f1cf6ee16bc421b7e7",
+    "mtime": 1792267852.521454,
+    "seen": 1792268041.444949,
+    "ast_hash": "4102bb8022ab697481167beb95babaa3",
     "semantic_hash": ""
   },
   "src/components/views/WorkingHoursPeriodsPanel.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1792267605.2813802,
-    "seen": 1792267613.8134358,
-    "ast_hash": "b72a4d85a7d2735d27dfce64a31d48e5",
+    "mtime": 1792268010.2239385,
+    "seen": 1792268041.4452848,
+    "ast_hash": "96f745f086f674ceed47f21b6c99c165",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1792267042.5355344,
-    "seen": 1792267051.9807615,
-    "ast_hash": "67f183bbc5e4bca9ab4c4e16cf12e3e6",
+    "mtime": 1792268010.2287228,
+    "seen": 1792268041.4452925,
+    "ast_hash": "c9e66bf5b2889409c93c4a54e0d44573",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1794,15 +1794,15 @@
     "semantic_hash": ""
   },
   "src/components/common/AppContext.tsx": {
-    "mtime": 1791950940.5668406,
-    "seen": 1791951702.5077193,
-    "ast_hash": "8e29cb3749491e2f64043ee546703d92",
+    "mtime": 1792267859.340169,
+    "seen": 1792268041.4448113,
+    "ast_hash": "9270af4115b9f3cda475ae8950d3657b",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/links.cjs": {
-    "mtime": 1791950940.4677699,
-    "seen": 1791951702.5076725,
-    "ast_hash": "8b372d51292ae1190c96dc14194e6877",
+    "mtime": 1792267864.2920737,
+    "seen": 1792268041.4447367,
+    "ast_hash": "ca253451de1fd3962861da85cb166a60",
     "semantic_hash": ""
   },
   "tasks/summary.md": {
