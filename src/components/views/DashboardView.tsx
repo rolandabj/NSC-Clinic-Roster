@@ -430,7 +430,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
       { route: 'availability', label: 'Leave and days off', hint: 'The leave grid and pinned days', icon: <CalendarRange className="w-4 h-4" /> },
       { route: 'nurses', label: 'Nurses', hint: 'Contracts, skills and usual doctors', icon: <Users className="w-4 h-4" /> },
       { route: 'doctors', label: 'Doctors', hint: 'Weekly clinic sessions', icon: <Stethoscope className="w-4 h-4" /> },
-      { route: 'publish', label: 'Publish', hint: 'Emails, read receipts and private links', icon: <Send className="w-4 h-4" /> },
+      { route: 'publish', label: 'Sent rosters', hint: 'Emails sent, read replies and private links', icon: <Send className="w-4 h-4" /> },
       { route: 'reports', label: 'Reports', hint: 'Hours, fairness and leave', icon: <BarChart3 className="w-4 h-4" /> },
       { route: 'history', label: 'History', hint: 'Saved and published copies', icon: <History className="w-4 h-4" /> },
     ] as const

@@ -64,8 +64,8 @@ Main moves only when the owner says "push to main".
 - [x] Checkpoint 6 (item 80)
 
 ## Phase 7: publishing, History and dialogs
-- [ ] Every dialog on the shared `Dialog` (slice 1, Leave and days off: item 83; slice 2, Requests and Doctors: item 84; slice 3a, roster screen smaller dialogs: item 85; slice 3b, editing dialogs: item 86; slice 3c, large forms: item 87; slice 4, Settings: item 88; slice 5, History: item 89; slice 6a, Publish: item 90)
-- [ ] One publish flow; Sent rosters screen with paging; remove the Invitations tab from Share links and point to Settings, Access and permissions (the owner chose option 1 on 17-10-2026)
+- [ ] Every dialog on the shared `Dialog` (slice 1, Leave and days off: item 83; slice 2, Requests and Doctors: item 84; slice 3a, roster screen smaller dialogs: item 85; slice 3b, editing dialogs: item 86; slice 3c, large forms: item 87; slice 4, Settings: item 88; slice 5, History: item 89; slice 6a, Publish: item 90; slice 6b, Sent rosters: item 91)
+- [x] One publish flow; Sent rosters screen with paging (items 90 and 91); remove the Invitations tab from Share links and point to Settings, Access and permissions (the owner chose option 1 on 17-10-2026)
 - [ ] Resume a stopped publish
 - [x] History tidied (slice 5, item 89)
 - [ ] Checkpoint 7

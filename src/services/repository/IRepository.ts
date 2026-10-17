@@ -6,6 +6,7 @@
  */
 
 import { CollectionName, EntityForCollection } from '../../types';
+import type { Page, PageRequest } from './paging';
 
 export type Unsubscribe = () => void;
 export type SubscribeCallback<T> = (
@@ -22,6 +23,12 @@ export interface IRepository {
     collection: T,
     filter?: { field: string; operator: '==' | '!='; value: any }
   ): Promise<EntityForCollection<T>[]>;
+
+  /**
+   * One page of a collection, ordered by one field (see paging.ts). Optional: callers use
+   * listPage() in paging.ts, which reads the whole list when a repository has no paging.
+   */
+  listPage?<T extends CollectionName>(collection: T, req: PageRequest): Promise<Page<EntityForCollection<T>>>;
 
   /**
    * Get a single document by ID

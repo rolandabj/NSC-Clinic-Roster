@@ -1,251 +1,162 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
- * Publish & Email Operations Center (Phase 13)
- * Status Grid, Acknowledgment Tracking, Email Audit Log with HTML Viewer & CSV Export.
+ *
+ * Sent rosters (#publish): what was sent for the open roster and what came back. Read replies
+ * (who confirmed they have seen it, with reminders), the emails sent (25 sends at a time, newest
+ * first) and the nurses' private links. Publishing itself happens only on the roster screen
+ * (Phase 7, slice 6b: one publish flow).
  */
 
-import React, { useState, useEffect, useId } from 'react';
-import {
-  Send,
-  MailCheck,
-  ShieldCheck,
-  Lock,
-  RefreshCw,
-  CheckCircle2,
-  Calendar,
-  User,
-  ExternalLink,
-  Copy,
-  Clock,
-  Mail,
-  AlertTriangle,
-  History,
-  FileSpreadsheet,
-  Download,
-  Info,
-  Check,
-  Eye,
-  Bell,
-  Search,
-  Filter,
-  Layers,
-  Sparkles,
-  X,
-} from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Bell, Copy, Download, Eye, Mail, RefreshCw, Send } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { escapeHtml } from '../../utils/escapeHtml';
 import { getRepository } from '../../services/repository';
-import {
-  Schedule,
-  ScheduleVersion,
-  NurseLink,
-  Assignment,
-  Nurse,
-  DutyWindow,
-  Doctor,
-  DoctorSession,
-  ClinicalRole,
-  Specialty,
-  SeniorityLevel,
-  Rule,
-  LeaveEntry,
-  LeaveType,
-  PublishLog,
-  Acknowledgment,
-  ShareLink,
-  LockEntry,
-  WorkingHoursPeriod,
-} from '../../types';
-import { PublishModal } from '../modals/PublishModal';
+import { listPage } from '../../services/repository/paging';
+import { Schedule, ScheduleVersion, NurseLink, Nurse, PublishLog, Acknowledgment, ShareLink, EmailLogKind } from '../../types';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { ensurePublicRosters } from '../../services/publish/publicRosterService';
-import {
-  ensureNurseLink,
-  regenerateNurseLink,
-  syncNurseRosters,
-  nurseLinkUrl,
-} from '../../services/publish/nurseRosterService';
+import { ensureNurseLink, regenerateNurseLink, syncNurseRosters, nurseLinkUrl } from '../../services/publish/nurseRosterService';
+import { emailKindLabel, sendResult } from '../../services/publish/sentRosters';
 import { canEditClinicData } from '../../services/auth/access';
 import { authService } from '../../services/auth/authService';
-import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
 import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
-import { useDialogA11y } from '../common/useDialogA11y';
-import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
+import { formatDate, formatDateTime } from '../../utils/dateUtils';
+import { notify, confirmDialog } from '../common/dialogs';
 import { EmailHtmlPreview } from '../common/EmailHtmlPreview';
 import { loadEmailSettings } from '../../services/settings/emailSettingsStore';
 import { withoutBackups } from '../../services/history/versionList';
+import {
+  Badge,
+  Button,
+  Card,
+  DataTable,
+  Dialog,
+  EmptyState,
+  ErrorState,
+  Field,
+  LoadingState,
+  Notice,
+  PageHeader,
+  Select,
+  TabPanel,
+  Tabs,
+  type Column,
+} from '../ui';
 
 interface PublishViewProps {
   context: ClinicContextState;
 }
 
-type PublishTab = 'status' | 'email_log' | 'personal_links';
+type SentTab = 'replies' | 'emails' | 'links';
+
+/** How many sends the email log shows at a time. */
+export const SENDS_PER_PAGE = 25;
 
 export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
-  const [activeTab, setActiveTab] = useState<PublishTab>('status');
+  const canEdit = canEditClinicData(authService.getCurrentUser());
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [activeTab, setActiveTab] = useState<SentTab>('replies');
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [nurses, setNurses] = useState<Nurse[]>([]);
-  const [dutyWindows, setDutyWindows] = useState<DutyWindow[]>([]);
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [sessions, setSessions] = useState<DoctorSession[]>([]);
-  const [roles, setClinicalRoles] = useState<ClinicalRole[]>([]);
-  const [specialties, setSpecialties] = useState<Specialty[]>([]);
-  const [seniorityLevels, setSeniorityLevels] = useState<SeniorityLevel[]>([]);
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [leaveEntries, setLeaveEntries] = useState<LeaveEntry[]>([]);
-  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
   const [versions, setVersions] = useState<ScheduleVersion[]>([]);
-  const [publishLogs, setPublishLogs] = useState<PublishLog[]>([]);
   const [acknowledgments, setAcknowledgments] = useState<Acknowledgment[]>([]);
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
-  // Pinned days and time periods, so publishing from here checks and counts like the Schedules page.
-  const [locks, setLocks] = useState<LockEntry[]>([]);
-  const [workingHoursPeriods, setWorkingHoursPeriods] = useState<WorkingHoursPeriod[]>([]);
-
-  // Wizard state
-  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-  const [wizardMode, setWizardMode] = useState<'PUBLISH' | 'CHANGE'>('PUBLISH');
-
-  // Email Viewer Modal
-  const [viewingEmailHtml, setViewingEmailHtml] = useState<{
-    subject: string;
-    recipientName: string;
-    recipientEmail: string;
-    html: string;
-  } | null>(null);
-  const emailViewerTitleId = useId();
-  const emailViewerRef = useDialogA11y<HTMLDivElement>(!!viewingEmailHtml, () => setViewingEmailHtml(null));
-
-  // Filters for Email Log
-  const [logFilterKind, setLogFilterKind] = useState<string>('ALL');
-  const [logSearchQuery, setLogSearchQuery] = useState('');
-
   // Each nurse's private link (nurse id to link); editors only.
   const [nurseLinks, setNurseLinks] = useState<Map<string, NurseLink>>(new Map());
   const [busyLinkNurseId, setBusyLinkNurseId] = useState<string | null>(null);
 
+  // The email log, one page of sends at a time (newest first).
+  const [sends, setSends] = useState<PublishLog[]>([]);
+  const [sendsCursor, setSendsCursor] = useState<unknown>(undefined);
+  const [moreSends, setMoreSends] = useState(false);
+  const [isLoadingSends, setIsLoadingSends] = useState(false);
+  const [kindFilter, setKindFilter] = useState<'ALL' | EmailLogKind>('ALL');
+  const [openSend, setOpenSend] = useState<PublishLog | null>(null);
+  const [viewingEmail, setViewingEmail] = useState<{ subject: string; recipientName: string; recipientEmail: string; html: string } | null>(null);
 
   const repo = getRepository();
 
+  const loadSends = async (from?: unknown) => {
+    setIsLoadingSends(true);
+    try {
+      const page = await listPage(repo, 'emailLog', { orderBy: 'sentAt', direction: 'desc', limit: SENDS_PER_PAGE, cursor: from });
+      setSends((prev) => (from === undefined ? page.items : [...prev, ...page.items]));
+      setSendsCursor(page.cursor);
+      setMoreSends(page.hasMore);
+    } catch (err: any) {
+      notify(`The emails sent could not be loaded: ${err?.message || err}`, 'error');
+    } finally {
+      setIsLoadingSends(false);
+    }
+  };
+
   const loadData = async () => {
     try {
-      const [
-        schedList,
-        asgnList,
-        nList,
-        dwList,
-        dList,
-        sessList,
-        crList,
-        spList,
-        sList,
-        rList,
-        leList,
-        ltList,
-        vList,
-        plList,
-        ackList,
-        linkList,
-        lockList,
-        periodList,
-      ] = await Promise.all([
+      const [schedList, nList, vList, ackList, linkList] = await Promise.all([
         repo.list('schedules'),
-        repo.list('assignments'),
         repo.list('nurses'),
-        repo.list('dutyWindows'),
-        repo.list('doctors'),
-        repo.list('doctorSessions'),
-        repo.list('clinicalRoles'),
-        repo.list('specialties'),
-        repo.list('seniorityLevels'),
-        repo.list('rules'),
-        repo.list('leaveEntries'),
-        repo.list('leaveTypes'),
         repo.list('versions').then(withoutBackups),
-        repo.list('emailLog'),
         repo.list('acknowledgments'),
         repo.list('shareLinks'),
-        repo.list('locks'),
-        repo.list('workingHoursPeriods'),
       ]);
-
       const uniqueSchedules = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
       setSchedules(uniqueSchedules);
-      setDutyWindows(dwList);
-      setDoctors(dList);
-      setSessions(sessList);
-      setClinicalRoles(crList);
-      setSpecialties(spList);
-      setSeniorityLevels(sList);
-      setRules(rList);
-      setLeaveEntries(leList);
-      setLeaveTypes(ltList);
       setNurses(nList.filter((n) => n.active));
-      setVersions(vList.sort((a, b) => b.number - a.number));
-      setPublishLogs(plList.sort((a, b) => b.sentAt.localeCompare(a.sentAt)));
+      setVersions(vList);
       setAcknowledgments(ackList);
       setShareLinks(linkList);
-      setLocks(lockList);
-      setWorkingHoursPeriods(periodList);
-      // Links made before public snapshots existed get one now (editors only).
-      if (canEditClinicData(authService.getCurrentUser())) {
+      setActiveSchedule(uniqueSchedules.find((s) => s.id === context.activeScheduleId) || uniqueSchedules[0] || null);
+      if (canEdit) {
+        // Links made before public snapshots existed get one now.
         void ensurePublicRosters(linkList);
-        // Private nurse links are for editors only, so they load on their own.
         repo
           .list('nurseLinks')
           .then((list) => setNurseLinks(new Map(list.filter((l) => !l.revoked).map((l) => [l.nurseId || l.id, l]))))
           .catch((err) => console.warn('Could not load private nurse links:', err));
       }
-
-      const current =
-        uniqueSchedules.find((s) => s.id === context.activeScheduleId) || uniqueSchedules[0];
-      if (current) {
-        setActiveSchedule(current);
-        const schedAsgns = asgnList.filter((a) => a.scheduleId === current.id);
-        setAssignments(schedAsgns);
-      }
+      setLoadState('ready');
     } catch (err) {
-      console.error('Error loading publish view:', err);
+      console.error('Error loading Sent rosters:', err);
+      setLoadState('failed');
     }
   };
 
   useEffect(() => {
     loadData();
+    // The email log is for planners (firestore.rules); only planners reach this screen today.
+    if (canEdit) loadSends();
   }, []);
 
-  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
+  const scheduleName = (id: string) => schedules.find((s) => s.id === id)?.name || 'A deleted roster';
+  const versionNumber = (id: string) => versions.find((v) => v.id === id)?.number;
 
-  // --- ACKNOWLEDGMENT HELPERS ---
-  const getLatestAckForNurse = (nurseId: string) => {
+  // --- READ REPLIES ---
+  const latestAck = (nurseId: string) => {
     if (!activeSchedule) return null;
-    const acks = acknowledgments.filter(
-      (a) => a.scheduleId === activeSchedule.id && a.nurseId === nurseId
-    );
-    if (acks.length === 0) return null;
-    acks.sort((a, b) => b.sentAt.localeCompare(a.sentAt));
-    return acks[0];
+    const acks = acknowledgments
+      .filter((a) => a.scheduleId === activeSchedule.id && a.nurseId === nurseId)
+      .sort((a, b) => b.sentAt.localeCompare(a.sentAt));
+    return acks[0] || null;
   };
-
-  // The clinic's shared email settings from Settings → Email (SMTP credentials live on the server)
-  const getEmailConfig = (): Promise<EmailSettingsConfig> => loadEmailSettings(repo, true);
-
-  const [isSendingReminders, setIsSendingReminders] = useState(false);
+  const sentCount = nurses.filter((n) => latestAck(n.id)).length;
+  const seenCount = nurses.filter((n) => latestAck(n.id)?.ackAt).length;
+  const waiting = nurses.filter((n) => {
+    const ack = latestAck(n.id);
+    return ack && !ack.ackAt;
+  });
 
   /**
-   * Sends a reminder for the nurse's latest unacknowledged roster, reusing the
-   * original confirmation link so the same token completes the acknowledgment.
-   * Returns the delivery status.
+   * Sends a reminder for the nurse's latest roster not yet confirmed, with the same confirm link
+   * as the first email, so the same token records the reply. Returns the delivery status.
    */
   const sendReminder = async (nurse: Nurse): Promise<string> => {
-    if (!activeSchedule) throw new Error('No active schedule selected.');
-    const ack = getLatestAckForNurse(nurse.id);
+    if (!activeSchedule) throw new Error('No roster is open.');
+    const ack = latestAck(nurse.id);
     if (!ack) throw new Error(`${nurse.fullName} has not been sent this roster yet. Publish it first.`);
     if (ack.ackAt) return 'ALREADY_ACKNOWLEDGED';
-
     const version = versions.find((v) => v.id === ack.versionId);
     const link = shareLinks.find((l) => l.scheduleId === activeSchedule.id && !l.revoked && l.public);
     const email = RosterPublishService.generateReminderEmailHtml({
@@ -257,9 +168,8 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       shareToken: link?.token,
       privateRosterUrl: nurseLinks.get(nurse.id) ? nurseLinkUrl(nurseLinks.get(nurse.id)!.token) : undefined,
     });
-
     const { recipientLog } = await RosterPublishService.dispatchEmail(
-      await getEmailConfig(),
+      await loadEmailSettings(repo, true),
       nurse.gmail,
       nurse,
       email.subject,
@@ -269,12 +179,8 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       ack.versionId,
       ack.token
     );
-
     const nowIso = new Date().toISOString();
-    await repo.update('acknowledgments', ack.id, {
-      lastReminderSentAt: nowIso,
-      reminderCount: (ack.reminderCount || 0) + 1,
-    });
+    await repo.update('acknowledgments', ack.id, { lastReminderSentAt: nowIso, reminderCount: (ack.reminderCount || 0) + 1 });
     await repo.create('emailLog', {
       id: `remind-${crypto.randomUUID()}`,
       scheduleId: activeSchedule.id,
@@ -284,47 +190,42 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       status: recipientLog.status === 'FAILED' ? 'FAILED' : recipientLog.status,
       sentAt: nowIso,
     });
-    if (recipientLog.status === 'FAILED') {
-      throw new Error(recipientLog.errorMessage || 'Email dispatch failed.');
-    }
+    if (recipientLog.status === 'FAILED') throw new Error(recipientLog.errorMessage || 'The email could not be sent.');
     return recipientLog.status;
   };
 
-  // Send Reminder to one unacknowledged nurse
+  const refreshAfterReminders = () => {
+    loadData();
+    if (canEdit) loadSends();
+  };
+
   const handleSendReminder = async (nurse: Nurse) => {
     try {
       const status = await sendReminder(nurse);
-      triggerToast(
+      notify(
         status === 'MOCK_SENT'
-          ? `Reminder for ${nurse.fullName} logged (sandbox mode, no email sent).`
-          : `Reminder sent to ${nurse.fullName} (${nurse.gmail}).`
+          ? `Reminder for ${nurse.fullName} recorded (test mode, nothing emailed).`
+          : `Reminder sent to ${nurse.fullName} (${nurse.gmail}).`,
+        'success'
       );
     } catch (err: any) {
-      notify(`Reminder failed: ${err.message}`, 'error');
+      notify(`The reminder could not be sent: ${err.message}`, 'error');
     }
-    loadData();
+    refreshAfterReminders();
   };
 
-  // Send reminders to every nurse who has not yet acknowledged the latest roster
-  const handleRemindAllPending = async () => {
-    const pending = nurses.filter((n) => {
-      const ack = getLatestAckForNurse(n.id);
-      return ack && !ack.ackAt;
-    });
-    if (pending.length === 0) {
-      triggerToast('Everyone has acknowledged the latest roster.');
-      return;
-    }
+  const [isSendingReminders, setIsSendingReminders] = useState(false);
+  const handleRemindAll = async () => {
+    if (waiting.length === 0) return;
     const ok = await confirmDialog({
       title: 'Send reminders?',
-      message: `Send a reminder to ${pending.length} staff member(s) who have not confirmed receipt?`,
+      message: `Send a reminder to the ${waiting.length === 1 ? 'nurse who has' : `${waiting.length} nurses who have`} not confirmed they have seen the roster?`,
       confirmLabel: 'Send reminders',
     });
     if (!ok) return;
-
     setIsSendingReminders(true);
     const failures: string[] = [];
-    for (const nurse of pending) {
+    for (const nurse of waiting) {
       try {
         await sendReminder(nurse);
       } catch (err: any) {
@@ -332,27 +233,43 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       }
     }
     setIsSendingReminders(false);
-    loadData();
+    refreshAfterReminders();
     if (failures.length > 0) {
-      notify(`${pending.length - failures.length} reminder(s) sent, ${failures.length} failed:\n\n${failures.join('\n')}`, 'warning');
+      notify(`${waiting.length - failures.length} reminders sent, ${failures.length} not sent:\n\n${failures.join('\n')}`, 'warning');
     } else {
-      triggerToast(`Reminders sent to ${pending.length} staff member(s).`);
+      notify(`Reminders sent to ${waiting.length === 1 ? '1 nurse' : `${waiting.length} nurses`}.`, 'success');
     }
   };
 
-  // --- PRIVATE NURSE LINKS ---
-  const rememberLink = (link: NurseLink) => setNurseLinks((prev) => new Map(prev).set(link.nurseId, link));
+  const handleDownloadReplies = () => {
+    if (!activeSchedule) return;
+    const rows: CsvValue[][] = [['Nurse', 'Code', 'Email', 'Version', 'Sent', 'Seen']];
+    nurses.forEach((nurse) => {
+      const ack = latestAck(nurse.id);
+      rows.push([
+        nurse.fullName,
+        nurse.employeeCode,
+        nurse.gmail,
+        ack ? versionNumber(ack.versionId) ?? '' : '',
+        ack ? formatDateTime(ack.sentAt) : 'Not sent',
+        ack?.ackAt ? formatDateTime(ack.ackAt) : ack ? 'Waiting' : '',
+      ]);
+    });
+    downloadCsv(`${activeSchedule.name} read replies.csv`, toCsv(rows));
+  };
 
+  // --- PRIVATE LINKS ---
+  const rememberLink = (link: NurseLink) => setNurseLinks((prev) => new Map(prev).set(link.nurseId, link));
   const copyText = async (text: string, done: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      triggerToast(done);
+      notify(done, 'success');
     } catch {
-      notify("Couldn't copy. Select the link and copy it instead.", 'warning');
+      notify("The link couldn't be copied. Select it and copy it instead.", 'warning');
     }
   };
 
-  /** Copies the nurse's private link, making it first when she has none yet. */
+  /** Copies the nurse's private link, making it first when they have none yet. */
   const handleCopyPrivateLink = async (nurse: Nurse) => {
     setBusyLinkNurseId(nurse.id);
     try {
@@ -361,11 +278,11 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
         link = await ensureNurseLink(repo, nurse.id);
         rememberLink(link);
         const result = await syncNurseRosters(repo, [nurse.id]);
-        if (result.failed.length > 0) notify(`The link was made, but her page couldn't be filled: ${result.failed[0]}`, 'warning');
+        if (result.failed.length > 0) notify(`The link was made, but ${nurse.fullName}'s page couldn't be updated: ${result.failed[0]}`, 'warning');
       }
       await copyText(nurseLinkUrl(link.token), `Private link for ${nurse.fullName} copied.`);
     } catch (err: any) {
-      notify(`Couldn't make the private link: ${err?.message || err}`, 'error');
+      notify(`The private link couldn't be made: ${err?.message || err}`, 'error');
     } finally {
       setBusyLinkNurseId(null);
     }
@@ -374,7 +291,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
   const handleRegeneratePrivateLink = async (nurse: Nurse) => {
     const ok = await confirmDialog({
       title: `Make a new link for ${nurse.fullName}?`,
-      message: 'The old link stops working. Send her the new one.',
+      message: 'The old link stops working. Send them the new one.',
       confirmLabel: 'Make a new link',
       danger: true,
     });
@@ -384,9 +301,9 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       const { link, syncError } = await regenerateNurseLink(repo, nurse.id);
       rememberLink(link);
       await copyText(nurseLinkUrl(link.token), `New private link for ${nurse.fullName} copied. The old link no longer works.`);
-      if (syncError) notify(`The new link was made, but her page couldn't be filled: ${syncError}`, 'warning');
+      if (syncError) notify(`The new link was made, but ${nurse.fullName}'s page couldn't be updated: ${syncError}`, 'warning');
     } catch (err: any) {
-      notify(`Couldn't make a new link: ${err?.message || err}`, 'error');
+      notify(`A new link couldn't be made: ${err?.message || err}`, 'error');
     } finally {
       setBusyLinkNurseId(null);
     }
@@ -397,599 +314,353 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
     setIsRefreshingPages(true);
     try {
       const result = await syncNurseRosters(repo);
-      if (result.failed.length > 0) {
-        notify(`${result.synced} page(s) updated, ${result.failed.length} failed:\n\n${result.failed.join('\n')}`, 'warning');
-      } else {
-        triggerToast(`${result.synced} private page(s) updated.`);
-      }
+      if (result.failed.length > 0) notify(`${result.synced} pages updated, ${result.failed.length} not updated:\n\n${result.failed.join('\n')}`, 'warning');
+      else notify(`${result.synced === 1 ? '1 private page' : `${result.synced} private pages`} updated.`, 'success');
     } catch (err: any) {
-      notify(`Couldn't update the private pages: ${err?.message || err}`, 'error');
+      notify(`The private pages couldn't be updated: ${err?.message || err}`, 'error');
     } finally {
       setIsRefreshingPages(false);
     }
   };
 
-  // Export Recipients CSV
-  const handleExportRecipientsCsv = () => {
-    if (!activeSchedule) return;
-    const rows: CsvValue[][] = [
-      ['Nurse Name', 'Employee Code', 'Gmail', 'Delivery Status', 'Dispatch Timestamp', 'Acknowledged Timestamp'],
-    ];
-
-    nurses.forEach((nurse) => {
-      const ack = getLatestAckForNurse(nurse.id);
-      rows.push([
-        nurse.fullName,
-        nurse.employeeCode,
-        nurse.gmail,
-        ack ? 'DISPATCHED' : 'NOT PUBLISHED',
-        ack ? new Date(ack.sentAt).toLocaleString() : 'N/A',
-        ack?.ackAt ? new Date(ack.ackAt).toLocaleString() : 'PENDING',
-      ]);
-    });
-
-    downloadCsv(`${activeSchedule.name}_acknowledgments.csv`, toCsv(rows));
-  };
-
-  /** What "View HTML" shows for an email whose body the log did not keep (see emailLogSize.ts). */
+  /** What View email shows for an email whose text the log did not keep (see emailLogSize.ts). */
   const notKeptHtml = (summary: string) =>
     '<div style="font-family:sans-serif;font-size:14px;line-height:1.5;color:#1e293b">' +
-    '<p>This email was sent, but its full text was not kept in the log, so that the record stays within the database size limit.</p>' +
+    '<p>This email was sent. Its full text was not kept, to keep the record small.</p>' +
     `<p><strong>Summary:</strong> ${escapeHtml(summary || 'none')}</p></div>`;
 
-  // Flat transmissions list for Email Log
-  const allTransmissions = publishLogs.flatMap((log) =>
-    log.recipients.map((rec) => ({
-      ...rec,
-      kind: log.kind,
-      versionId: log.versionId,
-      sentAt: log.sentAt,
-      logId: log.id,
-    }))
-  );
+  const shownSends = useMemo(() => sends.filter((s) => kindFilter === 'ALL' || s.kind === kindFilter), [sends, kindFilter]);
 
-  const filteredTransmissions = allTransmissions.filter((item) => {
-    if (logFilterKind !== 'ALL' && item.kind !== logFilterKind) return false;
-    if (
-      logSearchQuery &&
-      !item.nurseName.toLowerCase().includes(logSearchQuery.toLowerCase()) &&
-      !item.email.toLowerCase().includes(logSearchQuery.toLowerCase())
-    ) {
-      return false;
-    }
-    return true;
-  });
+  const replyColumns: Column<Nurse>[] = [
+    {
+      key: 'nurse',
+      header: 'Nurse',
+      cell: (n) => (
+        <span>
+          <span className="block font-medium text-ink">{n.fullName}</span>
+          <span className="block text-xs text-ink-muted">{n.gmail || 'No email address'}</span>
+        </span>
+      ),
+      sortValue: (n) => n.fullName,
+      phone: 'title',
+    },
+    {
+      key: 'version',
+      header: 'Version',
+      cell: (n) => {
+        const ack = latestAck(n.id);
+        const num = ack ? versionNumber(ack.versionId) : undefined;
+        return ack ? (num ? `Version ${num}` : 'A version no longer kept') : <span className="text-ink-muted">Not sent</span>;
+      },
+    },
+    { key: 'sent', header: 'Sent', cell: (n) => (latestAck(n.id) ? formatDateTime(latestAck(n.id)!.sentAt) : ''), sortValue: (n) => latestAck(n.id)?.sentAt || '' },
+    {
+      key: 'reply',
+      header: 'Reply',
+      cell: (n) => {
+        const ack = latestAck(n.id);
+        if (!ack) return <span className="text-ink-muted">Not sent yet</span>;
+        if (ack.ackAt) return <Badge tone="success">Seen on {formatDate(ack.ackAt)}</Badge>;
+        return (
+          <Badge tone="warning">
+            Waiting{ack.reminderCount ? `, ${ack.reminderCount === 1 ? '1 reminder' : `${ack.reminderCount} reminders`} sent` : ''}
+          </Badge>
+        );
+      },
+      sortValue: (n) => (latestAck(n.id)?.ackAt ? 2 : latestAck(n.id) ? 1 : 0),
+    },
+    ...(canEdit
+      ? [
+          {
+            key: 'actions',
+            header: 'Actions',
+            hideHeader: true,
+            phone: 'actions' as const,
+            align: 'right' as const,
+            cell: (n: Nurse) => {
+              const ack = latestAck(n.id);
+              return ack && !ack.ackAt ? (
+                <Button size="sm" icon={Bell} onClick={() => handleSendReminder(n)} aria-label={`Send a reminder to ${n.fullName}`}>
+                  Remind
+                </Button>
+              ) : null;
+            },
+          },
+        ]
+      : []),
+  ];
 
-  // Calculate Acknowledgment stats
-  const totalNurses = nurses.length;
-  const acknowledgedCount = nurses.filter((n) => {
-    const ack = getLatestAckForNurse(n.id);
-    return ack && ack.ackAt;
-  }).length;
-  const ackPercentage = totalNurses > 0 ? Math.round((acknowledgedCount / totalNurses) * 100) : 0;
+  const sendColumns: Column<PublishLog>[] = [
+    { key: 'sentAt', header: 'Sent', cell: (s) => formatDateTime(s.sentAt), sortValue: (s) => s.sentAt },
+    { key: 'roster', header: 'Roster', cell: (s) => <span className="font-medium text-ink">{scheduleName(s.scheduleId)}</span>, sortValue: (s) => scheduleName(s.scheduleId), phone: 'title' },
+    {
+      key: 'kind',
+      header: 'What',
+      cell: (s) => {
+        const num = versionNumber(s.versionId);
+        return `${emailKindLabel(s.kind)}${num ? `, version ${num}` : ''}`;
+      },
+      sortValue: (s) => emailKindLabel(s.kind),
+    },
+    {
+      key: 'result',
+      header: 'Result',
+      cell: (s) => {
+        const r = sendResult(s);
+        return <Badge tone={r.tone}>{r.words}</Badge>;
+      },
+    },
+    {
+      key: 'open',
+      header: 'Open',
+      hideHeader: true,
+      phone: 'actions',
+      align: 'right',
+      cell: (s) => (
+        <Button size="sm" icon={Eye} onClick={() => setOpenSend(s)} aria-label={`Open the email sent on ${formatDateTime(s.sentAt)}`}>
+          Open
+        </Button>
+      ),
+    },
+  ];
+
+  const tabs = [
+    { id: 'replies', label: 'Read replies', ...(waiting.length > 0 ? { count: waiting.length, countTone: 'warning' as const } : {}) },
+    { id: 'emails', label: 'Emails sent' },
+    { id: 'links', label: 'Private links' },
+  ];
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 select-none font-sans text-slate-800">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              Publish &amp; Email Notifications
-            </h1>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Dispatches personalized rosters, tracks digital shift acknowledgments, and logs delivery audits.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              setWizardMode('CHANGE');
-              setIsPublishModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
-            title="Send change alerts highlighting individual shift modifications"
-          >
-            <History className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-            <span>Send Change Alerts</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setWizardMode('PUBLISH');
-              setIsPublishModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold transition-colors shadow-xs cursor-pointer"
-          >
-            <Send className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Publish Official Roster</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Schedule Info & Status Banner */}
-      <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-slate-900">
-              {activeSchedule?.name || context.activeScheduleName}
-            </h2>
-            <span
-              className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] ${
-                activeSchedule?.status === 'PUBLISHED'
-                  ? 'bg-purple-100 text-purple-800'
-                  : 'bg-amber-100 text-amber-800'
-              }`}
+    <div className="mx-auto max-w-7xl space-y-5 p-4 text-ink sm:p-6">
+      <PageHeader
+        title="Sent rosters"
+        meta={
+          activeSchedule && (
+            <>
+              <span className="font-medium text-ink">{activeSchedule.name}</span>
+              <span>
+                {formatDate(activeSchedule.startDate)} to {formatDate(activeSchedule.endDate)}
+              </span>
+              <Badge tone={activeSchedule.status === 'PUBLISHED' ? 'success' : 'neutral'}>
+                {activeSchedule.status === 'PUBLISHED' ? 'Published' : 'Draft'}, version {activeSchedule.activeVersionNumber || 1}
+              </Badge>
+            </>
+          )
+        }
+        actions={
+          canEdit && (
+            <Button
+              icon={Send}
+              onClick={() => {
+                window.location.hash = activeSchedule ? `schedules?roster=${encodeURIComponent(activeSchedule.id)}` : 'schedules';
+              }}
             >
-              STATUS: {activeSchedule?.status || 'DRAFT'} v{activeSchedule?.activeVersionNumber || 1}
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5 font-mono">
-            {activeSchedule?.startDate} to {activeSchedule?.endDate} · {assignments.length} total assignments · {nurses.length} active staff
-          </p>
-        </div>
+              Publish from the roster
+            </Button>
+          )
+        }
+      />
 
-        {/* Quick Stats */}
-        <div className="flex items-center gap-4 text-xs font-mono">
-          <div className="text-center px-3 py-1 bg-slate-50 border border-slate-200 rounded">
-            <div className="font-bold text-slate-900">{totalNurses}</div>
-            <div className="text-[10px] text-slate-400">Total Staff</div>
-          </div>
-          <div className="text-center px-3 py-1 bg-emerald-50 border border-emerald-200 rounded text-emerald-900">
-            <div className="font-bold">{acknowledgedCount} / {totalNurses}</div>
-            <div className="text-[10px] text-emerald-700">Acknowledged ({ackPercentage}%)</div>
-          </div>
-          <div className="text-center px-3 py-1 bg-indigo-50 border border-indigo-200 rounded text-indigo-900">
-            <div className="font-bold">{publishLogs.length}</div>
-            <div className="text-[10px] text-indigo-700">Broadcasts</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation Tabs */}
-      <div className="border-b border-slate-200 flex items-center gap-6 bg-white px-2 text-xs">
-        <button
-          onClick={() => setActiveTab('status')}
-          className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
-            activeTab === 'status'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <MailCheck className="w-4 h-4" aria-hidden="true" />
-          <span>Staff Acknowledgment Grid ({acknowledgedCount}/{totalNurses})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('email_log')}
-          className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
-            activeTab === 'email_log'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <Mail className="w-4 h-4" aria-hidden="true" />
-          <span>Email Audit Ledger ({allTransmissions.length})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('personal_links')}
-          className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
-            activeTab === 'personal_links'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <ExternalLink className="w-4 h-4" aria-hidden="true" />
-          <span>Private Links</span>
-        </button>
-      </div>
-
-      {/* --- TAB 1: ACKNOWLEDGMENT GRID --- */}
-      {activeTab === 'status' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm">Staff Roster Receipt Verification</h3>
-              <p className="text-xs text-slate-500">
-                Live compliance grid tracking which nurses have opened and acknowledged their official duty timetable.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-            <button
-              onClick={handleRemindAllPending}
-              disabled={isSendingReminders}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded text-xs font-semibold cursor-pointer disabled:opacity-50"
-              title="Email a reminder to every nurse who has not yet confirmed receipt"
-            >
-              <Bell className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>{isSendingReminders ? 'Sending reminders...' : 'Send reminders to all pending'}</span>
-            </button>
-
-            <button
-              onClick={handleExportRecipientsCsv}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 rounded text-slate-700 text-xs font-semibold cursor-pointer shadow-2xs"
-            >
-              <Download className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-              <span>Export Receipts CSV</span>
-            </button>
-            </div>
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs text-xs">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50 text-slate-600 font-mono text-[11px] border-b border-slate-200">
-                <tr>
-                  <th className="py-2.5 px-4">Nursing Staff</th>
-                  <th className="py-2.5 px-3">Gmail Address</th>
-                  <th className="py-2.5 px-3">Dispatched Version</th>
-                  <th className="py-2.5 px-3">Dispatch Date</th>
-                  <th className="py-2.5 px-3">Digital Acknowledgment</th>
-                  <th className="py-2.5 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-sans">
-                {nurses.map((nurse) => {
-                  const ack = getLatestAckForNurse(nurse.id);
-                  const isAcked = !!ack?.ackAt;
-
-                  return (
-                    <tr key={nurse.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="font-bold text-slate-900">{nurse.fullName}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">{nurse.employeeCode}</div>
-                      </td>
-
-                      <td className="py-3 px-3 font-mono text-slate-700 text-[11px]">
-                        {nurse.gmail}
-                      </td>
-
-                      <td className="py-3 px-3 font-mono text-[11px]">
-                        {ack ? (
-                          <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-bold border border-purple-200">
-                            {ack.versionId}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-3 text-slate-500 font-mono text-[11px]">
-                        {ack ? new Date(ack.sentAt).toLocaleString() : 'Not Dispatched'}
-                      </td>
-
-                      <td className="py-3 px-3">
-                        {isAcked ? (
-                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>ACKNOWLEDGED {new Date(ack!.ackAt!).toLocaleDateString()}</span>
-                          </div>
-                        ) : ack ? (
-                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
-                            <Clock className="w-3.5 h-3.5 text-amber-600" />
-                            <span>PENDING RECEIPT</span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 text-[11px]">Awaiting First Publish</span>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {!isAcked && ack && (
-                            <>
-                              <button
-                                onClick={() => handleSendReminder(nurse)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-[11px] font-semibold cursor-pointer"
-                                title="Send reminder notification to this staff member"
-                              >
-                                <Bell className="w-3 h-3 text-amber-600" aria-hidden="true" />
-                                <span>Remind</span>
-                              </button>
-
-                            </>
-                          )}
-
-                          {isAcked && (
-                            <span className="text-emerald-700 text-[11px] font-mono font-medium">
-                              Verified ✓
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* --- TAB 2: EMAIL AUDIT LEDGER --- */}
-      {activeTab === 'email_log' && (
-        <div className="space-y-4">
-          {/* Filters Bar */}
-          <div className="p-3 bg-white border border-slate-200 rounded-lg flex flex-wrap items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <Filter className="w-3.5 h-3.5 text-slate-400" />
-                <span className="font-semibold text-slate-700">Kind:</span>
-                <select aria-label="Kind"
-                  value={logFilterKind}
-                  onChange={(e) => setLogFilterKind(e.target.value)}
-                  className="px-2 py-1 border border-slate-300 rounded bg-white font-medium"
-                >
-                  <option value="ALL">All Broadcasts</option>
-                  <option value="PUBLISH">Official Publish</option>
-                  <option value="CHANGE">Change Alert</option>
-                </select>
-              </div>
-
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
-                <input aria-label="Search recipient or email"
-                  type="text"
-                  placeholder="Search recipient or email..."
-                  value={logSearchQuery}
-                  onChange={(e) => setLogSearchQuery(e.target.value)}
-                  className="pl-8 pr-3 py-1 border border-slate-300 rounded text-xs w-56"
-                />
-              </div>
-            </div>
-
-            <div className="font-mono text-slate-500 text-[11px]">
-              Showing {filteredTransmissions.length} of {allTransmissions.length} logged transmissions
-            </div>
-          </div>
-
-          {/* Table */}
-          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs text-xs">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50 text-slate-600 font-mono text-[11px] border-b border-slate-200">
-                <tr>
-                  <th className="py-2.5 px-4">Sent At</th>
-                  <th className="py-2.5 px-3">Recipient Staff</th>
-                  <th className="py-2.5 px-3">Gmail Address</th>
-                  <th className="py-2.5 px-3">Type</th>
-                  <th className="py-2.5 px-3">Subject / Body Snapshot</th>
-                  <th className="py-2.5 px-3">Status</th>
-                  <th className="py-2.5 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-mono">
-                {filteredTransmissions.map((log, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-2.5 px-4 text-slate-500 text-[10px]">
-                      {new Date(log.sentAt).toLocaleString()}
-                    </td>
-                    <td className="py-2.5 px-3 font-semibold text-slate-900 font-sans">
-                      {log.nurseName}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-700 text-[11px]">
-                      {log.email}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          log.kind === 'CHANGE'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-purple-100 text-purple-800'
-                        }`}
-                      >
-                        {log.kind}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 font-sans max-w-xs truncate text-slate-600 text-[11px]">
-                      {log.subject}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-bold text-[10px] border ${
-                          log.status === 'SENT'
-                            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                            : log.status === 'MOCK_SENT'
-                            ? 'bg-slate-100 text-slate-700 border-slate-200'
-                            : log.status === 'FAILED'
-                            ? 'bg-rose-50 text-rose-800 border-rose-200'
-                            : 'bg-amber-50 text-amber-800 border-amber-200'
-                        }`}
-                      >
-                        {log.status === 'SENT' && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
-                        <span>
-                          {log.status === 'SENT'
-                            ? 'Sent'
-                            : log.status === 'MOCK_SENT'
-                            ? 'Test mode'
-                            : log.status === 'FAILED'
-                            ? 'Failed'
-                            : log.status === 'PARTIAL'
-                            ? 'Some failed'
-                            : 'Not finished'}
-                        </span>
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-4 text-right font-sans">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() =>
-                            setViewingEmailHtml({
-                              subject: log.subject,
-                              recipientName: log.nurseName,
-                              recipientEmail: log.email,
-                              html: log.fullBodyHtml || notKeptHtml(log.bodyPreview),
-                            })
-                          }
-                          className="inline-flex items-center gap-1 px-2 py-1 border border-slate-300 hover:bg-slate-50 text-indigo-700 rounded text-[11px] font-semibold cursor-pointer"
-                          title="View exact HTML payload sent to staff"
-                        >
-                          <Eye className="w-3 h-3" aria-hidden="true" />
-                          <span>View HTML</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-
-                {filteredTransmissions.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-400 text-xs font-sans">
-                      No matching email logs found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* --- TAB 3: PRIVATE NURSE LINKS --- */}
-      {activeTab === 'personal_links' && (
-        <div className="bg-white border border-slate-200 rounded-lg p-4 sm:p-5 shadow-xs space-y-4 text-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
-            <div className="flex items-center gap-2">
-              <Lock className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-              <h3 className="font-bold text-slate-800 text-sm">Private nurse links</h3>
-            </div>
-            {canEditClinicData(authService.getCurrentUser()) && (
-              <button
-                type="button"
-                onClick={handleRefreshPrivatePages}
-                disabled={isRefreshingPages}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 rounded text-slate-700 hover:bg-slate-50 cursor-pointer font-semibold disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingPages ? 'animate-spin' : ''}`} aria-hidden="true" />
-                {isRefreshingPages ? 'Updating…' : 'Update all pages'}
-              </button>
-            )}
-          </div>
-
-          <p className="text-slate-600 leading-relaxed text-[11px]">
-            Each nurse has her own link for My schedule and Team schedule, without signing in.
-            It is in her roster email after each publish. Pages update when you publish. Keep links within the clinic.
-          </p>
-
-          {!canEditClinicData(authService.getCurrentUser()) ? (
-            <p className="text-slate-500 text-[11px]">Only planners can see and share private links.</p>
-          ) : (
-            <ul className="divide-y divide-slate-100 border border-slate-200 rounded">
-              {nurses.map((n) => {
-                const link = nurseLinks.get(n.id);
-                const busy = busyLinkNurseId === n.id;
-                return (
-                  <li key={n.id} className="flex flex-col sm:flex-row sm:items-center gap-2 p-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-800 text-xs truncate">{n.fullName}</p>
-                      <p className="text-[11px] text-slate-500">{link ? 'Private link ready' : 'No link yet'}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleCopyPrivateLink(n)}
-                        disabled={busy}
-                        aria-label={`${link ? 'Copy private link' : 'Make and copy private link'} for ${n.fullName}`}
-                        className="inline-flex items-center gap-1 min-h-9 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold cursor-pointer disabled:opacity-50"
-                      >
-                        <Copy className="w-3 h-3" aria-hidden="true" />
-                        <span>{link ? 'Copy private link' : 'Make private link'}</span>
-                      </button>
-                      {link && (
-                        <button
-                          type="button"
-                          onClick={() => handleRegeneratePrivateLink(n)}
-                          disabled={busy}
-                          aria-label={`Make a new link for ${n.fullName}`}
-                          className="inline-flex items-center gap-1 min-h-9 px-3 bg-white border border-slate-300 rounded text-slate-700 hover:bg-slate-50 cursor-pointer font-semibold disabled:opacity-50"
-                        >
-                          <RefreshCw className="w-3 h-3" aria-hidden="true" />
-                          <span>Make a new link</span>
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {/* --- PUBLISH WIZARD MODAL COMPONENT (Phase 13) --- */}
-      {activeSchedule && (
-        <PublishModal
-          context={context}
-          schedule={activeSchedule}
-          assignments={assignments}
-          nurses={nurses}
-          dutyWindows={dutyWindows}
-          doctors={doctors}
-          sessions={sessions}
-          roles={roles}
-          specialties={specialties}
-          seniorityLevels={seniorityLevels}
-          rules={rules}
-          leaveEntries={leaveEntries}
-          leaveTypes={leaveTypes}
-          versions={versions}
-          locks={locks}
-          workingHoursPeriods={workingHoursPeriods}
-          isOpen={isPublishModalOpen}
-          onClose={() => setIsPublishModalOpen(false)}
-          onPublishComplete={() => {
+      {loadState === 'loading' && <LoadingState label="Loading Sent rosters…" />}
+      {loadState === 'failed' && (
+        <ErrorState
+          title="Sent rosters could not be loaded"
+          onRetry={() => {
+            setLoadState('loading');
             loadData();
-            triggerToast('Official publish broadcast finalized.');
+            if (canEdit) loadSends();
           }}
-          onSendUpdated={() => loadData()}
-          initialMode={wizardMode}
         />
       )}
 
-      {/* --- HTML EMAIL VIEWER MODAL --- */}
-      {viewingEmailHtml && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-          <div
-            ref={emailViewerRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={emailViewerTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs"
-          >
-            <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <div>
-                <h3 id={emailViewerTitleId} className="font-bold text-slate-900 text-sm">Dispatched HTML Email Snapshot</h3>
-                <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                  To: {viewingEmailHtml.recipientName} ({viewingEmailHtml.recipientEmail})
+      {loadState === 'ready' && (
+        <>
+          <Notice tone="info" title="Rosters are published from the roster screen">
+            Open the roster, then Publish. This screen shows what was sent and who has confirmed they have seen it.
+          </Notice>
+
+          <Card bodyClassName="">
+            <Tabs label="Sent rosters" idPrefix="sent" value={activeTab} onChange={(id) => setActiveTab(id as SentTab)} tabs={tabs} className="px-4" />
+
+            <TabPanel idPrefix="sent" id="replies" value={activeTab} className="space-y-4 p-4">
+              {!activeSchedule ? (
+                <EmptyState title="No roster yet">Create a roster and publish it; replies show here.</EmptyState>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-ink-muted" aria-live="polite">
+                      {sentCount === 0
+                        ? `${activeSchedule.name} has not been sent to any nurse yet.`
+                        : `${seenCount} of ${sentCount} ${sentCount === 1 ? 'nurse has' : 'nurses have'} confirmed they have seen ${activeSchedule.name}.`}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {canEdit && (
+                        <Button icon={Bell} busy={isSendingReminders} disabled={waiting.length === 0} onClick={handleRemindAll}>
+                          {waiting.length > 0 ? `Remind the ${waiting.length} waiting` : 'Nobody is waiting'}
+                        </Button>
+                      )}
+                      <Button icon={Download} onClick={handleDownloadReplies}>
+                        Download (CSV)
+                      </Button>
+                    </div>
+                  </div>
+                  <DataTable
+                    caption={`Read replies for ${activeSchedule.name}`}
+                    rows={nurses}
+                    rowKey={(n) => n.id}
+                    columns={replyColumns}
+                    initialSort={{ key: 'nurse', direction: 'ascending' }}
+                    empty={<EmptyState title="No active nurses" />}
+                  />
+                </>
+              )}
+            </TabPanel>
+
+            <TabPanel idPrefix="sent" id="emails" value={activeTab} className="space-y-4 p-4">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <Field label="What was sent" className="w-full sm:w-64">
+                  {(f) => (
+                    <Select {...f} value={kindFilter} onChange={(e) => setKindFilter(e.target.value as typeof kindFilter)}>
+                      <option value="ALL">All emails</option>
+                      <option value="PUBLISH">The whole roster</option>
+                      <option value="CHANGE">Changes only</option>
+                      <option value="REMINDER">Reminders</option>
+                      <option value="TEST">Test emails</option>
+                    </Select>
+                  )}
+                </Field>
+                <p className="text-ink-muted" aria-live="polite">
+                  {kindFilter === 'ALL' ? `${sends.length}` : `${shownSends.length} of the ${sends.length}`} newest emails shown
+                  {moreSends ? ', older ones are kept' : ''}.
                 </p>
               </div>
+              {sends.length === 0 && isLoadingSends ? (
+                <LoadingState label="Loading the emails sent…" />
+              ) : (
+                <DataTable
+                  caption="Emails sent, newest first"
+                  rows={shownSends}
+                  rowKey={(s) => s.id}
+                  columns={sendColumns}
+                  initialSort={{ key: 'sentAt', direction: 'descending' }}
+                  empty={<EmptyState icon={Mail} title={sends.length === 0 ? 'Nothing sent yet' : 'No emails of this kind among those shown'} />}
+                />
+              )}
+              {moreSends && (
+                <div className="flex justify-center">
+                  <Button busy={isLoadingSends} onClick={() => loadSends(sendsCursor)}>
+                    Show {SENDS_PER_PAGE} older emails
+                  </Button>
+                </div>
+              )}
+            </TabPanel>
 
-              <button
-                onClick={() => setViewingEmailHtml(null)}
-                className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
-                aria-label="Close"
-                title="Close"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            <div className="p-4 bg-slate-100 flex-1 overflow-y-auto">
-              <EmailHtmlPreview html={viewingEmailHtml.html} />
-            </div>
-
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
-              <button
-                onClick={() => setViewingEmailHtml(null)}
-                className="px-4 py-1.5 bg-slate-900 text-white rounded font-bold cursor-pointer"
-              >
-                Close Viewer
-              </button>
-            </div>
-          </div>
-        </div>
+            <TabPanel idPrefix="sent" id="links" value={activeTab} className="space-y-4 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <p className="max-w-2xl text-ink-muted">
+                  Each nurse has their own link to My schedule and Team schedule, without signing in. It is in their roster email after each
+                  publish, and the pages update when you publish. Keep the links within the clinic.
+                </p>
+                {canEdit && (
+                  <Button icon={RefreshCw} busy={isRefreshingPages} onClick={handleRefreshPrivatePages}>
+                    Update all pages
+                  </Button>
+                )}
+              </div>
+              {!canEdit ? (
+                <Notice tone="info" title="For planners">
+                  Only planners can see and share private links.
+                </Notice>
+              ) : (
+                <ul className="divide-y divide-line rounded-lg border border-line" aria-label="Private links">
+                  {nurses.map((n) => {
+                    const link = nurseLinks.get(n.id);
+                    const busy = busyLinkNurseId === n.id;
+                    return (
+                      <li key={n.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold text-ink">{n.fullName}</p>
+                          <p className="text-sm text-ink-muted">{link ? 'Private link ready' : 'No link yet'}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            icon={Copy}
+                            busy={busy}
+                            onClick={() => handleCopyPrivateLink(n)}
+                            aria-label={`${link ? 'Copy the private link' : 'Make and copy a private link'} for ${n.fullName}`}
+                          >
+                            {link ? 'Copy the link' : 'Make a link'}
+                          </Button>
+                          {link && (
+                            <Button size="sm" icon={RefreshCw} disabled={busy} onClick={() => handleRegeneratePrivateLink(n)} aria-label={`Make a new link for ${n.fullName}`}>
+                              Make a new link
+                            </Button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </TabPanel>
+          </Card>
+        </>
       )}
+
+      {/* One send: who it went to, and each email. */}
+      <Dialog
+        open={!!openSend && !viewingEmail}
+        onClose={() => setOpenSend(null)}
+        size="lg"
+        title={openSend ? `${emailKindLabel(openSend.kind)}, ${scheduleName(openSend.scheduleId)}` : ''}
+        description={openSend ? `Sent on ${formatDateTime(openSend.sentAt)}. ${sendResult(openSend).words}.` : undefined}
+        footer={<Button onClick={() => setOpenSend(null)}>Close</Button>}
+      >
+        {openSend &&
+          (openSend.recipients.length === 0 ? (
+            <EmptyState title="Nobody was emailed" />
+          ) : (
+            <ul className="divide-y divide-line rounded-lg border border-line text-sm" aria-label="Emails in this send">
+              {openSend.recipients.map((r) => (
+                <li key={r.nurseId + r.email} className="flex flex-wrap items-center gap-2 p-3">
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium text-ink">{r.nurseName}</span>
+                    <span className="block text-ink-muted">{r.email || 'No email address'}</span>
+                    {r.status === 'FAILED' && <span className="block text-danger">{r.errorMessage || 'Not sent'}</span>}
+                  </span>
+                  <Badge tone={r.status === 'SENT' ? 'success' : r.status === 'FAILED' ? 'danger' : r.status === 'MOCK_SENT' ? 'neutral' : 'warning'}>
+                    {r.status === 'SENT' ? 'Sent' : r.status === 'FAILED' ? 'Not sent' : r.status === 'MOCK_SENT' ? 'Test mode' : 'Waiting'}
+                  </Badge>
+                  {r.status !== 'FAILED' && (
+                    <Button
+                      size="sm"
+                      icon={Eye}
+                      aria-label={`View the email to ${r.nurseName}`}
+                      onClick={() =>
+                        setViewingEmail({ subject: r.subject, recipientName: r.nurseName, recipientEmail: r.email, html: r.fullBodyHtml || notKeptHtml(r.bodyPreview) })
+                      }
+                    >
+                      View email
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ))}
+      </Dialog>
+
+      <Dialog
+        open={!!viewingEmail}
+        onClose={() => setViewingEmail(null)}
+        size="lg"
+        title={viewingEmail ? `Email to ${viewingEmail.recipientName}` : ''}
+        description={viewingEmail ? `${viewingEmail.recipientEmail}. Subject: ${viewingEmail.subject}` : undefined}
+        footer={<Button onClick={() => setViewingEmail(null)}>Back</Button>}
+      >
+        {viewingEmail && <EmailHtmlPreview html={viewingEmail.html} className="h-[28rem]" />}
+      </Dialog>
     </div>
   );
 };

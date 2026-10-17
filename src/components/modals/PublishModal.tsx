@@ -276,7 +276,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         });
 
       // 2. Find latest published version for diffing
-      // Only this roster's versions (the Publish page passes every roster's).
+      // Only this roster's versions (it is given every roster's).
       const publishedList = versions.filter((v) => v.isPublished && v.scheduleId === schedule.id);
       if (publishedList.length > 0) {
         publishedList.sort((a, b) => b.number - a.number);
@@ -1132,7 +1132,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                       : `Published version ${createdVersion.number}: ${emails(failed.length)} not sent`
                   }
                 >
-                  Nurses can confirm they have seen it. Their replies show on the Publish screen.
+                  Nurses can confirm they have seen it. Their replies show on Sent rosters.
                 </Notice>
                 {failed.length > 0 && (
                   <Notice tone="danger" title="Not sent">

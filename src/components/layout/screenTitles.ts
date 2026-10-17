@@ -20,7 +20,7 @@ export const SCREEN_NAMES: Record<AppRoute, string> = {
   nurses: 'Nurses',
   doctors: 'Doctors',
   history: 'History',
-  publish: 'Publish',
+  publish: 'Sent rosters',
   reports: 'Reports',
   audit: 'Audit trail',
   settings: 'Settings',

@@ -186,9 +186,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/PublishModal.tsx": {
-    "mtime": 1792263686.0320125,
-    "seen": 1792263728.392741,
-    "ast_hash": "1657245930dbc5a1862f25ec9539143f",
+    "mtime": 1792263957.2202272,
+    "seen": 1792264381.3565214,
+    "ast_hash": "734020dda370e5fb3fb215edb02be094",
     "semantic_hash": ""
   },
   "src/components/modals/ShareModal.tsx": {
@@ -264,9 +264,9 @@
     "semantic_hash": ""
   },
   "src/components/views/DashboardView.tsx": {
-    "mtime": 1791957511.5422928,
-    "seen": 1791957562.298486,
-    "ast_hash": "de56f06313202729b18764d6f004cf91",
+    "mtime": 1792263957.2171538,
+    "seen": 1792264381.3565776,
+    "ast_hash": "9609b45a3334675f420575b7ca0a2ea9",
     "semantic_hash": ""
   },
   "src/components/views/DoctorsView.tsx": {
@@ -294,9 +294,9 @@
     "semantic_hash": ""
   },
   "src/components/views/PublishView.tsx": {
-    "mtime": 1791950940.5828934,
-    "seen": 1791951702.5078049,
-    "ast_hash": "9b2137369c50e0828306dde47ab807e8",
+    "mtime": 1792264222.270591,
+    "seen": 1792264381.356585,
+    "ast_hash": "bfe45ecb8c3c013e23926a4fbc0e89f2",
     "semantic_hash": ""
   },
   "src/components/views/PublishedRosterView.tsx": {
@@ -552,15 +552,15 @@
     "semantic_hash": ""
   },
   "src/services/repository/FirestoreRepository.ts": {
-    "mtime": 1791362587.9772897,
-    "seen": 1791365225.134097,
-    "ast_hash": "efade1fea9c27c482a74a7ff42a88b76",
+    "mtime": 1792263839.007285,
+    "seen": 1792264381.3567216,
+    "ast_hash": "bddc8856f1f316efdd8b7d5e1fa35db4",
     "semantic_hash": ""
   },
   "src/services/repository/IRepository.ts": {
-    "mtime": 1791362587.9777637,
-    "seen": 1791365225.1340983,
-    "ast_hash": "1d2b619b14bbeeb078355d9f366b2bd1",
+    "mtime": 1792263823.8499658,
+    "seen": 1792264381.3567226,
+    "ast_hash": "ca90b458564a7c35a7c844e4156caef2",
     "semantic_hash": ""
   },
   "src/services/repository/assignmentSync.ts": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1792263700.7460656,
-    "seen": 1792263728.3931208,
-    "ast_hash": "a03cea6f01074df0da04dc7769701b06",
+    "mtime": 1792264364.4207318,
+    "seen": 1792264381.3569136,
+    "ast_hash": "f24715b177c3e568ba39457bccc08833",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1792263700.7517521,
-    "seen": 1792263728.3931286,
-    "ast_hash": "1a196be7cf880c891ecf62b230140af4",
+    "mtime": 1792264364.4280427,
+    "seen": 1792264381.3569217,
+    "ast_hash": "ecaf6149751350a70a24896d345c08cb",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1608,9 +1608,9 @@
     "semantic_hash": ""
   },
   "src/services/publish/emailLogSize.ts": {
-    "mtime": 1791950940.5908406,
-    "seen": 1791951702.5079014,
-    "ast_hash": "b911ea3739bb5d223639cd922f17b670",
+    "mtime": 1792263957.2228155,
+    "seen": 1792264381.3567128,
+    "ast_hash": "b53a67fa8d92b08f532a7a88406777e5",
     "semantic_hash": ""
   },
   "tests/unit/emailLogSize.test.ts": {
@@ -1770,9 +1770,9 @@
     "semantic_hash": ""
   },
   "src/components/layout/screenTitles.ts": {
-    "mtime": 1791953752.6797318,
-    "seen": 1791954260.3661156,
-    "ast_hash": "cad3219a79f4013a5c6b131f8a0dbfbb",
+    "mtime": 1792263957.2141578,
+    "seen": 1792264381.3565054,
+    "ast_hash": "4033cd25cc0d52a7a4f12a5eeded3ff3",
     "semantic_hash": ""
   },
   "tests/unit/screenTitles.test.ts": {
@@ -2421,6 +2421,36 @@
     "mtime": 1792263530.4864302,
     "seen": 1792263728.3926315,
     "ast_hash": "5bf6f8e7622179571788c404c7681d43",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/sent-rosters.cjs": {
+    "mtime": 1792264313.8841689,
+    "seen": 1792264381.356402,
+    "ast_hash": "700eb2d47ddfa4d27244121108e49781",
+    "semantic_hash": ""
+  },
+  "src/services/publish/sentRosters.ts": {
+    "mtime": 1792263867.5647433,
+    "seen": 1792264381.3567188,
+    "ast_hash": "d73a424786ed3c92d288c4cedd64b7e8",
+    "semantic_hash": ""
+  },
+  "src/services/repository/paging.ts": {
+    "mtime": 1792263823.8300729,
+    "seen": 1792264381.3567297,
+    "ast_hash": "9b4aebc2a649088edc47b7bfbec7e0cd",
+    "semantic_hash": ""
+  },
+  "tests/unit/listPage.test.ts": {
+    "mtime": 1792263812.5767393,
+    "seen": 1792264381.3568275,
+    "ast_hash": "dd6c5c0ef4275e8e64de92cf88863676",
+    "semantic_hash": ""
+  },
+  "tests/unit/sentRosters.test.ts": {
+    "mtime": 1792263867.5620756,
+    "seen": 1792264381.3568602,
+    "ast_hash": "37d5fd1d898428437918537b3c8ba254",
     "semantic_hash": ""
   }
 }

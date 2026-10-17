@@ -21,11 +21,16 @@ import {
   writeBatch,
   runTransaction,
   getDocsFromServer,
+  orderBy,
+  limit,
+  startAfter,
+  QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import { CollectionName, EntityForCollection, Schedule } from '../../types';
 import { mergeScheduleRanges, rangesOverlap, ScheduleRange, toScheduleRange } from '../schedule/scheduleRanges';
 import { IRepository, SubscribeCallback, Unsubscribe } from './IRepository';
+import type { Page, PageRequest } from './paging';
 import { quotaTracker } from '../firebase/quotaTracker';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { LiveCollectionCache } from './liveCollectionCache';
@@ -155,6 +160,29 @@ export class FirestoreRepository implements IRepository {
       console.warn(`[FirestoreRepository] list failed for ${colName}:`, err?.message || err);
       // Never pretend a failed read is an empty collection: screens would show
       // an empty roster and a later save could delete the real records.
+      throw err;
+    }
+  }
+
+  /** One page, ordered by one field (a single field index, so no new index is needed). */
+  async listPage<T extends CollectionName>(colName: T, req: PageRequest): Promise<Page<EntityForCollection<T>>> {
+    try {
+      const colRef = collection(this.db, colName);
+      // The cursor is the last document of the page before; ties on the field keep Firestore's id order.
+      const q =
+        req.cursor instanceof QueryDocumentSnapshot
+          ? query(colRef, orderBy(req.orderBy, req.direction), startAfter(req.cursor), limit(req.limit + 1))
+          : query(colRef, orderBy(req.orderBy, req.direction), limit(req.limit + 1));
+      const snapshot = await getDocs(q);
+      const docs = snapshot.docs.slice(0, req.limit);
+      return {
+        items: docs.map((d) => ({ id: d.id, ...d.data() } as EntityForCollection<T>)),
+        hasMore: snapshot.docs.length > req.limit,
+        cursor: docs[docs.length - 1],
+      };
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
+      console.warn(`[FirestoreRepository] listPage failed for ${colName}:`, err?.message || err);
       throw err;
     }
   }
