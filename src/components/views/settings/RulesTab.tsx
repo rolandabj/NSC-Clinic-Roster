@@ -7,24 +7,29 @@
  * Every rule the roster generator and the checker use, written as a plain
  * sentence with its number in place. Each rule has an on/off switch and a
  * "Must" (never broken) or "Try to" (followed when possible) choice. Changes
- * save straight away.
+ * are a draft, saved only by Save, with Cancel (UI overhaul Phase 8, slice 1c).
  */
 
 import React, { useEffect, useState } from 'react';
-import { Check, ChevronDown, Lock, Minus, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { ChevronDown, Lock, Minus, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
-import { MAX_CONSECUTIVE_SHIFTS_NAME, RuleSyncService } from '../../../services/rules/ruleSyncService';
+import { RuleSyncService } from '../../../services/rules/ruleSyncService';
 import { Rule, RuleTemplateKey } from '../../../types';
 import { LATE_DUTY_RULE_WORDS, resolveRule } from '../../../services/engine/SchedulingEngine';
 import { WEEK_HOURS_DEFAULT, WEEK_HOURS_RULE } from '../../../services/engine/weekHours';
 import { confirmDialog, notify } from '../../common/dialogs';
-import { SaveNotifier } from './shared';
+import { Badge, Button, IconButton, Notice, cx } from '../../ui';
+import { SaveBar, SaveNotifier } from './shared';
 
 interface RulesTabProps {
   rules: Rule[];
   setRules: React.Dispatch<React.SetStateAction<Rule[]>>;
   loadData: () => void;
   triggerSaveNotification: SaveNotifier;
+  changed: boolean;
+  saving: boolean;
+  onSave: () => void;
+  onCancel: () => void;
 }
 
 interface NumberField {
@@ -71,7 +76,7 @@ const GROUPS: RuleGroup[] = [
         fallback: 1,
         title: 'Nurse Clinic',
         sentence: 'Keep {value} nurse(s) at Nurse Clinic every day, not with a doctor.',
-        help: 'Only nurses with the Nurse Clinic option in their profile are chosen. She also does blood collection.',
+        help: 'Only nurses with the Nurse Clinic option in their profile are chosen. That nurse also does blood collection.',
         value: { min: 1, max: 5 },
       },
       {
@@ -81,7 +86,7 @@ const GROUPS: RuleGroup[] = [
         fallback: 1,
         title: 'Free nurse every hour',
         sentence: 'Keep at least {value} free nurse(s) at every opening hour.',
-        help: 'A free nurse is not with a doctor at that hour. The Nurse Clinic nurse counts, and so does a doctor’s nurse after her doctor leaves. Not checked on public holidays.',
+        help: 'A free nurse is not with a doctor at that hour. The Nurse Clinic nurse counts, and so does a doctor’s nurse once their doctor leaves. Not checked on public holidays.',
         value: { min: 1, max: 5 },
       },
       {
@@ -90,7 +95,7 @@ const GROUPS: RuleGroup[] = [
         keywords: ['senior nurse', 'senior on duty'],
         title: 'Senior nurse',
         sentence: 'At least one senior nurse is on duty every day.',
-        help: 'Any shift counts; she does not need to cover all opening hours.',
+        help: 'Any shift counts; the senior nurse does not need to cover all opening hours.',
       },
     ],
   },
@@ -104,8 +109,8 @@ const GROUPS: RuleGroup[] = [
         keywords: ['working hours', 'max hours', 'period hours', 'overwork', 'hour limit'],
         fallback: 105,
         title: 'Hours limit',
-        sentence: 'A nurse works at most {value} of her hours goal.',
-        help: '100% means never over her goal. Above 100%, she may go over by at most one shift (8 hours), and only when a doctor or the free nurse would otherwise have nobody.',
+        sentence: 'A nurse works at most {value} of their hours goal.',
+        help: '100% means never over their goal. Above 100%, a nurse may go over by at most one shift (8 hours), and only when a doctor or the free nurse would otherwise have nobody.',
         value: { min: 100, max: 150, step: 5, unit: '%' },
         softMeaning: 'Going over is only reported, not stopped.',
       },
@@ -116,7 +121,7 @@ const GROUPS: RuleGroup[] = [
         fallback: WEEK_HOURS_DEFAULT,
         title: 'Hours in any 7 days',
         sentence: 'A nurse works at most {value} hours in any 7 days in a row.',
-        help: 'Shift hours only, not leave. The last days of the previous roster count too, so a week across two rosters is checked as one week. This keeps hours she is catching up from piling into one week.',
+        help: 'Shift hours only, not leave. The last days of the previous roster count too, so a week across two rosters is checked as one week. This keeps hours a nurse is catching up from piling into one week.',
         value: { min: 24, max: 96 },
         softMeaning: 'More hours are only reported, not stopped.',
       },
@@ -171,7 +176,7 @@ const ALWAYS_ON: { key: RuleTemplateKey; title: string; sentence: string }[] = [
   {
     key: 'STRICT_PROFILE_ALLOCATION',
     title: 'Doctors in the profile',
-    sentence: 'A nurse with doctors or specialties in her profile only works with those.',
+    sentence: 'A nurse with doctors or specialties in their profile only works with those.',
   },
 ];
 
@@ -224,7 +229,7 @@ const TimeBox: React.FC<{ value: string; disabled: boolean; label: string; onCom
   );
 };
 
-/** On/off switch. */
+/** On/off switch (24 px high, so it is easy to hit). */
 const Toggle: React.FC<{ on: boolean; label: string; onChange: () => void }> = ({ on, label, onChange }) => (
   <button
     type="button"
@@ -232,11 +237,9 @@ const Toggle: React.FC<{ on: boolean; label: string; onChange: () => void }> = (
     aria-checked={on}
     aria-label={label}
     onClick={onChange}
-    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1 ${
-      on ? 'bg-indigo-600' : 'bg-slate-300'
-    }`}
+    className={cx('relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors', on ? 'bg-brand' : 'bg-control')}
   >
-    <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : 'translate-x-0.5'}`} />
+    <span className={cx('inline-block size-5 rounded-full bg-white shadow transition-transform', on ? 'translate-x-5' : 'translate-x-0.5')} />
   </button>
 );
 
@@ -248,7 +251,7 @@ const Strictness: React.FC<{ value: 'HARD' | 'SOFT'; disabled: boolean; softMean
   onChange,
   label,
 }) => (
-  <div role="radiogroup" aria-label={label} className={`inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-[11px] ${disabled ? 'opacity-50' : ''}`}>
+  <div role="radiogroup" aria-label={label} className={cx('inline-flex rounded-md border border-line-strong bg-sunken p-0.5 text-sm', disabled && 'opacity-50')}>
     {(['HARD', 'SOFT'] as const).map((option) => (
       <button
         key={option}
@@ -258,9 +261,10 @@ const Strictness: React.FC<{ value: 'HARD' | 'SOFT'; disabled: boolean; softMean
         disabled={disabled}
         title={option === 'HARD' ? 'Never broken' : softMeaning || 'Followed when possible'}
         onClick={() => onChange(option)}
-        className={`rounded px-2 py-0.5 font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
-          value === option ? 'bg-white text-indigo-700 font-semibold shadow-xs ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-800'
-        }`}
+        className={cx(
+          'min-h-6 rounded px-2.5 font-medium transition-colors',
+          value === option ? 'bg-surface font-semibold text-brand-strong shadow-card ring-1 ring-line' : 'text-ink-muted hover:text-ink'
+        )}
       >
         {option === 'HARD' ? 'Must' : 'Try to'}
       </button>
@@ -286,16 +290,16 @@ const Stepper: React.FC<{ value: number; field: NumberField; disabled: boolean; 
     if (next !== value) onCommit(next);
   };
   return (
-    <span className={`inline-flex items-center gap-1 align-middle ${disabled ? 'opacity-50' : ''}`}>
-      <span className="inline-flex items-center rounded-md border border-slate-300 bg-white">
+    <span className={cx('inline-flex items-center gap-1 align-middle', disabled && 'opacity-50')}>
+      <span className="inline-flex items-center rounded-md border border-control bg-surface">
         <button
           type="button"
           aria-label={`Decrease ${label}`}
           disabled={disabled || value <= field.min}
           onClick={() => commit(value - step)}
-          className="px-1 py-0.5 text-slate-500 hover:text-slate-900 disabled:opacity-40"
+          className="flex size-6 items-center justify-center text-ink-muted hover:text-ink disabled:opacity-40"
         >
-          <Minus className="h-3 w-3" aria-hidden="true" />
+          <Minus className="size-3.5" aria-hidden="true" />
         </button>
         <input
           type="number"
@@ -315,64 +319,42 @@ const Stepper: React.FC<{ value: number; field: NumberField; disabled: boolean; 
           onKeyDown={(e) => {
             if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
           }}
-          className="w-10 border-x border-slate-200 py-0.5 text-center font-semibold tabular-nums text-slate-900 focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="h-6 w-11 border-x border-line text-center font-semibold tabular-nums text-ink focus:outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
         <button
           type="button"
           aria-label={`Increase ${label}`}
           disabled={disabled || value >= field.max}
           onClick={() => commit(value + step)}
-          className="px-1 py-0.5 text-slate-500 hover:text-slate-900 disabled:opacity-40"
+          className="flex size-6 items-center justify-center text-ink-muted hover:text-ink disabled:opacity-40"
         >
-          <Plus className="h-3 w-3" aria-hidden="true" />
+          <Plus className="size-3.5" aria-hidden="true" />
         </button>
       </span>
-      {field.unit && <span className="text-slate-600">{field.unit}</span>}
+      {field.unit && <span className="text-ink-muted">{field.unit}</span>}
     </span>
   );
 };
 
-export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, triggerSaveNotification }) => {
+export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, triggerSaveNotification, changed, saving, onSave, onCancel }) => {
   const repo = getRepository();
   const [isSyncing, setIsSyncing] = useState(false);
   const [showOther, setShowOther] = useState(false);
 
-  // An old consecutive shifts rule name with a number in it ("... = 6") is renamed once,
-  // so it never contradicts the number set here.
-  useEffect(() => {
-    const stale = rules.find((r) => r.templateKey === 'MAX_CONSECUTIVE_DAYS' && r.name !== MAX_CONSECUTIVE_SHIFTS_NAME);
-    if (!stale) return;
-    setRules((prev) => prev.map((r) => (r.id === stale.id ? { ...r, name: MAX_CONSECUTIVE_SHIFTS_NAME } : r)));
-    repo.update('rules', stale.id, { name: MAX_CONSECUTIVE_SHIFTS_NAME }).catch((err) => console.warn('Could not rename the rule:', err));
-  }, [rules]);
-
-  const saveRule = async (rule: Rule, baseUpdates: Partial<Rule>, message: string) => {
-    // The consecutive shifts rule keeps a name without a number, so it never contradicts its value.
-    const updates =
-      rule.templateKey === 'MAX_CONSECUTIVE_DAYS' && rule.name !== MAX_CONSECUTIVE_SHIFTS_NAME
-        ? { ...baseUpdates, name: MAX_CONSECUTIVE_SHIFTS_NAME }
-        : baseUpdates;
+  // A change goes into the draft; Save writes it (SettingsView, ruleDraft.ts).
+  const saveRule = (rule: Rule, updates: Partial<Rule>, _message?: string) =>
     setRules((prev) => prev.map((r) => (r.id === rule.id ? { ...r, ...updates } : r)));
-    try {
-      await repo.update('rules', rule.id, updates);
-      triggerSaveNotification(message);
-    } catch (err: any) {
-      notify(`Not saved: ${err?.message || err}`, 'error');
-      loadData();
-      return;
-    }
-  };
 
   const addMissingRules = async () => {
     setIsSyncing(true);
     try {
       const result = await RuleSyncService.syncStandardRules();
       setRules(result.rules);
-      triggerSaveNotification('Standard rules checked; any missing ones were added.');
+      triggerSaveNotification('The missing rules were added.');
       loadData();
     } catch (err) {
       console.error('Failed to add standard rules:', err);
-      notify('The standard rules could not be added.', 'error');
+      notify('The missing rules could not be added.', 'error');
     } finally {
       setIsSyncing(false);
     }
@@ -408,9 +390,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
             disabled={!enabled}
             value={time}
             onCommit={(v) => saveRule(rule, { params: { ...(rule.params || {}), thresholdTime: v } }, `${def.title}: late from ${v}.`)}
-            className={`mx-0.5 rounded-md border border-slate-300 bg-white px-1.5 py-0.5 align-middle font-semibold tabular-nums text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
-              enabled ? '' : 'opacity-50'
-            }`}
+            className={cx('mx-0.5 h-7 rounded-md border border-control bg-surface px-1.5 align-middle font-semibold tabular-nums text-ink', !enabled && 'opacity-50')}
           />
         );
       }
@@ -419,70 +399,59 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-6 text-sm">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">Scheduling rules</h2>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            These rules guide the roster generator and the roster checker. Change a number and it saves straight away.
-            <span className="ml-1 text-slate-600">
-              <strong className="font-semibold text-slate-800">Must</strong> rules are never broken;{' '}
-              <strong className="font-semibold text-slate-800">Try to</strong> rules are followed when possible.
-            </span>
+          <h2 className="text-lg font-semibold text-ink">Rules</h2>
+          <p className="mt-1 max-w-2xl text-ink-muted">
+            The rules the roster generator and the roster check follow. <strong className="text-ink">Must</strong> rules are never broken;{' '}
+            <strong className="text-ink">Try to</strong> rules are followed when possible. Changes apply the next time you fill or check a roster.
           </p>
         </div>
         {missingCount > 0 && (
-          <button
-            type="button"
-            onClick={addMissingRules}
-            disabled={isSyncing}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} aria-hidden="true" />
-            {isSyncing ? 'Adding…' : `Add ${missingCount} missing rule${missingCount === 1 ? '' : 's'}`}
-          </button>
+          <Button icon={RefreshCw} busy={isSyncing} disabled={changed} onClick={addMissingRules} className="shrink-0">
+            Add {missingCount === 1 ? 'the missing rule' : `the ${missingCount} missing rules`}
+          </Button>
         )}
       </div>
+      {changed && missingCount > 0 && (
+        <Notice tone="info" title="Save or cancel your changes first">
+          Missing rules can be added once your changes are saved or cancelled.
+        </Notice>
+      )}
 
-      {/* Rule groups */}
       {GROUPS.map((group) => (
         <section key={group.title} aria-labelledby={`rules-${slug(group.title)}`} className="space-y-2">
           <div>
-            <h3 id={`rules-${slug(group.title)}`} className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <h3 id={`rules-${slug(group.title)}`} className="text-base font-semibold text-ink">
               {group.title}
             </h3>
-            <p className="text-xs text-slate-400">{group.description}</p>
+            <p className="text-ink-muted">{group.description}</p>
           </div>
-          <div className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="divide-y divide-line overflow-hidden rounded-lg border border-line">
             {group.rules.map((def) => {
               const rule = findRule(rules, def);
               if (!rule) {
                 return (
-                  <div key={def.key} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                  <div key={def.key} className="flex items-center justify-between gap-3 px-4 py-3">
                     <div>
-                      <p className="font-medium text-slate-700">{def.title}</p>
-                      <p className="text-xs text-slate-400">Not set up yet: until it is added, the generator and the checker use the usual setting.</p>
+                      <p className="font-medium text-ink">{def.title}</p>
+                      <p className="text-ink-muted">Not set up yet: until it is added, the roster generator and the roster check use the usual setting.</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={addMissingRules}
-                      disabled={isSyncing}
-                      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                    >
+                    <Button size="sm" busy={isSyncing} disabled={changed} onClick={addMissingRules}>
                       Add
-                    </button>
+                    </Button>
                   </div>
                 );
               }
               const enabled = rule.enabled !== false;
               const severity = (rule.severity || 'HARD') as 'HARD' | 'SOFT';
               return (
-                <div key={rule.id} className={`flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-start sm:justify-between ${enabled ? '' : 'bg-slate-50/60'}`}>
+                <div key={rule.id} className={cx('flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-start sm:justify-between', !enabled && 'bg-sunken')}>
                   <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-medium ${enabled ? 'text-slate-900' : 'text-slate-500'}`}>{def.title}</p>
-                    <p className={`mt-1 text-sm leading-7 ${enabled ? 'text-slate-700' : 'text-slate-400'}`}>{renderSentence(def, rule, enabled)}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">{enabled ? def.help : 'Switched off: the generator and the checker ignore this rule.'}</p>
+                    <p className={cx('font-semibold', enabled ? 'text-ink' : 'text-ink-muted')}>{def.title}</p>
+                    <p className={cx('mt-1 leading-8', enabled ? 'text-ink' : 'text-ink-muted')}>{renderSentence(def, rule, enabled)}</p>
+                    <p className="mt-0.5 text-ink-muted">{enabled ? def.help : 'Switched off: the roster generator and the roster check leave this rule out.'}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3 sm:pt-0.5">
                     <Strictness
@@ -490,13 +459,9 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
                       disabled={!enabled}
                       softMeaning={def.softMeaning}
                       label={`${def.title}: must or try to`}
-                      onChange={(v) => saveRule(rule, { severity: v }, `${def.title}: ${v === 'HARD' ? 'must' : 'try to'}.`)}
+                      onChange={(v) => saveRule(rule, { severity: v })}
                     />
-                    <Toggle
-                      on={enabled}
-                      label={`${def.title} ${enabled ? 'on' : 'off'}`}
-                      onChange={() => saveRule(rule, { enabled: !enabled }, `${def.title} switched ${enabled ? 'off' : 'on'}.`)}
-                    />
+                    <Toggle on={enabled} label={`${def.title} on`} onChange={() => saveRule(rule, { enabled: !enabled })} />
                   </div>
                 </div>
               );
@@ -505,50 +470,42 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
         </section>
       ))}
 
-      {/* Always applied */}
-      <section className="space-y-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Always applied</h3>
-        <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
+      <section aria-labelledby="rules-always" className="space-y-2">
+        <h3 id="rules-always" className="text-base font-semibold text-ink">
+          Always applied
+        </h3>
+        <div className="divide-y divide-line rounded-lg border border-line">
           {ALWAYS_ON.map((r) => (
             <div key={r.key} className="flex items-center justify-between gap-3 px-4 py-3">
               <div>
-                <p className="text-sm font-medium text-slate-900">{r.title}</p>
-                <p className="text-sm text-slate-600">{r.sentence}</p>
+                <p className="font-semibold text-ink">{r.title}</p>
+                <p className="text-ink-muted">{r.sentence}</p>
               </div>
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                <Lock className="h-3 w-3" aria-hidden="true" />
-                Always on
-              </span>
+              <Badge icon={Lock}>Always on</Badge>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Old custom rules the generator does not use */}
       {otherRules.length > 0 && (
         <section className="space-y-2">
-          <button
-            type="button"
-            onClick={() => setShowOther((v) => !v)}
-            aria-expanded={showOther}
-            className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-800"
-          >
-            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showOther ? '' : '-rotate-90'}`} aria-hidden="true" />
-            Other saved rules ({otherRules.length}) — not used by the roster generator
-          </button>
+          <Button size="sm" variant="ghost" icon={ChevronDown} aria-expanded={showOther} onClick={() => setShowOther((v) => !v)}>
+            Other saved rules ({otherRules.length}). The roster generator does not use these.
+          </Button>
           {showOther && (
-            <div className="divide-y divide-slate-100 rounded-lg border border-dashed border-slate-300 bg-white">
+            <div className="divide-y divide-line rounded-lg border border-dashed border-line-strong">
               {otherRules.map((rule) => (
-                <div key={rule.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
-                  <span className="text-slate-600">{rule.name}</span>
-                  <button
-                    type="button"
-                    aria-label={`Delete ${rule.name}`}
+                <div key={rule.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                  <span className="text-ink-muted">{rule.name}</span>
+                  <IconButton
+                    label={`Delete ${rule.name}`}
+                    icon={Trash2}
+                    disabled={changed}
                     onClick={async () => {
                       if (
                         await confirmDialog({
-                          title: 'Delete rule',
-                          message: `Delete "${rule.name}"? It is not used by the roster generator.`,
+                          title: 'Delete this rule?',
+                          message: `Delete "${rule.name}"? The roster generator does not use it.`,
                           confirmLabel: 'Delete',
                           danger: true,
                         })
@@ -558,14 +515,11 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
                           triggerSaveNotification('Rule deleted.');
                           loadData();
                         } catch (err: any) {
-                          notify(`Could not delete the rule: ${err?.message || 'unknown error'}.`, 'error');
+                          notify(`The rule could not be deleted: ${err?.message || 'unknown error'}.`, 'error');
                         }
                       }
                     }}
-                    className="rounded p-1 text-slate-400 hover:text-rose-600"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
+                  />
                 </div>
               ))}
             </div>
@@ -573,10 +527,7 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
         </section>
       )}
 
-      <p className="flex items-center gap-1.5 text-xs text-slate-400">
-        <Check className="h-3.5 w-3.5" aria-hidden="true" />
-        Changes apply the next time you generate or check a roster.
-      </p>
+      <SaveBar changed={changed} saving={saving} onSave={onSave} onCancel={onCancel} />
     </div>
   );
 };

@@ -42,6 +42,8 @@ import {
 } from '../../types/settings';
 import { Badge, Field, PageHeader, Select, cx } from '../ui';
 import { addLeaveGuard, isChanged } from '../common/leaveGuard';
+import { ruleChanges } from '../../services/rules/ruleDraft';
+import { MAX_CONSECUTIVE_SHIFTS_NAME } from '../../services/rules/ruleSyncService';
 import { SEED_CLINIC_PROFILE } from '../../services/seed/seedData';
 import { notify } from '../common/dialogs';
 import { AccessManagementPanel } from './AccessManagementPanel';
@@ -222,8 +224,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  // Rules: a draft of the whole list, saved only by Save (Phase 8, slice 1c).
+  const [rulesDraft, setRulesDraft] = useState<Rule[]>([]);
+  const [rulesSaving, setRulesSaving] = useState(false);
+  useEffect(() => setRulesDraft(rules), [rules]);
+  const rulesToSave = ruleChanges(rules, rulesDraft);
+  const rulesChanged = rulesToSave.length > 0;
+  // An old consecutive shifts rule name with a number in it ("... = 6") is renamed once, so it
+  // never contradicts the number set here.
+  useEffect(() => {
+    const stale = rules.find((r) => r.templateKey === 'MAX_CONSECUTIVE_DAYS' && r.name !== MAX_CONSECUTIVE_SHIFTS_NAME);
+    if (!stale) return;
+    setRules((prev) => prev.map((r) => (r.id === stale.id ? { ...r, name: MAX_CONSECUTIVE_SHIFTS_NAME } : r)));
+    repo.update('rules', stale.id, { name: MAX_CONSECUTIVE_SHIFTS_NAME }).catch((err) => console.warn('Could not rename the rule:', err));
+  }, [rules]);
+
+  const saveRules = async () => {
+    if (rulesSaving || !rulesChanged) return;
+    setRulesSaving(true);
+    try {
+      for (const { id, updates } of rulesToSave) await repo.update('rules', id, updates);
+      setRules(rulesDraft);
+      triggerSaveNotification(`Rules saved: ${rulesToSave.length === 1 ? '1 rule' : `${rulesToSave.length} rules`} changed. They apply the next time you fill or check a roster.`);
+    } catch (err: any) {
+      notify(`The rules were not all saved. ${err?.message || err}`, 'error');
+      // What was saved before the failure is read again; the draft keeps the rest.
+      const fresh = await repo.list('rules').catch(() => null);
+      if (fresh) setRules(fresh);
+    } finally {
+      setRulesSaving(false);
+    }
+  };
+
   // Unsaved changes: named in the menu, asked about before leaving Settings or closing the tab.
-  const unsavedSections = [clinicChanged ? 'Clinic and opening hours' : '', emailChanged ? 'Email' : ''].filter(Boolean);
+  const unsavedSections = [clinicChanged ? 'Clinic and opening hours' : '', rulesChanged ? 'Rules' : '', emailChanged ? 'Email' : ''].filter(Boolean);
   const unsavedRef = useRef(unsavedSections);
   unsavedRef.current = unsavedSections;
   useEffect(() => {
@@ -232,7 +266,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         ? null
         : unsavedRef.current.length === 1
           ? `${unsavedRef.current[0]} has changes that are not saved.`
-          : `${unsavedRef.current[0]}, and ${unsavedRef.current[1]}, have changes that are not saved.`
+          : `${unsavedRef.current.slice(0, -1).join(', ')}, and ${unsavedRef.current[unsavedRef.current.length - 1]}, have changes that are not saved.`
     );
     const warn = (e: BeforeUnloadEvent) => {
       if (unsavedRef.current.length === 0) return;
@@ -358,7 +392,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       >
                         <Icon className="size-4 shrink-0" aria-hidden="true" />
                         <span>{t.label}</span>
-                        {((t.id === 'clinic' && clinicChanged) || (t.id === 'email' && emailChanged)) && (
+                        {((t.id === 'clinic' && clinicChanged) || (t.id === 'rules' && rulesChanged) || (t.id === 'email' && emailChanged)) && (
                           <Badge tone="warning" className="ml-auto">
                             Not saved
                           </Badge>
@@ -437,10 +471,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {/* 7. RULES & CUSTOM RULE BUILDER */}
         {activeTab === 'rules' && (
           <RulesTab
-            rules={rules}
-            setRules={setRules}
+            rules={rulesDraft}
+            setRules={setRulesDraft}
             loadData={loadData}
             triggerSaveNotification={triggerSaveNotification}
+            changed={rulesChanged}
+            saving={rulesSaving}
+            onSave={saveRules}
+            onCancel={() => setRulesDraft(rules)}
           />
         )}
 

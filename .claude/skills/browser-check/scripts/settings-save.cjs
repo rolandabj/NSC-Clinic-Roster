@@ -60,6 +60,35 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   check('it says everything is saved', /Everything is saved/.test(await main.innerText()));
   check('the top bar shows the new name', /North Clinic/.test(await page.locator('header').first().innerText()));
 
+  // 4b. Rules (slice 1c): a switch and a number are a draft until Save.
+  await nav.getByRole('link', { name: /^Rules/ }).click();
+  await page.getByRole('heading', { name: 'Rules', level: 2, exact: true }).waitFor({ timeout: 10000 });
+  await page.waitForTimeout(400);
+  check('the Rules section has no text under 12 px', (await smallText(main)).length === 0, (await smallText(main)).slice(0, 5).join(' | '));
+  // The test page starts with no rules: adding the missing ones happens at once.
+  const add = main.getByRole('button', { name: /^Add the (\d+ )?missing rules?$/ });
+  if (await add.count()) {
+    await add.click();
+    await main.getByRole('switch').first().waitFor({ timeout: 10000 });
+    check('Add the missing rules saves them at once', (await col('rules')).length > 0 && !/Not saved/.test(await nav.innerText()));
+  }
+  const sw = main.getByRole('switch').first();
+  const swName = (await sw.getAttribute('aria-label')).replace(/ on$/, '');
+  const ruleBefore = (await col('rules')).find((r) => swName.length > 0) && (await col('rules'));
+  const wasOn = (await sw.getAttribute('aria-checked')) === 'true';
+  await sw.click();
+  check('a rule switched is a draft, named in the menu', /Not saved/.test(await nav.getByRole('link', { name: /^Rules/ }).innerText()));
+  const savedNow = JSON.stringify((await col('rules')).map((r) => r.enabled));
+  check('and nothing is saved yet', savedNow === JSON.stringify(ruleBefore.map((r) => r.enabled)));
+  await main.getByRole('button', { name: 'Cancel', exact: true }).click();
+  check('Cancel puts the switch back', ((await sw.getAttribute('aria-checked')) === 'true') === wasOn);
+  await sw.click();
+  await main.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForTimeout(600);
+  const changedCount = (await col('rules')).filter((r, i) => r.enabled !== ruleBefore[i].enabled).length;
+  check('Save writes the one rule that changed', changedCount === 1, String(changedCount));
+  check('and the menu mark goes', !/Not saved/.test(await nav.innerText()));
+
   // 5. Email: leaving with a change not saved asks first.
   await nav.getByRole('link', { name: /^Email/ }).click();
   await page.waitForTimeout(400);

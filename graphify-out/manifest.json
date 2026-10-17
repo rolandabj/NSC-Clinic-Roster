@@ -318,9 +318,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
-    "mtime": 1792268341.9523065,
-    "seen": 1792268404.1562567,
-    "ast_hash": "c2fb7914121bb77e2e2e47cc5a120369",
+    "mtime": 1792268695.6257653,
+    "seen": 1792268765.2176113,
+    "ast_hash": "64db3ed7a1aea85ef06548d72df53bfd",
     "semantic_hash": ""
   },
   "src/components/views/WorkingHoursPeriodsPanel.tsx": {
@@ -372,9 +372,9 @@
     "semantic_hash": ""
   },
   "src/components/views/settings/RulesTab.tsx": {
-    "mtime": 1791362587.9670062,
-    "seen": 1791365225.1340299,
-    "ast_hash": "8335430741c42fc92ef39f376fdb07e2",
+    "mtime": 1792268695.6252613,
+    "seen": 1792268765.217622,
+    "ast_hash": "04a2e2ed754a9cab0496ab31ff1bce6b",
     "semantic_hash": ""
   },
   "src/components/views/settings/SeniorityTab.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1792268359.0441988,
-    "seen": 1792268404.1566672,
-    "ast_hash": "79c744738a6ba383e05773511f9b2b04",
+    "mtime": 1792268708.4397552,
+    "seen": 1792268765.217971,
+    "ast_hash": "617bc884f078e9f427b6bf2e697d0fcf",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1792268359.0493803,
-    "seen": 1792268404.15668,
-    "ast_hash": "408f7ec3aa5b51f5caf4fcf1a5d14117",
+    "mtime": 1792268708.4444017,
+    "seen": 1792268765.2179794,
+    "ast_hash": "b2659cef0435e2b4668a046fa081d7be",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -2478,9 +2478,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/settings-save.cjs": {
-    "mtime": 1792268212.4860263,
-    "seen": 1792268404.1560946,
-    "ast_hash": "71f6dd9a91a416000ffcd6844a7aeaa0",
+    "mtime": 1792268567.1963043,
+    "seen": 1792268765.217446,
+    "ast_hash": "2d0d0887693f7862d97fe4cdc90e70d8",
     "semantic_hash": ""
   },
   "src/components/common/leaveGuard.ts": {
@@ -2493,6 +2493,18 @@
     "mtime": 1792268084.5841823,
     "seen": 1792268404.156478,
     "ast_hash": "77e7876f35db9256f6728dd740df6263",
+    "semantic_hash": ""
+  },
+  "src/services/rules/ruleDraft.ts": {
+    "mtime": 1792268431.852203,
+    "seen": 1792268765.2177572,
+    "ast_hash": "a13c6354ace99e3ebe144b8e37e16312",
+    "semantic_hash": ""
+  },
+  "tests/unit/ruleDraft.test.ts": {
+    "mtime": 1792268425.5076694,
+    "seen": 1792268765.217903,
+    "ast_hash": "008f8e377546a2aec3175f54cd348b73",
     "semantic_hash": ""
   }
 }
