@@ -150,9 +150,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/DeleteScheduleModal.tsx": {
-    "mtime": 1791362587.9549289,
-    "seen": 1791365225.1339743,
-    "ast_hash": "d31decb793054dd6e22d3d1783958904",
+    "mtime": 1792236267.227044,
+    "seen": 1792236299.1747034,
+    "ast_hash": "6ee457033a15d4cc88a6d79a7299d24b",
     "semantic_hash": ""
   },
   "src/components/modals/DeleteVersionModal.tsx": {
@@ -198,9 +198,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/ShortcutsModal.tsx": {
-    "mtime": 1791950940.5748408,
-    "seen": 1791951702.5077546,
-    "ast_hash": "a58bcd7e8879e84ef8b435c9d7719df2",
+    "mtime": 1792235590.2166696,
+    "seen": 1792236299.174722,
+    "ast_hash": "049c131a71a30dc451aa10124719039b",
     "semantic_hash": ""
   },
   "src/components/modals/SwapManagerModal.tsx": {
@@ -312,9 +312,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1791950940.5868406,
-    "seen": 1791951702.5078082,
-    "ast_hash": "b2358b04daef738c451bc316456e73ef",
+    "mtime": 1792235539.0795283,
+    "seen": 1792236299.174789,
+    "ast_hash": "b2d40917b0f73c3a8a6af055db627cae",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1792234611.8993304,
-    "seen": 1792234623.4987998,
-    "ast_hash": "62157a4e5d81090e604c056942ec1dc3",
+    "mtime": 1792236287.4867675,
+    "seen": 1792236299.1752284,
+    "ast_hash": "df2ddf2e34d4eb46ba69eb2b1d2f9374",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1326,9 +1326,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/DoctorWeekChangeDialog.tsx": {
-    "mtime": 1791953561.0588377,
-    "seen": 1791953610.2209783,
-    "ast_hash": "0ff0ab981190fc3564ab3a2620a49c8b",
+    "mtime": 1792235627.9603102,
+    "seen": 1792236299.174707,
+    "ast_hash": "4600c5e543d2726cc5231c892c42d4da",
     "semantic_hash": ""
   },
   "src/services/engine/handMoveChecks.ts": {
@@ -1446,9 +1446,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/harness/seed.ts": {
-    "mtime": 1792231494.1608555,
-    "seen": 1792231935.7002032,
-    "ast_hash": "3c05d1a20fceabbce3d54686a97f0275",
+    "mtime": 1792235805.2453778,
+    "seen": 1792236299.1745808,
+    "ast_hash": "085bf946e286d365df94d327f456395e",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/harness/vite.config.ts": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1792234611.9063137,
-    "seen": 1792234623.4988081,
-    "ast_hash": "406a87aa8fb451baa81772baea315e1a",
+    "mtime": 1792236287.491607,
+    "seen": 1792236299.175242,
+    "ast_hash": "1517b7c84580a546f1c3e7bf65e3266f",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1716,9 +1716,9 @@
     "semantic_hash": ""
   },
   "src/components/ui/Dialog.tsx": {
-    "mtime": 1791950940.5828934,
-    "seen": 1791951702.507782,
-    "ast_hash": "6314443499bdf69b0e683030e8b4cb92",
+    "mtime": 1792236048.4526196,
+    "seen": 1792236299.1747556,
+    "ast_hash": "51c12281e82aa01085ff781e88bb0d05",
     "semantic_hash": ""
   },
   "src/components/ui/Field.tsx": {
@@ -1920,15 +1920,15 @@
     "semantic_hash": ""
   },
   "src/components/roster/FillDialog.tsx": {
-    "mtime": 1791950940.5748408,
-    "seen": 1791951702.5077615,
-    "ast_hash": "88b1270fb2597de80270adf4eecdeaae",
+    "mtime": 1792236267.2114556,
+    "seen": 1792236299.174731,
+    "ast_hash": "402c31775adec04a5a2aa4c437c35f7c",
     "semantic_hash": ""
   },
   "src/components/roster/RosterPicker.tsx": {
-    "mtime": 1791950940.5748408,
-    "seen": 1791951702.507765,
-    "ast_hash": "e84526ed0732d2269629ba40e4db2d78",
+    "mtime": 1792235557.8886676,
+    "seen": 1792236299.1747365,
+    "ast_hash": "db853b731039daf2e96ad07c5f11b830",
     "semantic_hash": ""
   },
   "src/components/roster/RosterSheetTabs.tsx": {
@@ -2343,6 +2343,12 @@
     "mtime": 1792234328.488411,
     "seen": 1792234623.4983015,
     "ast_hash": "940efa99b411cd3cdfb771f2227bf393",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/roster-dialogs.cjs": {
+    "mtime": 1792235805.246035,
+    "seen": 1792236299.1746225,
+    "ast_hash": "8bebc84dc95dfe997aafc282b7a44c4b",
     "semantic_hash": ""
   }
 }

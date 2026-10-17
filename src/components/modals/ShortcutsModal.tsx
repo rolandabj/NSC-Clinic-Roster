@@ -1,132 +1,93 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
- * Keyboard Shortcuts Cheat-Sheet Modal (Phase 14.9)
- * Triggered by '?' key or Help button.
+ *
+ * The keyboard shortcuts, opened with "?" anywhere or from the top bar. Only keys the app
+ * really handles are listed (useGridKeyboard, useRosterEdits, AppShell). On the shared Dialog
+ * since Phase 7, slice 3a, which also added Space, undo and redo.
  */
 
-import React, { useId } from 'react';
-import { X, Command, Keyboard } from 'lucide-react';
-import { useDialogA11y } from '../common/useDialogA11y';
+import React from 'react';
+import { Button, Dialog } from '../ui';
 
 interface ShortcutsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-interface ShortcutItem {
-  keys: string[];
-  action: string;
-  category: 'Navigation' | 'Editing' | 'Clipboard & History' | 'Global';
-}
-
-// Only shortcuts the app really supports are listed here.
-const SHORTCUTS: ShortcutItem[] = [
-  // Navigation
-  { keys: ['↑', '↓', '←', '→'], action: 'Navigate between roster cells', category: 'Navigation' },
-  { keys: ['Tab'], action: 'Move to next date in row', category: 'Navigation' },
-  { keys: ['Shift', 'Tab'], action: 'Move to previous date in row', category: 'Navigation' },
-
-  // Editing
-  { keys: ['Enter'], action: 'Open the duty and pairing editor for the selected cell', category: 'Editing' },
-  { keys: ['Delete'], action: 'Clear the selected cell (asks first for pinned or leave days)', category: 'Editing' },
-  { keys: ['Esc'], action: 'Exit the expanded roster view', category: 'Editing' },
-
-  // Clipboard & History
-  { keys: ['Ctrl / ⌘', 'C'], action: 'Copy the selected cell', category: 'Clipboard & History' },
-  { keys: ['Ctrl / ⌘', 'V'], action: 'Paste into the selected cell', category: 'Clipboard & History' },
-
-  // Global
-  { keys: ['?'], action: 'Open keyboard shortcut cheat-sheet', category: 'Global' },
-  { keys: ['Ctrl / ⌘', '\\'], action: 'Collapse / expand sidebar to maximize workspace', category: 'Global' },
+const GROUPS: { title: string; items: { keys: string[][]; action: string }[] }[] = [
+  {
+    title: 'Moving in the roster',
+    items: [
+      { keys: [['↑'], ['↓'], ['←'], ['→']], action: 'Move between cells, the hours and the day totals' },
+      { keys: [['Tab'], ['Shift', 'Tab']], action: 'Next or previous day in the row' },
+    ],
+  },
+  {
+    title: 'Changing a cell',
+    items: [
+      { keys: [['Enter']], action: 'Open the full editor for the cell' },
+      { keys: [['Space']], action: 'Open the quick choices for the cell' },
+      { keys: [['Delete'], ['Backspace']], action: 'Clear the cell (asks first on a pinned day or leave)' },
+      { keys: [['Ctrl', 'C']], action: 'Copy the cell' },
+      { keys: [['Ctrl', 'V']], action: 'Paste into the cell' },
+      { keys: [['Ctrl', 'Z']], action: 'Undo the last change' },
+      { keys: [['Ctrl', 'Y'], ['Ctrl', 'Shift', 'Z']], action: 'Redo' },
+    ],
+  },
+  {
+    title: 'Anywhere',
+    items: [
+      { keys: [['Esc']], action: 'Close a dialog or a menu, or leave Full screen' },
+      { keys: [['?']], action: 'Show these shortcuts' },
+      { keys: [['Ctrl', '\\']], action: 'Hide or show the menu labels' },
+    ],
+  },
 ];
 
-export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose }) => {
-  const titleId = useId();
-  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
+const Key: React.FC<{ children: string }> = ({ children }) => (
+  <kbd className="rounded border border-line-strong bg-surface px-1.5 py-0.5 font-mono text-xs font-semibold text-ink shadow-card">{children}</kbd>
+);
 
-  if (!isOpen) return null;
-
-  const categories = ['Navigation', 'Editing', 'Clipboard & History', 'Global'] as const;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-2xl max-w-2xl w-full p-5 space-y-4 text-xs font-sans text-slate-800 dark:text-slate-100"
-      >
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-              <Keyboard className="w-4 h-4" aria-hidden="true" />
-            </div>
-            <div>
-              <h3 id={titleId} className="font-bold text-slate-900 dark:text-white text-sm">
-                Workbook Keyboard Shortcuts
-              </h3>
-              <p className="text-[11px] text-slate-500 font-mono">
-                Press <kbd className="px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border text-[10px]">?</kbd> anywhere in the workbook
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-          >
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-          {categories.map((cat) => (
-            <div key={cat} className="space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                {cat}
-              </span>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {SHORTCUTS.filter((s) => s.category === cat).map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="p-2.5 rounded border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center justify-between gap-2"
-                  >
-                    <span className="text-slate-700 dark:text-slate-300 font-medium text-[11px]">
-                      {item.action}
-                    </span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {item.keys.map((k, i) => (
-                        <kbd
-                          key={i}
-                          className="px-1.5 py-0.5 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded text-[10px] font-mono font-bold text-slate-800 dark:text-slate-100 shadow-2xs"
-                        >
-                          {k}
-                        </kbd>
+export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose }) => (
+  <Dialog
+    open={isOpen}
+    onClose={onClose}
+    size="lg"
+    title="Keyboard shortcuts"
+    description="On a Mac, use ⌘ where Ctrl is shown."
+    footer={
+      <Button variant="primary" onClick={onClose}>
+        Close
+      </Button>
+    }
+  >
+    <div className="space-y-5 text-sm">
+      {GROUPS.map((group) => (
+        <section key={group.title} aria-label={group.title} className="space-y-2">
+          <h3 className="font-semibold text-ink">{group.title}</h3>
+          <dl className="divide-y divide-line rounded-lg border border-line">
+            {group.items.map((item) => (
+              <div key={item.action} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                <dt className="text-ink">{item.action}</dt>
+                <dd className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
+                  {item.keys.map((combo, i) => (
+                    <React.Fragment key={combo.join('+')}>
+                      {i > 0 && <span>or</span>}
+                      {combo.map((k, j) => (
+                        <React.Fragment key={k}>
+                          {j > 0 && <span aria-hidden="true">+</span>}
+                          <Key>{k}</Key>
+                        </React.Fragment>
                       ))}
-                    </div>
-                  </div>
-                ))}
+                    </React.Fragment>
+                  ))}
+                </dd>
               </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
-          <span>Excel-style navigation &amp; editing compliant</span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer"
-          >
-            Got it
-          </button>
-        </div>
-      </div>
+            ))}
+          </dl>
+        </section>
+      ))}
     </div>
-  );
-};
+  </Dialog>
+);

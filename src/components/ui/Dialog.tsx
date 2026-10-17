@@ -13,7 +13,7 @@
  *   </Dialog>
  */
 
-import React, { useId } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { IconButton } from './Button';
@@ -31,15 +31,29 @@ export const Dialog: React.FC<{
   size?: keyof typeof WIDTHS;
   /** alertdialog for a question that needs an answer before anything else. */
   role?: 'dialog' | 'alertdialog';
+  /** A dialog that opens over another dialog sits one layer higher. */
+  stacked?: boolean;
   children: React.ReactNode;
-}> = ({ open, onClose, title, description, footer, size = 'md', role = 'dialog', children }) => {
+}> = ({ open, onClose, title, description, footer, size = 'md', role = 'dialog', stacked, children }) => {
   const ref = useDialogA11y<HTMLDivElement>(open, onClose);
   const titleId = useId();
   const descriptionId = useId();
+  // Content that scrolls can take the focus, so the keyboard can scroll it (WCAG 2.1.1).
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [scrolls, setScrolls] = useState(false);
+  useEffect(() => {
+    const body = bodyRef.current;
+    if (!open || !body) return;
+    const measure = () => setScrolls(body.scrollHeight > body.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(body);
+    return () => observer.disconnect();
+  }, [open]);
   if (!open) return null;
   return (
     <div
-      className="fixed inset-0 z-[150] flex items-end justify-center bg-ink/50 sm:items-center sm:p-4"
+      className={cx('fixed inset-0 flex items-end justify-center bg-ink/50 sm:items-center sm:p-4', stacked ? 'z-[160]' : 'z-[150]')}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -68,7 +82,15 @@ export const Dialog: React.FC<{
           </div>
           <IconButton label="Close" icon={X} onClick={onClose} className="-mt-1 -mr-2" />
         </div>
-        <div className="min-h-0 overflow-y-auto px-5 py-4">{children}</div>
+        <div
+          ref={bodyRef}
+          tabIndex={scrolls ? 0 : undefined}
+          role={scrolls ? 'region' : undefined}
+          aria-labelledby={scrolls ? titleId : undefined}
+          className="min-h-0 overflow-y-auto px-5 py-4 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand"
+        >
+          {children}
+        </div>
         {footer && <div className="flex flex-col-reverse gap-2 border-t border-line px-5 py-3 sm:flex-row sm:justify-end">{footer}</div>}
       </div>
     </div>

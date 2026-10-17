@@ -141,6 +141,12 @@ if (params?.get('seed') === 'clean') {
   Object.assign(seed, { assignments: [amyDay], doctorSessions: [], leaveEntries: [] });
   seed.versions[0].snapshot.assignments = [amyDay];
 }
+// ?seed=pinned: Sara's Tuesday 17-11-2026 is a pinned day off from an approved request (the
+// roster screen's Unpin question).
+if (params?.get('seed') === 'pinned') {
+  (seed as any).locks = [{ id: 'lock-off-sara-2026-11-17', nurseId: 'sara', date: '2026-11-17', mode: 'OFF', createdAt: now }];
+  (seed as any).availabilityRequests = [{ id: 'rq-sara', nurseId: 'sara', date: '2026-11-17', available: false, status: 'APPROVED' }];
+}
 if (params?.get('email') === 'live') {
   seed.systemMetadata = [{ id: 'email_settings', emailMockMode: false, emailSenderName: 'Test Clinic' }];
 }

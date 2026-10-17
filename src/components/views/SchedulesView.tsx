@@ -1,14 +1,12 @@
 import { HoursHistory, hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
 import { loadHoursHistory, sameHoursHistory } from '../../services/hours/hoursHistoryService';
-import React, { useState, useEffect, useRef, useId, useMemo } from 'react';
-import { useDialogA11y } from '../common/useDialogA11y';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Button, Dialog, Field, Input, Notice } from '../ui';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import {
   CalendarRange,
   Plus,
   Send,
-  X,
-  Shield,
   Save,
 } from 'lucide-react';
 import { PageLoading } from '../common/PageLoading';
@@ -87,7 +85,7 @@ import { DeleteScheduleModal } from '../modals/DeleteScheduleModal';
 import { deleteEntireSchedule } from '../../services/schedule/scheduleDeletionService';
 import { populateRecurringDoctorSessionsForSchedule } from '../../services/schedule/doctorScheduleService';
 import { BACKUPS_KEPT, saveRosterBackup } from '../../services/history/rosterBackup';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, formatDateTime, formatDayDate } from '../../utils/dateUtils';
 import { usePhoneLayout } from '../roster/usePhoneLayout';
 import { RosterDayView } from '../roster/RosterDayView';
 import { cellLookupsOf } from '../workbook/grid/cellView';
@@ -319,13 +317,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   );
   const [isAllDaysExpanded, setIsAllDaysExpanded] = useState(false);
 
-  // Dialog keyboard and screen reader support
-  const saveTitleId = useId();
-  const overrideTitleId = useId();
-  const saveDialogRef = useDialogA11y<HTMLDivElement>(isSaveModalOpen, () => setIsSaveModalOpen(false));
-  const overrideDialogRef = useDialogA11y<HTMLDivElement>(isOverrideModalOpen && !!activeLockToOverride, () =>
-    setIsOverrideModalOpen(false)
-  );
+  const [copyError, setCopyError] = useState('');
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1203,8 +1195,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   };
 
   const [isBackupsOpen, setIsBackupsOpen] = useState(false);
-  const backupsTitleId = useId();
-  const backupsDialogRef = useDialogA11y<HTMLDivElement>(isBackupsOpen, () => setIsBackupsOpen(false));
   const backups = backupVersions
     .filter((v) => v.scheduleId === activeSchedule?.id)
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
@@ -1214,7 +1204,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (!activeSchedule) return;
     const ok = await confirmDialog({
       title: 'Restore this backup?',
-      message: `The roster's shifts go back to how they were on ${new Date(backup.timestamp).toLocaleString()} (${backup.snapshot.assignments.length} shift${backup.snapshot.assignments.length === 1 ? '' : 's'}). Pinned days and leave stay as they are now. You can undo this.`,
+      message: `The roster's shifts go back to how they were on ${formatDateTime(backup.timestamp)} (${backup.snapshot.assignments.length} shift${backup.snapshot.assignments.length === 1 ? '' : 's'}). Pinned days and leave stay as they are now. You can undo this.`,
       confirmLabel: 'Restore',
       danger: true,
     });
@@ -1242,6 +1232,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const handleSaveVersion = async () => {
     if (!activeSchedule || isSavingVersion) return;
     setIsSavingVersion(true);
+    setCopyError('');
     try {
       const sched = activeSchedule;
       // The number comes from the versions saved so far, read fresh, so two saves
@@ -1275,7 +1266,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setIsSaveModalOpen(false);
       setSaveNote('');
     } catch (err: any) {
-      notify(`Save failed: ${err.message}`, 'error');
+      setCopyError(`The copy was not kept: ${err.message}`);
     } finally {
       setIsSavingVersion(false);
     }
@@ -1294,7 +1285,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     try {
       const lock = activeLockToOverride;
       // An approved day off stays a day off while its request is approved, so unpinning
-      // it declines the request (it can be approved again in Availability, All requests).
+      // it declines the request (it can be approved again in Requests, All day off and shift requests).
       const request = approvedDayOffRequestFor(lock);
       if (request) {
         await decideRequest(authService.getCurrentUser(), 'AVAILABILITY', request.id, 'REJECTED', 'Declined when the pinned day off was removed from the roster.');
@@ -1935,145 +1926,98 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         )}
       </div>
 
-      {/* --- SAVE VERSION WITH NOTE MODAL --- */}
-      {isSaveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div
-            ref={saveDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={saveTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-sm w-full p-4 space-y-3 text-xs"
-          >
-            <h3 id={saveTitleId} className="font-bold text-slate-900 text-sm">Keep a copy</h3>
-            <p className="text-[11px] text-slate-500">
-              Your changes are already saved. This keeps a named copy of the roster as it is now (shifts, pinned days and leave), so you can look at it or compare with it later.
-            </p>
-            <input
-              type="text"
-              value={saveNote}
-              onChange={(e) => setSaveNote(e.target.value)}
-              aria-label="Name for this copy"
-              placeholder="For example: before moving the Thursday sessions"
-              className="w-full px-3 py-1.5 border border-slate-300 rounded font-medium"
-            />
-            <div className="pt-2 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsSaveModalOpen(false)}
-                className="px-3 py-1.5 border border-slate-300 rounded hover:bg-slate-50 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveVersion}
-                disabled={isSavingVersion}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
-              >
-                {isSavingVersion ? 'Keeping…' : 'Keep copy'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Keep a copy, Backup copies and Unpin on the shared Dialog (Phase 7, slice 3a). */}
+      <Dialog
+        open={isSaveModalOpen}
+        onClose={() => !isSavingVersion && setIsSaveModalOpen(false)}
+        size="sm"
+        title="Keep a copy"
+        description="Your changes are already saved. This keeps a named copy of the roster as it is now (shifts, pinned days and leave), so you can look at it or compare with it later."
+        footer={
+          <>
+            <Button disabled={isSavingVersion} onClick={() => setIsSaveModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" form="keep-copy" busy={isSavingVersion}>
+              Keep the copy
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="keep-copy"
+          noValidate
+          className="space-y-4 text-sm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSaveVersion();
+          }}
+        >
+          <Field label="Name for this copy" optional hint="For example: before moving the Thursday clinics.">
+            {(f) => <Input {...f} value={saveNote} onChange={(e) => setSaveNote(e.target.value)} />}
+          </Field>
+          {copyError && <Notice tone="danger" live title={copyError} />}
+        </form>
+      </Dialog>
 
-      {/* --- BACKUP COPIES --- */}
-      {isBackupsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div
-            ref={backupsDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={backupsTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-4 space-y-3 text-xs"
-          >
-            <div className="flex items-center justify-between">
-              <h3 id={backupsTitleId} className="font-bold text-slate-900 text-sm">Backup copies</h3>
-              <button
-                type="button"
-                onClick={() => setIsBackupsOpen(false)}
-                className="p-1 text-slate-500 hover:text-slate-700 cursor-pointer"
-                aria-label="Close"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-600">
-              A copy is kept by itself each time the roster is filled or cleared. The last {BACKUPS_KEPT} are kept.
-            </p>
-            {backups.length === 0 ? (
-              <p className="p-4 text-center text-slate-500 border border-dashed border-slate-300 rounded">No backup copies yet.</p>
-            ) : (
-              <ul className="space-y-1.5 max-h-80 overflow-y-auto">
-                {backups.map((b) => (
-                  <li key={b.id} className="flex items-center justify-between gap-2 p-2 border border-slate-200 rounded">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-slate-800">{b.note}</p>
-                      <p className="text-[11px] text-slate-500">
-                        {new Date(b.timestamp).toLocaleString()} · {b.snapshot.assignments.length} shift{b.snapshot.assignments.length === 1 ? '' : 's'} · {b.author}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleRestoreBackup(b)}
-                      className="shrink-0 px-2.5 py-1 border border-slate-300 rounded hover:bg-slate-50 font-semibold text-indigo-700 cursor-pointer"
-                    >
-                      Restore
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
+      <Dialog
+        open={isBackupsOpen}
+        onClose={() => setIsBackupsOpen(false)}
+        title="Backup copies"
+        description={`A copy is kept by itself each time the roster is filled or cleared. The last ${BACKUPS_KEPT} are kept.`}
+        footer={<Button onClick={() => setIsBackupsOpen(false)}>Close</Button>}
+      >
+        {backups.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-line-strong p-4 text-center text-sm text-ink-muted">No backup copies yet.</p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {backups.map((b) => (
+              <li key={b.id} className="flex items-center justify-between gap-3 rounded-lg border border-line p-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-ink">{b.note}</p>
+                  <p className="text-xs text-ink-muted">
+                    {formatDateTime(b.timestamp)}, {b.snapshot.assignments.length} {b.snapshot.assignments.length === 1 ? 'shift' : 'shifts'}, by {b.author}
+                  </p>
+                </div>
+                <Button size="sm" aria-label={`Restore the backup of ${formatDateTime(b.timestamp)}`} onClick={() => handleRestoreBackup(b)}>
+                  Restore
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Dialog>
 
-      {/* --- UNPIN A DAY --- */}
-      {isOverrideModalOpen && activeLockToOverride && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div
-            ref={overrideDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={overrideTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-150"
-          >
-            <div className="flex items-center gap-2">
-              <Shield className="w-5 h-5 shrink-0 text-amber-600" aria-hidden="true" />
-              <h3 id={overrideTitleId} className="text-sm font-bold text-slate-900">
-                Unpin this day?
-              </h3>
-            </div>
-            <p className="text-slate-700 leading-relaxed">
-              {nurseName(activeLockToOverride.nurseId)} on {formatDate(activeLockToOverride.date)} is pinned, so filling the
-              roster never changes it. If you unpin it, the shift stays for now as a hand change, and you can then edit it.
+      <Dialog
+        open={isOverrideModalOpen && !!activeLockToOverride}
+        onClose={() => setIsOverrideModalOpen(false)}
+        role="alertdialog"
+        size="sm"
+        title="Unpin this day?"
+        description={activeLockToOverride && `${nurseName(activeLockToOverride.nurseId)}, ${formatDayDate(activeLockToOverride.date)}.`}
+        footer={
+          <>
+            <Button onClick={() => setIsOverrideModalOpen(false)}>Keep pinned</Button>
+            <Button variant="primary" onClick={handleExecuteLockOverride}>
+              Unpin
+            </Button>
+          </>
+        }
+      >
+        {activeLockToOverride && (
+          <div className="space-y-4 text-sm">
+            <p className="text-ink">
+              Filling the roster never changes a pinned day. If you unpin it, the shift stays for now as a hand change, and you can then edit it.
             </p>
             {approvedDayOffRequestFor(activeLockToOverride) && (
-              <p className="text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 leading-relaxed">
-                This day off comes from {nurseName(activeLockToOverride.nurseId)}&apos;s approved request. Unpinning also declines the
-                request, so she can be given a shift that day. You can approve it again in Availability, All requests.
-              </p>
+              <Notice tone="warning" title="This also declines a request">
+                This day off comes from {nurseName(activeLockToOverride.nurseId)}&apos;s approved request. Unpinning also declines the request, so the nurse can
+                be given a shift that day. You can approve it again in Requests, under All day off and shift requests.
+              </Notice>
             )}
-            <div className="pt-2 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsOverrideModalOpen(false)}
-                className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-              >
-                Keep pinned
-              </button>
-              <button
-                type="button"
-                onClick={handleExecuteLockOverride}
-                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold cursor-pointer transition-colors shadow-xs"
-              >
-                Unpin
-              </button>
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Dialog>
 
       {/* --- FILL ROSTER DIALOG --- */}
       {isPreflightModalOpen && preflightSummary && (
