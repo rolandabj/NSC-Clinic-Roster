@@ -6,8 +6,8 @@
  */
 
 import React from 'react';
-import { useDialogA11y } from '../../common/useDialogA11y';
 import { notify } from '../../common/dialogs';
+import { Button, Dialog, Field, Input } from '../../ui';
 
 export type SettingsTab =
   | 'access-roles'
@@ -82,32 +82,74 @@ export const SENIORITY_COLOR_PALETTE = [
 export const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 interface SettingsDialogProps {
-  /** Called on Esc (and nothing else; buttons inside close the dialog themselves). */
+  title: string;
+  description?: React.ReactNode;
   onClose: () => void;
-  /** id of the dialog's heading. */
-  labelledBy: string;
-  overlayClassName: string;
-  panelClassName: string;
+  /** The main button; leave out with `footer` for other buttons. */
+  onSave?: () => void;
+  saveLabel?: string;
+  footer?: React.ReactNode;
+  size?: 'sm' | 'md' | 'lg';
   children: React.ReactNode;
 }
 
 /**
- * Overlay + panel for the inline Settings modals. Render it only while the modal
- * is open: it traps focus, closes on Esc and returns focus when it unmounts.
+ * The Settings tabs' dialogs, on the shared Dialog since Phase 7, slice 4: the title at the
+ * top, the fields, and Cancel with the main button at the bottom right.
  */
-export const SettingsDialog: React.FC<SettingsDialogProps> = ({
-  onClose,
-  labelledBy,
-  overlayClassName,
-  panelClassName,
-  children,
-}) => {
-  const ref = useDialogA11y<HTMLDivElement>(true, onClose);
-  return (
-    <div className={overlayClassName}>
-      <div ref={ref} role="dialog" aria-modal="true" aria-labelledby={labelledBy} className={panelClassName}>
-        {children}
+export const SettingsDialog: React.FC<SettingsDialogProps> = ({ title, description, onClose, onSave, saveLabel = 'Save', footer, size = 'md', children }) => (
+  <Dialog
+    open
+    onClose={onClose}
+    size={size}
+    title={title}
+    description={description}
+    footer={
+      footer ?? (
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={onSave}>
+            {saveLabel}
+          </Button>
+        </>
+      )
+    }
+  >
+    <div className="space-y-4 text-sm">{children}</div>
+  </Dialog>
+);
+
+/** A colour: the browser's colour picker, the hex code beside it and, if given, ready colours. */
+export const ColourField: React.FC<{ label: string; value: string; onChange: (colour: string) => void; hint?: string; palette?: string[] }> = ({
+  label,
+  value,
+  onChange,
+  hint,
+  palette,
+}) => (
+  <Field label={label} hint={hint}>
+    {(f) => (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2">
+          <input type="color" aria-label={`${label}, picker`} value={value} onChange={(e) => onChange(e.target.value)} className="h-9 w-12 shrink-0 cursor-pointer rounded border border-control" />
+          <Input {...f} value={value} onChange={(e) => onChange(e.target.value)} className="font-mono" />
+        </div>
+        {palette && (
+          <div className="flex flex-wrap gap-2" role="group" aria-label={`${label}, ready colours`}>
+            {palette.map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-label={`Use the colour ${c}`}
+                aria-pressed={value === c}
+                onClick={() => onChange(c)}
+                className={`size-7 rounded-full border border-line-strong ${value === c ? 'ring-2 ring-brand ring-offset-2' : ''}`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+        )}
       </div>
-    </div>
-  );
-};
+    )}
+  </Field>
+);

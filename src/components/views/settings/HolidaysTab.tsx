@@ -5,14 +5,15 @@
  * Settings > Public Holidays tab.
  */
 
-import React, { useId, useState } from 'react';
+import React, { useState } from 'react';
 import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { PublicHoliday } from '../../../types';
-import { localTodayIso } from '../../../utils/dateUtils';
+import { formatDate, localTodayIso } from '../../../utils/dateUtils';
 import { applyHolidayChangeToLeave } from '../../../services/hours/holidayLeave';
 import { notify, confirmDialog } from '../../common/dialogs';
 import { SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
+import { DateInput, Field, Input } from '../../ui';
 
 interface HolidaysTabProps {
   holidays: PublicHoliday[];
@@ -22,7 +23,6 @@ interface HolidaysTabProps {
 
 export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, triggerSaveNotification }) => {
   const repo = getRepository();
-  const holidayModalTitleId = useId();
 
   const [editingHoliday, setEditingHoliday] = useState<PublicHoliday | null>(null);
   const [isHolidayModalOpen, setIsHolidayModalOpen] = useState(false);
@@ -40,7 +40,7 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
     try {
       return await applyHolidayChangeToLeave(repo, before, after);
     } catch (err: any) {
-      notify(`The holiday is saved, but leave on that day could not be updated (${err?.message || err}). Use "Tidy public holiday leave" in Availability.`, 'warning');
+      notify(`The holiday is saved, but leave on that day could not be updated (${err?.message || err}). Use Tidy public holiday leave on Leave and days off.`, 'warning');
       return 0;
     }
   };
@@ -49,12 +49,12 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
     const name = (hol.name || '').trim();
     const date = hol.date || '';
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !name) {
-      notify('Date and holiday name are required.', 'warning');
+      notify('Enter the name and the date of the holiday.', 'warning');
       return;
     }
     const sameDay = holidays.find((h) => h.date === hol.date && h.id !== hol.id);
     if (sameDay) {
-      notify(`${hol.date} is already a public holiday ("${sameDay.name}").`, 'warning');
+      notify(`${formatDate(hol.date)} is already a public holiday (${sameDay.name}).`, 'warning');
       return;
     }
     hol = { ...hol, name, hijriNote: (hol.hijriNote || '').trim() };
@@ -197,75 +197,21 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
 
       {isHolidayModalOpen && editingHoliday && (
         <SettingsDialog
+          size="sm"
+          title={editingHoliday.id ? 'Change the public holiday' : 'Add a public holiday'}
           onClose={() => setIsHolidayModalOpen(false)}
-          labelledBy={holidayModalTitleId}
-          overlayClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs"
-          panelClassName="bg-white rounded-lg border border-slate-200 shadow-xl max-w-sm w-full p-5 space-y-4 text-xs"
+          onSave={() => handleSaveHoliday(editingHoliday)}
+          saveLabel={editingHoliday.id ? 'Save changes' : 'Add the public holiday'}
         >
-          <h3 id={holidayModalTitleId} className="text-sm font-bold text-slate-900">
-            {editingHoliday.id ? 'Edit Public Holiday' : 'Add Public Holiday'}
-          </h3>
-          <div className="space-y-3">
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Holiday Name</label>
-              <input
-                aria-label="Holiday Name"
-                type="text"
-                value={editingHoliday.name}
-                onChange={(e) =>
-                  setEditingHoliday({ ...editingHoliday, name: e.target.value })
-                }
-                placeholder="e.g. National Day"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded"
-              />
-            </div>
-
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Date (YYYY-MM-DD)</label>
-              <input
-                aria-label="Date (YYYY-MM-DD)"
-                type="date"
-                value={editingHoliday.date}
-                onChange={(e) =>
-                  setEditingHoliday({ ...editingHoliday, date: e.target.value })
-                }
-                className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                Hijri Equivalent Note (Optional)
-              </label>
-              <input
-                aria-label="Hijri Equivalent Note (Optional)"
-                type="text"
-                value={editingHoliday.hijriNote || ''}
-                onChange={(e) =>
-                  setEditingHoliday({ ...editingHoliday, hijriNote: e.target.value })
-                }
-                placeholder="e.g. Shawwal 1 (approximate)"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded text-slate-600"
-              />
-            </div>
-          </div>
-
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setIsHolidayModalOpen(false)}
-              className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSaveHoliday(editingHoliday)}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
-            >
-              Save Holiday
-            </button>
-          </div>
+          <Field label="Name" hint="For example: National Day.">
+            {(f) => <Input {...f} value={editingHoliday.name} onChange={(e) => setEditingHoliday({ ...editingHoliday, name: e.target.value })} />}
+          </Field>
+          <Field label="Date">
+            {(f) => <DateInput {...f} value={editingHoliday.date || ''} onChange={(iso) => setEditingHoliday({ ...editingHoliday, date: iso })} />}
+          </Field>
+          <Field label="Hijri date" optional hint="For example: Shawwal 1 (approximate).">
+            {(f) => <Input {...f} value={editingHoliday.hijriNote || ''} onChange={(e) => setEditingHoliday({ ...editingHoliday, hijriNote: e.target.value })} />}
+          </Field>
         </SettingsDialog>
       )}
     </>

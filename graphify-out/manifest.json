@@ -234,9 +234,9 @@
     "semantic_hash": "730953817e7a18e02d0574068cb873fc"
   },
   "src/components/views/AccessManagementPanel.tsx": {
-    "mtime": 1791950940.5828934,
-    "seen": 1791951702.5077906,
-    "ast_hash": "6f1371509d77bec507ee2b6fe2e4e92d",
+    "mtime": 1792241110.2455003,
+    "seen": 1792241594.8873787,
+    "ast_hash": "64d9fd9fedff0abd7ec7706159c3f158",
     "semantic_hash": ""
   },
   "src/components/views/AcknowledgePage.tsx": {
@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "src/components/views/WorkingHoursPeriodsPanel.tsx": {
-    "mtime": 1791950940.5868406,
-    "seen": 1791951702.5078108,
-    "ast_hash": "647f10cf5d70e51cca4381a0d8886cf6",
+    "mtime": 1792241569.4697897,
+    "seen": 1792241594.8874142,
+    "ast_hash": "60f87958abab7324886efb593fb51b76",
     "semantic_hash": ""
   },
   "src/components/views/settings/ClinicTab.tsx": {
@@ -336,16 +336,16 @@
     "semantic_hash": "8b6f0493810ad54658a56672a693c65f"
   },
   "src/components/views/settings/DatabaseTab.tsx": {
-    "mtime": 1791950940.5868406,
-    "seen": 1791951702.5078137,
-    "ast_hash": "ce4bc6f7960ad5cc09626c224d2f1639",
+    "mtime": 1792241053.2697647,
+    "seen": 1792241594.8874173,
+    "ast_hash": "168629dfa3615d1aae41d959c591a2f6",
     "semantic_hash": ""
   },
   "src/components/views/settings/DutiesTab.tsx": {
-    "mtime": 1791362587.9670062,
-    "seen": 1791365225.1340241,
-    "ast_hash": "059a218642c5e63e9c622d75567cdd02",
-    "semantic_hash": "059a218642c5e63e9c622d75567cdd02"
+    "mtime": 1792241038.849353,
+    "seen": 1792241594.887419,
+    "ast_hash": "77f061f01d2c822e92e97fbc32054ba7",
+    "semantic_hash": ""
   },
   "src/components/views/settings/EmailTab.tsx": {
     "mtime": 1791950940.5868406,
@@ -354,22 +354,22 @@
     "semantic_hash": ""
   },
   "src/components/views/settings/HolidaysTab.tsx": {
-    "mtime": 1791362587.9670062,
-    "seen": 1791365225.1340263,
-    "ast_hash": "b24ea06da92d2a4ca521f76960308dbc",
+    "mtime": 1792240980.3329072,
+    "seen": 1792241594.8874218,
+    "ast_hash": "34a4150f58ccfd573708d3e909446811",
     "semantic_hash": ""
   },
   "src/components/views/settings/LeaveTab.tsx": {
-    "mtime": 1791362587.9670062,
-    "seen": 1791365225.1340272,
-    "ast_hash": "24e15cbdfc60fbe5e83dbd0d7e729482",
+    "mtime": 1792240994.721931,
+    "seen": 1792241594.887423,
+    "ast_hash": "8adca4fdaf6d43f432f153d8cca8e2ec",
     "semantic_hash": ""
   },
   "src/components/views/settings/NurseSkillsTab.tsx": {
-    "mtime": 1791362587.9670062,
-    "seen": 1791365225.1340284,
-    "ast_hash": "4deb99bc79877b1ff3f04f0aa1c96d3d",
-    "semantic_hash": "4deb99bc79877b1ff3f04f0aa1c96d3d"
+    "mtime": 1792241021.0281715,
+    "seen": 1792241594.8874242,
+    "ast_hash": "61b073d1f23a585892ed65238ba6878b",
+    "semantic_hash": ""
   },
   "src/components/views/settings/RulesTab.tsx": {
     "mtime": 1791362587.9670062,
@@ -378,22 +378,22 @@
     "semantic_hash": ""
   },
   "src/components/views/settings/SeniorityTab.tsx": {
-    "mtime": 1791362587.9670062,
-    "seen": 1791365225.134031,
-    "ast_hash": "f51e5e652e8e05995bc07eebe6eb03ee",
-    "semantic_hash": "f51e5e652e8e05995bc07eebe6eb03ee"
+    "mtime": 1792241021.029246,
+    "seen": 1792241594.887427,
+    "ast_hash": "6e5b105fd1a560d1c6e38da747251393",
+    "semantic_hash": ""
   },
   "src/components/views/settings/SpecialtiesTab.tsx": {
-    "mtime": 1791362587.9670062,
-    "seen": 1791365225.1340325,
-    "ast_hash": "221cb8d4f12d9b187a1349bd26c22def",
-    "semantic_hash": "221cb8d4f12d9b187a1349bd26c22def"
+    "mtime": 1792240977.3471189,
+    "seen": 1792241594.8874283,
+    "ast_hash": "08dcaf0b4621361df2dc4b9578a96f76",
+    "semantic_hash": ""
   },
   "src/components/views/settings/shared.tsx": {
-    "mtime": 1791362587.9670062,
-    "seen": 1791365225.1340337,
-    "ast_hash": "9b9a15ef8d5b944ddab228cb17b2a2b3",
-    "semantic_hash": "9b9a15ef8d5b944ddab228cb17b2a2b3"
+    "mtime": 1792240994.7124124,
+    "seen": 1792241594.8874297,
+    "ast_hash": "236c4f35317b5c02d5759fd10fb1c70a",
+    "semantic_hash": ""
   },
   "src/components/workbook/CoverageSheet.tsx": {
     "mtime": 1791362587.9670062,
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1792240851.919996,
-    "seen": 1792240863.782011,
-    "ast_hash": "a7bc2f6a817430afbf2e4c231b87002c",
+    "mtime": 1792241585.7617943,
+    "seen": 1792241594.8877566,
+    "ast_hash": "82f430d14168f1296385db1ea9a12b36",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1792240851.925514,
-    "seen": 1792240863.782019,
-    "ast_hash": "d53e79d85e220fff07c53cdd266fbcef",
+    "mtime": 1792241585.7666888,
+    "seen": 1792241594.887765,
+    "ast_hash": "25de71a60c9af7aa041817ab03ce001c",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1722,9 +1722,9 @@
     "semantic_hash": ""
   },
   "src/components/ui/Field.tsx": {
-    "mtime": 1791950940.5828934,
-    "seen": 1791951702.5077834,
-    "ast_hash": "f3a7266ec8509476b454ef1b7e3f30c8",
+    "mtime": 1792241244.2020802,
+    "seen": 1792241594.887367,
+    "ast_hash": "a1ebab79ddedb1de881520f2b18527ed",
     "semantic_hash": ""
   },
   "src/components/ui/Notice.tsx": {
@@ -2385,6 +2385,12 @@
     "mtime": 1792240158.1197796,
     "seen": 1792240863.7819476,
     "ast_hash": "b4279eef7a0f07122a36f7aedc556586",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/settings-dialogs.cjs": {
+    "mtime": 1792241422.1337564,
+    "seen": 1792241594.88715,
+    "ast_hash": "f6ae56ca62732f7756ba800959132f50",
     "semantic_hash": ""
   }
 }

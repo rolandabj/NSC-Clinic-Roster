@@ -79,7 +79,7 @@ export const Checkbox: React.FC<
 > = ({ label, hint, className, ...props }) => {
   const hintId = useId();
   return (
-    <label className={cx('flex items-start gap-2.5 text-sm text-ink', props.disabled && 'opacity-50', className)}>
+    <label className={cx('flex min-h-6 items-start gap-2.5 text-sm text-ink', props.disabled && 'opacity-50', className)}>
       <input type="checkbox" {...props} aria-describedby={hint ? hintId : undefined} className="mt-0.5 size-5 shrink-0 accent-brand" />
       <span>
         {label}

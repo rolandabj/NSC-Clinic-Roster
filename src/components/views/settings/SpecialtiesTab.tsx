@@ -5,13 +5,14 @@
  * Settings > Specialties tab.
  */
 
-import React, { useId, useState } from 'react';
+import React, { useState } from 'react';
 import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { Specialty } from '../../../types';
 import { localTodayIso } from '../../../utils/dateUtils';
 import { notify, confirmDialog } from '../../common/dialogs';
 import { SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
+import { Field, Input } from '../../ui';
 
 interface SpecialtiesTabProps {
   specialties: Specialty[];
@@ -25,7 +26,6 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
   triggerSaveNotification,
 }) => {
   const repo = getRepository();
-  const specialtyModalTitleId = useId();
 
   const [editingSpecialty, setEditingSpecialty] = useState<Specialty | null>(null);
   const [isSpecialtyModalOpen, setIsSpecialtyModalOpen] = useState(false);
@@ -34,16 +34,16 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
     const codeClean = (sp.code || '').trim().toUpperCase();
     const name = (sp.name || '').trim();
     if (!name) {
-      notify('Please enter a specialty name.', 'warning');
+      notify('Enter a name for the specialty.', 'warning');
       return;
     }
     if (!/^[A-Z0-9]{2,5}$/.test(codeClean)) {
-      notify('The code must be 2 to 5 letters or numbers (e.g. CARD, PED).', 'warning');
+      notify('Enter a code of 2 to 5 letters or numbers, for example CARD or PED.', 'warning');
       return;
     }
     const duplicate = specialties.find((x) => x.code.toUpperCase() === codeClean && x.id !== sp.id);
     if (duplicate) {
-      notify(`The code ${codeClean} is already used by "${duplicate.name}".`, 'warning');
+      notify(`${duplicate.name} already has the code ${codeClean}.`, 'warning');
       return;
     }
     sp = { ...sp, name };
@@ -174,65 +174,20 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
 
       {isSpecialtyModalOpen && editingSpecialty && (
         <SettingsDialog
+          size="sm"
+          title={editingSpecialty.id ? 'Change the specialty' : 'Add a specialty'}
           onClose={() => setIsSpecialtyModalOpen(false)}
-          labelledBy={specialtyModalTitleId}
-          overlayClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs"
-          panelClassName="bg-white rounded-lg border border-slate-200 shadow-xl max-w-sm w-full p-5 space-y-4 text-xs"
+          onSave={() => handleSaveSpecialty(editingSpecialty)}
+          saveLabel={editingSpecialty.id ? 'Save changes' : 'Add the specialty'}
         >
-          <h3 id={specialtyModalTitleId} className="text-sm font-bold text-slate-900">
-            {editingSpecialty.id ? 'Edit Specialty' : 'Add Specialty'}
-          </h3>
-          <div className="space-y-3">
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Specialty Name</label>
-              <input
-                aria-label="Specialty Name"
-                type="text"
-                value={editingSpecialty.name}
-                onChange={(e) =>
-                  setEditingSpecialty({ ...editingSpecialty, name: e.target.value })
-                }
-                placeholder="e.g. Ophthalmology"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                Code (2 to 5 characters)
-              </label>
-              <input
-                aria-label="Code (2 to 5 characters)"
-                type="text"
-                maxLength={5}
-                value={editingSpecialty.code}
-                onChange={(e) =>
-                  setEditingSpecialty({
-                    ...editingSpecialty,
-                    code: e.target.value.toUpperCase(),
-                  })
-                }
-                placeholder="OPHT"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono font-bold uppercase"
-              />
-            </div>
-          </div>
-
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setIsSpecialtyModalOpen(false)}
-              className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSaveSpecialty(editingSpecialty)}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
-            >
-              Save Specialty
-            </button>
-          </div>
+          <Field label="Name" hint="For example: Ophthalmology.">
+            {(f) => <Input {...f} value={editingSpecialty.name} onChange={(e) => setEditingSpecialty({ ...editingSpecialty, name: e.target.value })} />}
+          </Field>
+          <Field label="Code" hint="2 to 5 letters, for example OPHT.">
+            {(f) => (
+              <Input {...f} maxLength={5} value={editingSpecialty.code} onChange={(e) => setEditingSpecialty({ ...editingSpecialty, code: e.target.value.toUpperCase() })} className="font-mono uppercase" />
+            )}
+          </Field>
         </SettingsDialog>
       )}
     </>

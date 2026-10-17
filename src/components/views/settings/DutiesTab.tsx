@@ -5,13 +5,14 @@
  * Settings > Duties tab.
  */
 
-import React, { useId, useState } from 'react';
+import React, { useState } from 'react';
 import { Plus, Trash2, Edit2, Star } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { DutyWindow } from '../../../types';
 import { resolveClinicSetup, toMinutes, uncoveredParts } from '../../../services/engine/clinicModel';
 import { notify, confirmDialog } from '../../common/dialogs';
-import { DUTY_COLOR_PALETTE, SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
+import { DUTY_COLOR_PALETTE, SaveNotifier, SettingsDialog, withSaveErrors, ColourField } from './shared';
+import { Checkbox, Field, Input } from '../../ui';
 
 interface DutiesTabProps {
   duties: DutyWindow[];
@@ -31,7 +32,6 @@ function shiftHours(d: Pick<DutyWindow, 'startTime' | 'endTime'>): number {
 
 export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTime, loadData, triggerSaveNotification }) => {
   const repo = getRepository();
-  const dutyModalTitleId = useId();
 
   const [editingDuty, setEditingDuty] = useState<DutyWindow | null>(null);
   const [isDutyModalOpen, setIsDutyModalOpen] = useState(false);
@@ -45,24 +45,24 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
     // Acronym unique check
     const acronymClean = (duty.acronym || '').trim().toUpperCase();
     if (!acronymClean || acronymClean.length > 5) {
-      notify('Duty acronym is required and must be 1 to 5 characters maximum.', 'warning');
+      notify('Enter a short name of 1 to 5 letters.', 'warning');
       return;
     }
     const duplicate = duties.find(
       (d) => d.acronym.toUpperCase() === acronymClean && d.id !== duty.id
     );
     if (duplicate) {
-      notify(`Acronym "${acronymClean}" is already in use by duty "${duplicate.name}".`, 'warning');
+      notify(`The shift ${duplicate.name} already has the short name ${acronymClean}.`, 'warning');
       return;
     }
 
     const name = (duty.name || '').trim();
     if (!name) {
-      notify('Please enter a shift name.', 'warning');
+      notify('Enter a name for the shift.', 'warning');
       return;
     }
     if (!TIME.test(duty.startTime || '') || !TIME.test(duty.endTime || '')) {
-      notify('Please enter both a start and an end time.', 'warning');
+      notify('Enter when the shift starts and ends.', 'warning');
       return;
     }
     if (duty.startTime! >= duty.endTime!) {
@@ -308,147 +308,40 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
 
       {isDutyModalOpen && editingDuty && (
         <SettingsDialog
+          title={editingDuty.id ? 'Change the shift' : 'Add a shift'}
           onClose={() => setIsDutyModalOpen(false)}
-          labelledBy={dutyModalTitleId}
-          overlayClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs"
-          panelClassName="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
+          onSave={() => handleSaveDuty(editingDuty)}
+          saveLabel={editingDuty.id ? 'Save changes' : 'Add the shift'}
         >
-          <h3 id={dutyModalTitleId} className="text-sm font-bold text-slate-900">
-            {editingDuty.id ? 'Edit Duty Window' : 'Add Duty Window'}
-          </h3>
-          <div className="space-y-3">
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Duty Name</label>
-              <input
-                aria-label="Duty Name"
-                type="text"
-                value={editingDuty.name}
-                onChange={(e) => setEditingDuty({ ...editingDuty, name: e.target.value })}
-                placeholder="e.g. Mid-Shift"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Acronym (max 5 chars)
-                </label>
-                <input
-                  aria-label="Acronym (max 5 chars)"
-                  type="text"
-                  maxLength={5}
-                  value={editingDuty.acronym}
-                  onChange={(e) =>
-                    setEditingDuty({ ...editingDuty, acronym: e.target.value.toUpperCase() })
-                  }
-                  placeholder="M"
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono font-bold uppercase"
-                />
-              </div>
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Duty Color</label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    aria-label="Duty Color"
-                    type="color"
-                    value={editingDuty.color}
-                    onChange={(e) => setEditingDuty({ ...editingDuty, color: e.target.value })}
-                    className="w-8 h-8 rounded border border-slate-300 cursor-pointer"
-                  />
-                  <input
-                    aria-label="Duty Color (hex)"
-                    type="text"
-                    value={editingDuty.color}
-                    onChange={(e) => setEditingDuty({ ...editingDuty, color: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-slate-300 rounded font-mono text-[11px]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Start Time</label>
-                <input
-                  aria-label="Start Time"
-                  type="time"
-                  value={editingDuty.startTime}
-                  onChange={(e) =>
-                    setEditingDuty({ ...editingDuty, startTime: e.target.value })
-                  }
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono text-center"
-                />
-              </div>
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">End Time</label>
-                <input
-                  aria-label="End Time"
-                  type="time"
-                  value={editingDuty.endTime}
-                  onChange={(e) =>
-                    setEditingDuty({ ...editingDuty, endTime: e.target.value })
-                  }
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono text-center"
-                />
-              </div>
-            </div>
-
-            {/* Priority Duty Option */}
-            <div className="p-3 rounded-lg border border-amber-200 bg-amber-50/70 space-y-1.5">
-              <label className="flex items-center justify-between cursor-pointer">
-                <div className="flex items-center gap-2">
-                  <Star
-                    className={`w-4 h-4 ${
-                      editingDuty.isPriority ? 'fill-amber-500 text-amber-500' : 'text-slate-400'
-                    }`}
-                  />
-                  <span className="font-semibold text-slate-900 text-xs">Set as Priority Duty</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={Boolean(editingDuty.isPriority)}
-                  onChange={(e) =>
-                    setEditingDuty({ ...editingDuty, isPriority: e.target.checked })
-                  }
-                  className="rounded text-amber-600 focus:ring-amber-500 w-4 h-4 cursor-pointer"
-                />
-              </label>
-              <p className="text-[11px] text-slate-600 leading-relaxed">
-                When on, the roster generator tries this shift first. If the rules (such as minimum rest) can't be met with it, other shifts are used.
-              </p>
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 cursor-pointer mt-1">
-                <input
-                  type="checkbox"
-                  checked={editingDuty.active}
-                  onChange={(e) =>
-                    setEditingDuty({ ...editingDuty, active: e.target.checked })
-                  }
-                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                />
-                <span className="text-slate-700">Active (available for roster assignment)</span>
-              </label>
-            </div>
+          <Field label="Name" hint="For example: Middle shift.">
+            {(f) => <Input {...f} value={editingDuty.name} onChange={(e) => setEditingDuty({ ...editingDuty, name: e.target.value })} />}
+          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Short name" hint="Up to 5 letters, shown in the roster.">
+              {(f) => <Input {...f} maxLength={5} value={editingDuty.acronym} onChange={(e) => setEditingDuty({ ...editingDuty, acronym: e.target.value.toUpperCase() })} className="font-mono uppercase" />}
+            </Field>
+            <ColourField label="Colour" value={editingDuty.color || '#3b82f6'} palette={DUTY_COLOR_PALETTE} onChange={(color) => setEditingDuty({ ...editingDuty, color })} />
           </div>
-
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setIsDutyModalOpen(false)}
-              className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSaveDuty(editingDuty)}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
-            >
-              Save Duty
-            </button>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Starts">
+              {(f) => <Input {...f} type="time" value={editingDuty.startTime} onChange={(e) => setEditingDuty({ ...editingDuty, startTime: e.target.value })} />}
+            </Field>
+            <Field label="Ends">
+              {(f) => <Input {...f} type="time" value={editingDuty.endTime} onChange={(e) => setEditingDuty({ ...editingDuty, endTime: e.target.value })} />}
+            </Field>
           </div>
+          <Checkbox
+            checked={Boolean(editingDuty.isPriority)}
+            onChange={(e) => setEditingDuty({ ...editingDuty, isPriority: e.target.checked })}
+            label="Use this shift first"
+            hint="Filling the roster tries this shift first. If the rules (such as the rest between shifts) can't be met with it, other shifts are used."
+          />
+          <Checkbox
+            checked={editingDuty.active}
+            onChange={(e) => setEditingDuty({ ...editingDuty, active: e.target.checked })}
+            label="Active"
+            hint="Only active shifts can be put on the roster."
+          />
         </SettingsDialog>
       )}
     </>

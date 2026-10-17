@@ -5,12 +5,13 @@
  * Settings > Seniority tab.
  */
 
-import React, { useId, useState } from 'react';
+import React, { useState } from 'react';
 import { Shield, Plus, Trash2, Edit2, GripVertical } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { SeniorityLevel } from '../../../types';
 import { notify, confirmDialog } from '../../common/dialogs';
-import { SENIORITY_COLOR_PALETTE, SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
+import { ColourField, SENIORITY_COLOR_PALETTE, SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
+import { Checkbox, Field, Input } from '../../ui';
 
 interface SeniorityTabProps {
   seniority: SeniorityLevel[];
@@ -26,7 +27,6 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
   triggerSaveNotification,
 }) => {
   const repo = getRepository();
-  const seniorityModalTitleId = useId();
 
   const [editingSeniority, setEditingSeniority] = useState<SeniorityLevel | null>(null);
   const [isSeniorityModalOpen, setIsSeniorityModalOpen] = useState(false);
@@ -58,12 +58,12 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
   const handleSaveSeniority = withSaveErrors('save the seniority level', async (level: Partial<SeniorityLevel>) => {
     const nameClean = (level.name || '').trim();
     if (!nameClean) {
-      notify('Seniority level name is required.', 'warning');
+      notify('Enter a name for the level.', 'warning');
       return;
     }
     const sameName = seniority.find((l) => l.name.trim().toLowerCase() === nameClean.toLowerCase() && l.id !== level.id);
     if (sameName) {
-      notify(`There is already a level called "${sameName.name}".`, 'warning');
+      notify(`There is already a level called ${sameName.name}.`, 'warning');
       return;
     }
     if (level.id && !(await confirmNotLastSenior(level, !!level.isSenior))) return;
@@ -326,112 +326,26 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
 
       {isSeniorityModalOpen && editingSeniority && (
         <SettingsDialog
+          title={editingSeniority.id ? 'Change the nurse level' : 'Add a nurse level'}
           onClose={() => setIsSeniorityModalOpen(false)}
-          labelledBy={seniorityModalTitleId}
-          overlayClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs"
-          panelClassName="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
+          onSave={() => handleSaveSeniority(editingSeniority)}
+          saveLabel={editingSeniority.id ? 'Save changes' : 'Add the level'}
         >
-          <h3 id={seniorityModalTitleId} className="text-sm font-bold text-slate-900">
-            {editingSeniority.id ? 'Edit Seniority Level' : 'Add Seniority Level'}
-          </h3>
-          <div className="space-y-3">
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                Seniority Level Name
-              </label>
-              <input
-                aria-label="Seniority Level Name"
-                type="text"
-                value={editingSeniority.name}
-                onChange={(e) =>
-                  setEditingSeniority({ ...editingSeniority, name: e.target.value })
-                }
-                placeholder="e.g. Charge Nurse, Staff Nurse"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded font-medium text-slate-800"
-              />
-            </div>
-
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Badge Color</label>
-              <div className="flex items-center gap-2 mb-2">
-                <input
-                  aria-label="Badge Color"
-                  type="color"
-                  value={editingSeniority.color || '#4f46e5'}
-                  onChange={(e) =>
-                    setEditingSeniority({ ...editingSeniority, color: e.target.value })
-                  }
-                  className="w-8 h-8 rounded border border-slate-300 cursor-pointer"
-                />
-                <input
-                  aria-label="Badge Color (hex)"
-                  type="text"
-                  value={editingSeniority.color || '#4f46e5'}
-                  onChange={(e) =>
-                    setEditingSeniority({ ...editingSeniority, color: e.target.value })
-                  }
-                  className="w-24 px-2 py-1.5 border border-slate-300 rounded font-mono text-[11px]"
-                />
-                <div className="flex items-center gap-1.5 ml-auto">
-                  {SENIORITY_COLOR_PALETTE.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setEditingSeniority({ ...editingSeniority, color: c })}
-                      className={`w-5 h-5 rounded-full border cursor-pointer transition-transform ${
-                        editingSeniority.color === c
-                          ? 'scale-110 ring-2 ring-indigo-500 ring-offset-1 border-white'
-                          : 'border-slate-300 hover:scale-105'
-                      }`}
-                      style={{ backgroundColor: c }}
-                      title={c}
-                      aria-label={`Use color ${c}`}
-                      aria-pressed={editingSeniority.color === c}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-1">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={editingSeniority.isSenior}
-                  onChange={(e) =>
-                    setEditingSeniority({
-                      ...editingSeniority,
-                      isSenior: e.target.checked,
-                    })
-                  }
-                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
-                />
-                <span className="font-semibold text-slate-800">
-                  Senior level
-                </span>
-              </label>
-              <p className="text-[11px] text-slate-500 pl-6 leading-relaxed">
-                Nurses at this level count for the rule &quot;at least one senior nurse on duty each day&quot;.
-              </p>
-            </div>
-          </div>
-
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
-            <button
-              type="button"
-              onClick={() => setIsSeniorityModalOpen(false)}
-              className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSaveSeniority(editingSeniority)}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
-            >
-              Save Seniority Level
-            </button>
-          </div>
+          <Field label="Name" hint="For example: Charge Nurse, Staff Nurse.">
+            {(f) => <Input {...f} value={editingSeniority.name} onChange={(e) => setEditingSeniority({ ...editingSeniority, name: e.target.value })} />}
+          </Field>
+          <ColourField
+            label="Colour"
+            value={editingSeniority.color || '#4f46e5'}
+            palette={SENIORITY_COLOR_PALETTE}
+            onChange={(color) => setEditingSeniority({ ...editingSeniority, color })}
+          />
+          <Checkbox
+            checked={editingSeniority.isSenior}
+            onChange={(e) => setEditingSeniority({ ...editingSeniority, isSenior: e.target.checked })}
+            label="Senior level"
+            hint='Nurses at this level count for the rule "at least one senior nurse on duty each day".'
+          />
         </SettingsDialog>
       )}
     </>

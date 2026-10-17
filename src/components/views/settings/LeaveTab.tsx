@@ -5,12 +5,13 @@
  * Settings > Leave tab.
  */
 
-import React, { useId, useState } from 'react';
+import React, { useState } from 'react';
 import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { LeaveType } from '../../../types';
 import { notify, confirmDialog } from '../../common/dialogs';
-import { LEAVE_COLOR_PALETTE, SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
+import { ColourField, LEAVE_COLOR_PALETTE, SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
+import { Checkbox, Field, Input } from '../../ui';
 
 interface LeaveTabProps {
   leaveTypes: LeaveType[];
@@ -24,7 +25,6 @@ const isBuiltInCode = (code?: string) => !!code && BUILT_IN_LEAVE_CODES.includes
 
 export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, triggerSaveNotification }) => {
   const repo = getRepository();
-  const leaveModalTitleId = useId();
 
   const [editingLeave, setEditingLeave] = useState<LeaveType | null>(null);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
@@ -32,7 +32,7 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
   const handleSaveLeaveType = withSaveErrors('save the leave type', async (lt: Partial<LeaveType>) => {
     const name = (lt.name || '').trim();
     if (!name) {
-      notify('Please enter a name.', 'warning');
+      notify('Enter a name.', 'warning');
       return;
     }
     const original = leaveTypes.find((l) => l.id === lt.id);
@@ -41,20 +41,20 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
     }
     const acronymClean = (lt.acronym || '').trim().toUpperCase();
     if (!acronymClean || acronymClean.length > 3) {
-      notify('Leave acronym is required and must be 1 to 3 characters.', 'warning');
+      notify('Enter a short name of 1 to 3 letters.', 'warning');
       return;
     }
     const duplicate = leaveTypes.find(
       (l) => l.acronym.toUpperCase() === acronymClean && l.id !== lt.id
     );
     if (duplicate) {
-      notify(`Acronym "${acronymClean}" is already in use by "${duplicate.name}".`, 'warning');
+      notify(`${duplicate.name} already has the short name ${acronymClean}.`, 'warning');
       return;
     }
 
     const hours = typeof lt.creditedHours === 'number' ? lt.creditedHours : lt.creditedHours === undefined || lt.creditedHours === 'match_duty' ? 8 : NaN;
     if (!Number.isFinite(hours) || hours < 0 || hours > 24) {
-      notify('Hours per leave day must be a number from 0 to 24.', 'warning');
+      notify('Enter the hours for each leave day as a number from 0 to 24.', 'warning');
       return;
     }
 
@@ -233,125 +233,58 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
 
       {isLeaveModalOpen && editingLeave && (
         <SettingsDialog
+          title={editingLeave.id ? 'Change the kind of leave' : 'Add a kind of leave'}
           onClose={() => setIsLeaveModalOpen(false)}
-          labelledBy={leaveModalTitleId}
-          overlayClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs"
-          panelClassName="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
+          onSave={() => handleSaveLeaveType(editingLeave)}
+          saveLabel={editingLeave.id ? 'Save changes' : 'Add the kind of leave'}
         >
-          <h3 id={leaveModalTitleId} className="text-sm font-bold text-slate-900">
-            {editingLeave.id ? 'Edit Leave Type' : 'Add Leave Type'}
-          </h3>
-          <div className="space-y-3">
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Leave Name</label>
-              <input
-                aria-label="Leave Name"
-                type="text"
-                value={editingLeave.name}
-                onChange={(e) => setEditingLeave({ ...editingLeave, name: e.target.value })}
-                placeholder="e.g. Compassionate Leave"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Acronym (max 3 chars)
-                </label>
-                <input
-                  aria-label="Acronym (max 3 chars)"
-                  type="text"
+          <Field label="Name" hint="For example: Compassionate leave.">
+            {(f) => <Input {...f} value={editingLeave.name} onChange={(e) => setEditingLeave({ ...editingLeave, name: e.target.value })} />}
+          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="Short name"
+              hint={
+                editingLeave.id && isBuiltInCode(leaveTypes.find((l) => l.id === editingLeave.id)?.acronym)
+                  ? "Built in: it can't be changed."
+                  : 'Up to 3 letters, shown in the roster.'
+              }
+            >
+              {(f) => (
+                <Input
+                  {...f}
                   maxLength={3}
                   disabled={!!editingLeave.id && isBuiltInCode(leaveTypes.find((l) => l.id === editingLeave.id)?.acronym)}
-                  title="Built in codes can't be changed"
                   value={editingLeave.acronym}
-                  onChange={(e) =>
-                    setEditingLeave({ ...editingLeave, acronym: e.target.value.toUpperCase() })
-                  }
-                  placeholder="CL"
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono font-bold uppercase"
+                  onChange={(e) => setEditingLeave({ ...editingLeave, acronym: e.target.value.toUpperCase() })}
+                  className="font-mono uppercase"
                 />
-              </div>
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Badge Color</label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    aria-label="Badge Color"
-                    type="color"
-                    value={editingLeave.color}
-                    onChange={(e) => setEditingLeave({ ...editingLeave, color: e.target.value })}
-                    className="w-8 h-8 rounded border border-slate-300 cursor-pointer"
-                  />
-                  <input
-                    aria-label="Badge Color (hex)"
-                    type="text"
-                    value={editingLeave.color}
-                    onChange={(e) => setEditingLeave({ ...editingLeave, color: e.target.value })}
-                    className="w-full px-2 py-1.5 border border-slate-300 rounded font-mono text-[11px]"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="leave-credited-hours" className="block font-medium text-slate-700 mb-1">
-                Hours counted per leave day
-              </label>
-              <input
-                id="leave-credited-hours"
+              )}
+            </Field>
+            <ColourField label="Colour" value={editingLeave.color || '#f59e0b'} palette={LEAVE_COLOR_PALETTE} onChange={(color) => setEditingLeave({ ...editingLeave, color })} />
+          </div>
+          <Field
+            label="Hours counted for each leave day"
+            hint="The usual hours for every day of this leave. To count a different number for one nurse on one day, open that day in the roster."
+          >
+            {(f) => (
+              <Input
+                {...f}
                 type="number"
                 min={0}
                 max={24}
                 step={0.5}
                 value={typeof editingLeave.creditedHours === 'number' ? editingLeave.creditedHours : 8}
-                onChange={(e) =>
-                  setEditingLeave({
-                    ...editingLeave,
-                    creditedHours: e.target.value === '' ? ('' as any) : Number(e.target.value),
-                  })
-                }
-                className="w-20 px-2 py-1 border border-slate-300 rounded font-mono text-center"
+                onChange={(e) => setEditingLeave({ ...editingLeave, creditedHours: e.target.value === '' ? ('' as any) : Number(e.target.value) })}
+                className="w-28"
               />
-              <span className="text-[10px] text-slate-400 mt-0.5 block">
-                The default for every day of this leave. To count a different number for one nurse on one day, open that day in the roster.
-              </span>
-            </div>
-
-            <div>
-              <label className="flex items-center gap-2 cursor-pointer mt-1">
-                <input
-                  type="checkbox"
-                  checked={editingLeave.countsTowardHoursTarget}
-                  onChange={(e) =>
-                    setEditingLeave({
-                      ...editingLeave,
-                      countsTowardHoursTarget: e.target.checked,
-                    })
-                  }
-                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4"
-                />
-                <span className="text-slate-700">Counts toward roster target hours</span>
-              </label>
-            </div>
-          </div>
-
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setIsLeaveModalOpen(false)}
-              className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSaveLeaveType(editingLeave)}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
-            >
-              Save Leave Type
-            </button>
-          </div>
+            )}
+          </Field>
+          <Checkbox
+            checked={editingLeave.countsTowardHoursTarget}
+            onChange={(e) => setEditingLeave({ ...editingLeave, countsTowardHoursTarget: e.target.checked })}
+            label="Counts toward the goal hours"
+          />
         </SettingsDialog>
       )}
     </>

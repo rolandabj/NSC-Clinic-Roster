@@ -8,7 +8,7 @@
  * and Manager Approver designations.
  */
 
-import React, { useState, useEffect, useId } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Shield,
   ShieldCheck,
@@ -33,7 +33,7 @@ import {
 import { UserProfile } from '../../services/auth/authService';
 import { getRepository } from '../../services/repository';
 import { UserAccessRecord, Nurse, Doctor, UserAccessRole, UserAccessStatus } from '../../types';
-import { useDialogA11y } from '../common/useDialogA11y';
+import { Button, Checkbox, Dialog, Field, Input, Select } from '../ui';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 
 interface AccessManagementPanelProps {
@@ -51,8 +51,6 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
 
   // New Whitelist User Modal
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const addTitleId = useId();
-  const addDialogRef = useDialogA11y<HTMLDivElement>(isAddModalOpen, () => setIsAddModalOpen(false));
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState<UserAccessRole>('VIEWER');
@@ -688,125 +686,58 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
         );
       })()}
 
-      {/* 4. PRE-APPROVE USER MODAL */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none">
-          <div
-            ref={addDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={addTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden text-xs"
-          >
-            <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                <h3 id={addTitleId} className="font-bold text-slate-900 text-sm">Pre-Approve Institutional User</h3>
-              </div>
-              <button
-                onClick={() => setIsAddModalOpen(false)}
-                className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
-                aria-label="Close"
-                title="Close"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddUserSubmit} className="p-5 space-y-4">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Google Workspace / Gmail Address <span className="text-rose-500">*</span>
-                </label>
-                <input aria-label="Google Workspace / Gmail Address"
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="nurse.name@gmail.com"
-                  required
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Staff Member Full Name</label>
-                <input aria-label="Staff Member Full Name"
-                  type="text"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. Fatima Al-Zahra"
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded focus:ring-1 focus:ring-indigo-500 focus:outline-none text-xs"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Roster Role</label>
-                  <select aria-label="Roster Role"
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value as UserAccessRole)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white text-xs"
-                  >
-                    <option value="VIEWER">Can view</option>
-                    <option value="EDITOR">Can edit (rosters, staff, settings)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Link Nurse Profile</label>
-                  <select aria-label="Link Nurse Profile"
-                    value={newLinkedNurseId}
-                    onChange={(e) => setNewLinkedNurseId(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white text-xs"
-                  >
-                    <option value="">-- Optional --</option>
-                    {nurses.map((nurse) => (
-                      <option key={nurse.id} value={nurse.id}>
-                        {nurse.fullName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-2">
-                <label className="flex items-center gap-2 p-2.5 rounded bg-indigo-50/60 border border-indigo-100 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newIsManager}
-                    onChange={(e) => setNewIsManager(e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <div>
-                    <span className="font-bold text-indigo-900 block">Can approve leave and availability</span>
-                    <span className="text-[10px] text-indigo-700">
-                      Lets this user approve or decline nurses' leave and availability requests. It doesn't let them edit rosters, staff or settings.
-                    </span>
-                  </div>
-                </label>
-              </div>
-
-              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-3 py-1.5 rounded border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isBusy}
-                  className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <Check className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Pre-Approve &amp; Save</span>
-                </button>
-              </div>
-            </form>
+      {/* Add a person before they first sign in (Phase 7, slice 4: on the shared Dialog). */}
+      <Dialog
+        open={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        title="Add a person"
+        description="They get this access the first time they sign in with this Google account."
+        footer={
+          <>
+            <Button onClick={() => setIsAddModalOpen(false)}>Cancel</Button>
+            <Button variant="primary" type="submit" form="add-person" icon={Check} busy={isBusy}>
+              Add the person
+            </Button>
+          </>
+        }
+      >
+        <form id="add-person" onSubmit={handleAddUserSubmit} className="space-y-4 text-sm">
+          <Field label="Google account email" hint="For example nurse.name@gmail.com.">
+            {(f) => <Input {...f} type="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />}
+          </Field>
+          <Field label="Full name" optional>
+            {(f) => <Input {...f} value={newName} onChange={(e) => setNewName(e.target.value)} />}
+          </Field>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="What they can do">
+              {(f) => (
+                <Select {...f} value={newRole} onChange={(e) => setNewRole(e.target.value as UserAccessRole)}>
+                  <option value="VIEWER">Look only</option>
+                  <option value="EDITOR">Change rosters, staff and settings</option>
+                </Select>
+              )}
+            </Field>
+            <Field label="Their nurse record" optional>
+              {(f) => (
+                <Select {...f} value={newLinkedNurseId} onChange={(e) => setNewLinkedNurseId(e.target.value)}>
+                  <option value="">None</option>
+                  {nurses.map((nurse) => (
+                    <option key={nurse.id} value={nurse.id}>
+                      {nurse.fullName}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
           </div>
-        </div>
-      )}
+          <Checkbox
+            checked={newIsManager}
+            onChange={(e) => setNewIsManager(e.target.checked)}
+            label="Can approve leave, days off and shifts"
+            hint="Lets them approve or decline nurses' requests. It doesn't let them change rosters, staff or settings."
+          />
+        </form>
+      </Dialog>
     </div>
   );
 };

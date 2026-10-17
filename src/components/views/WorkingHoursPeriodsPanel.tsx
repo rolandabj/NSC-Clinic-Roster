@@ -8,7 +8,7 @@
  * per roster period and verifies prorated hours calculations for short-range schedules.
  */
 
-import React, { useState, useEffect, useMemo, useId } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   CalendarRange,
   Clock,
@@ -28,7 +28,8 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { WorkingHoursPeriod } from '../../types';
-import { useDialogA11y } from '../common/useDialogA11y';
+import { Button, DateInput, Dialog, Field, Input, Notice } from '../ui';
+import { formatDate } from '../../utils/dateUtils';
 import { getRepository } from '../../services/repository';
 import { SEED_WORKING_HOURS_PERIODS } from '../../services/seed/seedData';
 import {
@@ -64,12 +65,6 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
   const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState<boolean>(false);
 
   // Dialog keyboard and screen reader support
-  const periodTitleId = useId();
-  const deleteTitleId = useId();
-  const restoreTitleId = useId();
-  const periodDialogRef = useDialogA11y<HTMLDivElement>(isModalOpen, () => setIsModalOpen(false));
-  const deleteDialogRef = useDialogA11y<HTMLDivElement>(!!deletingPeriod, () => setDeletingPeriod(null));
-  const restoreDialogRef = useDialogA11y<HTMLDivElement>(isRestoreConfirmOpen, () => setIsRestoreConfirmOpen(false));
 
   // Interactive Prorating Tester State
   const [testStartDate, setTestStartDate] = useState<string>('2026-01-19');
@@ -189,23 +184,23 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
     const hoursNum = typeof formWorkingHours === 'string' ? parseFloat(formWorkingHours) : formWorkingHours;
 
     if (!trimmedYear) {
-      setFormError('Please enter a year (e.g. 2026 or 2025-2026).');
+      setFormError('Enter the year, for example 2026.');
       return;
     }
     if (!trimmedName) {
-      setFormError('Please enter a period name (e.g. Dec19-Jan18).');
+      setFormError('Enter a name for the period, for example Dec19-Jan18.');
       return;
     }
     if (!formStartDate || !formEndDate) {
-      setFormError('Please specify both start and end dates.');
+      setFormError(`Enter the ${!formStartDate ? 'first' : 'last'} day, like 19-01-2026.`);
       return;
     }
     if (formStartDate > formEndDate) {
-      setFormError('Start date must be before or equal to end date.');
+      setFormError('The last day is before the first day.');
       return;
     }
     if (isNaN(hoursNum) || hoursNum <= 0 || hoursNum > 1000) {
-      setFormError('Working hours must be a number above 0.');
+      setFormError('Enter the goal hours as a number above 0.');
       return;
     }
     if (loadError) {
@@ -217,7 +212,7 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
     );
     if (overlap) {
       setFormError(
-        `These dates overlap "${overlap.name}" (${overlap.startDate} to ${overlap.endDate}). Each day can only be in one period.`
+        `These dates overlap ${overlap.name} (${formatDate(overlap.startDate)} to ${formatDate(overlap.endDate)}). Each day can only be in one period.`
       );
       return;
     }
@@ -663,260 +658,100 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Add / Edit Period Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-2xs animate-in fade-in duration-100">
-          <div
-            ref={periodDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={periodTitleId}
-            className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-150"
-          >
-            <div className="flex items-center justify-between p-4 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-                  <CalendarRange className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 id={periodTitleId} className="text-sm font-bold text-slate-900">
-                    {editingPeriodId ? 'Edit Dedicated Time Period' : 'New Dedicated Time Period'}
-                  </h3>
-                  <span className="text-[11px] text-slate-500">
-                    Define cycle dates and contracted full-time working hours.
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
-                aria-label="Close"
-                title="Close"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSavePeriod} className="p-4 space-y-3.5 text-xs">
-              {formError && (
-                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg text-xs flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>{formError}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                    Year / Cycle <span className="text-rose-500">*</span>
-                  </label>
-                  <input aria-label="Year / Cycle"
-                    type="text"
-                    required
-                    placeholder="e.g. 2026 or 2025-2026"
-                    value={formYear}
-                    onChange={(e) => setFormYear(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                    Period Name <span className="text-rose-500">*</span>
-                  </label>
-                  <input aria-label="Period Name"
-                    type="text"
-                    required
-                    placeholder="e.g. Jan19-Feb18"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                    Start Date <span className="text-rose-500">*</span>
-                  </label>
-                  <input aria-label="Start Date"
-                    type="date"
-                    required
-                    value={formStartDate}
-                    onChange={(e) => setFormStartDate(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                    End Date <span className="text-rose-500">*</span>
-                  </label>
-                  <input aria-label="End Date"
-                    type="date"
-                    required
-                    value={formEndDate}
-                    onChange={(e) => setFormEndDate(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Full-Time Working Hours (Target) <span className="text-rose-500">*</span>
-                </label>
-                <div className="relative">
-                  <input aria-label="Full-Time Working Hours (Target)"
-                    type="number"
-                    required
-                    min={1}
-                    max={500}
-                    step={1}
-                    placeholder="e.g. 210, 227, 145"
-                    value={formWorkingHours}
-                    onChange={(e) => setFormWorkingHours(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-indigo-700"
-                  />
-                  <span className="absolute right-3 top-2 text-[11px] text-slate-400 font-medium">hours</span>
-                </div>
-              </div>
-
-              {/* Calculated Rate Preview in Modal */}
-              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between text-[11px]">
-                <span className="text-slate-600">
-                  Duration: <b>{formDurationDays} days</b>
-                </span>
-                <span className="text-indigo-700 font-semibold">
-                  Daily Baseline: ~{formDailyRate} hrs/day
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                  Notes / Description (Optional)
-                </label>
-                <input aria-label="Notes / Description (Optional)"
-                  type="text"
-                  placeholder="e.g. Ramadan hours adjustments, standard 210h cycle"
-                  value={formNote}
-                  onChange={(e) => setFormNote(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-2xs disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  {isSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" /> : <Check className="w-3.5 h-3.5" aria-hidden="true" />}
-                  <span>{editingPeriodId ? 'Update Period' : 'Create Period'}</span>
-                </button>
-              </div>
-            </form>
+      {/* The three dialogs, on the shared Dialog since Phase 7, slice 4. */}
+      <Dialog
+        open={isModalOpen}
+        onClose={() => !isSaving && setIsModalOpen(false)}
+        title={editingPeriodId ? 'Change the time period' : 'New time period'}
+        description="The dates of a period and the goal hours of a full time nurse in it."
+        footer={
+          <>
+            <Button disabled={isSaving} onClick={() => setIsModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" form="time-period" icon={Check} busy={isSaving}>
+              {editingPeriodId ? 'Save changes' : 'Add the period'}
+            </Button>
+          </>
+        }
+      >
+        <form id="time-period" onSubmit={handleSavePeriod} noValidate className="space-y-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Year" hint="For example 2026, or 2025-2026.">
+              {(f) => <Input {...f} value={formYear} onChange={(e) => setFormYear(e.target.value)} />}
+            </Field>
+            <Field label="Name" hint="For example Jan19-Feb18.">
+              {(f) => <Input {...f} value={formName} onChange={(e) => setFormName(e.target.value)} />}
+            </Field>
           </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {deletingPeriod && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-2xs animate-in fade-in duration-100">
-          <div
-            ref={deleteDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={deleteTitleId}
-            className="bg-white rounded-xl shadow-xl w-full max-w-sm p-4 text-xs space-y-3"
-          >
-            <div className="flex items-center gap-2 text-rose-600 font-bold text-sm">
-              <AlertTriangle className="w-5 h-5 shrink-0" aria-hidden="true" />
-              <span id={deleteTitleId}>Delete Dedicated Period?</span>
-            </div>
-            <p className="text-slate-600 text-xs">
-              Are you sure you want to delete <b>{deletingPeriod.name} ({deletingPeriod.year})</b> with {deletingPeriod.workingHours}h target? Rosters covering dates without another dedicated period will use their own hours targets.
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setDeletingPeriod(null)}
-                className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmDelete}
-                className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-lg shadow-2xs"
-              >
-                Delete Period
-              </button>
-            </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="First day">{(f) => <DateInput {...f} value={formStartDate} onChange={setFormStartDate} />}</Field>
+            <Field label="Last day">{(f) => <DateInput {...f} value={formEndDate} onChange={setFormEndDate} />}</Field>
           </div>
-        </div>
-      )}
+          <Field label="Goal hours for a full time nurse" hint={`${formDurationDays} days, about ${formDailyRate} hours a day.`}>
+            {(f) => <Input {...f} type="number" min={1} max={500} step={1} value={formWorkingHours} onChange={(e) => setFormWorkingHours(e.target.value)} className="w-32" />}
+          </Field>
+          <Field label="Note" optional hint="For example: Ramadan hours.">
+            {(f) => <Input {...f} value={formNote} onChange={(e) => setFormNote(e.target.value)} />}
+          </Field>
+          {formError && <Notice tone="danger" live title={formError} />}
+        </form>
+      </Dialog>
 
-      {/* Restore Standard 2025-2026 Confirmation Modal */}
-      {isRestoreConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-2xs animate-in fade-in duration-100">
-          <div
-            ref={restoreDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={restoreTitleId}
-            className="bg-white rounded-xl shadow-xl w-full max-w-md p-4 text-xs space-y-3"
-          >
-            <div className="flex items-center gap-2 text-indigo-700 font-bold text-sm">
-              <RotateCcw className="w-5 h-5 shrink-0" aria-hidden="true" />
-              <span id={restoreTitleId}>Load 2025–2026 Baseline Periods?</span>
-            </div>
-            <p className="text-slate-600 text-xs leading-relaxed">
-              This adds the 12 standard periods below. If you changed any of them, your changes are replaced by the standard values. Other periods are kept.
-              <br />
-              <span className="font-mono text-[11px] block mt-1.5 bg-slate-50 p-2 rounded border border-slate-200 text-slate-700">
-                • Dec19–Jan18: 210h<br />
-                • Jan19–Feb18: 227h<br />
-                • Feb19–Mar18: 145h<br />
-                • Mar19–Apr18: 207h<br />
-                • Apr19–May18: 220h<br />
-                • May19–Jun18: 230h<br />
-                • Jun19–Jul18: 200h<br />
-                • Jul19–Aug18: 230h<br />
-                • Aug19–Sep18: 220h<br />
-                • Sep19–Oct18: 210h<br />
-                • Oct19–Nov18: 230h<br />
-                • Nov19–Dec18: 210h
-              </span>
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsRestoreConfirmOpen(false)}
-                className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded-lg"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleRestoreBaseline}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-2xs"
-              >
-                Confirm & Load Baseline
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog
+        open={!!deletingPeriod}
+        onClose={() => setDeletingPeriod(null)}
+        role="alertdialog"
+        size="sm"
+        title="Delete the time period?"
+        description={deletingPeriod ? `${deletingPeriod.name} ${deletingPeriod.year}, a goal of ${deletingPeriod.workingHours} h.` : undefined}
+        footer={
+          <>
+            <Button onClick={() => setDeletingPeriod(null)}>Cancel</Button>
+            <Button variant="danger" onClick={handleConfirmDelete}>
+              Delete the period
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-ink">Roster dates that no other period covers use their own goal hours.</p>
+      </Dialog>
+
+      <Dialog
+        open={isRestoreConfirmOpen}
+        onClose={() => setIsRestoreConfirmOpen(false)}
+        title="Load the usual periods of 2025 and 2026?"
+        description="This adds the 12 usual periods below. If you changed any of them, your changes are replaced by the usual hours. Other periods are kept."
+        footer={
+          <>
+            <Button onClick={() => setIsRestoreConfirmOpen(false)}>Cancel</Button>
+            <Button variant="primary" onClick={handleRestoreBaseline}>
+              Load the usual periods
+            </Button>
+          </>
+        }
+      >
+        <ul className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm text-ink sm:grid-cols-2">
+          {[
+            ['19 December to 18 January', 210],
+            ['19 January to 18 February', 227],
+            ['19 February to 18 March', 145],
+            ['19 March to 18 April', 207],
+            ['19 April to 18 May', 220],
+            ['19 May to 18 June', 230],
+            ['19 June to 18 July', 200],
+            ['19 July to 18 August', 230],
+            ['19 August to 18 September', 220],
+            ['19 September to 18 October', 210],
+            ['19 October to 18 November', 230],
+            ['19 November to 18 December', 210],
+          ].map(([when, hours]) => (
+            <li key={when as string}>
+              {when}: {hours} h
+            </li>
+          ))}
+        </ul>
+      </Dialog>
     </div>
   );
 };

@@ -14,13 +14,14 @@
  * nurses with the skill each day, in its time window.
  */
 
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Edit2, Lock } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import { ClinicalRole, Nurse } from '../../../types';
 import { bloodCollectionRole, nurseClinicRoleOf } from '../../../services/engine/clinicModel';
 import { notify, confirmDialog } from '../../common/dialogs';
 import { SaveNotifier, SettingsDialog, withSaveErrors } from './shared';
+import { Field, Input, Textarea } from '../../ui';
 
 interface NurseSkillsTabProps {
   clinicalRoles: ClinicalRole[];
@@ -51,7 +52,6 @@ const BUILT_IN = [
 
 export const NurseSkillsTab: React.FC<NurseSkillsTabProps> = ({ clinicalRoles, loadData, triggerSaveNotification }) => {
   const repo = getRepository();
-  const dialogTitleId = useId();
   const [nurses, setNurses] = useState<Nurse[]>([]);
   const [editing, setEditing] = useState<ClinicalRole | null>(null);
 
@@ -91,7 +91,7 @@ export const NurseSkillsTab: React.FC<NurseSkillsTabProps> = ({ clinicalRoles, l
   const handleSave = withSaveErrors('save the skill', async (role: ClinicalRole) => {
     const name = (role.name || '').trim();
     if (!name) {
-      notify('Please enter a name.', 'warning');
+      notify('Enter a name.', 'warning');
       return;
     }
 
@@ -101,7 +101,7 @@ export const NurseSkillsTab: React.FC<NurseSkillsTabProps> = ({ clinicalRoles, l
     } else {
       const code = (role.acronym || '').trim().toUpperCase();
       if (!/^[A-Z0-9]{1,4}$/.test(code)) {
-        notify('The code must be 1 to 4 letters or numbers.', 'warning');
+        notify('Enter a code of 1 to 4 letters or numbers.', 'warning');
         return;
       }
       if (RESERVED_CODES.includes(code)) {
@@ -110,12 +110,12 @@ export const NurseSkillsTab: React.FC<NurseSkillsTabProps> = ({ clinicalRoles, l
       }
       const duplicate = clinicalRoles.find((r) => r.acronym.toUpperCase() === code && r.id !== role.id);
       if (duplicate) {
-        notify(`The code ${code} is already used by "${duplicate.name}".`, 'warning');
+        notify(`${duplicate.name} already has the code ${code}.`, 'warning');
         return;
       }
       const perDay = Number(role.defaultDailyQuota);
       if (!Number.isInteger(perDay) || perDay < 1 || perDay > 20) {
-        notify('Nurses needed per day must be a whole number from 1 to 20.', 'warning');
+        notify('Enter the nurses needed each day as a whole number from 1 to 20.', 'warning');
         return;
       }
       const startTime = role.defaultStartTime || '09:00';
@@ -308,125 +308,42 @@ export const NurseSkillsTab: React.FC<NurseSkillsTabProps> = ({ clinicalRoles, l
 
       {editing && (
         <SettingsDialog
+          title={editing.id ? `Change ${editing.name || 'the skill'}` : 'Add a nurse skill'}
           onClose={() => setEditing(null)}
-          labelledBy={dialogTitleId}
-          overlayClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs"
-          panelClassName="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
+          onSave={() => handleSave(editing)}
+          saveLabel={editing.id ? 'Save changes' : 'Add the skill'}
         >
-          <h3 id={dialogTitleId} className="text-sm font-bold text-slate-900">
-            {editing.id ? `Edit ${editing.name || 'skill'}` : 'Add skill'}
-          </h3>
-          <div className="space-y-3">
-            <div>
-              <label htmlFor="skill-name" className="block font-medium text-slate-700 mb-1">
-                Name
-              </label>
-              <input
-                id="skill-name"
-                type="text"
-                value={editing.name}
-                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                placeholder="e.g. Wound care"
-                className="w-full px-3 py-1.5 border border-slate-300 rounded"
-              />
-            </div>
-
-            {editingBuiltIn ? (
-              <p className="text-[11px] text-slate-500">
-                The code <span className="font-mono font-bold">{editing.acronym}</span> is fixed, because the roster generator finds this skill by its code.
-              </p>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="skill-code" className="block font-medium text-slate-700 mb-1">
-                      Code (shown on the roster)
-                    </label>
-                    <input
-                      id="skill-code"
-                      type="text"
-                      maxLength={4}
-                      value={editing.acronym}
-                      onChange={(e) => setEditing({ ...editing, acronym: e.target.value.toUpperCase() })}
-                      placeholder="WND"
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono font-bold uppercase"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="skill-per-day" className="block font-medium text-slate-700 mb-1">
-                      Nurses needed per day
-                    </label>
-                    <input
-                      id="skill-per-day"
-                      type="number"
-                      min={1}
-                      max={20}
-                      step={1}
-                      value={editing.defaultDailyQuota}
-                      onChange={(e) => setEditing({ ...editing, defaultDailyQuota: Number(e.target.value) })}
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono text-center"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="skill-start" className="block font-medium text-slate-700 mb-1">
-                      From
-                    </label>
-                    <input
-                      id="skill-start"
-                      type="time"
-                      value={editing.defaultStartTime || '09:00'}
-                      onChange={(e) => setEditing({ ...editing, defaultStartTime: e.target.value })}
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="skill-end" className="block font-medium text-slate-700 mb-1">
-                      To
-                    </label>
-                    <input
-                      id="skill-end"
-                      type="time"
-                      value={editing.defaultEndTime || '13:00'}
-                      onChange={(e) => setEditing({ ...editing, defaultEndTime: e.target.value })}
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono bg-white"
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            <div>
-              <label htmlFor="skill-description" className="block font-medium text-slate-700 mb-1">
-                Description (optional)
-              </label>
-              <textarea
-                id="skill-description"
-                value={editing.description}
-                onChange={(e) => setEditing({ ...editing, description: e.target.value })}
-                rows={2}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded"
-              />
-            </div>
-          </div>
-
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setEditing(null)}
-              className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSave(editing)}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
-            >
-              Save
-            </button>
-          </div>
+          <Field label="Name" hint="For example: Wound care.">
+            {(f) => <Input {...f} value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />}
+          </Field>
+          {editingBuiltIn ? (
+            <p className="text-ink-muted">
+              The code <span className="font-mono font-semibold text-ink">{editing.acronym}</span> is fixed, because filling the roster finds this skill by its
+              code.
+            </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Code" hint="Up to 4 letters, shown on the roster.">
+                  {(f) => <Input {...f} maxLength={4} value={editing.acronym} onChange={(e) => setEditing({ ...editing, acronym: e.target.value.toUpperCase() })} className="font-mono uppercase" />}
+                </Field>
+                <Field label="Nurses needed each day">
+                  {(f) => <Input {...f} type="number" min={1} max={20} step={1} value={editing.defaultDailyQuota} onChange={(e) => setEditing({ ...editing, defaultDailyQuota: Number(e.target.value) })} />}
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="From">
+                  {(f) => <Input {...f} type="time" value={editing.defaultStartTime || '09:00'} onChange={(e) => setEditing({ ...editing, defaultStartTime: e.target.value })} />}
+                </Field>
+                <Field label="To">
+                  {(f) => <Input {...f} type="time" value={editing.defaultEndTime || '13:00'} onChange={(e) => setEditing({ ...editing, defaultEndTime: e.target.value })} />}
+                </Field>
+              </div>
+            </>
+          )}
+          <Field label="Description" optional>
+            {(f) => <Textarea {...f} rows={2} value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} />}
+          </Field>
         </SettingsDialog>
       )}
     </>

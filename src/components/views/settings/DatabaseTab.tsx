@@ -5,7 +5,7 @@
  * Settings > Database & Storage tab.
  */
 
-import React, { useEffect, useId, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Trash2, AlertTriangle, Download, Upload, RefreshCw, X } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import {
@@ -20,6 +20,8 @@ import { notify } from '../../common/dialogs';
 import { useAppContext } from '../../common/AppContext';
 import { defaultFirebaseConfig } from '../../../services/firebase/firebaseConfig';
 import { SaveNotifier, SettingsDialog } from './shared';
+import { formatDateTime } from '../../../utils/dateUtils';
+import { Button, Field, Input, Notice, Textarea } from '../../ui';
 
 interface DatabaseTabProps {
   loadData: () => Promise<void>;
@@ -30,8 +32,6 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
   // Tells the app all data was deleted: the top bar forgets the roster and screens load again.
   const clinicDataCleared = useAppContext()?.clinicDataCleared;
   const repo = getRepository();
-  const clearModalTitleId = useId();
-  const importModalTitleId = useId();
 
   // Database & Storage management state
   const [dbStats, setDbStats] = useState<DatabaseStats | null>(null);
@@ -293,185 +293,97 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
 
       {isClearConfirmOpen && (
         <SettingsDialog
+          size="sm"
+          title="Delete all clinic data?"
+          description="Staff, doctors, rosters, settings and history are deleted for everyone. A backup downloads first, and user access is kept."
           onClose={() => {
             if (isBusyAction) return;
             setIsClearConfirmOpen(false);
             setClearConfirmInput('');
           }}
-          labelledBy={clearModalTitleId}
-          overlayClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
-          panelClassName="bg-white dark:bg-slate-900 rounded-lg border border-red-200 dark:border-red-900 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
+          footer={
+            <>
+              <Button
+                disabled={isBusyAction}
+                onClick={() => {
+                  setIsClearConfirmOpen(false);
+                  setClearConfirmInput('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button variant="danger" icon={Trash2} busy={isBusyAction} disabled={clearConfirmInput.trim() !== 'CLEAR'} onClick={handleClearDatabase}>
+                Download a backup and delete
+              </Button>
+            </>
+          }
         >
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 id={clearModalTitleId} className="text-sm font-bold text-red-900 dark:text-red-300">
-                Delete all clinic data?
-              </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                Staff, doctors, rosters, settings and history will be deleted for everyone. A backup downloads first, and user access is kept. Type <strong className="font-mono text-red-700 dark:text-red-400">CLEAR</strong> below to confirm.
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-              Type CLEAR
-            </label>
-            <input
-              aria-label="Type CLEAR to confirm"
-              type="text"
-              value={clearConfirmInput}
-              onChange={(e) => setClearConfirmInput(e.target.value.toUpperCase())}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !isBusyAction && clearConfirmInput.trim() === 'CLEAR') {
-                  e.preventDefault();
-                  handleClearDatabase();
-                }
-              }}
-              placeholder="Type CLEAR to confirm"
-              className="w-full px-3 py-1.5 border border-red-300 rounded font-mono text-xs focus:ring-1 focus:ring-red-500 uppercase"
-              autoFocus
-            />
-          </div>
-
-          <div className="pt-2 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setIsClearConfirmOpen(false);
-                setClearConfirmInput('');
-              }}
-              disabled={isBusyAction}
-              className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleClearDatabase}
-              disabled={isBusyAction || clearConfirmInput.trim() !== 'CLEAR'}
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40 transition-colors"
-            >
-              {isBusyAction ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-              <span>Download backup and delete</span>
-            </button>
-          </div>
+          <Field label="To delete everything, type CLEAR">
+            {(f) => (
+              <Input
+                {...f}
+                autoComplete="off"
+                value={clearConfirmInput}
+                onChange={(e) => setClearConfirmInput(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !isBusyAction && clearConfirmInput.trim() === 'CLEAR') {
+                    e.preventDefault();
+                    handleClearDatabase();
+                  }
+                }}
+                className="font-mono uppercase"
+              />
+            )}
+          </Field>
         </SettingsDialog>
       )}
 
       {isImportModalOpen && (
         <SettingsDialog
-          onClose={() => {
-            // A restore in progress keeps the dialog open, like its disabled Cancel button.
-            if (!isBusyAction) setIsImportModalOpen(false);
-          }}
-          labelledBy={importModalTitleId}
-          overlayClassName="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
-          panelClassName="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 shadow-xl max-w-lg w-full p-5 space-y-4 text-xs"
+          title="Restore from a backup"
+          // A restore in progress keeps the dialog open, like its disabled Cancel button.
+          onClose={() => !isBusyAction && setIsImportModalOpen(false)}
+          footer={
+            <>
+              <Button disabled={isBusyAction} onClick={() => setIsImportModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" icon={Upload} busy={isBusyAction} disabled={!backupCheck?.ok} onClick={handleImportBackup}>
+                Download a backup and restore
+              </Button>
+            </>
+          }
         >
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-            <h3 id={importModalTitleId} className="text-sm font-bold text-slate-900 dark:text-white">
-              Restore from a backup
-            </h3>
-            <button
-              type="button"
-              aria-label="Close"
-              onClick={() => {
-                if (!isBusyAction) setIsImportModalOpen(false);
-              }}
-              disabled={isBusyAction}
-              className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
-            >
-              <X className="w-4 h-4" aria-hidden="true" />
-            </button>
-          </div>
-
-          <div className="space-y-3">
-            <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Backup file (.json)
-              </label>
+          <Field label="Backup file (.json)">
+            {(f) => (
               <input
-                aria-label="Backup file (.json)"
+                {...f}
                 type="file"
                 accept=".json,application/json"
                 onChange={handleFileUpload}
-                className="w-full text-xs text-slate-500 file:mr-3 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+                className="block text-sm text-ink-muted file:mr-3 file:h-9 file:rounded-md file:border file:border-line-strong file:bg-surface file:px-3 file:text-sm file:font-semibold file:text-ink hover:file:bg-sunken"
               />
-            </div>
-
-            <div>
-              <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                Or paste the backup text
-              </label>
-              <textarea
-                aria-label="Or paste the backup text"
-                rows={6}
-                value={importJsonText}
-                onChange={(e) => setImportJsonText(e.target.value)}
-                placeholder='{"app": "ClinicRoster", "collections": { ... }}'
-                className="w-full p-2 border border-slate-300 dark:border-slate-700 rounded font-mono text-[11px] bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200"
-              />
-            </div>
-
-            {backupCheck && !backupCheck.ok && (
-              <div className="p-2.5 rounded border text-[11px] bg-red-50 border-red-200 text-red-700">
-                {backupCheck.error}
-              </div>
             )}
-
-            {backupCheck?.ok && (
-              <div className="p-2.5 rounded border text-[11px] bg-amber-50 border-amber-200 text-amber-900 space-y-1">
-                <p>
-                  This backup{backupCheck.exportedAt ? ` from ${new Date(backupCheck.exportedAt).toLocaleString()}` : ''} has{' '}
-                  <strong>{backupCheck.total}</strong> records
-                  {' '}({['nurses', 'doctors', 'schedules', 'assignments']
-                    .filter((c) => backupCheck.counts[c])
-                    .map((c) => `${backupCheck.counts[c]} ${c}`)
-                    .join(', ') || 'settings only'}).
-                </p>
-                <p>
-                  Restoring replaces <strong>all</strong> current clinic data for everyone. A backup of the current data downloads first.
-                  User access and the history of changes stay as they are.
-                </p>
-              </div>
-            )}
-
-            {backupStatusMessage && (
-              <div
-                className={`p-2.5 rounded border text-[11px] ${
-                  backupStatusMessage.error
-                    ? 'bg-red-50 border-red-200 text-red-700'
-                    : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                }`}
-              >
-                {backupStatusMessage.text}
-              </div>
-            )}
-          </div>
-
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={() => setIsImportModalOpen(false)}
-              disabled={isBusyAction}
-              className="px-3 py-1.5 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded cursor-pointer"
+          </Field>
+          <Field label="Or paste the backup text">
+            {(f) => <Textarea {...f} rows={6} value={importJsonText} onChange={(e) => setImportJsonText(e.target.value)} className="font-mono" />}
+          </Field>
+          {backupCheck && !backupCheck.ok && <Notice tone="danger" live title={backupCheck.error} />}
+          {backupCheck?.ok && (
+            <Notice
+              tone="warning"
+              title={`This backup${backupCheck.exportedAt ? ` of ${formatDateTime(backupCheck.exportedAt)}` : ''} has ${backupCheck.total} records (${
+                ['nurses', 'doctors', 'schedules', 'assignments']
+                  .filter((c) => backupCheck.counts[c])
+                  .map((c) => `${backupCheck.counts[c]} ${c === 'schedules' ? 'rosters' : c === 'assignments' ? 'shifts' : c}`)
+                  .join(', ') || 'settings only'
+              }).`}
             >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleImportBackup}
-              disabled={isBusyAction || !backupCheck?.ok}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer shadow-xs disabled:opacity-40"
-            >
-              {isBusyAction ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-              <span>Download backup and restore</span>
-            </button>
-          </div>
+              Restoring replaces all current clinic data for everyone. A backup of the current data downloads first. User access and the history of changes
+              stay as they are.
+            </Notice>
+          )}
+          {backupStatusMessage && <Notice tone={backupStatusMessage.error ? 'danger' : 'success'} live title={backupStatusMessage.text} />}
         </SettingsDialog>
       )}
     </>
