@@ -1,47 +1,17 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
- * Schedule Version History Center (Phase 10 & 16)
- * Complete interactive historical snapshot studio with calendar matrix inspection,
- * diff audit, non-destructive restore, and permanent deletion with verification prompt.
+ *
+ * History: every saved copy, automatic backup and published version of every roster, with one
+ * set of filters. Pick one to see its shifts, what changed since, and to download, restore or
+ * delete it. Restore and delete are for planners; deleting a whole roster is only in the
+ * roster's More menu (Phase 7, slice 5).
  */
 
-import { isWeekendDay } from '../../utils/weekend';
-import React, { useState, useEffect, useMemo, useId } from 'react';
-import { useDialogA11y } from '../common/useDialogA11y';
+import React, { useState, useEffect, useMemo } from 'react';
 import { usePermissions } from '../common/usePermissions';
-import { notify, type NoticeTone } from '../common/dialogs';
-import {
-  History,
-  RotateCcw,
-  Eye,
-  CheckCircle2,
-  Calendar,
-  User,
-  ArrowRight,
-  Shield,
-  FileSpreadsheet,
-  AlertTriangle,
-  Diff,
-  Download,
-  Filter,
-  Search,
-  Sparkles,
-  Layers,
-  Clock,
-  Trash2,
-  LayoutGrid,
-  List,
-  ChevronLeft,
-  ChevronRight,
-  ArrowUpDown,
-  Lock,
-  Droplets,
-  Info,
-  Maximize2,
-  Check,
-} from 'lucide-react';
+import { notify } from '../common/dialogs';
+import { ChevronLeft, ChevronRight, Diff, Download, History, Lock, Maximize2, RotateCcw, Search, Trash2 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
 import { restoreVersion } from '../../services/history/versionRestore';
@@ -60,32 +30,67 @@ import {
   SeniorityLevel,
   Rule,
 } from '../../types';
+import { computeScheduleDiff, ScheduleVersionDiff, type ChangeType } from '../../services/history/diffEngine';
 import {
-  computeScheduleDiff,
-  ScheduleVersionDiff,
-} from '../../services/history/diffEngine';
+  filterVersions,
+  versionKind,
+  versionKindLabel,
+  versionName,
+  versionYears,
+  type VersionFilters,
+  type VersionKind,
+} from '../../services/history/versionKinds';
+import { VersionRoster, shiftTargetName } from '../history/VersionRoster';
 import { VersionCompareModal } from '../modals/VersionCompareModal';
 import { VersionViewModal } from '../modals/VersionViewModal';
 import { ExportModal } from '../modals/ExportModal';
 import { DeleteVersionModal } from '../modals/DeleteVersionModal';
-import { DeleteScheduleModal } from '../modals/DeleteScheduleModal';
-import { deleteEntireSchedule } from '../../services/schedule/scheduleDeletionService';
-import { withoutBackups } from '../../services/history/versionList';
-import { isFloatShift } from '../../services/engine/floatShift';
+import { formatDate, formatDateTime } from '../../utils/dateUtils';
+import {
+  Badge,
+  Button,
+  Card,
+  DataTable,
+  Dialog,
+  EmptyState,
+  ErrorState,
+  Field,
+  IconButton,
+  Input,
+  LoadingState,
+  Notice,
+  PageHeader,
+  Select,
+  TabPanel,
+  Tabs,
+  cx,
+  type Column,
+  type Tone,
+} from '../ui';
 
 interface HistoryViewProps {
   context: ClinicContextState;
 }
 
-const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const KIND_TONES: Record<VersionKind, Tone> = { SAVED: 'neutral', BACKUP: 'warning', PUBLISHED: 'success' };
+
+const CHANGE_WORDS: Record<ChangeType, { word: string; tone: Tone }> = {
+  ADDED: { word: 'Added', tone: 'success' },
+  REMOVED: { word: 'Removed', tone: 'danger' },
+  MODIFIED: { word: 'Changed', tone: 'info' },
+};
+
+const NO_FILTERS: VersionFilters = { kind: 'ALL', year: 'ALL', search: '', order: 'NEWEST' };
+
+type StudioTab = 'ROSTER' | 'CHANGES' | 'SHIFTS' | 'DETAILS';
 
 export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
   // Restore and delete need a planner (firestore.rules refuses everyone else). Downloads are kept
   // to planners and managers: a screen choice, since the rules let approved users read this data.
   const { canEdit, canExport } = usePermissions();
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'failed'>('loading');
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [activeSchedule, setActiveSchedule] = useState<Schedule | null>(null);
-  const [activeAssignments, setActiveAssignments] = useState<Assignment[]>([]);
+  const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);
   const [versions, setVersions] = useState<ScheduleVersion[]>([]);
   const [nurses, setNurses] = useState<Nurse[]>([]);
   const [dutyWindows, setDutyWindows] = useState<DutyWindow[]>([]);
@@ -98,85 +103,43 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
   const [seniorityLevels, setSeniorityLevels] = useState<SeniorityLevel[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
 
-  // Selected Version for inspection
-  const [selectedVersion, setSelectedVersion] = useState<ScheduleVersion | null>(null);
+  const [filters, setFilters] = useState<VersionFilters>(NO_FILTERS);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [studioTab, setStudioTab] = useState<StudioTab>('ROSTER');
 
-  // Studio tabs: Roster Matrix, Diff vs Draft, Shifts List, Snapshot Metadata
-  const [studioTab, setStudioTab] = useState<'MATRIX' | 'DIFF' | 'SHIFTS' | 'INFO'>('MATRIX');
 
-  // Matrix controls
-  const [matrixBlockIndex, setMatrixBlockIndex] = useState<number>(0);
-  const [matrixShowAllDates, setMatrixShowAllDates] = useState<boolean>(false);
-  const [matrixNurseFilter, setMatrixNurseFilter] = useState<string>('ALL');
-  const [matrixSearchQuery, setMatrixSearchQuery] = useState<string>('');
-
-  // Version Timeline Filters
-  const [versionSearch, setVersionSearch] = useState<string>('');
-  const [versionTypeFilter, setVersionTypeFilter] = useState<'ALL' | 'PUBLISHED' | 'RESTORED'>('ALL');
-  const [selectedYear, setSelectedYear] = useState<string>('ALL');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc'); // Sort from earliest to latest
-  const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);
-
-  // Modals
-  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
   const [compareBaseId, setCompareBaseId] = useState<string | undefined>(undefined);
   const [compareTargetId, setCompareTargetId] = useState<string | undefined>(undefined);
-
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [versionToView, setVersionToView] = useState<ScheduleVersion | null>(null);
-
-  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const [versionToRestore, setVersionToRestore] = useState<ScheduleVersion | null>(null);
-  const restoreTitleId = useId();
-  const restoreDialogRef = useDialogA11y<HTMLDivElement>(isRestoreModalOpen && !!versionToRestore, () => {
-    setIsRestoreModalOpen(false);
-    setVersionToRestore(null);
-  });
-
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [versionToDelete, setVersionToDelete] = useState<ScheduleVersion | null>(null);
-
-  const [isDeleteScheduleModalOpen, setIsDeleteScheduleModalOpen] = useState(false);
-  const [scheduleToDelete, setScheduleToDelete] = useState<Schedule | null>(null);
-
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   const repo = getRepository();
 
   const loadData = async () => {
     try {
-      const [
-        schedList,
-        asgnList,
-        vList,
-        nList,
-        dwList,
-        dList,
-        sessList,
-        crList,
-        spList,
-        leList,
-        ltList,
-        sList,
-        rList,
-      ] = await Promise.all([
-        repo.list('schedules'),
-        repo.list('assignments'),
-        repo.list('versions').then(withoutBackups),
-        repo.list('nurses'),
-        repo.list('dutyWindows'),
-        repo.list('doctors'),
-        repo.list('doctorSessions'),
-        repo.list('clinicalRoles'),
-        repo.list('specialties'),
-        repo.list('leaveEntries'),
-        repo.list('leaveTypes'),
-        repo.list('seniorityLevels'),
-        repo.list('rules'),
-      ]);
-
-      const uniqueSchedules = Array.from(new Map(schedList.map((s) => [s.id, s])).values());
-      setSchedules(uniqueSchedules);
+      const [schedList, asgnList, vList, nList, dwList, dList, sessList, crList, spList, leList, ltList, sList, rList] =
+        await Promise.all([
+          repo.list('schedules'),
+          repo.list('assignments'),
+          repo.list('versions'),
+          repo.list('nurses'),
+          repo.list('dutyWindows'),
+          repo.list('doctors'),
+          repo.list('doctorSessions'),
+          repo.list('clinicalRoles'),
+          repo.list('specialties'),
+          repo.list('leaveEntries'),
+          repo.list('leaveTypes'),
+          repo.list('seniorityLevels'),
+          repo.list('rules'),
+        ]);
+      setSchedules(Array.from(new Map(schedList.map((s) => [s.id, s])).values()));
+      setAllAssignments(asgnList);
+      setVersions(vList);
       setNurses(nList);
       setDutyWindows(dwList);
       setDoctors(dList);
@@ -187,24 +150,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
       setLeaveTypes(ltList);
       setSeniorityLevels(sList);
       setRules(rList);
-      setAllAssignments(asgnList);
-
-      // Allow all previous versions to be viewed in the checkpoint timeline
-      setVersions(vList);
-
-      const current =
-        schedList.find((s) => s.id === context.activeScheduleId) || schedList[0];
-      if (current) {
-        setActiveSchedule(current);
-        const schedAsgns = asgnList.filter((a) => a.scheduleId === current.id);
-        setActiveAssignments(schedAsgns);
-      }
-
-      if (vList.length > 0 && !selectedVersion) {
-        setSelectedVersion(vList[0]);
-      }
+      setLoadState('ready');
     } catch (err) {
-      console.error('Error loading version history:', err);
+      console.error('Error loading History:', err);
+      setLoadState('failed');
     }
   };
 
@@ -212,1464 +161,596 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
     loadData();
   }, []);
 
-  // When selectedVersion changes, sync activeSchedule and activeAssignments to this version's schedule
-  useEffect(() => {
-    if (selectedVersion) {
-      const schedId = selectedVersion.scheduleId;
-      const sched = schedules.find((s) => s.id === schedId);
-      if (sched) {
-        setActiveSchedule(sched);
-      }
-      const schedAsgns = allAssignments.filter((a) => a.scheduleId === schedId);
-      setActiveAssignments(schedAsgns);
-    }
-  }, [selectedVersion, allAssignments, schedules]);
+  const shown = useMemo(() => filterVersions(versions, filters), [versions, filters]);
+  const years = useMemo(() => versionYears(versions), [versions]);
+  const filtered = filters.kind !== 'ALL' || filters.year !== 'ALL' || filters.search.trim() !== '';
 
-  const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
+  // The version open on the right: the one picked, or else the first one in the list.
+  const selectedVersion = shown.find((v) => v.id === selectedId) || shown[0] || null;
+  const selectedIndex = selectedVersion ? shown.indexOf(selectedVersion) : -1;
+  const prevVersion = selectedIndex > 0 ? shown[selectedIndex - 1] : null;
+  const nextVersion = selectedIndex >= 0 && selectedIndex < shown.length - 1 ? shown[selectedIndex + 1] : null;
 
-  const handleScheduleChange = (schedId: string) => {
-    const found = schedules.find((s) => s.id === schedId);
-    if (found) {
-      setActiveSchedule(found);
-      setMatrixBlockIndex(0);
-      repo.list('assignments').then((asgns) => {
-        setActiveAssignments(asgns.filter((a) => a.scheduleId === found.id));
-      });
-      repo.list('versions').then((vList) => {
-        const schedVersions = withoutBackups(vList)
-          .filter((v) => v.scheduleId === found.id)
-          .sort((a, b) => b.number - a.number);
-        setVersions(schedVersions);
-        if (schedVersions.length > 0) {
-          setSelectedVersion(schedVersions[0]);
-        } else {
-          setSelectedVersion(null);
-        }
-      });
+  const scheduleMap = useMemo(() => new Map(schedules.map((s) => [s.id, s])), [schedules]);
+  // The roster of the version open on the right, as it is now, and its shifts now.
+  const roster = selectedVersion ? scheduleMap.get(selectedVersion.scheduleId) || null : null;
+  const rosterAssignments = useMemo(
+    () => (selectedVersion ? allAssignments.filter((a) => a.scheduleId === selectedVersion.scheduleId) : []),
+    [allAssignments, selectedVersion]
+  );
+  const effectiveSchedule = selectedVersion?.snapshot.schedule || roster;
+
+  /** The roster's current version (backups have no number, so never). */
+  const isCurrent = (v: ScheduleVersion) => v.kind !== 'BACKUP' && v.number === scheduleMap.get(v.scheduleId)?.activeVersionNumber;
+
+  const pick = (v: ScheduleVersion) => setSelectedId(v.id);
+
+  const askRestore = (v: ScheduleVersion) => {
+    if (v.kind === 'BACKUP') {
+      notify('Automatic backups are restored from the roster screen: More, then Backup copies.', 'info');
+      return;
     }
+    setVersionToRestore(v);
   };
 
-  // A version goes back into its own roster (History lists every roster's versions,
-  // so the roster selected on screen can be a different one).
+  // A version goes back into its own roster (History lists every roster's versions).
   const handleConfirmRestore = async () => {
-    if (!versionToRestore) return;
-
+    if (!versionToRestore || isRestoring) return;
+    setIsRestoring(true);
     try {
-      const result = await restoreVersion(
-        repo,
-        versionToRestore,
-        context.currentUser?.name || context.currentUser?.email || 'Planner'
+      const result = await restoreVersion(repo, versionToRestore, context.currentUser?.name || context.currentUser?.email || 'Planner');
+      notify(
+        `Version ${versionToRestore.number} of ${result.schedule.name} restored as version ${result.newVersionNumber}. A backup of the shifts before it was kept.`,
+        'success'
       );
-      triggerToast(
-        `Restored v${versionToRestore.number} of "${result.schedule.name}" as v${result.newVersionNumber}. A backup copy of the shifts before it was kept.`
-      );
-      setIsRestoreModalOpen(false);
       setVersionToRestore(null);
       await loadData();
     } catch (err: any) {
-      notify(`Restore failed: ${err.message}`, 'error');
+      notify(`The version could not be restored: ${err.message}`, 'error');
+    } finally {
+      setIsRestoring(false);
     }
   };
 
-  // Safe permanent deletion after verification
   const handleConfirmDelete = async (ver: ScheduleVersion) => {
     try {
-      const deletedNumber = ver.number;
-      const deletedId = ver.id;
-
-      // 1. Remove from repository
-      await repo.remove('versions', deletedId);
-
-      // 2. Log in audit ledger
+      await repo.remove('versions', ver.id);
       await repo.create('audit', {
-        actor: context.currentUser?.name || 'Admin',
+        scheduleId: ver.scheduleId,
+        actor: context.currentUser?.name || 'Planner',
         action: 'DELETE',
         entity: 'ScheduleVersion',
-        entityId: deletedId,
-        note: `Permanently deleted version checkpoint v${deletedNumber} ("${ver.note || 'No note'}")`,
+        entityId: ver.id,
+        note: `Deleted ${versionName(ver).toLowerCase()} of ${ver.snapshot?.schedule?.name || 'a roster'} ("${ver.note || 'no note'}")`,
         timestamp: new Date().toISOString(),
       });
-
-      // 3. Update local state
-      const updatedVersions = versions.filter((v) => v.id !== deletedId);
-      setVersions(updatedVersions);
-
-      if (selectedVersion?.id === deletedId) {
-        setSelectedVersion(updatedVersions.length > 0 ? updatedVersions[0] : null);
-      }
-
-      setIsDeleteModalOpen(false);
+      setVersions((list) => list.filter((v) => v.id !== ver.id));
+      if (selectedId === ver.id) setSelectedId(null);
       setVersionToDelete(null);
-      triggerToast(`Version v${deletedNumber} permanently deleted.`);
+      notify(`${versionName(ver)} deleted.`, 'success');
     } catch (err: any) {
       console.error('Delete failed:', err);
-      notify(`Delete failed: ${err.message || 'Unknown error'}`, 'error');
+      notify(`The version could not be deleted: ${err.message || 'unknown error'}`, 'error');
     }
   };
 
-  // Safe permanent deletion of an entire schedule period
-  const handleConfirmDeleteSchedule = async (sched: Schedule) => {
-    try {
-      const result = await deleteEntireSchedule(repo, sched.id, context.currentUser?.name || 'Admin');
-
-      const remainingSchedules = schedules.filter((s) => s.id !== sched.id);
-      setSchedules(remainingSchedules);
-
-      setIsDeleteScheduleModalOpen(false);
-      setScheduleToDelete(null);
-      triggerToast(`Schedule "${result.scheduleName}" and all associated versions were permanently deleted.`);
-
-      if (activeSchedule?.id === sched.id) {
-        if (remainingSchedules.length > 0) {
-          handleScheduleChange(remainingSchedules[0].id);
-        } else {
-          setActiveSchedule(null);
-          setActiveAssignments([]);
-          setVersions([]);
-          setSelectedVersion(null);
-        }
-      }
-    } catch (err: any) {
-      console.error('Delete schedule failed:', err);
-      notify(`Delete schedule failed: ${err.message || 'Unknown error'}`, 'error');
-    }
-  };
-
-  // Compare helpers
-  const handleOpenCompareWithDraft = (version: ScheduleVersion) => {
-    setCompareBaseId(version.id);
+  const openCompare = (base: ScheduleVersion) => {
+    setCompareBaseId(base.id);
     setCompareTargetId('DRAFT');
-    setIsCompareModalOpen(true);
+    setIsCompareOpen(true);
   };
 
-  const handleOpenCompareTwoVersions = (baseVer: ScheduleVersion, targetVer: ScheduleVersion) => {
-    setCompareBaseId(baseVer.id);
-    setCompareTargetId(targetVer.id);
-    setIsCompareModalOpen(true);
-  };
-
-  const handleOpenViewSnapshot = (version: ScheduleVersion) => {
-    setVersionToView(version);
-    setIsViewModalOpen(true);
-  };
-
-  // Live diff computation between selected version and current active draft
-  const selectedVsDraftDiff: ScheduleVersionDiff | null = useMemo(() => {
+  // What changed from the version open on the right to its roster now.
+  const diff: ScheduleVersionDiff | null = useMemo(() => {
     if (!selectedVersion) return null;
     return computeScheduleDiff(
       selectedVersion.snapshot.assignments || [],
-      activeAssignments,
+      rosterAssignments,
       nurses,
       dutyWindows,
       doctors,
       roles,
       specialties,
-      `v${selectedVersion.number}`,
-      'Active Draft'
+      versionName(selectedVersion),
+      'The roster now'
     );
-  }, [
-    selectedVersion,
-    activeAssignments,
-    nurses,
-    dutyWindows,
-    doctors,
-    roles,
-    specialties,
-  ]);
+  }, [selectedVersion, rosterAssignments, nurses, dutyWindows, doctors, roles, specialties]);
 
-  // Lookup dictionaries
   const dutyMap = useMemo(() => new Map(dutyWindows.map((d) => [d.id, d])), [dutyWindows]);
   const nurseMap = useMemo(() => new Map(nurses.map((n) => [n.id, n])), [nurses]);
   const doctorMap = useMemo(() => new Map(doctors.map((d) => [d.id, d])), [doctors]);
   const roleMap = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
   const specialtyMap = useMemo(() => new Map(specialties.map((s) => [s.id, s])), [specialties]);
-  const seniorityMap = useMemo(() => new Map(seniorityLevels.map((s) => [s.id, s])), [seniorityLevels]);
-  const leaveTypeMap = useMemo(() => new Map(leaveTypes.map((l) => [l.id, l])), [leaveTypes]);
 
-  // Available years from versions history
-  const availableYears = useMemo(() => {
-    const yearsSet = new Set<string>();
-    versions.forEach((v) => {
-      if (v.timestamp) {
-        const y = new Date(v.timestamp).getFullYear().toString();
-        if (!isNaN(Number(y)) && y.length === 4) yearsSet.add(y);
-      }
-      if (v.snapshot?.schedule?.startDate) {
-        const y = v.snapshot.schedule.startDate.split('-')[0];
-        if (y && !isNaN(Number(y)) && y.length === 4) yearsSet.add(y);
-      }
-    });
-    return Array.from(yearsSet).sort((a, b) => b.localeCompare(a));
-  }, [versions]);
+  const shiftTarget = (a: Assignment) => shiftTargetName(a, { doctors: doctorMap, roles: roleMap, specialties: specialtyMap });
 
-  // Filter and sort versions for timeline rail
-  const filteredVersions = useMemo(() => {
-    return versions
-      .filter((ver) => {
-        const q = versionSearch.toLowerCase().trim();
-        const schedName = (ver.snapshot?.schedule?.name || '').toLowerCase();
-        const matchesSearch =
-          !q ||
-          ver.note?.toLowerCase().includes(q) ||
-          ver.author.toLowerCase().includes(q) ||
-          `v${ver.number}`.includes(q) ||
-          schedName.includes(q);
+  const shiftColumns: Column<Assignment>[] = [
+    { key: 'date', header: 'Date', cell: (a) => formatDate(a.date), sortValue: (a) => a.date },
+    {
+      key: 'nurse',
+      header: 'Nurse',
+      cell: (a) => <span className="font-medium text-ink">{nurseMap.get(a.nurseId)?.fullName || 'A nurse no longer listed'}</span>,
+      sortValue: (a) => nurseMap.get(a.nurseId)?.fullName || '',
+      phone: 'title',
+    },
+    {
+      key: 'shift',
+      header: 'Shift',
+      cell: (a) => {
+        const duty = dutyMap.get(a.dutyWindowId);
+        return duty ? `${duty.acronym}, ${duty.name}` : 'A shift no longer listed';
+      },
+      sortValue: (a) => dutyMap.get(a.dutyWindowId)?.name || '',
+    },
+    { key: 'for', header: 'With', cell: (a) => shiftTarget(a) || 'Not set', sortValue: (a) => shiftTarget(a) },
+    {
+      key: 'pinned',
+      header: 'Pinned',
+      cell: (a) => (a.locked ? <Badge tone="warning" icon={Lock}>Pinned</Badge> : <span className="text-ink-muted">No</span>),
+      sortValue: (a) => (a.locked ? 1 : 0),
+    },
+  ];
 
-        const matchesType =
-          versionTypeFilter === 'ALL' ||
-          (versionTypeFilter === 'PUBLISHED' && ver.isPublished) ||
-          (versionTypeFilter === 'RESTORED' && ver.note?.toLowerCase().includes('restored'));
+  const changeColumns: Column<ScheduleVersionDiff['allChanges'][number]>[] = [
+    { key: 'date', header: 'Date', cell: (c) => formatDate(c.date), sortValue: (c) => c.date },
+    { key: 'nurse', header: 'Nurse', cell: (c) => <span className="font-medium text-ink">{c.nurseName}</span>, sortValue: (c) => c.nurseName, phone: 'title' },
+    {
+      key: 'change',
+      header: 'Change',
+      cell: (c) => <Badge tone={CHANGE_WORDS[c.changeType].tone}>{CHANGE_WORDS[c.changeType].word}</Badge>,
+      sortValue: (c) => CHANGE_WORDS[c.changeType].word,
+    },
+    {
+      key: 'before',
+      header: selectedVersion ? `In ${versionName(selectedVersion).toLowerCase()}` : 'Before',
+      cell: (c) => (c.before ? `${c.before.dutyAcronym}, ${c.before.targetName}` : 'No shift'),
+    },
+    { key: 'after', header: 'On the roster now', cell: (c) => (c.after ? `${c.after.dutyAcronym}, ${c.after.targetName}` : 'No shift') },
+  ];
 
-        let matchesYear = true;
-        if (selectedYear !== 'ALL') {
-          const verYear = new Date(ver.timestamp).getFullYear().toString();
-          const schedYear = ver.snapshot?.schedule?.startDate?.split('-')[0];
-          matchesYear = verYear === selectedYear || schedYear === selectedYear;
-        }
-
-        return matchesSearch && matchesType && matchesYear;
-      })
-      .sort((a, b) => {
-        const timeA = new Date(a.timestamp).getTime();
-        const timeB = new Date(b.timestamp).getTime();
-        if (sortOrder === 'asc') {
-          // Earliest to latest
-          return timeA - timeB || a.number - b.number;
-        } else {
-          // Latest to earliest
-          return timeB - timeA || b.number - a.number;
-        }
-      });
-  }, [versions, versionSearch, versionTypeFilter, selectedYear, sortOrder]);
-
-  // Compute block dates for Calendar Matrix inspection
-  const effectiveSchedule = selectedVersion?.snapshot.schedule || activeSchedule;
-  const blockWeeks = effectiveSchedule?.blockWeeks || 2;
-  const daysPerBlock = blockWeeks * 7;
-
-  const { blockDates, totalBlocks } = useMemo(() => {
-    if (!effectiveSchedule) return { blockDates: [], totalBlocks: 1 };
-    const start = new Date(effectiveSchedule.startDate + 'T00:00:00Z');
-    const end = new Date(effectiveSchedule.endDate + 'T00:00:00Z');
-    const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-    const numBlocks = Math.max(1, Math.ceil(totalDays / daysPerBlock));
-
-    if (matrixShowAllDates) {
-      const all: string[] = [];
-      for (let day = 1; day <= totalDays; day++) {
-        const d = new Date(start);
-        d.setUTCDate(start.getUTCDate() + (day - 1));
-        all.push(d.toISOString().split('T')[0]);
-      }
-      return { blockDates: all, totalBlocks: numBlocks };
-    }
-
-    const startDay = matrixBlockIndex * daysPerBlock + 1;
-    const endDay = Math.min((matrixBlockIndex + 1) * daysPerBlock, totalDays);
-    const dates: string[] = [];
-    for (let day = startDay; day <= endDay; day++) {
-      const d = new Date(start);
-      d.setUTCDate(start.getUTCDate() + (day - 1));
-      dates.push(d.toISOString().split('T')[0]);
-    }
-    return { blockDates: dates, totalBlocks: numBlocks };
-  }, [effectiveSchedule, matrixBlockIndex, matrixShowAllDates, daysPerBlock]);
-
-  // Filter nurses for matrix view
-  const matrixDisplayedNurses = useMemo(() => {
-    return nurses.filter((nurse) => {
-      const q = matrixSearchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        nurse.fullName.toLowerCase().includes(q) ||
-        nurse.employeeCode.toLowerCase().includes(q);
-      const matchesSelect = matrixNurseFilter === 'ALL' || nurse.id === matrixNurseFilter;
-      return matchesSearch && matchesSelect;
-    });
-  }, [nurses, matrixSearchQuery, matrixNurseFilter]);
-
-  // Stepper navigation helpers (based on current filtered and sorted list)
-  const currentVersionIndex = useMemo(() => {
-    if (!selectedVersion) return -1;
-    return filteredVersions.findIndex((v) => v.id === selectedVersion.id);
-  }, [filteredVersions, selectedVersion]);
-
-  const prevVersion = currentVersionIndex > 0 ? filteredVersions[currentVersionIndex - 1] : null;
-  const nextVersion =
-    currentVersionIndex >= 0 && currentVersionIndex < filteredVersions.length - 1
-      ? filteredVersions[currentVersionIndex + 1]
-      : null;
+  const kindCount = (kind: VersionKind) => versions.filter((v) => versionKind(v) === kind).length;
+  const restoreRoster = versionToRestore ? scheduleMap.get(versionToRestore.scheduleId) : undefined;
+  const restoreShiftCount = versionToRestore?.snapshot?.assignments?.length || 0;
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5 select-none">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              Schedule Version History Center
-            </h1>
-            <span className="px-2 py-0.5 rounded text-[11px] font-bold font-mono bg-indigo-50 text-indigo-700 border border-indigo-200">
-              {filteredVersions.length} of {versions.length} Snapshots
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Inspect historical roster matrices, review cell-by-cell delta audits, compare drafts, and restore or purge checkpoints across all clinic schedules.
-          </p>
-        </div>
+    <div className="mx-auto max-w-7xl space-y-5 p-4 text-ink sm:p-6">
+      <PageHeader
+        title="History"
+        meta={
+          <span>
+            Saved copies, automatic backups and published versions of every roster
+            {loadState === 'ready' && `: ${versions.length} in all`}
+          </span>
+        }
+        actions={
+          selectedVersion && (
+            <Button icon={Diff} onClick={() => openCompare(selectedVersion)}>
+              Compare versions
+            </Button>
+          )
+        }
+      />
 
-        {/* Header Action Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Year Filter Quick Select */}
-          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs shadow-2xs hover:border-slate-300 transition-colors">
-            <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span className="text-slate-500 font-medium text-[11px]">Year:</span>
-            <select aria-label="Year"
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-              className="bg-transparent font-semibold text-slate-800 focus:outline-none cursor-pointer text-xs"
-              title="Filter versions by year"
-            >
-              <option value="ALL">All Years ({versions.length})</option>
-              {availableYears.map((yr) => (
-                <option key={yr} value={yr}>
-                  {yr}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Sort Order Toggle: Earliest to Latest / Latest to Earliest */}
-          <button
-            type="button"
-            onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
-            title={
-              sortOrder === 'asc'
-                ? 'Sorted Earliest to Latest. Click to sort Latest to Earliest.'
-                : 'Sorted Latest to Earliest. Click to sort Earliest to Latest.'
-            }
-          >
-            <ArrowUpDown className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-            <span>{sortOrder === 'asc' ? 'Earliest to Latest' : 'Latest to Earliest'}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setCompareBaseId(versions[0]?.id || 'DRAFT');
-              setCompareTargetId('DRAFT');
-              setIsCompareModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
-          >
-            <Diff className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Compare Any Versions</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main Grid: Versions Timeline (Left 4 Cols) + Interactive Snapshot Studio (Right 8 Cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left Column: Version History Rail (4 Cols) */}
-        <div className="lg:col-span-4 space-y-3">
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-            {/* Timeline Filter Header */}
-            <div className="p-3 border-b border-slate-200 bg-slate-50 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-slate-800 flex items-center gap-1.5">
-                  <History className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Checkpoints Timeline</span>
-                </span>
-                <span className="text-[11px] text-slate-500 font-mono font-medium">
-                  {filteredVersions.length} of {versions.length}
-                </span>
-              </div>
-
-              {/* Search input */}
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                <input aria-label="Filter versions"
-                  type="text"
-                  placeholder="Filter by note, author, v#..."
-                  value={versionSearch}
-                  onChange={(e) => setVersionSearch(e.target.value)}
-                  className="w-full pl-8 pr-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-
-              {/* Filter chips */}
-              <div className="flex items-center gap-1 text-[10px] font-medium pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => setVersionTypeFilter('ALL')}
-                  className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
-                    versionTypeFilter === 'ALL'
-                      ? 'bg-indigo-600 text-white font-bold'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  All ({versions.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVersionTypeFilter('PUBLISHED')}
-                  className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
-                    versionTypeFilter === 'PUBLISHED'
-                      ? 'bg-purple-600 text-white font-bold'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  Published ({versions.filter((v) => v.isPublished).length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVersionTypeFilter('RESTORED')}
-                  className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
-                    versionTypeFilter === 'RESTORED'
-                      ? 'bg-amber-600 text-white font-bold'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  Restored ({versions.filter((v) => v.note?.toLowerCase().includes('restored')).length})
-                </button>
-              </div>
-
-              {/* Year Filter & Sort Toggle in Timeline Header */}
-              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/80">
-                <div className="flex items-center gap-1.5 text-[11px]">
-                  <span className="text-slate-500 font-semibold text-[10px] uppercase tracking-wider">Year:</span>
-                  <select aria-label="Year"
-                    value={selectedYear}
-                    onChange={(e) => setSelectedYear(e.target.value)}
-                    className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  >
-                    <option value="ALL">All Years ({versions.length})</option>
-                    {availableYears.map((yr) => (
-                      <option key={yr} value={yr}>
-                        {yr} ({versions.filter((v) => new Date(v.timestamp).getFullYear().toString() === yr).length})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-[10px] font-semibold cursor-pointer transition-colors shadow-2xs"
-                  title={
-                    sortOrder === 'asc'
-                      ? 'Currently sorted Earliest to Latest (Click for Latest to Earliest)'
-                      : 'Currently sorted Latest to Earliest (Click for Earliest to Latest)'
-                  }
-                >
-                  <ArrowUpDown className="w-3 h-3 text-indigo-600" aria-hidden="true" />
-                  <span>{sortOrder === 'asc' ? 'Earliest → Latest' : 'Latest → Earliest'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Version Cards Scrollable List */}
-            <div className="divide-y divide-slate-100 max-h-[660px] overflow-y-auto">
-              {filteredVersions.map((ver, idx) => {
-                const isSelected = selectedVersion?.id === ver.id;
-                const isCurrentDraft = ver.number === activeSchedule?.activeVersionNumber;
-                const prevVer = versions[idx + 1];
-
-                const shiftCount = ver.snapshot.assignments?.length || 0;
-                const leaveCount = ver.snapshot.leaveEntries?.length || 0;
-                const lockCount = ver.snapshot.locks?.length || 0;
-                const schedName = ver.snapshot?.schedule?.name;
-
-                return (
-                  <div
-                    key={ver.id}
-                    onClick={() => setSelectedVersion(ver)}
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={isSelected}
-                    aria-label={`Version ${ver.number}${ver.note ? `: ${ver.note}` : ''}`}
-                    onKeyDown={(e) => {
-                      if (e.target !== e.currentTarget) return;
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setSelectedVersion(ver);
-                      }
-                    }}
-                    className={`p-3.5 transition-all cursor-pointer relative group ${
-                      isSelected
-                        ? 'bg-indigo-50/70 border-l-4 border-l-indigo-600 shadow-2xs'
-                        : 'hover:bg-slate-50 border-l-4 border-l-transparent'
-                    }`}
-                  >
-                    {/* Header Row */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-mono font-bold text-xs px-2 py-0.5 rounded bg-slate-900 text-white">
-                          v{ver.number}.0
-                        </span>
-                        {ver.isPublished && (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                            PUBLISHED
-                          </span>
-                        )}
-                        {isCurrentDraft && (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                            ACTIVE DRAFT
-                          </span>
-                        )}
-                        {schedName && (
-                          <span
-                            className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 truncate max-w-[130px]"
-                            title={schedName}
-                          >
-                            {schedName}
-                          </span>
-                        )}
-                      </div>
-
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {new Date(ver.timestamp).toLocaleDateString(undefined, {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </span>
-                    </div>
-
-                    {/* Checkpoint Note */}
-                    <div className="mt-1.5">
-                      <p className="text-xs font-semibold text-slate-900 leading-snug line-clamp-2">
-                        {ver.note || 'Manual save checkpoint'}
-                      </p>
-                      <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-1 font-sans">
-                        <span className="truncate">{ver.author}</span>
-                        <span>·</span>
-                        <span>{new Date(ver.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-                    </div>
-
-                    {/* Snapshot Stats Pills */}
-                    <div className="mt-2 flex items-center gap-2 text-[10px] font-mono text-slate-600">
-                      <span className="px-1.5 py-0.5 bg-white border border-slate-200 rounded">
-                        {shiftCount} shifts
-                      </span>
-                      <span className="px-1.5 py-0.5 bg-white border border-slate-200 rounded">
-                        {leaveCount} leave
-                      </span>
-                      {lockCount > 0 && (
-                        <span className="px-1.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-800 rounded flex items-center gap-0.5">
-                          <Lock className="w-2.5 h-2.5" />
-                          {lockCount} locks
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Quick Actions Row */}
-                    <div className="mt-2.5 pt-2 flex items-center gap-1.5 border-t border-slate-200/60">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedVersion(ver);
-                          setStudioTab('MATRIX');
-                        }}
-                        className="inline-flex items-center gap-1 px-2 py-0.8 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold text-[10px] cursor-pointer shadow-2xs"
-                        title="Inspect snapshot in calendar matrix"
-                      >
-                        <LayoutGrid className="w-2.5 h-2.5 text-indigo-600" aria-hidden="true" />
-                        <span>Inspect</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenCompareWithDraft(ver);
-                        }}
-                        className="inline-flex items-center gap-1 px-2 py-0.8 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-medium text-[10px] cursor-pointer shadow-2xs"
-                        title="Compare with active draft"
-                      >
-                        <Diff className="w-2.5 h-2.5 text-indigo-600" aria-hidden="true" />
-                        <span>Diff</span>
-                      </button>
-
-                      {canEdit && (<>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setVersionToRestore(ver);
-                          setIsRestoreModalOpen(true);
-                        }}
-                        className="inline-flex items-center gap-1 px-2 py-0.8 rounded bg-white border border-slate-200 hover:bg-slate-100 text-amber-800 font-medium text-[10px] cursor-pointer shadow-2xs"
-                        title="Restore this version as a new draft"
-                      >
-                        <RotateCcw className="w-2.5 h-2.5 text-amber-600" aria-hidden="true" />
-                        <span>Restore</span>
-                      </button>
-
-                      {/* Delete Version Button with Verification */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setVersionToDelete(ver);
-                          setIsDeleteModalOpen(true);
-                        }}
-                        className="ml-auto inline-flex items-center gap-1 px-2 py-0.8 rounded bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 font-medium text-[10px] cursor-pointer shadow-2xs transition-colors"
-                        title="Delete this version checkpoint (with confirmation prompt)"
-                      >
-                        <Trash2 className="w-2.5 h-2.5 text-rose-600" aria-hidden="true" />
-                        <span>Delete</span>
-                      </button>
-                      </>)}
-                    </div>
-                  </div>
-                );
-              })}
-
-              {filteredVersions.length === 0 && (
-                <div className="p-8 text-center text-slate-400 text-xs space-y-1">
-                  <p className="font-semibold text-slate-600">No versions match criteria.</p>
-                  <p className="text-[11px]">Clear search or select another schedule period.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Interactive Snapshot Studio (8 Cols) */}
-        <div className="lg:col-span-8 space-y-4">
-          {selectedVersion ? (
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs space-y-0 text-xs">
-              {/* Studio Header Bar */}
-              <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-50 via-white to-indigo-50/30 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono font-bold text-xs px-2.5 py-0.5 rounded bg-indigo-600 text-white shadow-2xs">
-                      Version v{selectedVersion.number}.0
-                    </span>
-                    {selectedVersion.isPublished && (
-                      <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold font-mono text-[10px]">
-                        OFFICIALLY PUBLISHED
-                      </span>
-                    )}
-                    <span className="text-slate-400 font-mono text-xs">·</span>
-                    <span className="text-xs font-bold text-slate-800">
-                      {effectiveSchedule?.name || 'October 2026 Roster'}
-                    </span>
-                  </div>
-
-                  <p className="text-slate-700 font-medium mt-1 text-xs">
-                    &ldquo;{selectedVersion.note || 'Save checkpoint'}&rdquo;
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5 font-sans">
-                    Saved by <strong>{selectedVersion.author}</strong> on {new Date(selectedVersion.timestamp).toLocaleString()}
-                  </p>
-                </div>
-
-                {/* Top Action Controls */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Stepper Navigation: Previous / Next Version */}
-                  <div className="flex items-center bg-white border border-slate-200 rounded-lg p-0.5 shadow-2xs">
-                    <button
-                      type="button"
-                      disabled={!prevVersion}
-                      onClick={() => prevVersion && setSelectedVersion(prevVersion)}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-100 text-slate-700 text-[11px] disabled:opacity-30 cursor-pointer font-medium"
-                      title={prevVersion ? `Go to previous version v${prevVersion.number}` : 'No previous version in current view'}
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>v{prevVersion?.number || '—'}</span>
-                    </button>
-                    <div className="h-4 w-px bg-slate-200 mx-0.5" />
-                    <button
-                      type="button"
-                      disabled={!nextVersion}
-                      onClick={() => nextVersion && setSelectedVersion(nextVersion)}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-100 text-slate-700 text-[11px] disabled:opacity-30 cursor-pointer font-medium"
-                      title={nextVersion ? `Go to next version v${nextVersion.number}` : 'No next version in current view'}
-                    >
-                      <span>v{nextVersion?.number || '—'}</span>
-                      <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
-
-                  {/* Export button */}
-                  {canExport && (
-                  <button
-                    type="button"
-                    onClick={() => setIsExportModalOpen(true)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
-                    title="Export this historical version as Excel, CSV, or Print packet"
-                  >
-                    <Download className="w-3.5 h-3.5 text-indigo-600" aria-hidden="true" />
-                    <span className="hidden sm:inline">Export</span>
-                  </button>
-                  )}
-
-                  {/* Popout Fullscreen Modal */}
-                  <button
-                    type="button"
-                    onClick={() => handleOpenViewSnapshot(selectedVersion)}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-medium cursor-pointer shadow-2xs transition-colors"
-                    title="Open snapshot in expanded modal view"
-                  >
-                    <Maximize2 className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-                    <span className="hidden sm:inline">Popout</span>
-                  </button>
-
-                  {/* Restore and delete buttons (planners) */}
-                  {canEdit && (<>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVersionToRestore(selectedVersion);
-                      setIsRestoreModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
-                    title="Restore this version as new draft"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Restore Draft</span>
-                  </button>
-
-                  {/* Delete version button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVersionToDelete(selectedVersion);
-                      setIsDeleteModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
-                    title="Permanently delete version checkpoint with verification prompt"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 text-rose-600" aria-hidden="true" />
-                    <span>Delete Version</span>
-                  </button>
-
-                  {/* Delete entire schedule button */}
-                  {activeSchedule && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setScheduleToDelete(activeSchedule);
-                        setIsDeleteScheduleModalOpen(true);
-                      }}
-                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-rose-300 hover:bg-rose-100 text-rose-800 rounded-lg text-xs font-semibold cursor-pointer shadow-2xs transition-colors"
-                      title={`Permanently delete schedule "${activeSchedule.name}" and all versions`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5 text-rose-600" aria-hidden="true" />
-                      <span>Delete Schedule</span>
-                    </button>
-                  )}
-                  </>)}
-                </div>
-              </div>
-
-              {/* Studio Tabs Navigation */}
-              <div className="px-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-1 -mb-px">
-                  <button
-                    type="button"
-                    onClick={() => setStudioTab('MATRIX')}
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 border-b-2 text-xs font-bold cursor-pointer transition-colors ${
-                      studioTab === 'MATRIX'
-                        ? 'border-indigo-600 text-indigo-700 bg-white'
-                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
-                    }`}
-                  >
-                    <LayoutGrid className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Roster Matrix</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setStudioTab('DIFF')}
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 border-b-2 text-xs font-bold cursor-pointer transition-colors ${
-                      studioTab === 'DIFF'
-                        ? 'border-indigo-600 text-indigo-700 bg-white'
-                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
-                    }`}
-                  >
-                    <Diff className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Diff vs Active Draft</span>
-                    {selectedVsDraftDiff && (
-                      <span className="ml-1 px-1.5 py-0.2 rounded-full font-mono text-[10px] bg-indigo-100 text-indigo-800">
-                        {selectedVsDraftDiff.totalChangesCount}
-                      </span>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setStudioTab('SHIFTS')}
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 border-b-2 text-xs font-bold cursor-pointer transition-colors ${
-                      studioTab === 'SHIFTS'
-                        ? 'border-indigo-600 text-indigo-700 bg-white'
-                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
-                    }`}
-                  >
-                    <List className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Shifts Table</span>
-                    <span className="ml-1 px-1.5 py-0.2 rounded-full font-mono text-[10px] bg-slate-200 text-slate-700">
-                      {selectedVersion.snapshot.assignments?.length || 0}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setStudioTab('INFO')}
-                    className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 border-b-2 text-xs font-bold cursor-pointer transition-colors ${
-                      studioTab === 'INFO'
-                        ? 'border-indigo-600 text-indigo-700 bg-white'
-                        : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
-                    }`}
-                  >
-                    <Info className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Snapshot Metadata</span>
-                  </button>
-                </div>
-
-                <div className="hidden sm:flex items-center gap-3 text-[11px] font-mono text-slate-500">
-                  <span>{selectedVersion.snapshot.assignments?.length || 0} shifts</span>
-                  <span>·</span>
-                  <span>{selectedVersion.snapshot.leaveEntries?.length || 0} leaves</span>
-                  <span>·</span>
-                  <span>{selectedVersion.snapshot.locks?.length || 0} locks</span>
-                </div>
-              </div>
-
-              {/* Tab 1: Calendar Matrix View */}
-              {studioTab === 'MATRIX' && (
-                <div className="p-4 sm:p-5 space-y-4">
-                  {/* Matrix Controls Toolbar */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                    {/* Block Navigation */}
-                    <div className="flex items-center gap-2">
-                      {!matrixShowAllDates && totalBlocks > 1 && (
-                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
-                          <button
-                            type="button"
-                            disabled={matrixBlockIndex === 0}
-                            onClick={() => setMatrixBlockIndex((p) => Math.max(0, p - 1))}
-                            className="p-1 rounded hover:bg-slate-200 disabled:opacity-30 cursor-pointer"
-                            title="Previous block"
-                            aria-label="Previous block"
-                          >
-                            <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                          <span className="px-2 font-mono font-bold text-[11px] text-slate-700">
-                            Block {matrixBlockIndex + 1} of {totalBlocks}
-                          </span>
-                          <button
-                            type="button"
-                            disabled={matrixBlockIndex >= totalBlocks - 1}
-                            onClick={() => setMatrixBlockIndex((p) => Math.min(totalBlocks - 1, p + 1))}
-                            className="p-1 rounded hover:bg-slate-200 disabled:opacity-30 cursor-pointer"
-                            title="Next block"
-                            aria-label="Next block"
-                          >
-                            <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                        </div>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => setMatrixShowAllDates(!matrixShowAllDates)}
-                        className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold cursor-pointer transition-colors ${
-                          matrixShowAllDates
-                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                            : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        {matrixShowAllDates ? 'Viewing All Days' : 'View Entire Period'}
-                      </button>
-                    </div>
-
-                    {/* Filters & Search */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="relative w-48">
-                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-                        <input aria-label="Filter nurse"
-                          type="text"
-                          placeholder="Filter nurse..."
-                          value={matrixSearchQuery}
-                          onChange={(e) => setMatrixSearchQuery(e.target.value)}
-                          className="w-full pl-8 pr-2.5 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                        />
-                      </div>
-
-                      <select aria-label="Nurse"
-                        value={matrixNurseFilter}
-                        onChange={(e) => setMatrixNurseFilter(e.target.value)}
-                        className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-700 text-xs cursor-pointer"
-                      >
-                        <option value="ALL">All Staff ({nurses.length})</option>
-                        {nurses.map((n) => (
-                          <option key={n.id} value={n.id}>
-                            {n.fullName}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Calendar Matrix Table */}
-                  <div className="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse text-left text-xs font-mono">
-                        <thead>
-                          <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 text-[11px]">
-                            <th className="py-2.5 px-3 sticky left-0 bg-slate-50 z-20 w-44 border-r border-slate-200">
-                              Nursing Staff
-                            </th>
-                            {blockDates.map((dateStr) => {
-                              const dateObj = new Date(dateStr + 'T00:00:00Z');
-                              const weekday = WEEKDAY_NAMES[dateObj.getUTCDay()];
-                              const dayNum = dateStr.split('-')[2];
-                              const isWeekend = isWeekendDay(dateObj.getUTCDay());
-
-                              return (
-                                <th
-                                  key={dateStr}
-                                  className={`py-2 px-1 text-center min-w-[70px] border-r border-slate-100 ${
-                                    isWeekend ? 'bg-slate-100/70 text-slate-800' : ''
-                                  }`}
-                                >
-                                  <div className="text-[10px] text-slate-400 uppercase font-bold">{weekday}</div>
-                                  <div className="font-bold text-xs text-slate-900">{dayNum}</div>
-                                </th>
-                              );
-                            })}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {matrixDisplayedNurses.map((nurse) => {
-                            const seniority = seniorityMap.get(nurse.seniorityLevelId);
-                            const assignments = selectedVersion.snapshot.assignments || [];
-                            const leaveEntries = selectedVersion.snapshot.leaveEntries || [];
-                            const locks = selectedVersion.snapshot.locks || [];
-
-                            return (
-                              <tr key={nurse.id} className="hover:bg-slate-50/60 transition-colors">
-                                <td className="py-2 px-3 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-2xs">
-                                  <div className="font-sans font-bold text-slate-900 truncate">
-                                    {nurse.fullName}
-                                  </div>
-                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5">
-                                    <span>{nurse.employeeCode}</span>
-                                    <span>·</span>
-                                    <span>{seniority?.name || `${nurse.contractPercent}%`}</span>
-                                  </div>
-                                </td>
-
-                                {blockDates.map((dateStr) => {
-                                  const asgn = assignments.find(
-                                    (a) => a.nurseId === nurse.id && a.date === dateStr
-                                  );
-                                  const leave = leaveEntries.find(
-                                    (l) =>
-                                      l.nurseId === nurse.id &&
-                                      l.approved &&
-                                      dateStr >= l.startDate &&
-                                      dateStr <= l.endDate
-                                  );
-                                  const isLocked = locks.some(
-                                    (lk) => lk.nurseId === nurse.id && lk.date === dateStr
-                                  ) || asgn?.locked;
-
-                                  const duty = asgn ? dutyMap.get(asgn.dutyWindowId) : null;
-                                  const leaveType = leave ? leaveTypeMap.get(leave.leaveTypeId) : null;
-
-                                  let targetLabel = '';
-                                  if (asgn && isFloatShift(asgn)) {
-                                    targetLabel = 'Float';
-                                  } else if (asgn?.doctorId) {
-                                    const doc = doctorMap.get(asgn.doctorId);
-                                    targetLabel = doc ? doc.fullName.split(' ')[1] || doc.fullName : 'Doc';
-                                  } else if (asgn?.clinicalRoleId) {
-                                    const cr = roleMap.get(asgn.clinicalRoleId);
-                                    targetLabel = cr ? cr.name : '';
-                                  } else if (asgn?.specialtyId) {
-                                    const sp = specialtyMap.get(asgn.specialtyId);
-                                    targetLabel = sp ? sp.name : '';
-                                  }
-
-                                  return (
-                                    <td
-                                      key={dateStr}
-                                      className="py-1 px-1 border-r border-slate-100 text-center align-middle"
-                                    >
-                                      {leave ? (
-                                        <div
-                                          className="p-1 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200"
-                                          title={`Leave: ${leaveType?.name || 'Leave'}`}
-                                        >
-                                          <div>{leaveType?.acronym || 'LV'}</div>
-                                          <div className="text-[9px] font-normal text-amber-700">Leave</div>
-                                        </div>
-                                      ) : asgn && duty ? (
-                                        <div
-                                          className="p-1 rounded text-[10px] font-bold text-white relative shadow-2xs"
-                                          style={{ backgroundColor: duty.color }}
-                                          title={`${duty.name} (${duty.startTime}–${duty.endTime}) ${targetLabel ? '· ' + targetLabel : ''}`}
-                                        >
-                                          <div className="flex items-center justify-center gap-0.5">
-                                            <span>{duty.acronym}</span>
-                                            {isLocked && <Lock className="w-2.5 h-2.5 text-white/80 shrink-0" />}
-                                          </div>
-                                          {targetLabel && (
-                                            <div className="text-[9px] font-normal opacity-90 truncate max-w-[62px]">
-                                              {targetLabel}
-                                            </div>
-                                          )}
-                                        </div>
-                                      ) : (
-                                        <span className="text-slate-300 text-[11px]">—</span>
-                                      )}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Quick Duty Legend */}
-                  <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-600">
-                    <span className="font-semibold text-slate-500">Legend:</span>
-                    {dutyWindows.map((dw) => (
-                      <span
-                        key={dw.id}
-                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-white text-[10px] font-bold"
-                        style={{ backgroundColor: dw.color }}
-                      >
-                        {dw.acronym} - {dw.name} ({dw.startTime}–{dw.endTime})
-                      </span>
-                    ))}
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-bold">
-                      LV - Approved Leave
-                    </span>
-                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
-                      <Lock className="w-3 h-3 text-amber-600" /> Pinned Lock
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 2: Diff vs Active Draft */}
-              {studioTab === 'DIFF' && selectedVsDraftDiff && (
-                <div className="p-4 sm:p-5 space-y-4">
-                  {/* Diff Summary Cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                        Total Delta Cells
-                      </span>
-                      <span className="text-xl font-bold font-mono text-slate-900">
-                        {selectedVsDraftDiff.totalChangesCount}
-                      </span>
-                    </div>
-
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">
-                        Added Shifts
-                      </span>
-                      <span className="text-xl font-bold font-mono text-emerald-800">
-                        {selectedVsDraftDiff.addedCount}
-                      </span>
-                    </div>
-
-                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 block">
-                        Removed Shifts
-                      </span>
-                      <span className="text-xl font-bold font-mono text-rose-800">
-                        {selectedVsDraftDiff.removedCount}
-                      </span>
-                    </div>
-
-                    <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 block">
-                        Modified Targets
-                      </span>
-                      <span className="text-xl font-bold font-mono text-indigo-800">
-                        {selectedVsDraftDiff.modifiedCount}
-                      </span>
-                    </div>
-                  </div>
-
-                  {selectedVsDraftDiff.totalChangesCount > 0 ? (
-                    <div className="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-                      <table className="w-full text-left text-xs font-mono">
-                        <thead className="bg-slate-50 text-slate-600 text-[11px] border-b border-slate-200">
-                          <tr>
-                            <th className="py-2.5 px-3">Date</th>
-                            <th className="py-2.5 px-3">Nurse Staff</th>
-                            <th className="py-2.5 px-3">Change Type</th>
-                            <th className="py-2.5 px-3">v{selectedVersion.number} State</th>
-                            <th className="py-2.5 px-3">Current Active Draft</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 text-[11px]">
-                          {selectedVsDraftDiff.allChanges.map((change) => (
-                            <tr key={change.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="py-2 px-3 font-bold text-slate-900">{change.date}</td>
-                              <td className="py-2 px-3 text-slate-900 font-sans font-medium">{change.nurseName}</td>
-                              <td className="py-2 px-3">
-                                <span
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                    change.changeType === 'ADDED'
-                                      ? 'bg-emerald-100 text-emerald-800'
-                                      : change.changeType === 'REMOVED'
-                                      ? 'bg-rose-100 text-rose-800'
-                                      : 'bg-indigo-100 text-indigo-800'
-                                  }`}
-                                >
-                                  {change.changeType}
-                                </span>
-                              </td>
-                              <td className="py-2 px-3 text-slate-700">
-                                {change.before
-                                  ? `${change.before.dutyAcronym} (${change.before.targetName})`
-                                  : '—'}
-                              </td>
-                              <td className="py-2 px-3 font-semibold text-slate-900">
-                                {change.after
-                                  ? `${change.after.dutyAcronym} (${change.after.targetName})`
-                                  : '—'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-900 flex items-center gap-3">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                      <div>
-                        <p className="font-bold text-xs">Identical to Active Draft</p>
-                        <p className="text-[11px] text-emerald-700 mt-0.5">
-                          Every nurse shift assignment in version v{selectedVersion.number} exactly matches the current active schedule draft.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="pt-1 flex items-center justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenCompareWithDraft(selectedVersion)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-lg text-xs cursor-pointer transition-colors"
-                    >
-                      <Diff className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>Open Full Side-by-Side Diff Modal</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 3: Shifts Table View */}
-              {studioTab === 'SHIFTS' && (
-                <div className="p-4 sm:p-5 space-y-4">
-                  <div className="border border-slate-200 rounded-lg overflow-hidden shadow-2xs">
-                    <table className="w-full text-left text-xs font-mono">
-                      <thead className="bg-slate-50 text-slate-600 text-[11px] border-b border-slate-200">
-                        <tr>
-                          <th className="py-2.5 px-3">Date</th>
-                          <th className="py-2.5 px-3">Nurse Staff</th>
-                          <th className="py-2.5 px-3">Duty Window</th>
-                          <th className="py-2.5 px-3">Clinical Target</th>
-                          <th className="py-2.5 px-3">Source</th>
-                          <th className="py-2.5 px-3 text-right">Lock Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {(selectedVersion.snapshot.assignments || [])
-                          .slice()
-                          .sort((a, b) => a.date.localeCompare(b.date))
-                          .map((a) => {
-                            const nurse = nurseMap.get(a.nurseId);
-                            const duty = dutyMap.get(a.dutyWindowId);
-
-                            let targetName = 'Specialty Pool';
-                            if (isFloatShift(a)) {
-                              targetName = 'Float';
-                            } else if (a.doctorId) {
-                              const doc = doctorMap.get(a.doctorId);
-                              targetName = doc ? doc.fullName : 'Doctor';
-                            } else if (a.clinicalRoleId) {
-                              const role = roleMap.get(a.clinicalRoleId);
-                              targetName = role ? role.name : 'Clinical Role';
-                            } else if (a.specialtyId) {
-                              const spec = specialtyMap.get(a.specialtyId);
-                              targetName = spec ? `${spec.name} Pool` : 'Specialty Pool';
-                            }
-
-                            return (
-                              <tr key={a.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="py-2 px-3 font-bold text-slate-900">{a.date}</td>
-                                <td className="py-2 px-3 font-sans font-medium text-slate-900">
-                                  {nurse?.fullName || a.nurseId}
-                                </td>
-                                <td className="py-2 px-3">
-                                  {duty ? (
-                                    <span
-                                      className="px-1.5 py-0.5 rounded text-white font-bold text-[10px]"
-                                      style={{ backgroundColor: duty.color }}
-                                    >
-                                      {duty.acronym} · {duty.name}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400">—</span>
-                                  )}
-                                </td>
-                                <td className="py-2 px-3 text-slate-800 font-sans">{targetName}</td>
-                                <td className="py-2 px-3 text-[10px] text-slate-500">{a.source}</td>
-                                <td className="py-2 px-3 text-right">
-                                  {a.locked ? (
-                                    <span className="inline-flex items-center gap-1 text-amber-700 font-bold text-[10px]">
-                                      <Lock className="w-3 h-3" /> PINNED LOCK
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400 text-[10px]">UNLOCKED</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 4: Snapshot Info & Integrity */}
-              {studioTab === 'INFO' && (
-                <div className="p-4 sm:p-5 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Version Identifier
-                      </span>
-                      <p className="font-mono font-bold text-sm text-slate-900">
-                        {selectedVersion.id}
-                      </p>
-                      <p className="text-[11px] text-slate-500">Immutable Checkpoint ID</p>
-                    </div>
-
-                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Schedule Scope
-                      </span>
-                      <p className="font-bold text-sm text-slate-900 truncate">
-                        {effectiveSchedule?.name || 'Active Schedule'}
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-mono">
-                        {effectiveSchedule?.startDate} to {effectiveSchedule?.endDate}
-                      </p>
-                    </div>
-
-                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Publication Status
-                      </span>
-                      <p className="font-bold text-sm text-slate-900">
-                        {selectedVersion.isPublished ? 'Published to Staff' : 'Internal Checkpoint'}
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-mono">
-                        Active Draft v{activeSchedule?.activeVersionNumber}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Summary Breakdown Cards */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="p-3 bg-white border border-slate-200 rounded-lg font-mono">
-                      <span className="text-slate-500 text-[10px] block">Roster Shifts</span>
-                      <span className="text-lg font-bold text-slate-900">
-                        {selectedVersion.snapshot.assignments?.length || 0}
-                      </span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">Assigned shifts</span>
-                    </div>
-
-                    <div className="p-3 bg-white border border-slate-200 rounded-lg font-mono">
-                      <span className="text-slate-500 text-[10px] block">Approved Leave</span>
-                      <span className="text-lg font-bold text-slate-900">
-                        {selectedVersion.snapshot.leaveEntries?.length || 0}
-                      </span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">Entries recorded</span>
-                    </div>
-
-                    <div className="p-3 bg-white border border-slate-200 rounded-lg font-mono">
-                      <span className="text-slate-500 text-[10px] block">Pinned Locks</span>
-                      <span className="text-lg font-bold text-amber-700">
-                        {selectedVersion.snapshot.locks?.length || 0}
-                      </span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">Non-changeable days</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="bg-white border border-slate-200 rounded-xl p-12 text-center text-slate-400 text-xs">
-              Select a version from the timeline on the left to inspect its snapshot details.
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* --- RESTORE CONFIRMATION MODAL --- */}
-      {isRestoreModalOpen && versionToRestore && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none animate-in fade-in duration-150">
-          <div
-            ref={restoreDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={restoreTitleId}
-            className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs"
-          >
-            <div className="flex items-center gap-2 text-indigo-600">
-              <RotateCcw className="w-5 h-5 shrink-0" aria-hidden="true" />
-              <h3 id={restoreTitleId} className="text-sm font-bold text-slate-900">
-                Restore this version?
-              </h3>
-            </div>
-
-            {(() => {
-              // The version's own roster, which is not always the one selected on screen.
-              const roster = schedules.find((s) => s.id === versionToRestore.scheduleId);
-              const shiftCount = versionToRestore.snapshot?.assignments?.length || 0;
-              return (
-                <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-900 space-y-2 leading-relaxed text-[11px]">
-                  <p>
-                    The shifts of <strong>{roster?.name || versionToRestore.snapshot?.schedule?.name || 'this roster'}</strong> are
-                    replaced by the {shiftCount} shift{shiftCount === 1 ? '' : 's'} saved in{' '}
-                    <strong>v{versionToRestore.number}</strong>, and{' '}
-                    <strong className="font-mono text-indigo-950 font-bold">v{(roster?.activeVersionNumber || 1) + 1}</strong>{' '}
-                    records the restore.
-                  </p>
-                  <p className="text-slate-600 text-[10px]">
-                    A backup copy of the shifts as they are now is kept first, so you can go back (Rosters, More, Backup copies).
-                    Pinned days and leave are not changed.
-                  </p>
-                </div>
-              );
-            })()}
-
-            <div className="pt-2 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRestoreModalOpen(false);
-                  setVersionToRestore(null);
-                }}
-                className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg cursor-pointer font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmRestore}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold cursor-pointer transition-colors shadow-xs"
-              >
-                Confirm &amp; Restore
-              </button>
-            </div>
-          </div>
-        </div>
+      {loadState === 'loading' && <LoadingState label="Loading History…" />}
+      {loadState === 'failed' && (
+        <ErrorState
+          title="History could not be loaded"
+          onRetry={() => {
+            setLoadState('loading');
+            loadData();
+          }}
+        />
       )}
 
-      {/* --- DELETE VERSION VERIFICATION MODAL --- */}
+      {loadState === 'ready' && versions.length === 0 && (
+        <Card>
+          <EmptyState icon={History} title="Nothing saved yet">
+            A roster's saved copies, automatic backups and published versions are listed here. Keep a copy from the roster screen (More, then Keep a
+            copy), or publish a roster.
+          </EmptyState>
+        </Card>
+      )}
+
+      {loadState === 'ready' && versions.length > 0 && (
+        <>
+          {/* One set of filters for the whole screen. */}
+          <div role="search" aria-label="Filter History" className="grid grid-cols-2 gap-3 rounded-lg border border-line bg-surface p-3 shadow-card lg:grid-cols-4">
+            <Field label="Search" className="col-span-2 lg:col-span-1">
+              {(f) => (
+                <div className="relative">
+                  <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-ink-muted" />
+                  <Input
+                    {...f}
+                    type="search"
+                    className="pl-8"
+                    placeholder="Note, person or roster"
+                    value={filters.search}
+                    onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                  />
+                </div>
+              )}
+            </Field>
+            <Field label="Kind">
+              {(f) => (
+                <Select {...f} value={filters.kind} onChange={(e) => setFilters({ ...filters, kind: e.target.value as VersionFilters['kind'] })}>
+                  <option value="ALL">All kinds ({versions.length})</option>
+                  <option value="SAVED">Saved copies ({kindCount('SAVED')})</option>
+                  <option value="BACKUP">Automatic backups ({kindCount('BACKUP')})</option>
+                  <option value="PUBLISHED">Published versions ({kindCount('PUBLISHED')})</option>
+                </Select>
+              )}
+            </Field>
+            <Field label="Year">
+              {(f) => (
+                <Select {...f} value={filters.year} onChange={(e) => setFilters({ ...filters, year: e.target.value })}>
+                  <option value="ALL">All years</option>
+                  {years.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field label="Order">
+              {(f) => (
+                <Select {...f} value={filters.order} onChange={(e) => setFilters({ ...filters, order: e.target.value as VersionFilters['order'] })}>
+                  <option value="NEWEST">Newest first</option>
+                  <option value="OLDEST">Oldest first</option>
+                </Select>
+              )}
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-12">
+            {/* The list: each item is one button; the actions are beside the version open on the right. */}
+            <section aria-labelledby="history-list-heading" className="overflow-hidden rounded-lg border border-line bg-surface shadow-card min-w-0 lg:col-span-4">
+              <header className="flex min-h-12 items-center justify-between gap-2 border-b border-line px-4 py-2">
+                <h2 id="history-list-heading" className="text-base font-semibold text-ink">
+                  Versions
+                </h2>
+                <span className="text-sm text-ink-muted" aria-live="polite">
+                  {filtered ? `${shown.length} of ${versions.length}` : `${versions.length}`}
+                </span>
+              </header>
+              {shown.length === 0 ? (
+                <EmptyState
+                  title="No versions match these filters"
+                  action={
+                    <Button size="sm" onClick={() => setFilters(NO_FILTERS)}>
+                      Clear the filters
+                    </Button>
+                  }
+                />
+              ) : (
+                <ul className="max-h-[42rem] divide-y divide-line overflow-y-auto" aria-label="Versions">
+                  {shown.map((ver) => {
+                    const kind = versionKind(ver);
+                    const selected = selectedVersion?.id === ver.id;
+                    const shiftCount = ver.snapshot.assignments?.length || 0;
+                    return (
+                      <li key={ver.id}>
+                        <button
+                          type="button"
+                          onClick={() => pick(ver)}
+                          aria-current={selected ? 'true' : undefined}
+                          className={cx(
+                            'block w-full border-l-4 px-4 py-3 text-left transition-colors',
+                            selected ? 'border-l-brand bg-brand-soft' : 'border-l-transparent hover:bg-sunken'
+                          )}
+                        >
+                          <span className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-semibold text-ink">{versionName(ver)}</span>
+                            {kind !== 'BACKUP' && <Badge tone={KIND_TONES[kind]}>{versionKindLabel(kind)}</Badge>}
+                            {isCurrent(ver) && <Badge tone="brand">Current</Badge>}
+                          </span>
+                          <span className="mt-0.5 block truncate text-sm text-ink">{ver.snapshot?.schedule?.name || 'A roster'}</span>
+                          {ver.note && <span className="mt-0.5 line-clamp-2 block text-sm text-ink-muted">{ver.note}</span>}
+                          <span className="mt-1 block text-xs text-ink-muted">
+                            {formatDateTime(ver.timestamp)}, {ver.author || 'a planner'}, {shiftCount} {shiftCount === 1 ? 'shift' : 'shifts'}
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+
+            {/* The version open on the right. */}
+            <div className="min-w-0 lg:col-span-8">
+              {selectedVersion ? (
+                <section aria-labelledby="history-version-heading" className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
+                  <header className="space-y-3 border-b border-line p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 id="history-version-heading" className="text-lg font-semibold text-ink">
+                          {versionName(selectedVersion)} of {effectiveSchedule?.name || 'a roster'}
+                        </h2>
+                        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-ink-muted">
+                          <Badge tone={KIND_TONES[versionKind(selectedVersion)]}>{versionKindLabel(versionKind(selectedVersion))}</Badge>
+                          {isCurrent(selectedVersion) && <Badge tone="brand">Current</Badge>}
+                          <span>
+                            {selectedVersion.kind === 'BACKUP' ? 'Kept' : 'Saved'} by {selectedVersion.author || 'a planner'} on{' '}
+                            {formatDateTime(selectedVersion.timestamp)}
+                          </span>
+                        </p>
+                        {selectedVersion.note && <p className="mt-1 text-sm text-ink">{selectedVersion.note}</p>}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <IconButton
+                          label={prevVersion ? `Previous in the list: ${versionName(prevVersion)}` : 'Previous in the list'}
+                          icon={ChevronLeft}
+                          disabled={!prevVersion}
+                          onClick={() => prevVersion && pick(prevVersion)}
+                        />
+                        <IconButton
+                          label={nextVersion ? `Next in the list: ${versionName(nextVersion)}` : 'Next in the list'}
+                          icon={ChevronRight}
+                          disabled={!nextVersion}
+                          onClick={() => nextVersion && pick(nextVersion)}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button size="sm" icon={Maximize2} onClick={() => setIsViewOpen(true)}>
+                        Open larger
+                      </Button>
+                      {canExport && (
+                        <Button size="sm" icon={Download} onClick={() => setIsExportOpen(true)}>
+                          Download
+                        </Button>
+                      )}
+                      {canEdit && selectedVersion.kind !== 'BACKUP' && roster && (
+                        <Button size="sm" variant="primary" icon={RotateCcw} onClick={() => askRestore(selectedVersion)}>
+                          Restore
+                        </Button>
+                      )}
+                      {canEdit && (
+                        <Button size="sm" icon={Trash2} className="text-danger" onClick={() => setVersionToDelete(selectedVersion)}>
+                          Delete
+                        </Button>
+                      )}
+                    </div>
+                    {selectedVersion.kind === 'BACKUP' && canEdit && roster && (
+                      <Notice tone="info" title="Restore it from the roster screen">
+                        Automatic backups are restored from the roster screen (More, then Backup copies), where the restore can be undone.
+                      </Notice>
+                    )}
+                    {!roster && (
+                      <Notice tone="warning" title="The roster has been deleted">
+                        This version can be looked at but not restored.
+                      </Notice>
+                    )}
+                  </header>
+
+                  <Tabs
+                    label="Parts of this version"
+                    idPrefix="history"
+                    value={studioTab}
+                    onChange={(id) => setStudioTab(id as StudioTab)}
+                    className="px-4"
+                    tabs={[
+                      { id: 'ROSTER', label: 'Roster' },
+                      { id: 'CHANGES', label: 'What changed', count: diff?.totalChangesCount ?? 0 },
+                      { id: 'SHIFTS', label: 'Shifts', count: selectedVersion.snapshot.assignments?.length || 0 },
+                      { id: 'DETAILS', label: 'Details' },
+                    ]}
+                  />
+
+                  <TabPanel idPrefix="history" id="ROSTER" value={studioTab} className="p-4">
+                    <VersionRoster
+                      key={selectedVersion.id}
+                      version={selectedVersion}
+                      nurses={nurses}
+                      dutyWindows={dutyWindows}
+                      doctors={doctors}
+                      roles={roles}
+                      specialties={specialties}
+                      leaveTypes={leaveTypes}
+                      seniorityLevels={seniorityLevels}
+                    />
+                  </TabPanel>
+
+                  <TabPanel idPrefix="history" id="CHANGES" value={studioTab} className="space-y-4 p-4">
+                    {diff && (
+                      <>
+                        <p className="text-sm text-ink-muted">
+                          What changed on {effectiveSchedule?.name || 'the roster'} since this version was{' '}
+                          {selectedVersion.kind === 'BACKUP' ? 'kept' : 'saved'}.
+                        </p>
+                        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                          {[
+                            { label: 'Changes', value: diff.totalChangesCount },
+                            { label: 'Shifts added', value: diff.addedCount },
+                            { label: 'Shifts removed', value: diff.removedCount },
+                            { label: 'Shifts changed', value: diff.modifiedCount },
+                          ].map((s) => (
+                            <div key={s.label} className="rounded-lg border border-line bg-sunken p-3">
+                              <dt className="text-sm text-ink-muted">{s.label}</dt>
+                              <dd className="text-xl font-semibold text-ink tabular-nums">{s.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                        {diff.totalChangesCount > 0 ? (
+                          <DataTable
+                            caption={`Changes since ${versionName(selectedVersion).toLowerCase()}`}
+                            rows={diff.allChanges}
+                            rowKey={(c) => c.id}
+                            columns={changeColumns}
+                            initialSort={{ key: 'date', direction: 'ascending' }}
+                            maxHeight="28rem"
+                          />
+                        ) : (
+                          <Notice tone="success" title="Nothing has changed">
+                            The roster's shifts are the same as in this version.
+                          </Notice>
+                        )}
+                        <div className="flex justify-end">
+                          <Button size="sm" icon={Diff} onClick={() => openCompare(selectedVersion)}>
+                            Compare side by side
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </TabPanel>
+
+                  <TabPanel idPrefix="history" id="SHIFTS" value={studioTab} className="p-4">
+                    <DataTable
+                      caption={`Shifts in ${versionName(selectedVersion).toLowerCase()}`}
+                      rows={selectedVersion.snapshot.assignments || []}
+                      rowKey={(a) => a.id}
+                      columns={shiftColumns}
+                      initialSort={{ key: 'date', direction: 'ascending' }}
+                      maxHeight="32rem"
+                      empty={<EmptyState title="No shifts">This version was kept before any shifts were on the roster.</EmptyState>}
+                    />
+                  </TabPanel>
+
+                  <TabPanel idPrefix="history" id="DETAILS" value={studioTab} className="p-4">
+                    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {[
+                        { label: 'Roster', value: effectiveSchedule?.name || 'Not known' },
+                        {
+                          label: 'Roster dates',
+                          value: effectiveSchedule ? `${formatDate(effectiveSchedule.startDate)} to ${formatDate(effectiveSchedule.endDate)}` : 'Not known',
+                        },
+                        { label: 'Kind', value: versionKindLabel(versionKind(selectedVersion)) },
+                        {
+                          label: "The roster's current version",
+                          value: roster ? `Version ${roster.activeVersionNumber || 1}` : 'The roster has been deleted',
+                        },
+                        { label: 'Shifts', value: selectedVersion.snapshot.assignments?.length || 0 },
+                        { label: 'Leave entries', value: selectedVersion.snapshot.leaveEntries?.length || 0 },
+                        { label: 'Pinned days', value: selectedVersion.snapshot.locks?.length || 0 },
+                        ...(selectedVersion.publishedAt ? [{ label: 'Published', value: formatDateTime(selectedVersion.publishedAt) }] : []),
+                      ].map((d) => (
+                        <div key={d.label} className="rounded-lg border border-line p-3">
+                          <dt className="text-sm text-ink-muted">{d.label}</dt>
+                          <dd className="font-semibold text-ink">{d.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </TabPanel>
+                </section>
+              ) : (
+                <Card>
+                  <EmptyState title="No version open">Pick a version from the list to see its shifts.</EmptyState>
+                </Card>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      <Dialog
+        open={!!versionToRestore}
+        onClose={() => !isRestoring && setVersionToRestore(null)}
+        title="Restore this version?"
+        footer={
+          <>
+            <Button disabled={isRestoring} onClick={() => setVersionToRestore(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" icon={RotateCcw} busy={isRestoring} disabled={!restoreRoster} onClick={handleConfirmRestore}>
+              Restore
+            </Button>
+          </>
+        }
+      >
+        {versionToRestore && (
+          <div className="space-y-3 text-sm">
+            {restoreRoster ? (
+              <>
+                <p>
+                  The shifts of <strong>{restoreRoster.name}</strong> are replaced by the {restoreShiftCount}{' '}
+                  {restoreShiftCount === 1 ? 'shift' : 'shifts'} in version {versionToRestore.number}, and version{' '}
+                  {(restoreRoster.activeVersionNumber || 1) + 1} records the restore.
+                </p>
+                <p className="text-ink-muted">
+                  A backup of the shifts as they are now is kept first, so you can go back (roster screen, More, then Backup copies). Pinned days
+                  and leave are not changed.
+                </p>
+              </>
+            ) : (
+              <Notice tone="warning" title="The roster has been deleted">
+                This version cannot be restored.
+              </Notice>
+            )}
+          </div>
+        )}
+      </Dialog>
+
       <DeleteVersionModal
-        isOpen={isDeleteModalOpen}
+        isOpen={!!versionToDelete}
         version={versionToDelete}
-        scheduleName={activeSchedule?.name || 'Roster'}
-        isCurrentActiveDraft={versionToDelete?.number === activeSchedule?.activeVersionNumber}
-        isOnlyVersion={versions.length <= 1}
-        onClose={() => {
-          setIsDeleteModalOpen(false);
-          setVersionToDelete(null);
-        }}
+        scheduleName={versionToDelete?.snapshot?.schedule?.name || 'the roster'}
+        isCurrentActiveDraft={!!versionToDelete && isCurrent(versionToDelete)}
+        onClose={() => setVersionToDelete(null)}
         onConfirmDelete={handleConfirmDelete}
-        onDeleteScheduleInstead={() => {
-          if (activeSchedule) {
-            setScheduleToDelete(activeSchedule);
-            setIsDeleteScheduleModalOpen(true);
+      />
+
+      {selectedVersion && (
+        <VersionCompareModal
+          schedule={roster}
+          // Only the versions of the same roster can be compared with each other.
+          versions={versions.filter((v) => v.scheduleId === selectedVersion.scheduleId)}
+          activeAssignments={rosterAssignments}
+          nurses={nurses}
+          dutyWindows={dutyWindows}
+          doctors={doctors}
+          roles={roles}
+          specialties={specialties}
+          initialBaseVersionId={compareBaseId}
+          initialTargetVersionId={compareTargetId}
+          isOpen={isCompareOpen}
+          onClose={() => setIsCompareOpen(false)}
+          canDownload={canExport}
+          onRestoreVersion={
+            canEdit
+              ? (v) => {
+                  setIsCompareOpen(false);
+                  askRestore(v);
+                }
+              : undefined
           }
-        }}
-      />
+        />
+      )}
 
-      {/* --- DELETE SCHEDULE VERIFICATION MODAL --- */}
-      <DeleteScheduleModal
-        isOpen={isDeleteScheduleModalOpen}
-        schedule={scheduleToDelete}
-        shiftCount={activeAssignments.length}
-        versionCount={versions.length}
-        onClose={() => {
-          setIsDeleteScheduleModalOpen(false);
-          setScheduleToDelete(null);
-        }}
-        onConfirmDelete={handleConfirmDeleteSchedule}
-      />
-
-      {/* --- VERSION COMPARE MODAL --- */}
-      <VersionCompareModal
-        schedule={activeSchedule || schedules[0]}
-        versions={versions}
-        activeAssignments={activeAssignments}
-        nurses={nurses}
-        dutyWindows={dutyWindows}
-        doctors={doctors}
-        roles={roles}
-        specialties={specialties}
-        initialBaseVersionId={compareBaseId}
-        initialTargetVersionId={compareTargetId}
-        isOpen={isCompareModalOpen}
-        onClose={() => setIsCompareModalOpen(false)}
-        canDownload={canExport}
-        onRestoreVersion={canEdit ? (v) => {
-          setIsCompareModalOpen(false);
-          setVersionToRestore(v);
-          setIsRestoreModalOpen(true);
-        } : undefined}
-      />
-
-      {/* --- VERSION VIEW MODAL --- */}
       <VersionViewModal
-        version={versionToView}
-        schedule={activeSchedule}
+        version={isViewOpen ? selectedVersion : null}
+        schedule={roster}
         nurses={nurses}
         dutyWindows={dutyWindows}
         doctors={doctors}
         roles={roles}
         specialties={specialties}
         leaveTypes={leaveTypes}
-        isOpen={isViewModalOpen}
-        onClose={() => setIsViewModalOpen(false)}
-        onRestore={canEdit ? (v) => {
-          setVersionToRestore(v);
-          setIsRestoreModalOpen(true);
-        } : undefined}
-        onDelete={canEdit ? (v) => {
-          setIsViewModalOpen(false);
-          setVersionToDelete(v);
-          setIsDeleteModalOpen(true);
-        } : undefined}
+        seniorityLevels={seniorityLevels}
+        isOpen={isViewOpen}
+        onClose={() => setIsViewOpen(false)}
+        onRestore={
+          canEdit && selectedVersion?.kind !== 'BACKUP' && roster
+            ? (v) => {
+                setIsViewOpen(false);
+                askRestore(v);
+              }
+            : undefined
+        }
+        onDelete={
+          canEdit
+            ? (v) => {
+                setIsViewOpen(false);
+                setVersionToDelete(v);
+              }
+            : undefined
+        }
       />
 
-      {/* --- EXPORT MODAL FOR HISTORICAL SNAPSHOT --- */}
-      {selectedVersion && activeSchedule && (
+      {selectedVersion && effectiveSchedule && (
         <ExportModal
           clinicName={context.clinicName}
-          schedule={selectedVersion.snapshot.schedule || activeSchedule}
+          schedule={effectiveSchedule}
           assignments={selectedVersion.snapshot.assignments || []}
           nurses={nurses}
           dutyWindows={dutyWindows}
@@ -1682,8 +763,8 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
           specialties={specialties}
           rules={selectedVersion.snapshot.rulesSnapshot || rules}
           versionNumber={selectedVersion.number}
-          isOpen={isExportModalOpen}
-          onClose={() => setIsExportModalOpen(false)}
+          isOpen={isExportOpen}
+          onClose={() => setIsExportOpen(false)}
         />
       )}
     </div>

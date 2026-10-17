@@ -156,9 +156,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/DeleteVersionModal.tsx": {
-    "mtime": 1791362587.9549289,
-    "seen": 1791365225.1339755,
-    "ast_hash": "a6e7cd7ead859bb0cb42767f218c5b7f",
+    "mtime": 1792242649.7333448,
+    "seen": 1792243027.6780493,
+    "ast_hash": "f9caf582488bf96f5ea29c2bbf0f766a",
     "semantic_hash": ""
   },
   "src/components/modals/EditDoctorShiftModal.tsx": {
@@ -216,15 +216,15 @@
     "semantic_hash": ""
   },
   "src/components/modals/VersionCompareModal.tsx": {
-    "mtime": 1791950940.5748408,
-    "seen": 1791951702.5077581,
-    "ast_hash": "6c416de3670d638cf42f482173d2c5ce",
+    "mtime": 1792242763.7371144,
+    "seen": 1792243027.6780632,
+    "ast_hash": "5e285f31fc257d9db0c8b2889cb876d6",
     "semantic_hash": ""
   },
   "src/components/modals/VersionViewModal.tsx": {
-    "mtime": 1791950940.5748408,
-    "seen": 1791951702.507759,
-    "ast_hash": "edfcb235fe69e2168f6cb0be713b2a9d",
+    "mtime": 1792242721.0115893,
+    "seen": 1792243027.6780643,
+    "ast_hash": "99592a5cc4782a82c0918e5f7f4a2cac",
     "semantic_hash": ""
   },
   "src/components/modals/WalkthroughModal.tsx": {
@@ -276,9 +276,9 @@
     "semantic_hash": ""
   },
   "src/components/views/HistoryView.tsx": {
-    "mtime": 1791950940.5828934,
-    "seen": 1791951702.5077996,
-    "ast_hash": "3fa1167491ae11e54205da29e89ffa82",
+    "mtime": 1792242721.0283656,
+    "seen": 1792243027.6781373,
+    "ast_hash": "b01438c2d1e4dbcbb57d2cb189db44d6",
     "semantic_hash": ""
   },
   "src/components/views/NurseSelfServicePanel.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1792241585.7617943,
-    "seen": 1792241594.8877566,
-    "ast_hash": "82f430d14168f1296385db1ea9a12b36",
+    "mtime": 1792243018.3765757,
+    "seen": 1792243027.6784503,
+    "ast_hash": "0b35888f85b97598bf5a4f375fc68d51",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1110,9 +1110,9 @@
     "semantic_hash": ""
   },
   "tests/unit/versionCompareModal.test.ts": {
-    "mtime": 1791362587.9857638,
-    "seen": 1791365225.1341727,
-    "ast_hash": "e8e8ed7469c15d0a450c779f5e03fc4a",
+    "mtime": 1792242763.7376523,
+    "seen": 1792243027.6784031,
+    "ast_hash": "27360837ae23b1b353ae25cd97d62526",
     "semantic_hash": ""
   },
   "firebase.emulator.json": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1792241585.7666888,
-    "seen": 1792241594.887765,
-    "ast_hash": "25de71a60c9af7aa041817ab03ce001c",
+    "mtime": 1792242938.922756,
+    "seen": 1792243027.6784585,
+    "ast_hash": "e29224e86676ac42a8d89909b19cf6f8",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1716,9 +1716,9 @@
     "semantic_hash": ""
   },
   "src/components/ui/Dialog.tsx": {
-    "mtime": 1792240449.7788112,
-    "seen": 1792240863.7816792,
-    "ast_hash": "e9c1aacbfa158322dbc37af49ec34374",
+    "mtime": 1792242721.0091186,
+    "seen": 1792243027.6781137,
+    "ast_hash": "c0aaaf2b7b9a07588d00261c66486773",
     "semantic_hash": ""
   },
   "src/components/ui/Field.tsx": {
@@ -2391,6 +2391,30 @@
     "mtime": 1792241422.1337564,
     "seen": 1792241594.88715,
     "ast_hash": "f6ae56ca62732f7756ba800959132f50",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/history.cjs": {
+    "mtime": 1792242816.681198,
+    "seen": 1792243027.6779292,
+    "ast_hash": "90117754120c983fc5f84fb43fead5c2",
+    "semantic_hash": ""
+  },
+  "src/components/history/VersionRoster.tsx": {
+    "mtime": 1792242917.5212715,
+    "seen": 1792243027.6780336,
+    "ast_hash": "dd1f99065da1f53569c49d6d28d24bfc",
+    "semantic_hash": ""
+  },
+  "src/services/history/versionKinds.ts": {
+    "mtime": 1792242052.241586,
+    "seen": 1792243027.678244,
+    "ast_hash": "e875202c89d67afbe0996c71fc6e6846",
+    "semantic_hash": ""
+  },
+  "tests/unit/versionKinds.test.ts": {
+    "mtime": 1792242041.7204232,
+    "seen": 1792243027.678404,
+    "ast_hash": "021c3c0dbb7ffd9f790026093e4f299c",
     "semantic_hash": ""
   }
 }

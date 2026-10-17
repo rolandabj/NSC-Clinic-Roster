@@ -19,7 +19,7 @@ import { useDialogA11y } from '../common/useDialogA11y';
 import { IconButton } from './Button';
 import { cx } from './cx';
 
-const WIDTHS = { sm: 'sm:max-w-md', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl', xl: 'sm:max-w-4xl' };
+const WIDTHS = { sm: 'sm:max-w-md', md: 'sm:max-w-lg', lg: 'sm:max-w-2xl', xl: 'sm:max-w-4xl', full: 'sm:max-w-[min(96vw,90rem)]' };
 
 export const Dialog: React.FC<{
   open: boolean;

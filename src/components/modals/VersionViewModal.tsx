@@ -1,49 +1,19 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
- * Version view: a saved version of a roster, read only, as a calendar or a
- * list of shifts, with buttons to restore or delete it.
+ *
+ * History's Open larger: one saved version's whole roster across nearly the whole screen, with
+ * Restore and Delete for planners. On the shared Dialog since Phase 7, slice 5b; the table is the
+ * same one as History's Roster tab (VersionRoster).
  */
 
-import { isWeekendDay } from '../../utils/weekend';
-import React, { useId, useState } from 'react';
-import {
-  X,
-  Eye,
-  RotateCcw,
-  Calendar,
-  User,
-  Clock,
-  Lock,
-  Search,
-  Download,
-  Shield,
-  Layers,
-  LayoutGrid,
-  List,
-  ChevronLeft,
-  ChevronRight,
-  Droplets,
-  Trash2,
-} from 'lucide-react';
-import {
-  Schedule,
-  ScheduleVersion,
-  Assignment,
-  Nurse,
-  DutyWindow,
-  Doctor,
-  ClinicalRole,
-  Specialty,
-  LeaveType,
-} from '../../types';
-import { useDialogA11y } from '../common/useDialogA11y';
-import { formatDate, localTodayIso } from '../../utils/dateUtils';
-import { monthRange } from '../../utils/dateDefaults';
-
-const SOURCE_LABELS: Record<string, string> = { GENERATED: 'Filled automatically', MANUAL: 'Set by hand', LOCK: 'From a pinned day' };
-import { isFloatShift } from '../../services/engine/floatShift';
+import React from 'react';
+import { RotateCcw, Trash2 } from 'lucide-react';
+import { ScheduleVersion, Nurse, DutyWindow, Doctor, ClinicalRole, Specialty, Schedule, LeaveType, SeniorityLevel } from '../../types';
+import { formatDateTime } from '../../utils/dateUtils';
+import { versionKind, versionKindLabel, versionName } from '../../services/history/versionKinds';
+import { VersionRoster } from '../history/VersionRoster';
+import { Button, Dialog } from '../ui';
 
 interface VersionViewModalProps {
   version: ScheduleVersion | null;
@@ -54,13 +24,12 @@ interface VersionViewModalProps {
   roles: ClinicalRole[];
   specialties: Specialty[];
   leaveTypes?: LeaveType[];
+  seniorityLevels?: SeniorityLevel[];
   isOpen: boolean;
   onClose: () => void;
   onRestore?: (version: ScheduleVersion) => void;
   onDelete?: (version: ScheduleVersion) => void;
 }
-
-const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const VersionViewModal: React.FC<VersionViewModalProps> = ({
   version,
@@ -71,469 +40,52 @@ export const VersionViewModal: React.FC<VersionViewModalProps> = ({
   roles,
   specialties,
   leaveTypes = [],
+  seniorityLevels = [],
   isOpen,
   onClose,
   onRestore,
   onDelete,
 }) => {
-  const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedNurseId, setSelectedNurseId] = useState<string>('ALL');
-  const [selectedBlockIndex, setSelectedBlockIndex] = useState<number>(0);
-  const titleId = useId();
-  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen && !!version, onClose);
-
   if (!isOpen || !version) return null;
-
-  const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
-  const nurseMap = new Map(nurses.map((n) => [n.id, n]));
-  const doctorMap = new Map(doctors.map((d) => [d.id, d]));
-  const roleMap = new Map(roles.map((r) => [r.id, r]));
-  const specialtyMap = new Map(specialties.map((s) => [s.id, s]));
-  const leaveTypeMap = new Map(leaveTypes.map((l) => [l.id, l]));
-
-  const assignments = version.snapshot.assignments || [];
-  const leaveEntries = version.snapshot.leaveEntries || [];
-  const locks = version.snapshot.locks || [];
-
-  // Effective schedule dates
-  const effectiveSchedule = version.snapshot.schedule || schedule;
-  // Without a roster (never expected), show the current month rather than a fixed one.
-  const fallbackMonth = monthRange(localTodayIso());
-  const startDateStr = effectiveSchedule?.startDate || fallbackMonth.startDate;
-  const endDateStr = effectiveSchedule?.endDate || fallbackMonth.endDate;
-  const blockWeeks = effectiveSchedule?.blockWeeks || 2;
-  const daysPerBlock = blockWeeks * 7;
-
-  const start = new Date(startDateStr + 'T00:00:00Z');
-  const end = new Date(endDateStr + 'T00:00:00Z');
-  const totalDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-  const totalBlocks = Math.max(1, Math.ceil(totalDays / daysPerBlock));
-
-  const currentBlockStartDay = selectedBlockIndex * daysPerBlock + 1;
-  const currentBlockEndDay = Math.min((selectedBlockIndex + 1) * daysPerBlock, totalDays);
-
-  const blockDates: string[] = [];
-  for (let day = currentBlockStartDay; day <= currentBlockEndDay; day++) {
-    const d = new Date(start);
-    d.setUTCDate(start.getUTCDate() + (day - 1));
-    blockDates.push(d.toISOString().split('T')[0]);
-  }
-
-  // Filtered nurses
-  const displayedNurses = nurses.filter((nurse) => {
-    const matchesSearch =
-      nurse.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      nurse.employeeCode.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesNurse = selectedNurseId === 'ALL' || nurse.id === selectedNurseId;
-    return matchesSearch && matchesNurse;
-  });
-
-  // Filtered assignments for list mode
-  const filteredAssignments = assignments.filter((a) => {
-    const nurse = nurseMap.get(a.nurseId);
-    const nurseName = nurse ? nurse.fullName.toLowerCase() : '';
-    const matchesSearch =
-      nurseName.includes(searchQuery.toLowerCase()) || a.date.includes(searchQuery);
-    const matchesNurse = selectedNurseId === 'ALL' || a.nurseId === selectedNurseId;
-    return matchesSearch && matchesNurse;
-  });
-  filteredAssignments.sort((a, b) => a.date.localeCompare(b.date));
+  const rosterName = version.snapshot.schedule?.name || schedule?.name || 'a roster';
+  const kept = version.kind === 'BACKUP' ? 'Kept' : 'Saved';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-6xl w-full max-h-[92vh] flex flex-col overflow-hidden text-xs"
-      >
-        {/* Modal Top Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 bg-slate-50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center shadow-xs">
-              <Eye className="w-5 h-5" aria-hidden="true" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 id={titleId} className="text-base font-bold text-slate-900">
-                  Version {version.number}
-                </h2>
-                {version.isPublished && (
-                  <span className="px-2 py-0.5 rounded bg-purple-100 text-purple-800 font-bold text-[10px]">
-                    Published
-                  </span>
-                )}
-                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-mono text-[10px]">
-                  {effectiveSchedule?.name || 'Roster'}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-0.5 font-sans">
-                &ldquo;{version.note || 'No note'}&rdquo; · saved by <strong>{version.author || 'Planner'}</strong> on {new Date(version.timestamp).toLocaleString()}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {onRestore && (
-              <button
-                type="button"
-                onClick={() => {
-                  onRestore(version);
-                  onClose();
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium cursor-pointer shadow-xs transition-colors"
-                title="Put this version's shifts back on the roster (you will be asked to confirm first)"
-              >
-                <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Restore this version</span>
-              </button>
-            )}
-
-            {onDelete && (
-              <button
-                type="button"
-                onClick={() => {
-                  onDelete(version);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 rounded-lg font-medium cursor-pointer shadow-2xs transition-colors"
-                title="Delete this version (you will be asked to confirm first)"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-rose-600" aria-hidden="true" />
-                <span>Delete</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-            >
-              <X className="w-4 h-4" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-
-        {/* View Switcher & Filter Bar */}
-        <div className="px-6 py-2.5 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
-          {/* Mode Switcher */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-            <button
-              type="button"
-              onClick={() => setViewMode('GRID')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold cursor-pointer transition-colors ${
-                viewMode === 'GRID'
-                  ? 'bg-white text-indigo-700 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Calendar</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('LIST')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold cursor-pointer transition-colors ${
-                viewMode === 'LIST'
-                  ? 'bg-white text-indigo-700 shadow-2xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <List className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>List of shifts</span>
-            </button>
-          </div>
-
-          {/* Quick Metrics */}
-          <div className="hidden sm:flex items-center gap-3 text-[11px] text-slate-600">
-            <span className="px-2 py-0.5 rounded bg-slate-50 border border-slate-200">
-              Shifts: <strong className="text-slate-900">{assignments.length}</strong>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-slate-50 border border-slate-200">
-              Leave: <strong className="text-slate-900">{leaveEntries.length}</strong>
-            </span>
-            <span className="px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800">
-              Pinned days: <strong>{locks.length}</strong>
-            </span>
-          </div>
-
-          {/* Controls: Search, Nurse filter, page of days */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Search */}
-            <div className="relative w-56">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-              <input
-                type="text"
-                aria-label="Search by nurse or date"
-                placeholder="Search by nurse or date..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
-              />
-            </div>
-
-            {/* Nurse dropdown */}
-            <select
-              aria-label="Filter by nurse"
-              value={selectedNurseId}
-              onChange={(e) => setSelectedNurseId(e.target.value)}
-              className="px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-700 text-xs cursor-pointer"
-            >
-              <option value="ALL">All nurses ({nurses.length})</option>
-              {nurses.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.fullName} ({n.employeeCode})
-                </option>
-              ))}
-            </select>
-
-            {/* Block Switcher (if grid view and multiple blocks) */}
-            {viewMode === 'GRID' && totalBlocks > 1 && (
-              <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5">
-                <button
-                  type="button"
-                  disabled={selectedBlockIndex === 0}
-                  onClick={() => setSelectedBlockIndex((p) => p - 1)}
-                  className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
-                  title="Earlier days"
-                  aria-label="Earlier days"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
-                <span className="px-2 font-mono font-bold text-[11px] text-slate-700">
-                  Days {formatDate(blockDates[0])} to {formatDate(blockDates[blockDates.length - 1])}
-                </span>
-                <button
-                  type="button"
-                  disabled={selectedBlockIndex >= totalBlocks - 1}
-                  onClick={() => setSelectedBlockIndex((p) => p + 1)}
-                  className="p-1 rounded hover:bg-slate-100 disabled:opacity-30 cursor-pointer"
-                  title="Later days"
-                  aria-label="Later days"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Content Body */}
-        <div className="flex-1 overflow-auto bg-slate-50/50 p-4">
-          {viewMode === 'GRID' ? (
-            /* Calendar Matrix Grid */
-            <div className="bg-white border border-slate-200 rounded-lg shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-xs font-mono">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 text-[11px]">
-                      <th className="py-2.5 px-3 sticky left-0 bg-slate-50 z-20 w-48 border-r border-slate-200">
-                        Nurse
-                      </th>
-                      {blockDates.map((dateStr) => {
-                        const dateObj = new Date(dateStr + 'T00:00:00Z');
-                        const weekday = WEEKDAY_NAMES[dateObj.getUTCDay()];
-                        const dayNum = dateStr.split('-')[2];
-                        const isWeekend = isWeekendDay(dateObj.getUTCDay());
-
-                        return (
-                          <th
-                            key={dateStr}
-                            className={`py-2 px-1 text-center min-w-[76px] border-r border-slate-100 ${
-                              isWeekend ? 'bg-slate-100/80 text-slate-800' : ''
-                            }`}
-                          >
-                            <div className="text-[10px] text-slate-400 uppercase font-bold">{weekday}</div>
-                            <div className="font-bold text-xs text-slate-900">{dayNum}</div>
-                          </th>
-                        );
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {displayedNurses.map((nurse) => (
-                      <tr key={nurse.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-2 px-3 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-2xs">
-                          <div className="font-sans font-bold text-slate-900 truncate">
-                            {nurse.fullName}
-                          </div>
-                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5">
-                            <span>{nurse.employeeCode}</span>
-                            <span>·</span>
-                            <span>{nurse.contractPercent}%</span>
-                          </div>
-                        </td>
-
-                        {blockDates.map((dateStr) => {
-                          const asgn = assignments.find(
-                            (a) => a.nurseId === nurse.id && a.date === dateStr
-                          );
-                          const leave = leaveEntries.find(
-                            (l) =>
-                              l.nurseId === nurse.id &&
-                              l.approved &&
-                              dateStr >= l.startDate &&
-                              dateStr <= l.endDate
-                          );
-                          const isLocked = locks.some(
-                            (lk) => lk.nurseId === nurse.id && lk.date === dateStr
-                          ) || asgn?.locked;
-
-                          const duty = asgn ? dutyMap.get(asgn.dutyWindowId) : null;
-                          const leaveType = leave ? leaveTypeMap.get(leave.leaveTypeId) : null;
-
-                          let targetLabel = '';
-                          if (asgn && isFloatShift(asgn)) {
-                            targetLabel = 'Float';
-                          } else if (asgn?.doctorId) {
-                            const doc = doctorMap.get(asgn.doctorId);
-                            targetLabel = doc ? doc.fullName.split(' ')[1] || doc.fullName : 'Doctor';
-                          } else if (asgn?.clinicalRoleId) {
-                            const cr = roleMap.get(asgn.clinicalRoleId);
-                            targetLabel = cr ? cr.name : '';
-                          } else if (asgn?.specialtyId) {
-                            const sp = specialtyMap.get(asgn.specialtyId);
-                            targetLabel = sp ? sp.name : '';
-                          }
-
-                          return (
-                            <td
-                              key={dateStr}
-                              className="py-1 px-1 border-r border-slate-100 text-center align-middle"
-                            >
-                              {leave ? (
-                                <div
-                                  className="p-1 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200"
-                                  title={`Approved leave: ${leaveType?.name || 'Leave'}`}
-                                >
-                                  <div>{leaveType?.acronym || 'LV'}</div>
-                                  <div className="text-[9px] font-normal text-amber-700">Leave</div>
-                                </div>
-                              ) : asgn && duty ? (
-                                <div
-                                  className="p-1 rounded text-[10px] font-bold text-white relative shadow-2xs"
-                                  style={{ backgroundColor: duty.color }}
-                                  title={`${duty.name} (${duty.startTime}–${duty.endTime}) ${targetLabel ? '· ' + targetLabel : ''}`}
-                                >
-                                  <div className="flex items-center justify-center gap-0.5">
-                                    <span>{duty.acronym}</span>
-                                    {isLocked && <Lock className="w-2.5 h-2.5 text-white/80 shrink-0" aria-label="Pinned day" />}
-                                  </div>
-                                  {targetLabel && (
-                                    <div className="text-[9px] font-normal opacity-90 truncate max-w-[68px]">
-                                      {targetLabel}
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-slate-300 text-[11px]">—</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : (
-            /* Shifts List View */
-            <div className="bg-white border border-slate-200 rounded-lg shadow-xs overflow-hidden">
-              <table className="w-full text-left text-xs font-mono">
-                <thead className="sticky top-0 bg-slate-100 text-slate-600 text-[11px] border-b border-slate-200">
-                  <tr>
-                    <th className="py-2.5 px-4">Date</th>
-                    <th className="py-2.5 px-3">Nurse</th>
-                    <th className="py-2.5 px-3">Shift</th>
-                    <th className="py-2.5 px-3">Working with</th>
-                    <th className="py-2.5 px-3">How it was set</th>
-                    <th className="py-2.5 px-4 text-right">Pinned day</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredAssignments.map((a) => {
-                    const nurse = nurseMap.get(a.nurseId);
-                    const duty = dutyMap.get(a.dutyWindowId);
-
-                    let targetName = 'Any specialty';
-                    if (isFloatShift(a)) {
-                      targetName = 'Float';
-                    } else if (a.doctorId) {
-                      const doc = doctorMap.get(a.doctorId);
-                      targetName = doc ? doc.fullName : 'Doctor';
-                    } else if (a.clinicalRoleId) {
-                      const role = roleMap.get(a.clinicalRoleId);
-                      targetName = role ? role.name : 'Nurse skill';
-                    } else if (a.specialtyId) {
-                      const spec = specialtyMap.get(a.specialtyId);
-                      targetName = spec ? spec.name : 'Any specialty';
-                    }
-
-                    return (
-                      <tr key={a.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-2 px-4 font-bold text-slate-900">{formatDate(a.date)}</td>
-                        <td className="py-2 px-3 font-sans font-medium text-slate-900">
-                          {nurse?.fullName || a.nurseId}
-                        </td>
-                        <td className="py-2 px-3">
-                          {duty ? (
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className="px-1.5 py-0.5 rounded text-white font-bold text-[10px]"
-                                style={{ backgroundColor: duty.color }}
-                              >
-                                {duty.acronym}
-                              </span>
-                              <span className="text-slate-700">
-                                {duty.name} ({duty.startTime}–{duty.endTime})
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">—</span>
-                          )}
-                        </td>
-                        <td className="py-2 px-3 text-slate-800 font-sans">{targetName}</td>
-                        <td className="py-2 px-3 text-[10px] text-slate-500">{SOURCE_LABELS[a.source] || a.source}</td>
-                        <td className="py-2 px-4 text-right">
-                          {a.locked ? (
-                            <span className="inline-flex items-center gap-1 text-amber-700 font-bold text-[10px]">
-                              <Lock className="w-3 h-3" aria-hidden="true" /> Pinned
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 text-[10px]">No</span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {filteredAssignments.length === 0 && (
-                <div className="p-8 text-center text-slate-400 text-xs">
-                  No shifts match your search or the nurse you chose.
-                </div>
-              )}
-            </div>
+    <Dialog
+      open
+      onClose={onClose}
+      size="full"
+      title={`${versionName(version)} of ${rosterName}`}
+      description={`${versionKindLabel(versionKind(version))}. ${kept} by ${version.author || 'a planner'} on ${formatDateTime(version.timestamp)}.${version.note ? ` ${version.note}` : ''}`}
+      footer={
+        <>
+          {onDelete && (
+            <Button icon={Trash2} className="text-danger sm:mr-auto" onClick={() => onDelete(version)}>
+              Delete
+            </Button>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="p-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-slate-500 text-[11px]">
-          <span>
-            This version has {assignments.length} shift{assignments.length === 1 ? '' : 's'}, {leaveEntries.length} leave {leaveEntries.length === 1 ? 'entry' : 'entries'} and {locks.length} pinned day{locks.length === 1 ? '' : 's'}
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg font-medium cursor-pointer transition-colors shadow-2xs"
-          >
+          {onRestore && (
+            <Button icon={RotateCcw} onClick={() => onRestore(version)}>
+              Restore
+            </Button>
+          )}
+          <Button variant="primary" onClick={onClose}>
             Close
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </>
+      }
+    >
+      <VersionRoster
+        version={version}
+        nurses={nurses}
+        dutyWindows={dutyWindows}
+        doctors={doctors}
+        roles={roles}
+        specialties={specialties}
+        leaveTypes={leaveTypes}
+        seniorityLevels={seniorityLevels}
+        startWhole
+      />
+    </Dialog>
   );
 };

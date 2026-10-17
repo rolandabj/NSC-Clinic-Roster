@@ -64,10 +64,10 @@ Main moves only when the owner says "push to main".
 - [x] Checkpoint 6 (item 80)
 
 ## Phase 7: publishing, History and dialogs
-- [ ] Every dialog on the shared `Dialog` (slice 1, Leave and days off: item 83; slice 2, Requests and Doctors: item 84; slice 3a, roster screen smaller dialogs: item 85; slice 3b, editing dialogs: item 86; slice 3c, large forms: item 87; slice 4, Settings: item 88)
+- [ ] Every dialog on the shared `Dialog` (slice 1, Leave and days off: item 83; slice 2, Requests and Doctors: item 84; slice 3a, roster screen smaller dialogs: item 85; slice 3b, editing dialogs: item 86; slice 3c, large forms: item 87; slice 4, Settings: item 88; slice 5, History: item 89)
 - [ ] One publish flow; Sent rosters screen with paging
 - [ ] Resume a stopped publish
-- [ ] History tidied
+- [x] History tidied (slice 5, item 89)
 - [ ] Checkpoint 7
 
 ## Phase 8: Settings, Reports, Audit

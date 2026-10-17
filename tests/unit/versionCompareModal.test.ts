@@ -61,5 +61,5 @@ test('a loaded roster still compares its saved version with the current draft', 
   assert.match(html, /Compare versions/);
   assert.match(html, /1 removed/);
   assert.match(html, /Version 1/);
-  assert.match(html, /Roster now/);
+  assert.match(html, /The roster now/);
 });
