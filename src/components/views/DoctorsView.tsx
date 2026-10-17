@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useId, useRef } from 'react';
-import { useDialogA11y } from '../common/useDialogA11y';
+import React, { useState, useEffect, useRef } from 'react';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import {
   Stethoscope,
@@ -48,7 +47,7 @@ import {
 import { formatDate, formatDayDate, localTodayIso } from '../../utils/dateUtils';
 import { defaultPatternRange, defaultSessionDate } from '../../utils/dateDefaults';
 import { checkDoctorForm, doctorCounts, filterDoctors, usualWeekLines, WEEKDAY_NAMES, type DoctorFilters } from '../../services/doctors/doctorForm';
-import { Badge, Button, Checkbox, DataTable, Dialog, EmptyState, Field, IconButton, Input, Notice, PageHeader, Select, Textarea, cx, type Column } from '../ui';
+import { Badge, Button, Checkbox, DataTable, DateInput, Dialog, EmptyState, Field, IconButton, Input, Notice, PageHeader, Select, Textarea, cx, type Column } from '../ui';
 
 interface DoctorsViewProps {
   context: ClinicContextState;
@@ -126,10 +125,12 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
 
 
   // Dialog keyboard and screen reader support
-  const expandTitleId = useId();
-  const sessionTitleId = useId();
-  const expandDialogRef = useDialogA11y<HTMLDivElement>(isExpandModalOpen, () => setIsExpandModalOpen(false));
-  const sessionDialogRef = useDialogA11y<HTMLDivElement>(isSessionModalOpen && !!editingSession, () => setIsSessionModalOpen(false));
+  const [expandError, setExpandError] = useState('');
+  const [isExpanding, setIsExpanding] = useState(false);
+  const [sessionError, setSessionError] = useState('');
+  // A changed field clears the last refusal.
+  useEffect(() => setExpandError(''), [expandRange, isExpandModalOpen]);
+  useEffect(() => setSessionError(''), [editingSession, isSessionModalOpen]);
 
   const repo = getRepository();
 
@@ -439,10 +440,15 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
           ? doctors
           : doctors.filter((d) => d.id === expandRange.targetDoctorId);
 
-      if (expandRange.startDate > expandRange.endDate) {
-        notify('Start date must be before or equal to end date.', 'warning');
+      if (!expandRange.startDate || !expandRange.endDate) {
+        setExpandError(`Enter the ${!expandRange.startDate ? 'first' : 'last'} day, like 01-11-2026.`);
         return;
       }
+      if (expandRange.startDate > expandRange.endDate) {
+        setExpandError('The last day is before the first day.');
+        return;
+      }
+      setIsExpanding(true);
 
       const result = await populateRecurringDoctorSessionsForSchedule({
         repo,
@@ -458,7 +464,9 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       setIsExpandModalOpen(false);
       loadData();
     } catch (err: any) {
-      notify(`Error expanding sessions: ${err.message}`, 'error');
+      setExpandError(`The usual weeks were not put on dates: ${err.message}`);
+    } finally {
+      setIsExpanding(false);
     }
   };
 
@@ -477,7 +485,16 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
   // Save Ad-hoc Session Override
   const handleSaveAdHocSession = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingSession || !editingSession.doctorId || !editingSession.date) return;
+    if (!editingSession || !editingSession.doctorId) return;
+    // A refusal shows in the dialog (Phase 7). The date of a clinic already there stays as it is.
+    if (!editingSession.date) {
+      setSessionError('Enter the date, like 17-11-2026.');
+      return;
+    }
+    if (!editingSession.startTime || !editingSession.endTime || editingSession.endTime <= editingSession.startTime) {
+      setSessionError('The clinic must end after it starts.');
+      return;
+    }
 
     try {
       if (editingSession.id) {
@@ -488,7 +505,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
           cancelled: editingSession.cancelled,
           source: 'MANUAL',
         });
-        triggerNotification(`The clinic of ${formatDayDate(editingSession.date || '')} updated.`);
+        triggerNotification(`The clinic on ${formatDayDate(editingSession.date || '')} changed.`);
       } else {
         await repo.create('doctorSessions', {
           doctorId: editingSession.doctorId,
@@ -506,7 +523,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       setEditingSession(null);
       loadData();
     } catch (err: any) {
-      notify(`Failed to save session: ${err.message}`, 'error');
+      setSessionError(`The clinic was not saved: ${err.message}`);
     }
   };
 
@@ -1037,185 +1054,117 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
         />
       )}
 
-      {isExpandModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div
-            ref={expandDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={expandTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
-          >
-            <h3 id={expandTitleId} className="text-sm font-bold text-slate-900">
-              Put usual weeks on dates
-            </h3>
-            <p className="text-[11px] text-slate-500">
-              Puts each doctor's usual week on every day of this range. Days changed or cancelled by hand for one date stay as they are; other days follow the week, and clinics the week no longer has are removed.
-            </p>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Target Doctor</label>
-                <select aria-label="Target Doctor"
-                  value={expandRange.targetDoctorId}
-                  onChange={(e) =>
-                    setExpandRange({ ...expandRange, targetDoctorId: e.target.value })
-                  }
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white"
-                >
-                  <option value="ALL">All Active Doctors ({doctors.length})</option>
-                  {[...doctors]
-                    .sort((a, b) => a.fullName.localeCompare(b.fullName))
-                    .map((d) => {
-                      const docSpec = specialties
-                        .filter((s) => d.specialtyIds?.includes(s.id))
-                        .map((s) => s.name)
-                        .join(', ');
-                      return (
-                        <option key={d.id} value={d.id}>
-                          {d.fullName}{docSpec ? ` — ${docSpec}` : ''}
-                        </option>
-                      );
-                    })}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Start Date</label>
-                  <input aria-label="Start Date"
-                    type="date"
-                    value={expandRange.startDate}
-                    onChange={(e) =>
-                      setExpandRange({ ...expandRange, startDate: e.target.value })
-                    }
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">End Date</label>
-                  <input aria-label="End Date"
-                    type="date"
-                    value={expandRange.endDate}
-                    onChange={(e) =>
-                      setExpandRange({ ...expandRange, endDate: e.target.value })
-                    }
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsExpandModalOpen(false)}
-                className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleExpandPatternToSessions}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
-              >
-                Expand Sessions
-              </button>
-            </div>
+      {/* Both on the shared Dialog (Phase 7, slice 2). */}
+      <Dialog
+        open={isExpandModalOpen}
+        onClose={() => !isExpanding && setIsExpandModalOpen(false)}
+        title="Put usual weeks on dates"
+        description="Puts each doctor's usual week on every day from the first day to the last day. Clinics changed or cancelled by hand stay as they are. Other days follow the usual week, and clinics the week no longer has are removed."
+        footer={
+          <>
+            <Button disabled={isExpanding} onClick={() => setIsExpandModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" form="usual-weeks" busy={isExpanding}>
+              Put on dates
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="usual-weeks"
+          noValidate
+          className="space-y-4 text-sm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleExpandPatternToSessions();
+          }}
+        >
+          <Field label="Doctors">
+            {(f) => (
+              <Select {...f} value={expandRange.targetDoctorId} onChange={(e) => setExpandRange({ ...expandRange, targetDoctorId: e.target.value })}>
+                <option value="ALL">All doctors ({doctors.length})</option>
+                {[...doctors]
+                  .sort((a, b) => a.fullName.localeCompare(b.fullName))
+                  .map((d) => {
+                    const docSpec = specialties
+                      .filter((sp) => d.specialtyIds?.includes(sp.id))
+                      .map((sp) => sp.name)
+                      .join(', ');
+                    return (
+                      <option key={d.id} value={d.id}>
+                        {d.fullName}
+                        {docSpec ? `, ${docSpec}` : ''}
+                      </option>
+                    );
+                  })}
+              </Select>
+            )}
+          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="First day">
+              {(f) => <DateInput {...f} value={expandRange.startDate} onChange={(iso) => setExpandRange({ ...expandRange, startDate: iso })} />}
+            </Field>
+            <Field label="Last day">
+              {(f) => <DateInput {...f} value={expandRange.endDate} onChange={(iso) => setExpandRange({ ...expandRange, endDate: iso })} />}
+            </Field>
           </div>
-        </div>
-      )}
+          {expandError && <Notice tone="danger" live title={expandError} />}
+        </form>
+      </Dialog>
 
-      {/* AD-HOC SESSION OVERRIDE MODAL */}
-      {isSessionModalOpen && editingSession && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div
-            ref={sessionDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={sessionTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-sm w-full p-5 space-y-4 text-xs"
-          >
-            <h3 id={sessionTitleId} className="text-sm font-bold text-slate-900">
-              {editingSession.id ? 'Edit Clinic Session' : 'Add Ad-hoc Session'}
-            </h3>
-
-            <form onSubmit={handleSaveAdHocSession} className="space-y-3">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Date</label>
-                <input aria-label="Date"
-                  type="date"
-                  required
-                  value={editingSession.date}
-                  onChange={(e) =>
-                    setEditingSession({ ...editingSession, date: e.target.value })
-                  }
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Start Time</label>
-                  <input aria-label="Start Time"
-                    type="time"
-                    required
-                    value={editingSession.startTime}
-                    onChange={(e) =>
-                      setEditingSession({ ...editingSession, startTime: e.target.value })
-                    }
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono text-center"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">End Time</label>
-                  <input aria-label="End Time"
-                    type="time"
-                    required
-                    value={editingSession.endTime}
-                    onChange={(e) =>
-                      setEditingSession({ ...editingSession, endTime: e.target.value })
-                    }
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono text-center"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Room / Suite</label>
-                <input aria-label="Room / Suite"
-                  type="text"
-                  value={editingSession.room || ''}
-                  onChange={(e) =>
-                    setEditingSession({ ...editingSession, room: e.target.value })
-                  }
-                  placeholder="Suite 101"
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSessionModalOpen(false);
-                    setEditingSession(null);
-                  }}
-                  className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer"
-                >
-                  Save Session
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <Dialog
+        open={isSessionModalOpen && !!editingSession}
+        onClose={() => {
+          setIsSessionModalOpen(false);
+          setEditingSession(null);
+        }}
+        size="sm"
+        title={editingSession?.id ? 'Change the clinic' : 'Add a clinic'}
+        description={
+          editingSession &&
+          [doctors.find((d) => d.id === editingSession.doctorId)?.fullName, editingSession.id && editingSession.date ? formatDayDate(editingSession.date) : '']
+            .filter(Boolean)
+            .join(', ')
+        }
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                setIsSessionModalOpen(false);
+                setEditingSession(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" form="clinic-editor" icon={Save}>
+              {editingSession?.id ? 'Save changes' : 'Add the clinic'}
+            </Button>
+          </>
+        }
+      >
+        {editingSession && (
+          <form id="clinic-editor" onSubmit={handleSaveAdHocSession} noValidate className="space-y-4 text-sm">
+            {!editingSession.id && (
+              <Field label="Date">
+                {(f) => <DateInput {...f} value={editingSession.date || ''} onChange={(iso) => setEditingSession({ ...editingSession, date: iso })} />}
+              </Field>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Starts">
+                {(f) => <Input {...f} type="time" value={editingSession.startTime || ''} onChange={(e) => setEditingSession({ ...editingSession, startTime: e.target.value })} />}
+              </Field>
+              <Field label="Ends">
+                {(f) => <Input {...f} type="time" value={editingSession.endTime || ''} onChange={(e) => setEditingSession({ ...editingSession, endTime: e.target.value })} />}
+              </Field>
+            </div>
+            <Field label="Room" optional>
+              {(f) => <Input {...f} value={editingSession.room || ''} onChange={(e) => setEditingSession({ ...editingSession, room: e.target.value })} />}
+            </Field>
+            {sessionError && <Notice tone="danger" live title={sessionError} />}
+          </form>
+        )}
+      </Dialog>
 
       {/* Bulk CSV Import Modal (opens on the doctors tab) */}
       <BulkImportModal

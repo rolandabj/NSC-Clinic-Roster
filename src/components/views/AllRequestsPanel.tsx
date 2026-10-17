@@ -5,11 +5,12 @@
  * All requests: every day off and shift request of every nurse, whatever its
  * decision (waiting, approved or declined). Planners and managers can approve,
  * decline, put back to waiting, change or delete any of them. An approved day
- * off keeps its pinned day off in step (see staffRequestService).
+ * off keeps its pinned day off in step (see staffRequestService). On the shared
+ * table, fields and dialog since Phase 7, slice 2.
  */
 
-import React, { useEffect, useId, useMemo, useState } from 'react';
-import { Check, Pencil, RefreshCw, RotateCcw, Trash2, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Check, Pencil, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import { UserProfile } from '../../services/auth/authService';
 import {
   decideRequest,
@@ -19,9 +20,9 @@ import {
   updateAvailabilityRequest,
 } from '../../services/requests/staffRequestService';
 import { AvailabilityRequest, DutyWindow, Nurse } from '../../types';
-import { formatDate, localTodayIso } from '../../utils/dateUtils';
+import { formatDayDate, localTodayIso } from '../../utils/dateUtils';
 import { confirmDialog, notify } from '../common/dialogs';
-import { useDialogA11y } from '../common/useDialogA11y';
+import { Badge, Button, DataTable, DateInput, Dialog, ErrorState, Field, Input, LoadingState, Notice, Select, type Column, type Tone } from '../ui';
 
 interface AllRequestsPanelProps {
   currentUser?: UserProfile;
@@ -33,18 +34,11 @@ interface AllRequestsPanelProps {
 type StatusFilter = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED';
 type KindFilter = 'ALL' | 'DAY_OFF' | 'SHIFT';
 
-const STATUS_LABEL: Record<AvailabilityRequest['status'], string> = {
-  PENDING: 'Waiting',
-  APPROVED: 'Approved',
-  REJECTED: 'Declined',
+const STATUS: Record<AvailabilityRequest['status'], { label: string; tone: Tone }> = {
+  PENDING: { label: 'Waiting', tone: 'warning' },
+  APPROVED: { label: 'Approved', tone: 'success' },
+  REJECTED: { label: 'Declined', tone: 'neutral' },
 };
-const STATUS_STYLE: Record<AvailabilityRequest['status'], string> = {
-  PENDING: 'bg-amber-50 text-amber-800 border-amber-200',
-  APPROVED: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-  REJECTED: 'bg-slate-100 text-slate-600 border-slate-200',
-};
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const weekdayOf = (date: string) => WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()];
 
 interface Draft {
   id: string;
@@ -65,8 +59,10 @@ export const AllRequestsPanel: React.FC<AllRequestsPanelProps> = ({ currentUser,
   const [nurseId, setNurseId] = useState('ALL');
   const [fromDate, setFromDate] = useState(localTodayIso(-31));
   const [draft, setDraft] = useState<Draft | null>(null);
-  const editTitleId = useId();
-  const editDialogRef = useDialogA11y<HTMLDivElement>(!!draft, () => setDraft(null));
+  const [draftError, setDraftError] = useState('');
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  // A changed date or request clears the last refusal.
+  useEffect(() => setDraftError(''), [draft?.date, draft?.available, draft?.preferredDutyWindowId]);
 
   const nurseMap = useMemo(() => new Map(nurses.map((n) => [n.id, n])), [nurses]);
   const dutyMap = useMemo(() => new Map(dutyWindows.map((d) => [d.id, d])), [dutyWindows]);
@@ -117,9 +113,9 @@ export const AllRequestsPanel: React.FC<AllRequestsPanelProps> = ({ currentUser,
   const handleDelete = async (r: AvailabilityRequest) => {
     const name = nurseMap.get(r.nurseId)?.fullName || 'this nurse';
     const ok = await confirmDialog({
-      title: 'Delete request',
-      message: `Delete ${name}'s ${describe(r).toLowerCase()} request for ${formatDate(r.date)}?${
-        !r.available && r.status === 'APPROVED' ? ' The pinned day off goes too, so she can be given a shift that day.' : ''
+      title: 'Delete the request?',
+      message: `Delete ${name}'s ${describe(r).toLowerCase()} request for ${formatDayDate(r.date)}?${
+        !r.available && r.status === 'APPROVED' ? ' The pinned day off goes too, so the nurse can be given a shift that day.' : ''
       }`,
       confirmLabel: 'Delete',
       danger: true,
@@ -127,284 +123,237 @@ export const AllRequestsPanel: React.FC<AllRequestsPanelProps> = ({ currentUser,
     if (ok) run(r.id, () => deleteAvailabilityRequest(currentUser, r.id), 'Request deleted.');
   };
 
-  const saveDraft = async () => {
-    if (!draft) return;
-    if (!draft.date) {
-      notify('Choose a date.', 'warning');
-      return;
-    }
-    const d = draft;
-    setDraft(null);
-    run(
-      d.id,
-      () =>
-        updateAvailabilityRequest(currentUser, d.id, {
-          date: d.date,
-          available: d.available,
-          preferredDutyWindowId: d.available ? d.preferredDutyWindowId || null : null,
-          note: d.note,
-        }),
-      'Request changed.'
-    );
+  const openDraft = (r: AvailabilityRequest) => {
+    setDraftError('');
+    setDraft({
+      id: r.id,
+      nurseName: nurseMap.get(r.nurseId)?.fullName || 'Unknown nurse',
+      date: r.date,
+      available: r.available,
+      preferredDutyWindowId: r.preferredDutyWindowId || '',
+      note: r.note || '',
+    });
   };
 
-  const selectClass = 'px-2 py-1.5 border border-slate-300 rounded bg-white text-slate-800 text-xs';
+  // The dialog stays open until the change is saved; a refusal shows in it (Phase 7).
+  const saveDraft = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!draft) return;
+    if (!draft.date) {
+      setDraftError('Enter the date, like 18-11-2026.');
+      return;
+    }
+    setIsSavingDraft(true);
+    try {
+      await updateAvailabilityRequest(currentUser, draft.id, {
+        date: draft.date,
+        available: draft.available,
+        preferredDutyWindowId: draft.available ? draft.preferredDutyWindowId || null : null,
+        note: draft.note,
+      });
+      setDraft(null);
+      notify('Request changed.', 'success');
+      await load();
+      onChanged?.();
+    } catch (err: any) {
+      setDraftError(`The request was not saved: ${err?.message || err}`);
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  const nameOf = (r: AvailabilityRequest) => nurseMap.get(r.nurseId)?.fullName || 'Unknown nurse';
+  const what = (r: AvailabilityRequest) => `${nameOf(r)}: ${describe(r).toLowerCase()} on ${formatDayDate(r.date)}`;
+
+  const columns: Column<AvailabilityRequest>[] = [
+    { key: 'date', header: 'Date', sortValue: (r) => r.date, cell: (r) => <span className="whitespace-nowrap">{formatDayDate(r.date)}</span> },
+    { key: 'nurse', header: 'Nurse', sortValue: nameOf, cell: nameOf, phone: 'title' },
+    { key: 'request', header: 'Request', cell: describe },
+    {
+      key: 'status',
+      header: 'Status',
+      sortValue: (r) => STATUS[r.status].label,
+      cell: (r) => (
+        <span className="block">
+          <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>
+          {r.reviewedByUserName && r.status !== 'PENDING' && <span className="mt-0.5 block text-xs text-ink-muted">by {r.reviewedByUserName}</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'note',
+      header: 'Note',
+      cell: (r) => (
+        <span className="block max-w-64">
+          {r.note || <span className="text-ink-muted">None</span>}
+          {r.reviewNotes && <span className="mt-0.5 block text-xs text-ink-muted">Decision note: {r.reviewNotes}</span>}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      hideHeader: true,
+      phone: 'actions',
+      align: 'right',
+      cell: (r) => {
+        const busy = busyId === r.id;
+        return (
+          <span className="inline-flex flex-wrap justify-end gap-2">
+            {r.status !== 'APPROVED' && (
+              <Button size="sm" icon={Check} disabled={busy} aria-label={`Approve ${what(r)}`} onClick={() => run(r.id, () => decideRequest(currentUser, 'AVAILABILITY', r.id, 'APPROVED'), 'Request approved.')}>
+                Approve
+              </Button>
+            )}
+            {r.status !== 'REJECTED' && (
+              <Button size="sm" icon={X} disabled={busy} aria-label={`Decline ${what(r)}`} onClick={() => run(r.id, () => decideRequest(currentUser, 'AVAILABILITY', r.id, 'REJECTED'), 'Request declined.')}>
+                Decline
+              </Button>
+            )}
+            {r.status !== 'PENDING' && (
+              <Button size="sm" icon={RotateCcw} disabled={busy} aria-label={`Put back to waiting: ${what(r)}`} onClick={() => run(r.id, () => reopenAvailabilityRequest(currentUser, r.id), 'Request put back to waiting.')}>
+                Put back to waiting
+              </Button>
+            )}
+            <Button size="sm" icon={Pencil} disabled={busy} aria-label={`Change ${what(r)}`} onClick={() => openDraft(r)}>
+              Change
+            </Button>
+            <Button size="sm" icon={Trash2} disabled={busy} aria-label={`Delete ${what(r)}`} onClick={() => handleDelete(r)}>
+              Delete
+            </Button>
+          </span>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="space-y-4">
-      <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="space-y-3 rounded-lg border border-line bg-surface p-4 shadow-card">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-slate-900">All day off and shift requests</h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Every request, whether it is waiting, approved or declined. Approving a day off pins it on the roster; declining,
-              putting it back to waiting or deleting it removes that pin, so the nurse can be given a shift that day.
+            <h2 className="font-semibold text-ink">All day off and shift requests</h2>
+            <p className="mt-0.5 text-sm text-ink-muted">
+              Every request, whether it is waiting, approved or declined. Approving a day off pins it on the roster. Declining,
+              putting it back to waiting or deleting it unpins it, so the nurse can be given a shift that day.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={load}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 border border-slate-300 rounded text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
-          >
-            <RefreshCw className="w-3.5 h-3.5" aria-hidden="true" /> Refresh
-          </button>
+          <Button icon={RefreshCw} onClick={load} disabled={isLoading}>
+            Refresh
+          </Button>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <label className="flex items-center gap-1.5">
-            <span className="text-slate-600">Status</span>
-            <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)} className={selectClass}>
-              <option value="ALL">All</option>
-              <option value="PENDING">Waiting</option>
-              <option value="APPROVED">Approved</option>
-              <option value="REJECTED">Declined</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5">
-            <span className="text-slate-600">Type</span>
-            <select aria-label="Type" value={kind} onChange={(e) => setKind(e.target.value as KindFilter)} className={selectClass}>
-              <option value="ALL">All</option>
-              <option value="DAY_OFF">Day off</option>
-              <option value="SHIFT">Shift</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5">
-            <span className="text-slate-600">Nurse</span>
-            <select aria-label="Nurse" value={nurseId} onChange={(e) => setNurseId(e.target.value)} className={selectClass}>
-              <option value="ALL">All nurses</option>
-              {[...nurses].sort((a, b) => a.fullName.localeCompare(b.fullName)).map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.fullName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5">
-            <span className="text-slate-600">From</span>
-            <input type="date" aria-label="From date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={selectClass} />
-          </label>
-          <span className="text-slate-500">{shown.length} shown</span>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
+          <Field label="Status">
+            {(f) => (
+              <Select {...f} value={status} onChange={(e) => setStatus(e.target.value as StatusFilter)}>
+                <option value="ALL">All</option>
+                <option value="PENDING">Waiting</option>
+                <option value="APPROVED">Approved</option>
+                <option value="REJECTED">Declined</option>
+              </Select>
+            )}
+          </Field>
+          <Field label="Type">
+            {(f) => (
+              <Select {...f} value={kind} onChange={(e) => setKind(e.target.value as KindFilter)}>
+                <option value="ALL">All</option>
+                <option value="DAY_OFF">Day off</option>
+                <option value="SHIFT">Shift</option>
+              </Select>
+            )}
+          </Field>
+          <Field label="Nurse">
+            {(f) => (
+              <Select {...f} value={nurseId} onChange={(e) => setNurseId(e.target.value)}>
+                <option value="ALL">All nurses</option>
+                {[...nurses].sort((a, b) => a.fullName.localeCompare(b.fullName)).map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.fullName}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <Field label="From">
+            {(f) => <DateInput {...f} value={fromDate} onChange={setFromDate} />}
+          </Field>
+          <p className="text-sm text-ink-muted lg:pb-2" role="status">
+            {shown.length} {shown.length === 1 ? 'request' : 'requests'} shown
+          </p>
         </div>
       </div>
 
-      {loadError && (
-        <p className="text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded p-3">The requests could not be loaded: {loadError}</p>
+      {isLoading && requests.length === 0 ? (
+        <LoadingState label="Loading the requests…" />
+      ) : loadError ? (
+        <ErrorState title="The requests couldn't be loaded" onRetry={load}>
+          {loadError}
+        </ErrorState>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-card">
+          <DataTable
+            caption="All day off and shift requests"
+            rows={shown}
+            rowKey={(r) => r.id}
+            columns={columns}
+            initialSort={{ key: 'date', direction: 'ascending' }}
+            empty={<p className="px-4 py-8 text-center text-ink-muted">No requests match these filters.</p>}
+          />
+        </div>
       )}
 
-      <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
-        <table className="w-full text-xs">
-          <thead className="bg-slate-50 text-slate-600 text-left">
-            <tr>
-              <th className="px-3 py-2 font-semibold">Date</th>
-              <th className="px-3 py-2 font-semibold">Nurse</th>
-              <th className="px-3 py-2 font-semibold">Request</th>
-              <th className="px-3 py-2 font-semibold">Status</th>
-              <th className="px-3 py-2 font-semibold">Note</th>
-              <th className="px-3 py-2 font-semibold text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {isLoading && (
-              <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-slate-500">Loading…</td>
-              </tr>
-            )}
-            {!isLoading && shown.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-slate-500">No requests match these filters.</td>
-              </tr>
-            )}
-            {!isLoading &&
-              shown.map((r) => {
-                const nurse = nurseMap.get(r.nurseId);
-                const busy = busyId === r.id;
-                const btn = 'inline-flex items-center gap-1 px-2 py-1 rounded border text-[11px] cursor-pointer disabled:opacity-50';
-                return (
-                  <tr key={r.id} className="align-top">
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <span className="font-semibold text-slate-900">{formatDate(r.date)}</span>
-                      <span className="text-slate-500"> {weekdayOf(r.date)}</span>
-                    </td>
-                    <td className="px-3 py-2 text-slate-800">{nurse?.fullName || 'Unknown nurse'}</td>
-                    <td className="px-3 py-2 text-slate-800">{describe(r)}</td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-block px-2 py-0.5 rounded border text-[11px] font-semibold ${STATUS_STYLE[r.status]}`}>
-                        {STATUS_LABEL[r.status]}
-                      </span>
-                      {r.reviewedByUserName && r.status !== 'PENDING' && (
-                        <div className="text-[10px] text-slate-500 mt-0.5">by {r.reviewedByUserName}</div>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-slate-600 max-w-[16rem]">
-                      {r.note || '—'}
-                      {r.reviewNotes && <div className="text-[10px] text-slate-500 mt-0.5">Decision note: {r.reviewNotes}</div>}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap justify-end gap-1">
-                        {r.status !== 'APPROVED' && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => run(r.id, () => decideRequest(currentUser, 'AVAILABILITY', r.id, 'APPROVED'), 'Request approved.')}
-                            className={`${btn} border-emerald-300 text-emerald-800 hover:bg-emerald-50`}
-                          >
-                            <Check className="w-3 h-3" aria-hidden="true" /> Approve
-                          </button>
-                        )}
-                        {r.status !== 'REJECTED' && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => run(r.id, () => decideRequest(currentUser, 'AVAILABILITY', r.id, 'REJECTED'), 'Request declined.')}
-                            className={`${btn} border-slate-300 text-slate-700 hover:bg-slate-50`}
-                          >
-                            <X className="w-3 h-3" aria-hidden="true" /> Decline
-                          </button>
-                        )}
-                        {r.status !== 'PENDING' && (
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() => run(r.id, () => reopenAvailabilityRequest(currentUser, r.id), 'Request put back to waiting.')}
-                            className={`${btn} border-slate-300 text-slate-700 hover:bg-slate-50`}
-                          >
-                            <RotateCcw className="w-3 h-3" aria-hidden="true" /> Back to waiting
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
-                            setDraft({
-                              id: r.id,
-                              nurseName: nurse?.fullName || 'Unknown nurse',
-                              date: r.date,
-                              available: r.available,
-                              preferredDutyWindowId: r.preferredDutyWindowId || '',
-                              note: r.note || '',
-                            })
-                          }
-                          className={`${btn} border-indigo-300 text-indigo-700 hover:bg-indigo-50`}
-                        >
-                          <Pencil className="w-3 h-3" aria-hidden="true" /> Change
-                        </button>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => handleDelete(r)}
-                          className={`${btn} border-rose-300 text-rose-700 hover:bg-rose-50`}
-                        >
-                          <Trash2 className="w-3 h-3" aria-hidden="true" /> Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-          </tbody>
-        </table>
-      </div>
-
-      {draft && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div
-            ref={editDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={editTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs"
-          >
-            <h3 id={editTitleId} className="text-sm font-bold text-slate-900">
-              Change {draft.nurseName}&apos;s request
-            </h3>
-            <label className="block space-y-1">
-              <span className="font-semibold text-slate-700">Date</span>
-              <input
-                type="date"
-                value={draft.date}
-                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-                className="w-full px-2 py-1.5 border border-slate-300 rounded"
-              />
-            </label>
-            <fieldset className="space-y-1">
-              <legend className="font-semibold text-slate-700">Request</legend>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" checked={!draft.available} onChange={() => setDraft({ ...draft, available: false })} />
-                <span>Day off</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" checked={draft.available} onChange={() => setDraft({ ...draft, available: true })} />
-                <span>A shift</span>
-              </label>
-            </fieldset>
+      <Dialog
+        open={!!draft}
+        onClose={() => !isSavingDraft && setDraft(null)}
+        title={draft ? `Change ${draft.nurseName}'s request` : ''}
+        description="The decision stays as it is. If the request is an approved day off, the pinned day off moves to the new date."
+        footer={
+          <>
+            <Button disabled={isSavingDraft} onClick={() => setDraft(null)}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" form="request-editor" icon={Save} busy={isSavingDraft}>
+              Save changes
+            </Button>
+          </>
+        }
+      >
+        {draft && (
+          <form id="request-editor" onSubmit={saveDraft} noValidate className="space-y-4 text-sm">
+            <Field label="Date">
+              {(f) => <DateInput {...f} value={draft.date} onChange={(iso) => setDraft({ ...draft, date: iso })} />}
+            </Field>
+            <Field label="Request">
+              {(f) => (
+                <Select {...f} value={draft.available ? 'SHIFT' : 'OFF'} onChange={(e) => setDraft({ ...draft, available: e.target.value === 'SHIFT' })}>
+                  <option value="OFF">A day off</option>
+                  <option value="SHIFT">A shift</option>
+                </Select>
+              )}
+            </Field>
             {draft.available && (
-              <label className="block space-y-1">
-                <span className="font-semibold text-slate-700">Shift asked for</span>
-                <select
-                  value={draft.preferredDutyWindowId}
-                  onChange={(e) => setDraft({ ...draft, preferredDutyWindowId: e.target.value })}
-                  className="w-full px-2 py-1.5 border border-slate-300 rounded bg-white"
-                >
-                  <option value="">Any shift</option>
-                  {dutyWindows
-                    .filter((d) => d.active !== false)
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.acronym} ({d.startTime} to {d.endTime})
-                      </option>
-                    ))}
-                </select>
-              </label>
+              <Field label="Shift asked for">
+                {(f) => (
+                  <Select {...f} value={draft.preferredDutyWindowId} onChange={(e) => setDraft({ ...draft, preferredDutyWindowId: e.target.value })}>
+                    <option value="">Any shift</option>
+                    {dutyWindows
+                      .filter((d) => d.active !== false)
+                      .map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.startTime} to {d.endTime})
+                        </option>
+                      ))}
+                  </Select>
+                )}
+              </Field>
             )}
-            <label className="block space-y-1">
-              <span className="font-semibold text-slate-700">Note</span>
-              <input
-                type="text"
-                value={draft.note}
-                onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-                className="w-full px-2 py-1.5 border border-slate-300 rounded"
-              />
-            </label>
-            <p className="text-slate-500">The decision stays as it is. An approved day off moves its pin to the new date.</p>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setDraft(null)}
-                className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={saveDraft}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            <Field label="Note" optional>
+              {(f) => <Input {...f} value={draft.note} onChange={(e) => setDraft({ ...draft, note: e.target.value })} />}
+            </Field>
+            {draftError && <Notice tone="danger" live title={draftError} />}
+          </form>
+        )}
+      </Dialog>
     </div>
   );
 };
