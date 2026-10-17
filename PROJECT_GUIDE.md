@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 17-10-2026, after UI overhaul Phase 7, slice 5 (section 16, item 89): History tidied, with one set of filters, plain names and its dialogs on the shared `Dialog`. Pushed to the working branch; main waits for the owner's word.
+Last updated: 17-10-2026, after UI overhaul Phase 7, slice 5 (section 16, item 89): History tidied, with one set of filters, plain names and its dialogs on the shared `Dialog`. The owner approved pushing items 83 to 89 (Phase 7, slices 1 to 5) to main on 17-10-2026; main is at the commit that records this. Slice 6 (one publish flow and Sent rosters) comes next.
 
 ---
 
