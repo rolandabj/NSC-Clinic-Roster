@@ -3,21 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  * 
  * Templates dialog: save a roster's weekly pattern, fill a roster from a
- * saved template, or copy the weekly pattern of an earlier roster.
+ * saved template, or copy the weekly pattern of an earlier roster. On the shared Dialog and Tabs
+ * since Phase 7, slice 3b.
  */
 
-import React, { useState, useEffect, useId } from 'react';
-import {
-  X,
-  Layers,
-  Copy,
-  Save,
-  Trash2,
-  Calendar,
-  Sparkles,
-  ArrowRight,
-  Info,
-} from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Copy, Layers, Save, Sparkles, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import {
   Schedule,
@@ -30,7 +21,8 @@ import {
   LockEntry,
 } from '../../types';
 import { getRepository } from '../../services/repository';
-import { useDialogA11y } from '../common/useDialogA11y';
+import { formatDate } from '../../utils/dateUtils';
+import { Button, Dialog, EmptyState, Field, IconButton, Input, Select, TabPanel, Tabs, Textarea, cx } from '../ui';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import { authService } from '../../services/auth/authService';
 
@@ -92,8 +84,6 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
     }
   }, [isOpen, schedule.id]);
 
-  const titleId = useId();
-  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -349,251 +339,105 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs font-sans text-slate-800"
-      >
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-              <Layers className="w-4 h-4" aria-hidden="true" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 id={titleId} className="text-base font-bold text-slate-900">
-                  Templates
-                </h2>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Save a weekly pattern, or fill this roster from a template or an earlier roster
-              </p>
-            </div>
+    <Dialog
+      open
+      onClose={onClose}
+      size="lg"
+      title="Templates and copy last roster"
+      description="Save a weekly pattern, or fill this roster from a template or an earlier roster."
+      footer={<Button onClick={onClose}>Close</Button>}
+    >
+      <div className="space-y-4 text-sm">
+        <Tabs
+          label="Templates"
+          idPrefix="templates"
+          value={activeTab}
+          onChange={(id) => setActiveTab(id as typeof activeTab)}
+          tabs={[
+            { id: 'SAVE', label: 'Save as template' },
+            { id: 'APPLY', label: 'Use a template', count: savedTemplates.length },
+            { id: 'COPY_PERIOD', label: 'Copy an earlier roster' },
+          ]}
+        />
+
+        <TabPanel idPrefix="templates" id="SAVE" value={activeTab}>
+          <form onSubmit={handleSaveAsTemplate} className="space-y-4">
+            <p className="text-ink-muted">
+              Saves which shift each nurse works on each weekday in <strong className="text-ink">{schedule.name}</strong> ({assignments.length} shifts), so
+              you can use the same pattern again.
+            </p>
+            <Field label="Template name">{(f) => <Input {...f} required value={templateName} onChange={(e) => setTemplateName(e.target.value)} />}</Field>
+            <Field label="Description" optional hint="For example: the usual pattern for a normal month.">
+              {(f) => <Textarea {...f} rows={2} value={templateDescription} onChange={(e) => setTemplateDescription(e.target.value)} />}
+            </Field>
+            <Button variant="primary" type="submit" icon={Save}>
+              Save the template
+            </Button>
+          </form>
+        </TabPanel>
+
+        <TabPanel idPrefix="templates" id="APPLY" value={activeTab}>
+          <div className="space-y-4">
+            <p className="text-ink-muted">
+              Fills this roster from a saved template. Each nurse only gets shifts on the weekdays the template gives them. Pinned days, approved leave and
+              shifts you set by hand are kept. You will see how many shifts change before anything is saved.
+            </p>
+            {savedTemplates.length > 0 ? (
+              <ul className="space-y-2" aria-label="Saved templates">
+                {savedTemplates.map((t) => {
+                  const isSelected = t.id === selectedTemplateId;
+                  return (
+                    <li key={t.id} className={cx('flex items-stretch gap-1 rounded-lg border', isSelected ? 'border-brand bg-brand-soft' : 'border-line')}>
+                      <button type="button" aria-pressed={isSelected} onClick={() => setSelectedTemplateId(t.id)} className="min-w-0 flex-1 rounded-lg p-3 text-left hover:bg-sunken">
+                        <span className="block font-semibold text-ink">{t.name}</span>
+                        <span className="mt-0.5 block text-xs text-ink-muted">
+                          {t.patterns.length} weekly {t.patterns.length === 1 ? 'shift' : 'shifts'}, saved {formatDate(t.createdAt)}
+                        </span>
+                        {t.description && <span className="mt-1 block text-xs text-ink-muted">{t.description}</span>}
+                      </button>
+                      <IconButton label={`Delete the template ${t.name}`} icon={Trash2} onClick={(e) => handleDeleteTemplate(t.id, e)} className="m-1.5 self-center" />
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <EmptyState icon={Layers} title="No saved templates yet">
+                Use Save as template to save this roster's weekly pattern.
+              </EmptyState>
+            )}
+            {savedTemplates.length > 0 && (
+              <Button variant="primary" icon={Sparkles} busy={isProcessing} disabled={!selectedTemplateId} onClick={handleApplyTemplate}>
+                Fill the roster from the template
+              </Button>
+            )}
           </div>
+        </TabPanel>
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
-          >
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        {/* Tabs Bar */}
-        <div className="px-6 py-2.5 bg-slate-100/70 border-b border-slate-200 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setActiveTab('SAVE')}
-            className={`px-3 py-1.5 rounded font-bold transition-colors cursor-pointer ${
-              activeTab === 'SAVE'
-                ? 'bg-indigo-600 text-white shadow-2xs'
-                : 'text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Save as template
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('APPLY')}
-            className={`px-3 py-1.5 rounded font-bold transition-colors cursor-pointer ${
-              activeTab === 'APPLY'
-                ? 'bg-indigo-600 text-white shadow-2xs'
-                : 'text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Use a template ({savedTemplates.length})
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('COPY_PERIOD')}
-            className={`px-3 py-1.5 rounded font-bold transition-colors cursor-pointer ${
-              activeTab === 'COPY_PERIOD'
-                ? 'bg-indigo-600 text-white shadow-2xs'
-                : 'text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            Copy an earlier roster
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-4 flex-1">
-          {/* TAB 1: SAVE */}
-          {activeTab === 'SAVE' && (
-            <form onSubmit={handleSaveAsTemplate} className="space-y-4">
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded text-slate-600 text-[11px] leading-relaxed">
-                Saves which shift each nurse works on each weekday in <strong>{schedule.name}</strong> ({assignments.length} shifts), so you can use the same pattern again.
-              </div>
-
-              <div className="space-y-1">
-                <label className="block font-bold text-slate-800 text-xs">
-                  Template name <span className="text-rose-500" aria-hidden="true">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  aria-label="Template name"
-                  value={templateName}
-                  onChange={(e) => setTemplateName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded font-medium text-xs focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block font-bold text-slate-800 text-xs">
-                  Description (optional)
-                </label>
-                <textarea
-                  rows={2}
-                  aria-label="Template description"
-                  placeholder="For example: usual pattern for a normal month"
-                  value={templateDescription}
-                  onChange={(e) => setTemplateDescription(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded text-xs focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs"
-              >
-                <Save className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Save template</span>
-              </button>
-            </form>
-          )}
-
-          {/* TAB 2: APPLY */}
-          {activeTab === 'APPLY' && (
-            <div className="space-y-4">
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded text-slate-600 text-[11px] leading-relaxed">
-                Fills this roster from a saved template. Each nurse only gets shifts on the weekdays the template gives them. Pinned days, approved leave and shifts you set by hand are kept. You will see how many shifts change before anything is saved.
-              </div>
-
-              {savedTemplates.length > 0 ? (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {savedTemplates.map((t) => {
-                    const isSelected = t.id === selectedTemplateId;
-                    return (
-                      <div
-                        key={t.id}
-                        onClick={() => setSelectedTemplateId(t.id)}
-                        className={`p-3 rounded border cursor-pointer transition-colors flex items-center justify-between ${
-                          isSelected
-                            ? 'border-indigo-600 bg-indigo-50/50 text-indigo-950'
-                            : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-800'
-                        }`}
-                      >
-                        {/* The row stays clickable with the mouse; this button gives keyboard users the same action. */}
-                        <button
-                          type="button"
-                          onClick={() => setSelectedTemplateId(t.id)}
-                          aria-pressed={isSelected}
-                          className="flex-1 text-left cursor-pointer"
-                        >
-                          <span className="block font-bold">{t.name}</span>
-                          <span className="block text-[11px] text-slate-500 font-mono mt-0.5">
-                            {t.patterns.length} weekly shift{t.patterns.length === 1 ? '' : 's'} · saved {new Date(t.createdAt).toLocaleDateString()}
-                          </span>
-                          {t.description && (
-                            <span className="block text-[11px] text-slate-600 mt-1 italic">{t.description}</span>
-                          )}
-                        </button>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteTemplate(t.id, e)}
-                            className="p-1 text-slate-400 hover:text-rose-600 rounded cursor-pointer"
-                            title="Delete template"
-                            aria-label={`Delete template ${t.name}`}
-                          >
-                            <Trash2 className="w-4 h-4" aria-hidden="true" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="p-8 border border-slate-200 rounded text-center text-slate-400 text-xs">
-                  No saved templates yet. Use "Save as template" to save this roster's weekly pattern.
-                </div>
-              )}
-
-              {savedTemplates.length > 0 && (
-                <button
-                  type="button"
-                  disabled={!selectedTemplateId || isProcessing}
-                  onClick={handleApplyTemplate}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40"
-                >
-                  <Sparkles className="w-4 h-4" aria-hidden="true" />
-                  <span>Fill roster from template</span>
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: COPY PREVIOUS MONTH */}
-          {activeTab === 'COPY_PERIOD' && (
-            <div className="space-y-4">
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded text-slate-600 text-[11px] leading-relaxed">
-                Copies each nurse's weekly pattern from an earlier roster (for example last month's) into this one, weekday by weekday. Pinned days, approved leave and shifts you set by hand are kept. You will see how many shifts change before anything is saved.
-              </div>
-
-              <div className="space-y-2">
-                <label className="block font-bold text-slate-800 text-xs">
-                  Roster to copy from:
-                </label>
-                <select
-                  aria-label="Roster to copy from"
-                  value={selectedSourceScheduleId}
-                  onChange={(e) => setSelectedSourceScheduleId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded font-medium text-xs bg-white"
-                >
+        <TabPanel idPrefix="templates" id="COPY_PERIOD" value={activeTab}>
+          <div className="space-y-4">
+            <p className="text-ink-muted">
+              Copies each nurse's weekly pattern from an earlier roster (for example last month's) into this one, weekday by weekday. Pinned days, approved
+              leave and shifts you set by hand are kept. You will see how many shifts change before anything is saved.
+            </p>
+            <Field label="Roster to copy from">
+              {(f) => (
+                <Select {...f} value={selectedSourceScheduleId} onChange={(e) => setSelectedSourceScheduleId(e.target.value)}>
                   {allSchedules
-                    .filter((s) => s.id !== schedule.id)
-                    .map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.startDate} to {s.endDate} · {s.status === 'PUBLISHED' ? 'published' : s.status === 'DRAFT' ? 'draft' : s.status.toLowerCase()})
+                    .filter((sc) => sc.id !== schedule.id)
+                    .map((sc) => (
+                      <option key={sc.id} value={sc.id}>
+                        {sc.name} ({formatDate(sc.startDate)} to {formatDate(sc.endDate)}, {sc.status === 'PUBLISHED' ? 'published' : sc.status === 'DRAFT' ? 'draft' : sc.status.toLowerCase()})
                       </option>
                     ))}
-                </select>
-              </div>
-
-              <button
-                type="button"
-                disabled={!selectedSourceScheduleId || isProcessing}
-                onClick={handleCopyPreviousPeriod}
-                className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40"
-              >
-                <Copy className="w-4 h-4" aria-hidden="true" />
-                <span>Copy weekly pattern</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded font-medium cursor-pointer"
-          >
-            Close
-          </button>
-        </div>
+                </Select>
+              )}
+            </Field>
+            <Button variant="primary" icon={Copy} busy={isProcessing} disabled={!selectedSourceScheduleId} onClick={handleCopyPreviousPeriod}>
+              Copy the weekly pattern
+            </Button>
+          </div>
+        </TabPanel>
       </div>
-    </div>
+    </Dialog>
   );
 };

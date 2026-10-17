@@ -12,21 +12,8 @@ import type { HoursHistory } from '../../services/hours/hoursBalance';
 
 import { summarizeNurseHours } from '../../services/reports/hoursAccounting';
 import { isWeekendDate, isWeekendDay } from '../../utils/weekend';
-import React, { useState, useMemo, useId, useEffect, useRef } from 'react';
-import {
-  X,
-  Scale,
-  Sparkles,
-  CheckCircle2,
-  AlertCircle,
-  ArrowRight,
-  RotateCcw,
-  Moon,
-  Calendar,
-  Clock,
-  Sun,
-  ShieldAlert,
-} from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import {
   Schedule,
@@ -51,7 +38,7 @@ import { formatDate } from '../../utils/dateUtils';
 import { MoveSuggestion, newFindings, rebalancedFields, RosterCheck, suggestMoves } from '../../services/engine/handMoveChecks';
 import { isLateDuty, lateDutyThreshold } from '../../services/engine/SchedulingEngine';
 import { loadYearToDate, YearToDate } from '../../services/fairness/yearToDate';
-import { useDialogA11y } from '../common/useDialogA11y';
+import { Badge, Button, Checkbox, DataTable, Dialog, EmptyState, LoadingState, Notice, TabPanel, Tabs, cx, type Column } from '../ui';
 import { notify, confirmDialog } from '../common/dialogs';
 import { authService } from '../../services/auth/authService';
 import { moveShift } from '../../services/schedule/shiftMoves';
@@ -312,9 +299,6 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
     checkRoster,
   ]);
 
-  const titleId = useId();
-  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
-
   if (!isOpen) return null;
 
   const handleApplyRebalance = async () => {
@@ -386,360 +370,160 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
     }
   };
 
+  type Row = (typeof metrics)[number];
+  const columns: Column<Row>[] = [
+    { key: 'nurse', header: 'Nurse', sortValue: (m) => m.nurse.fullName, cell: (m) => m.nurse.fullName, phone: 'title' },
+    { key: 'contract', header: 'Contract', sortValue: (m) => m.nurse.contractPercent, cell: (m) => `${m.nurse.contractPercent}%`, align: 'right' },
+    { key: 'goal', header: 'Goal', sortValue: (m) => m.targetHours, cell: (m) => `${m.targetHours} h`, align: 'right' },
+    { key: 'hours', header: 'Hours (shifts and leave)', sortValue: (m) => m.totalDutyHours, cell: (m) => `${m.totalDutyHours} h`, align: 'right' },
+    {
+      key: 'balance',
+      header: 'Closing balance',
+      sortValue: (m) => m.hoursDelta,
+      align: 'right',
+      cell: (m) => (
+        <Badge tone={Math.abs(m.hoursDelta) <= 2 ? 'success' : m.hoursDelta > 0 ? 'warning' : 'danger'}>{m.hoursDelta >= 0 ? `+${m.hoursDelta} h` : `${m.hoursDelta} h`}</Badge>
+      ),
+    },
+    { key: 'weekends', header: 'Weekend days off', sortValue: (m) => m.weekendsOff, cell: (m) => `${m.weekendsOff} days`, align: 'right' },
+    { key: 'holidays', header: 'Holidays worked', sortValue: (m) => m.holidaysWorked, cell: (m) => m.holidaysWorked, align: 'right' },
+    {
+      key: 'late',
+      header: `Late shifts (end ${lateThreshold} or later)`,
+      sortValue: (m) => m.lateEndsCount,
+      align: 'right',
+      cell: (m) => <Badge tone={m.lateEndsCount >= 4 ? 'danger' : 'neutral'}>{m.lateEndsCount} shifts</Badge>,
+    },
+    ...(showYear
+      ? ([
+          { key: 'yearWeekend', header: 'This year: weekend days worked', sortValue: (m) => thisYear(m).weekendDays, cell: (m) => `${thisYear(m).weekendDays} days`, align: 'right' },
+          { key: 'yearLate', header: 'This year: late shifts', sortValue: (m) => thisYear(m).lateShifts, cell: (m) => `${thisYear(m).lateShifts} shifts`, align: 'right' },
+          { key: 'yearHolidays', header: 'This year: holidays worked', sortValue: (m) => thisYear(m).holidays, cell: (m) => thisYear(m).holidays, align: 'right' },
+        ] as Column<Row>[])
+      : []),
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs font-sans text-slate-800"
-      >
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
-              <Scale className="w-4 h-4" aria-hidden="true" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 id={titleId} className="text-base font-bold text-slate-900">
-                  Fairness
-                </h2>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {schedule.name} · how evenly the work is shared, and suggested changes
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
-          >
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        {/* Global Summary Bar */}
-        <div className="px-6 py-3 bg-slate-100/70 border-b border-slate-200 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-600">Fairness score:</span>
-              <span
-                className={`font-mono font-bold text-sm px-2.5 py-0.5 rounded border ${
-                  spreadScore >= 80
-                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
-                    : spreadScore >= 60
-                    ? 'bg-amber-100 text-amber-900 border-amber-300'
-                    : 'bg-rose-100 text-rose-900 border-rose-300'
-                }`}
-              >
-                {spreadScore} / 100
-              </span>
-            </div>
-
-            <span className="text-slate-300">|</span>
-
-            <div className="text-slate-600 text-[11px]">
-              Higher is fairer. Looks at how far each nurse is from their hours goal and how evenly late shifts (ending {lateThreshold} or later) are shared.
-            </div>
-          </div>
-
-          {/* Tab Selector */}
-          <div className="flex items-center gap-1 bg-white p-1 rounded border border-slate-200">
-            <button
-              type="button"
-              onClick={() => setActiveTab('METRICS')}
-              className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition-colors ${
-                activeTab === 'METRICS'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              Each nurse
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('REBALANCE');
-                setSuggestionsOpened(true);
-              }}
-              className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1 ${
-                activeTab === 'REBALANCE'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <Sparkles className="w-3 h-3" aria-hidden="true" />
-              <span>Suggested changes{proposedSwaps ? ` (${proposedSwaps.length})` : ''}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('AI_INSIGHTS');
-                if (!aiInsights && !aiLoading) {
-                  void handleGenerateAiInsights();
-                }
-              }}
-              className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1 ${
-                activeTab === 'AI_INSIGHTS'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <Sparkles className="w-3 h-3" aria-hidden="true" />
-              <span>Gemini 3.8 Flash</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Content Area */}
-        <div className="p-6 overflow-y-auto space-y-4 flex-1">
-          {activeTab === 'METRICS' && (
-            <div className="space-y-4">
-              {yearStatus === 'loading' && (
-                <p className="text-[11px] text-slate-500" role="status">
-                  Loading…
-                </p>
-              )}
-              {showYear && (
-                <p className="text-[11px] text-slate-500">
-                  "This year" adds up the earlier published rosters of {schedule.startDate.slice(0, 4)} (as saved now) and this roster.
-                </p>
-              )}
-              <div className="border border-slate-200 rounded-lg overflow-x-auto shadow-xs">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-slate-600 font-mono text-[11px] border-b border-slate-200">
-                    <tr>
-                      <th className="py-2.5 px-4">Nurse</th>
-                      <th className="py-2.5 px-3">Contract</th>
-                      <th className="py-2.5 px-3">Goal</th>
-                      <th className="py-2.5 px-3">Hours (shifts + leave)</th>
-                      <th className="py-2.5 px-3">Closing balance</th>
-                      <th className="py-2.5 px-3">Weekend days off</th>
-                      <th className="py-2.5 px-3">Holidays worked</th>
-                      <th className="py-2.5 px-3">Late shifts (end {lateThreshold} or later)</th>
-                      {showYear && (
-                        <>
-                          <th className="py-2.5 px-3 border-l border-slate-200">This year: weekend days worked</th>
-                          <th className="py-2.5 px-3">This year: late shifts</th>
-                          <th className="py-2.5 px-3">This year: holidays worked</th>
-                        </>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-mono">
-                    {metrics.map((m) => (
-                      <tr key={m.nurse.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-3 px-4 font-sans font-bold text-slate-900">
-                          {m.nurse.fullName}
-                        </td>
-                        <td className="py-3 px-3 text-slate-600">{m.nurse.contractPercent}%</td>
-                        <td className="py-3 px-3 text-slate-600">{m.targetHours}h</td>
-                        <td className="py-3 px-3 font-bold text-indigo-700">{m.totalDutyHours}h</td>
-                        <td className="py-3 px-3">
-                          <span
-                            className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
-                              Math.abs(m.hoursDelta) <= 2
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : m.hoursDelta > 0
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-rose-100 text-rose-800'
-                            }`}
-                          >
-                            {m.hoursDelta >= 0 ? `+${m.hoursDelta}h` : `${m.hoursDelta}h`}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-slate-700">{m.weekendsOff} days</td>
-                        <td className="py-3 px-3 text-slate-700">{m.holidaysWorked}</td>
-                        <td className="py-3 px-3">
-                          <span
-                            className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
-                              m.lateEndsCount >= 4
-                                ? 'bg-rose-100 text-rose-800'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {m.lateEndsCount} shifts
-                          </span>
-                        </td>
-                        {showYear && (
-                          <>
-                            <td className="py-3 px-3 text-slate-700 border-l border-slate-100">{thisYear(m).weekendDays} days</td>
-                            <td className="py-3 px-3 text-slate-700">{thisYear(m).lateShifts} shifts</td>
-                            <td className="py-3 px-3 text-slate-700">{thisYear(m).holidays}</td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'REBALANCE' && (
-            <div className="space-y-4">
-              <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded text-xs space-y-1">
-                <div className="font-bold text-indigo-950 flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                  <span>Suggested shift moves</span>
-                </div>
-                <p className="text-indigo-900 text-[11px] leading-relaxed">
-                  These move a shift from a nurse with too many hours or many late shifts to a nurse with fewer. Each move is checked as the roster check would see it: the nurse must be able to do the shift, the doctor must be in their list, and the move never leaves a new or bigger Must fix. Pinned shifts are never moved.
-                </p>
-              </div>
-
-              {proposedSwaps === null ? (
-                <p className="p-8 border border-slate-200 rounded text-center text-slate-500 text-xs" role="status">
-                  Checking the suggestions against the roster…
-                </p>
-              ) : proposedSwaps.length > 0 ? (
-                <div className="space-y-2">
-                  <span className="font-bold text-slate-800 block text-xs">
-                    Suggested moves ({proposedSwaps.length}):
-                  </span>
-
-                  <div className="space-y-2">
-                    {proposedSwaps.map((s) => {
-                      const isSelected = selectedSwaps.has(s.id);
-                      return (
-                        <label
-                          key={s.id}
-                          className={`p-3 rounded border transition-colors cursor-pointer flex items-center justify-between ${
-                            isSelected
-                              ? 'border-indigo-600 bg-indigo-50/40 text-slate-900'
-                              : 'border-slate-200 bg-white text-slate-600'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {
-                                const next = new Set(selectedSwaps);
-                                if (isSelected) next.delete(s.id);
-                                else next.add(s.id);
-                                setSelectedSwaps(next);
-                              }}
-                              className="rounded text-indigo-600 pointer-events-none"
-                            />
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold">{formatDate(s.date)}</span>
-                                <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-mono text-[10px]">
-                                  {s.dutyName}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 mt-1 text-[11px]">
-                                <span className="text-rose-700 font-medium">
-                                  {s.overloadedNurse.fullName}
-                                </span>
-                                <ArrowRight className="w-3 h-3 text-slate-400" aria-hidden="true" />
-                                <span className="text-emerald-700 font-bold">
-                                  {s.underloadedNurse.fullName}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <span className="text-[11px] text-slate-500 font-mono">{s.reason}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <div className="p-8 border border-slate-200 rounded text-center text-slate-400 text-xs">
-                  No moves to suggest. The work is already shared as evenly as the rules allow.
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeTab === 'AI_INSIGHTS' && (
-            <div className="space-y-4">
-              <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-lg p-4 flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                    <h3 className="text-sm font-semibold text-indigo-950">
-                      Roster Intelligence (Gemini 3.8 Flash)
-                    </h3>
-                  </div>
-                  <p className="text-xs text-indigo-700 mt-1">
-                    Workload analysis, equity assessment, and operational advice generated securely via server-side Gemini 3.8 Flash.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={aiLoading}
-                  onClick={handleGenerateAiInsights}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded cursor-pointer transition-colors shadow-xs"
-                >
-                  {aiLoading ? 'Analyzing…' : aiInsights ? 'Re-analyze' : 'Analyze Roster'}
-                </button>
-              </div>
-
-              {aiLoading && (
-                <div className="p-8 border border-slate-200 rounded-lg text-center space-y-2">
-                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent" />
-                  <p className="text-xs text-slate-500 font-medium">
-                    Consulting Gemini 3.8 Flash for roster equity and operations analysis…
-                  </p>
-                </div>
-              )}
-
-              {aiError && !aiLoading && (
-                <div className="p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-800 text-xs">
-                  <p className="font-semibold">Unable to generate AI analysis</p>
-                  <p className="mt-1">{aiError}</p>
-                </div>
-              )}
-
-              {aiInsights && !aiLoading && (
-                <div className="border border-slate-200 rounded-lg p-5 bg-white space-y-4 shadow-xs">
-                  <div className="prose prose-sm max-w-none text-slate-800 text-xs leading-relaxed whitespace-pre-line font-sans">
-                    {aiInsights}
-                  </div>
-                </div>
-              )}
-
-              {!aiInsights && !aiLoading && !aiError && (
-                <div className="p-8 border border-slate-200 rounded-lg text-center text-slate-400 text-xs">
-                  Click "Analyze Roster" to generate executive summary and fairness recommendations using Gemini 3.8 Flash.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Footer Actions */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-3.5 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded font-medium cursor-pointer"
-          >
-            Close
-          </button>
-
+    <Dialog
+      open
+      onClose={onClose}
+      size="xl"
+      title="Fairness"
+      description={`${schedule.name}: how evenly the work is shared, and suggested changes.`}
+      footer={
+        <>
+          <Button onClick={onClose}>Close</Button>
           {activeTab === 'REBALANCE' && !!proposedSwaps && proposedSwaps.length > 0 && (
-            <button
-              type="button"
-              disabled={selectedSwaps.size === 0 || isApplying}
-              onClick={handleApplyRebalance}
-              className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40"
-            >
-              <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-              <span>Move {selectedSwaps.size} shift{selectedSwaps.size === 1 ? '' : 's'}</span>
-            </button>
+            <Button variant="primary" icon={CheckCircle2} busy={isApplying} disabled={selectedSwaps.size === 0} onClick={handleApplyRebalance}>
+              Move {selectedSwaps.size} {selectedSwaps.size === 1 ? 'shift' : 'shifts'}
+            </Button>
           )}
+        </>
+      }
+    >
+      <div className="space-y-4 text-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="font-semibold text-ink">Fairness score</span>
+          <Badge tone={spreadScore >= 80 ? 'success' : spreadScore >= 60 ? 'warning' : 'danger'}>{spreadScore} of 100</Badge>
+          <span className="text-ink-muted">
+            Higher is fairer. It looks at how far each nurse is from their goal hours and how evenly late shifts (ending {lateThreshold} or later) are shared.
+          </span>
         </div>
+        <Tabs
+          label="Fairness"
+          idPrefix="fairness"
+          value={activeTab}
+          onChange={(id) => {
+            setActiveTab(id as typeof activeTab);
+            if (id === 'REBALANCE') setSuggestionsOpened(true);
+            if (id === 'AI_INSIGHTS' && !aiInsights && !aiLoading) void handleGenerateAiInsights();
+          }}
+          tabs={[
+            { id: 'METRICS', label: 'Each nurse' },
+            { id: 'REBALANCE', label: 'Suggested changes', count: proposedSwaps ? proposedSwaps.length : undefined },
+            { id: 'AI_INSIGHTS', label: 'Advice from Gemini' },
+          ]}
+        />
+
+        <TabPanel idPrefix="fairness" id="METRICS" value={activeTab}>
+          <div className="space-y-3">
+            {yearStatus === 'loading' && <LoadingState label="Loading this year's rosters…" />}
+            {showYear && (
+              <p className="text-ink-muted">"This year" adds up the earlier published rosters of {schedule.startDate.slice(0, 4)} (as saved now) and this roster.</p>
+            )}
+            <div className="overflow-hidden rounded-lg border border-line">
+              <DataTable caption="Fairness of each nurse" rows={metrics} rowKey={(m) => m.nurse.id} columns={columns} />
+            </div>
+          </div>
+        </TabPanel>
+
+        <TabPanel idPrefix="fairness" id="REBALANCE" value={activeTab}>
+          <div className="space-y-3">
+            <Notice tone="info" title="Suggested shift moves">
+              These move a shift from a nurse with too many hours or many late shifts to a nurse with fewer. Each move is checked as the roster check would see
+              it: the nurse must be able to do the shift, the doctor must be in their list, and the move never leaves a new or bigger Must fix. Pinned shifts
+              are never moved.
+            </Notice>
+            {proposedSwaps === null ? (
+              <LoadingState label="Checking the suggestions against the roster…" />
+            ) : proposedSwaps.length > 0 ? (
+              <ul className="space-y-2" aria-label={`Suggested moves (${proposedSwaps.length})`}>
+                {proposedSwaps.map((sw) => {
+                  const isSelected = selectedSwaps.has(sw.id);
+                  return (
+                    <li key={sw.id} className={cx('flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3', isSelected ? 'border-brand bg-brand-soft' : 'border-line')}>
+                      <Checkbox
+                        checked={isSelected}
+                        onChange={() => {
+                          const next = new Set(selectedSwaps);
+                          if (isSelected) next.delete(sw.id);
+                          else next.add(sw.id);
+                          setSelectedSwaps(next);
+                        }}
+                        label={
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold">{formatDate(sw.date)}</span>
+                            <Badge>{sw.dutyName}</Badge>
+                            <span>{sw.overloadedNurse.fullName}</span>
+                            <ArrowRight aria-label="to" className="size-4 text-ink-muted" />
+                            <span className="font-semibold">{sw.underloadedNurse.fullName}</span>
+                          </span>
+                        }
+                      />
+                      <span className="text-ink-muted">{sw.reason}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <EmptyState icon={CheckCircle2} title="No moves to suggest">
+                The work is already shared as evenly as the rules allow.
+              </EmptyState>
+            )}
+          </div>
+        </TabPanel>
+
+        <TabPanel idPrefix="fairness" id="AI_INSIGHTS" value={activeTab}>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <p className="max-w-prose text-ink-muted">
+                Gemini reads a summary of this roster (counts only, no nurse names) and suggests how to share the work more evenly. The advice is only a suggestion: the roster
+                check decides what is allowed.
+              </p>
+              <Button icon={Sparkles} busy={aiLoading} onClick={handleGenerateAiInsights}>
+                {aiInsights ? 'Ask again' : 'Ask Gemini'}
+              </Button>
+            </div>
+            {aiLoading && <LoadingState label="Waiting for Gemini…" />}
+            {aiError && !aiLoading && (
+              <Notice tone="danger" live title="Gemini's advice could not be loaded">
+                {aiError}
+              </Notice>
+            )}
+            {aiInsights && !aiLoading && <div className="whitespace-pre-line rounded-lg border border-line p-4 text-ink">{aiInsights}</div>}
+          </div>
+        </TabPanel>
       </div>
-    </div>
+    </Dialog>
   );
 };

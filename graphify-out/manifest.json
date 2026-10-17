@@ -162,9 +162,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/EditDoctorShiftModal.tsx": {
-    "mtime": 1791362587.9549289,
-    "seen": 1791365225.133979,
-    "ast_hash": "581a010913066bd8a05595e16a31e69e",
+    "mtime": 1792237414.294617,
+    "seen": 1792237806.0863447,
+    "ast_hash": "0c0c683549d86e8f158f60740b89f27a",
     "semantic_hash": ""
   },
   "src/components/modals/ExportModal.tsx": {
@@ -174,9 +174,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/FairnessModal.tsx": {
-    "mtime": 1791950940.5708406,
-    "seen": 1791951702.5077498,
-    "ast_hash": "fde7f35ac85a9b3a2e7960c5814279dc",
+    "mtime": 1792237776.9780056,
+    "seen": 1792237806.086348,
+    "ast_hash": "de869b74185cbca02ec18e41d1c6b1de",
     "semantic_hash": ""
   },
   "src/components/modals/NurseTimesheetModal.tsx": {
@@ -204,15 +204,15 @@
     "semantic_hash": ""
   },
   "src/components/modals/SwapManagerModal.tsx": {
-    "mtime": 1791362587.9577637,
-    "seen": 1791365225.1339881,
-    "ast_hash": "0eeb67fd04cbb9f0ac142b0ff144a9b4",
+    "mtime": 1792237776.9776504,
+    "seen": 1792237806.0863547,
+    "ast_hash": "25ec6a225d1e1fb205d2677410d159cf",
     "semantic_hash": ""
   },
   "src/components/modals/TemplateModal.tsx": {
-    "mtime": 1791950940.5748408,
-    "seen": 1791951702.5077565,
-    "ast_hash": "5ca431e5f5e058bd73bc5135bbd97c90",
+    "mtime": 1792237442.357386,
+    "seen": 1792237806.086356,
+    "ast_hash": "a0d4b854b5ca20a94c2b2c58c021544e",
     "semantic_hash": ""
   },
   "src/components/modals/VersionCompareModal.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1792236287.4867675,
-    "seen": 1792236299.1752284,
-    "ast_hash": "df2ddf2e34d4eb46ba69eb2b1d2f9374",
+    "mtime": 1792237793.5936856,
+    "seen": 1792237806.0867264,
+    "ast_hash": "754851a8b58d5df06b79146c528d4648",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1792236287.491607,
-    "seen": 1792236299.175242,
-    "ast_hash": "1517b7c84580a546f1c3e7bf65e3266f",
+    "mtime": 1792237793.5985029,
+    "seen": 1792237806.0867338,
+    "ast_hash": "967f6d19721d748d51c5d3157c7b1c77",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -1980,9 +1980,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/grid/CellEditorDialog.tsx": {
-    "mtime": 1791950940.5908406,
-    "seen": 1791951702.5078368,
-    "ast_hash": "0e61841841e3398d676d3652096e03a9",
+    "mtime": 1792237776.977291,
+    "seen": 1792237806.086455,
+    "ast_hash": "7be0e97c6c5f6f62993626b2e578650f",
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridLegend.tsx": {
@@ -2349,6 +2349,12 @@
     "mtime": 1792235805.246035,
     "seen": 1792236299.1746225,
     "ast_hash": "8bebc84dc95dfe997aafc282b7a44c4b",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/roster-editing-dialogs.cjs": {
+    "mtime": 1792237480.8167605,
+    "seen": 1792237806.086244,
+    "ast_hash": "c30dd84f17e744b1ecf6b3d1a3038d95",
     "semantic_hash": ""
   }
 }
