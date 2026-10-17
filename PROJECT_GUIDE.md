@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 17-10-2026, after UI overhaul Checkpoint 7 (section 16, item 93): Phase 7 checked as a whole; four faults found and fixed. Pushed to the working branch; main waits for the owner's word. Phase 8 waits for the owner.
+Last updated: 17-10-2026, after UI overhaul Checkpoint 7 (section 16, item 93): Phase 7 checked as a whole; four faults found and fixed. The owner approved pushing items 90 to 93 (Phase 7, slices 6 and 7, and Checkpoint 7) to main on 17-10-2026; main is at the commit that records this. Phase 8 waits for the owner.
 
 ---
 
