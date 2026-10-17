@@ -1273,11 +1273,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
               </thead>
               <tbody className="divide-y divide-slate-100 font-mono">
                 {nurseAccountingRows.map((r) => {
-                  const al = r.quotas.find((q) => q.leaveTypeId === 'leave-al');
-                  const ph = r.quotas.find((q) => q.leaveTypeId === 'leave-ph');
-                  const bl = r.quotas.find((q) => q.leaveTypeId === 'leave-bl');
-                  const slDays = r.leaveBreakdown['leave-sl']?.daysCount || 0;
-                  const blDays = r.leaveBreakdown['leave-bl']?.daysCount || 0;
+                  // Found by acronym: the live leave types have generated ids, not 'leave-al' and so on.
+                  const idOf = (acronym: string) => leaveTypes.find((lt) => lt.acronym?.toUpperCase() === acronym)?.id ?? `leave-${acronym.toLowerCase()}`;
+                  const al = r.quotas.find((q) => q.leaveTypeId === idOf('AL'));
+                  const ph = r.quotas.find((q) => q.leaveTypeId === idOf('PH'));
+                  const bl = r.quotas.find((q) => q.leaveTypeId === idOf('BL'));
+                  const slDays = r.leaveBreakdown[idOf('SL')]?.daysCount || 0;
+                  const blDays = r.leaveBreakdown[idOf('BL')]?.daysCount || 0;
 
                   return (
                     <tr key={r.nurse.id} className="hover:bg-slate-50">
@@ -1297,25 +1299,25 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context }) => {
                       </td>
 
                       <td className="py-2.5 px-3 font-semibold text-amber-700">
-                        {al?.usedDays ?? 0} / {al?.annualQuotaDays ?? 30} days
+                        {al?.usedDays ?? 0} / {al?.annualQuotaDays ?? 0} days
                       </td>
 
                       <td className="py-2.5 px-3 font-bold text-slate-800">
-                        {al?.remainingDays ?? 30} days
+                        {al?.remainingDays ?? 0} days
                       </td>
 
                       <td className="py-2.5 px-3 font-semibold text-cyan-700">
-                        {ph?.usedDays ?? 0} / {ph?.annualQuotaDays ?? 10} days
+                        {ph?.usedDays ?? 0} / {ph?.annualQuotaDays ?? 0} days
                       </td>
 
                       <td className="py-2.5 px-3">
                         {blDays > 0 ? (
                           <span className="inline-flex items-center gap-1 text-rose-600 font-bold">
-                            🎂 {blDays} / {bl?.annualQuotaDays ?? 1} day
+                            🎂 {blDays} / {bl?.annualQuotaDays ?? 0} day
                           </span>
                         ) : (
                           <span className="text-slate-400">
-                            0 / {bl?.annualQuotaDays ?? 1} day
+                            0 / {bl?.annualQuotaDays ?? 0} day
                           </span>
                         )}
                       </td>

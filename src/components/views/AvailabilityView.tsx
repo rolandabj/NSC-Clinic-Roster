@@ -5,7 +5,7 @@ import { confirmDialog, notify, type NoticeTone } from '../common/dialogs';
 import { Button, IconButton, Notice, PageHeader, Tabs, cx } from '../ui';
 import { moveInGrid, pickStep, type GridCell } from '../../services/availability/leaveGridPick';
 import { leaveClash } from '../../services/availability/leaveClash';
-import { allowanceDays } from '../../services/hours/leaveAllowance';
+import { allowanceFor } from '../../services/hours/leaveAllowance';
 import { readableTextOn } from '../../utils/colorContrast';
 import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo, useId, useRef } from 'react';
@@ -255,8 +255,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
   // Calculate annual leave quota usage for a nurse in DAYS
   const getLeaveQuotaBadge = (nurse: Nurse, leaveType: LeaveType) => {
-    // In days, as typed (the owner's rule of 14-10-2026).
-    const quotaDays = allowanceDays(nurse.leaveQuotas?.[leaveType.id]);
+    // In days, as typed; none set is 0 (the owner's rules of 14-10-2026 and 17-10-2026).
+    const quotaDays = allowanceFor(nurse, leaveType);
     if (quotaDays === null) return null;
 
     // Sum scheduled days for this nurse and leave type across the year
@@ -283,7 +283,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
   const leaveQuotaInfo = useMemo(() => {
     if (!editingLeaveEntry || !selectedNurseForLeave || !selectedTypeForLeave) return null;
-    const quotaDays = allowanceDays(selectedNurseForLeave.leaveQuotas?.[selectedTypeForLeave.id]);
+    const quotaDays = allowanceFor(selectedNurseForLeave, selectedTypeForLeave);
     if (quotaDays === null) return null;
     const start = editingLeaveEntry.startDate || '';
     const end = editingLeaveEntry.endDate || start;
@@ -347,7 +347,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     // Strict Quota Ceiling Enforcement: Block save if quota would be exceeded
     if (leaveQuotaInfo && leaveQuotaInfo.isExceeded) {
       triggerToast(
-        `Cannot schedule leave: ${selectedNurseForLeave?.fullName || 'Staff'} has already scheduled ${leaveQuotaInfo.alreadyUsedDays} of ${leaveQuotaInfo.quotaDays} allowed ${selectedTypeForLeave?.name || 'leave'} days for ${leaveQuotaInfo.year}. Requesting ${leaveQuotaInfo.requestedDays} day(s) exceeds the annual limit by ${leaveQuotaInfo.excessDays} day(s).`,
+        leaveQuotaInfo.quotaDays === 0
+          ? `Cannot schedule leave: ${selectedNurseForLeave?.fullName || 'This nurse'} has no ${selectedTypeForLeave?.name || 'leave'} allowance for ${leaveQuotaInfo.year}. Set the days allowed in their nurse record first.`
+          : `Cannot schedule leave: ${selectedNurseForLeave?.fullName || 'Staff'} has already scheduled ${leaveQuotaInfo.alreadyUsedDays} of ${leaveQuotaInfo.quotaDays} allowed ${selectedTypeForLeave?.name || 'leave'} days for ${leaveQuotaInfo.year}. Requesting ${leaveQuotaInfo.requestedDays} day(s) exceeds the annual limit by ${leaveQuotaInfo.excessDays} day(s).`,
         'error'
       );
       return;
@@ -635,7 +637,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
         const totalCredits = (typeof lt.creditedHours === 'number' ? lt.creditedHours : 8) * daySpan;
 
         // Quota Check
-        const quotaDays = allowanceDays(nurse.leaveQuotas?.[lt.id]);
+        const quotaDays = allowanceFor(nurse, lt);
         if (quotaDays !== null) {
           const year = startDate.slice(0, 4);
           const yearPrefix = `${year}-`;
@@ -643,7 +645,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
             .filter((le) => le.nurseId === nurse.id && le.leaveTypeId === lt.id && le.startDate.startsWith(yearPrefix))
             .reduce((sum, le) => sum + countDaysBetween(le.startDate, le.endDate), 0);
           if (used + daySpan > quotaDays) {
-            logs.push(`Row ${i + 1}: Quota exceeded for ${nurse.fullName} (${used + daySpan}/${quotaDays} days of ${lt.name}). Skipped.`);
+            logs.push(quotaDays === 0
+              ? `Row ${i + 1}: ${nurse.fullName} has no ${lt.name} allowance for ${year}. Skipped.`
+              : `Row ${i + 1}: Quota exceeded for ${nurse.fullName} (${used + daySpan}/${quotaDays} days of ${lt.name}). Skipped.`);
             errorCount++;
             continue;
           }
@@ -1255,7 +1259,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
                   {leaveQuotaInfo.isExceeded && (
                     <div className="text-[11px] text-rose-700 font-medium bg-rose-100/70 p-1.5 rounded border border-rose-200">
-                      Scheduling blocked: {selectedNurseForLeave?.fullName} cannot be allocated more than {leaveQuotaInfo.quotaDays} days of {selectedTypeForLeave?.name} in {leaveQuotaInfo.year}.
+                      {leaveQuotaInfo.quotaDays === 0
+                        ? `Scheduling blocked: ${selectedNurseForLeave?.fullName} has no ${selectedTypeForLeave?.name} allowance for ${leaveQuotaInfo.year}. Set the days allowed in their nurse record first.`
+                        : `Scheduling blocked: ${selectedNurseForLeave?.fullName} cannot be allocated more than ${leaveQuotaInfo.quotaDays} days of ${selectedTypeForLeave?.name} in ${leaveQuotaInfo.year}.`}
                     </div>
                   )}
                 </div>

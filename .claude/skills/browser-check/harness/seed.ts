@@ -15,6 +15,7 @@ const nurse = (id: string, name: string, extra: any = {}) => ({
   capabilityIds: ['role-nurse-clinic', 'role-phl'],
   isClinicNurse: true,
   preferences: [],
+  leaveQuotas: { 'lt-al': 30 },
   active: true,
   createdAt: now,
   updatedAt: now,

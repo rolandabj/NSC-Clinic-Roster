@@ -509,8 +509,8 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
           <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-[11px]">
             <div className="flex items-center gap-3">
               <span className="font-semibold text-slate-700">Leave left this year:</span>
+              {/* Every allowance as set, 0 of 0 included (the owner's rule of 17-10-2026). */}
               {quotas
-                .filter((q) => q.annualQuotaDays > 0)
                 .map((q) => (
                   <span
                     key={q.leaveTypeId}

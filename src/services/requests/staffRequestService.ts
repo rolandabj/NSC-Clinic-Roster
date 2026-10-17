@@ -8,7 +8,7 @@
  * PENDING requests; managers and editors approve or reject them.
  */
 
-import { allowanceDays } from '../hours/leaveAllowance';
+import { allowanceFor } from '../hours/leaveAllowance';
 import { v4 as uuidv4 } from 'uuid';
 import {
   AvailabilityRequest,
@@ -117,10 +117,15 @@ export async function submitLeaveRequest(
   const requestedDays = daysInclusive(startDate, endDate);
   const hoursPerDay = typeof leaveType?.creditedHours === 'number' ? leaveType.creditedHours : 8;
 
-  // Annual allowance, in days as typed (the owner's rule of 14-10-2026)
-  const quotaDays = allowanceDays(nurse?.leaveQuotas?.[leaveTypeId]);
+  // Annual allowance, in days as typed (the owner's rules of 14-10-2026 and 17-10-2026: none set is 0)
+  const quotaDays = leaveType ? allowanceFor(nurse, leaveType) : null;
   if (quotaDays !== null) {
     const year = startDate.slice(0, 4);
+    if (quotaDays === 0) {
+      throw new Error(
+        `${nurse?.fullName || 'This nurse'} has no ${leaveType?.name || 'leave'} allowance for ${year}. Ask a planner to set the days allowed.`
+      );
+    }
     const usedDays = existing
       .filter(
         (le) =>

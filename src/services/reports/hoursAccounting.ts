@@ -5,7 +5,7 @@
  * Hours Accounting, Contract Proportions & Payroll Ledger Service (Phase 9)
  */
 
-import { allowanceDays } from '../hours/leaveAllowance';
+import { allowanceFor, takesAllowance } from '../hours/leaveAllowance';
 import { HoursHistory, HoursPart, NurseHoursBalance, countHoursInRange, dutyDurationHours, nurseContractShare, resolveNurseHoursBalance } from '../hours/hoursBalance';
 
 import { isWeekendDay } from '../../utils/weekend';
@@ -383,26 +383,12 @@ export function calculateNurseHoursAccounting(
     status = 'OVER';
   }
 
-  // Quotas calculations in DAYS (Annual Leave, Public Holiday, Birthday Leave; Sick Leave has no quota ceiling)
+  // Allowances in days, only as set (the owner's rules of 14-10-2026 and 17-10-2026): none set
+  // is 0 days, never an assumed number. Sick leave, RO, DO and 0 hour kinds have no allowance.
   const quotaRows = leaveTypes
-    .filter(
-      (lt) =>
-        lt.active &&
-        lt.id !== 'leave-sl' &&
-        lt.acronym !== 'SL' &&
-        !lt.name.toLowerCase().includes('sick')
-    )
+    .filter((lt) => lt.active && takesAllowance(lt))
     .map((lt) => {
-      // In days, as typed (the owner's rule of 14-10-2026).
-      const annualQuotaDays =
-        allowanceDays(nurse.leaveQuotas?.[lt.id]) ??
-        (lt.acronym === 'AL'
-          ? 30
-          : lt.acronym === 'PH'
-          ? 10
-          : lt.acronym === 'BL'
-          ? 1
-          : 0);
+      const annualQuotaDays = allowanceFor(nurse, lt) ?? 0;
 
       const usedDays = leaveBreakdown[lt.id]?.daysCount || 0;
       // The hours actually counted for this leave; the allowance itself is in days, since each

@@ -192,8 +192,8 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
     for (const [k, v] of Object.entries(rawQuotas)) {
       const lt = leaveTypes.find((l) => l.id === k);
       const isSick = lt?.id === 'leave-sl' || lt?.acronym?.toUpperCase() === 'SL' || lt?.name?.toLowerCase().includes('sick');
-      if (!isSick && typeof v === 'number' && v > 0) {
-        // In days, as typed (the owner's rule of 14-10-2026).
+      if (!isSick && typeof v === 'number' && v >= 0) {
+        // In days, as typed (the owner's rule of 14-10-2026); a stored 0 opens as 0.
         normalizedQuotas[k] = v;
       }
     }
@@ -257,7 +257,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
         lt?.id === 'leave-sl' ||
         lt?.acronym?.toUpperCase() === 'SL' ||
         lt?.name?.toLowerCase().includes('sick');
-      if (!isSick && typeof v === 'number' && v > 0) {
+      if (!isSick && typeof v === 'number' && v >= 0) {
         cleanQuotas[k] = Math.round(v);
       }
     }
@@ -936,7 +936,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
               <h3 id="nurse-quotas" className="text-base font-semibold text-ink">
                 Leave days a year
               </h3>
-              <p className="text-ink-muted">Days allowed each calendar year. Keep a box empty for no limit. Sick leave has no limit.</p>
+              <p className="text-ink-muted">Days allowed each calendar year. An empty box or 0 means 0 days, so that leave is refused until days are set. Sick leave has no limit.</p>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {leaveTypes
