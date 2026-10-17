@@ -2,40 +2,24 @@ import { leaveCreditInRange } from '../../services/hours/hoursPolicy';
 import { planHolidayLeaveTidy, saveHolidayLeave, withHolidaysAtZero } from '../../services/hours/holidayLeave';
 import { leaveApprovalFields } from '../../services/engine/leaveStatus';
 import { confirmDialog, notify, type NoticeTone } from '../common/dialogs';
-import { Button, IconButton, Notice, PageHeader, Tabs, cx } from '../ui';
+import { Button, DateInput, Dialog, Field, IconButton, Input, Notice, PageHeader, Select, Switch, Tabs, Textarea, cx } from '../ui';
 import { moveInGrid, pickStep, type GridCell } from '../../services/availability/leaveGridPick';
 import { leaveClash } from '../../services/availability/leaveClash';
+import { planLeaveImport } from '../../services/availability/leaveImport';
 import { allowanceFor } from '../../services/hours/leaveAllowance';
 import { readableTextOn } from '../../utils/colorContrast';
 import { isWeekendDay } from '../../utils/weekend';
-import React, { useState, useEffect, useMemo, useId, useRef } from 'react';
-import { useDialogA11y } from '../common/useDialogA11y';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  CalendarCheck2,
-  ListChecks,
   Lock,
-  Unlock,
   Plus,
   Upload,
-  Calendar,
-  CheckCircle2,
-  AlertTriangle,
-  AlertCircle,
   Flag,
   Pin,
   Trash2,
-  Edit2,
-  Shield,
-  ShieldAlert,
   ChevronLeft,
   ChevronRight,
-  Filter,
   Save,
-  X,
-  Droplets,
-  Clock,
-  Sparkles,
-  Info,
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
@@ -50,7 +34,6 @@ import {
   ClinicalRole,
   PublicHoliday,
   IsoDateString,
-  LockMode,
 } from '../../types';
 import { formatDate, formatDayDate } from '../../utils/dateUtils';
 import { countPendingApprovals, decideRequest } from '../../services/requests/staffRequestService';
@@ -115,6 +98,9 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const [editingLeaveEntry, setEditingLeaveEntry] = useState<Partial<LeaveEntry> | null>(null);
   const [selectedCellDate, setSelectedCellDate] = useState<string | null>(null);
+  const [leaveError, setLeaveError] = useState('');
+  // A changed nurse, kind or date clears the last refusal.
+  useEffect(() => setLeaveError(''), [editingLeaveEntry?.nurseId, editingLeaveEntry?.leaveTypeId, editingLeaveEntry?.startDate, editingLeaveEntry?.endDate, isLeaveModalOpen]);
 
   // Lock Entry Modal
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
@@ -128,30 +114,25 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   // CSV Import Modal
   const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
   const [csvContent, setCsvContent] = useState('');
-  const [csvImportLog, setCsvImportLog] = useState<string | null>(null);
+  const [csvImportLog, setCsvImportLog] = useState<{ added: number; messages: string[] } | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   // Notification Toast
   const [isDeletingLeave, setIsDeletingLeave] = useState(false);
   const [isOverridingLock, setIsOverridingLock] = useState(false);
 
-  // Dialog keyboard and screen reader support
-  const leaveTitleId = useId();
-  const lockTitleId = useId();
-  const overrideTitleId = useId();
-  const csvTitleId = useId();
-  const leaveDialogRef = useDialogA11y<HTMLDivElement>(isLeaveModalOpen && !!editingLeaveEntry, () => {
+  const closeLeaveDialog = () => {
     setIsLeaveModalOpen(false);
     setEditingLeaveEntry(null);
-  });
-  const lockDialogRef = useDialogA11y<HTMLDivElement>(isLockModalOpen && !!editingLockEntry, () => setIsLockModalOpen(false));
-  const overrideDialogRef = useDialogA11y<HTMLDivElement>(isOverrideModalOpen && !!activeLockToOverride, () => {
-    // Same as "Keep Pinned", which is disabled while the override is saving
+    setSelectedCellDate(null);
+  };
+  const closeOverrideDialog = () => {
+    // Not while the pin is being removed.
     if (isOverridingLock) return;
     setIsOverrideModalOpen(false);
     setActiveLockToOverride(null);
     setOverrideInput('');
-  });
-  const csvDialogRef = useDialogA11y<HTMLDivElement>(isCsvModalOpen, () => setIsCsvModalOpen(false));
+  };
 
   const repo = getRepository();
 
@@ -233,6 +214,13 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     const d = new Date(dateStr + 'T00:00:00Z');
     d.setUTCDate(d.getUTCDate() + days);
     return d.toISOString().split('T')[0];
+  };
+
+  // What a kind of leave counts, under its name in the leave editor.
+  const leaveHoursHint = (lt?: LeaveType) => {
+    if (!lt) return undefined;
+    const hours = typeof lt.creditedHours === 'number' ? `Counts ${lt.creditedHours} h a day` : "Counts the hours of the nurse's shift each day";
+    return lt.countsTowardHoursTarget === false ? `${hours}, outside the goal hours.` : `${hours}.`;
   };
 
   const countDaysBetween = (startStr: string, endStr: string): number => {
@@ -326,16 +314,21 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     e.preventDefault();
     if (!editingLeaveEntry || !editingLeaveEntry.nurseId || !editingLeaveEntry.leaveTypeId) return;
 
-    const start = editingLeaveEntry.startDate!;
-    const end = editingLeaveEntry.endDate || start;
+    // A refusal shows in the dialog, beside Save, not in a corner message (Phase 7).
+    const start = editingLeaveEntry.startDate || '';
+    const end = editingLeaveEntry.endDate || '';
+    if (!start || !end) {
+      setLeaveError(`Enter the ${!start ? 'first' : 'last'} day, like 19-10-2026.`);
+      return;
+    }
     if (start > end) {
-      triggerToast('Start date must be before or equal to end date.', 'error');
+      setLeaveError('The last day is before the first day.');
       return;
     }
     // A leave must not cover another leave or a pinned day of the same nurse (Checkpoint 6).
     const clash = leaveClash(editingLeaveEntry.nurseId, start, end, leaveEntries, locks, editingLeaveEntry.id);
     if (clash) {
-      triggerToast(clash, 'error');
+      setLeaveError(clash);
       return;
     }
 
@@ -345,15 +338,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     const totalCredits = dailyCredit * daySpan;
 
     // Strict Quota Ceiling Enforcement: Block save if quota would be exceeded
-    if (leaveQuotaInfo && leaveQuotaInfo.isExceeded) {
-      triggerToast(
-        leaveQuotaInfo.quotaDays === 0
-          ? `Cannot schedule leave: ${selectedNurseForLeave?.fullName || 'This nurse'} has no ${selectedTypeForLeave?.name || 'leave'} allowance for ${leaveQuotaInfo.year}. Set the days allowed in their nurse record first.`
-          : `Cannot schedule leave: ${selectedNurseForLeave?.fullName || 'Staff'} has already scheduled ${leaveQuotaInfo.alreadyUsedDays} of ${leaveQuotaInfo.quotaDays} allowed ${selectedTypeForLeave?.name || 'leave'} days for ${leaveQuotaInfo.year}. Requesting ${leaveQuotaInfo.requestedDays} day(s) exceeds the annual limit by ${leaveQuotaInfo.excessDays} day(s).`,
-        'error'
-      );
-      return;
-    }
+    if (leaveQuotaInfo && leaveQuotaInfo.isExceeded) return;
 
     // A public holiday inside the leave counts 0 h: the period hours already leave it out.
     const { dayHours } = withHolidaysAtZero({ startDate: start, endDate: end, dayHours: editingLeaveEntry.dayHours }, holidays);
@@ -372,7 +357,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           hoursCredited: totalCredits,
           ...(dayHours ? { dayHours } : {}),
         });
-        triggerToast(`Updated leave entry (${daySpan} day(s), ${totalCredits}h credited).`);
+        triggerToast(`Leave changed: ${daySpan} ${daySpan === 1 ? 'day' : 'days'}, ${totalCredits} h counted.`);
       } else {
         await repo.create('leaveEntries', {
           nurseId: editingLeaveEntry.nurseId,
@@ -384,14 +369,14 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           hoursCredited: totalCredits,
           ...(dayHours ? { dayHours } : {}),
         });
-        triggerToast(`Recorded ${lt?.name} for ${daySpan} day(s) (${totalCredits}h credited).`);
+        triggerToast(`${lt?.name} recorded: ${daySpan} ${daySpan === 1 ? 'day' : 'days'}, ${totalCredits} h counted.`);
       }
       setIsLeaveModalOpen(false);
       setEditingLeaveEntry(null);
       setSelectedCellDate(null);
       loadData();
     } catch (err: any) {
-      triggerToast(`Error saving leave: ${err.message}`, 'error');
+      setLeaveError(`The leave was not saved: ${err.message}`);
     }
   };
 
@@ -404,10 +389,10 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       setEditingLeaveEntry(null);
       setSelectedCellDate(null);
       await loadData();
-      triggerToast('Selected leave entry removed successfully. Other leaves remain untouched.');
+      triggerToast('Leave deleted. Other leaves stay as they are.');
     } catch (err: any) {
       console.error('Failed to delete leave entry:', err);
-      triggerToast(`Failed to delete leave entry: ${err?.message || 'Error occurred'}`, 'error');
+      triggerToast(`The leave was not deleted: ${err?.message || 'try again'}`, 'error');
     } finally {
       setIsDeletingLeave(false);
     }
@@ -474,10 +459,10 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       setEditingLeaveEntry(null);
       setSelectedCellDate(null);
       await loadData();
-      triggerToast(`Removed leave on ${targetDate}. All other days remain active.`);
+      triggerToast(`Removed ${formatDayDate(targetDate)} from the leave. The other days stay as they are.`);
     } catch (err: any) {
       console.error('Failed to remove date from leave:', err);
-      triggerToast(`Failed to update leave: ${err?.message || 'Error occurred'}`, 'error');
+      triggerToast(`The leave was not changed: ${err?.message || 'try again'}`, 'error');
     } finally {
       setIsDeletingLeave(false);
     }
@@ -543,7 +528,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
         entity: 'LockEntry',
         entityId: activeLockToOverride.id,
         before: activeLockToOverride,
-        note: `User confirmed OVERRIDE protocol to unlock pinned day on ${formatDate(activeLockToOverride.date)}.`,
+        note: `Pin removed on ${formatDate(activeLockToOverride.date)} after the OVERRIDE check.`,
         timestamp: new Date().toISOString(),
       });
 
@@ -592,84 +577,35 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   };
 
   // --- CSV IMPORT LEAVE ---
+  // Each row is checked as the leave editor checks a leave; the refused rows are listed (Phase 7).
   const handleProcessLeaveCsv = async () => {
     if (!csvContent.trim()) {
-      triggerToast('Please paste CSV content.', 'warning');
+      setCsvImportLog({ added: 0, messages: ['Paste the rows to import first.'] });
       return;
     }
-
+    const plan = planLeaveImport(csvContent, { nurses, leaveTypes, leaveEntries, locks });
+    setIsImporting(true);
+    let added = 0;
     try {
-      const lines = csvContent.trim().split('\n');
-      let successCount = 0;
-      let errorCount = 0;
-      const logs: string[] = [];
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line || line.startsWith('gmail') || line.startsWith('Gmail')) continue; // Skip header
-
-        const parts = line.split(',').map((p) => p.trim());
-        if (parts.length < 4) {
-          logs.push(`Row ${i + 1}: Insufficient columns (expected: gmail, acronym, startDate, endDate)`);
-          errorCount++;
-          continue;
-        }
-
-        const [gmail, acronym, startDate, endDate] = parts;
-        const nurse = nurses.find((n) => n.gmail.toLowerCase() === gmail.toLowerCase());
-        if (!nurse) {
-          logs.push(`Row ${i + 1}: Nurse with Gmail "${gmail}" not found.`);
-          errorCount++;
-          continue;
-        }
-
-        const lt = leaveTypes.find((l) => l.acronym.toUpperCase() === acronym.toUpperCase());
-        if (!lt) {
-          logs.push(`Row ${i + 1}: Leave type with acronym "${acronym}" not found.`);
-          errorCount++;
-          continue;
-        }
-
-        const daySpan =
-          Math.round(
-            (new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)
-          ) + 1;
-        const totalCredits = (typeof lt.creditedHours === 'number' ? lt.creditedHours : 8) * daySpan;
-
-        // Quota Check
-        const quotaDays = allowanceFor(nurse, lt);
-        if (quotaDays !== null) {
-          const year = startDate.slice(0, 4);
-          const yearPrefix = `${year}-`;
-          const used = leaveEntries
-            .filter((le) => le.nurseId === nurse.id && le.leaveTypeId === lt.id && le.startDate.startsWith(yearPrefix))
-            .reduce((sum, le) => sum + countDaysBetween(le.startDate, le.endDate), 0);
-          if (used + daySpan > quotaDays) {
-            logs.push(quotaDays === 0
-              ? `Row ${i + 1}: ${nurse.fullName} has no ${lt.name} allowance for ${year}. Skipped.`
-              : `Row ${i + 1}: Quota exceeded for ${nurse.fullName} (${used + daySpan}/${quotaDays} days of ${lt.name}). Skipped.`);
-            errorCount++;
-            continue;
-          }
-        }
-
+      for (const row of plan.add) {
+        const lt = leaveTypes.find((l) => l.id === row.leaveTypeId);
         await repo.create('leaveEntries', withHolidaysAtZero({
-          nurseId: nurse.id,
-          leaveTypeId: lt.id,
-          startDate,
-          endDate,
-          note: 'Imported via CSV',
-          approved: true,
-          hoursCredited: totalCredits,
+          nurseId: row.nurseId,
+          leaveTypeId: row.leaveTypeId,
+          startDate: row.startDate,
+          endDate: row.endDate,
+          note: 'Imported from CSV',
+          ...leaveApprovalFields(true, undefined, currentUser),
+          hoursCredited: (typeof lt?.creditedHours === 'number' ? lt.creditedHours : 8) * row.days,
         }, holidays));
-        successCount++;
+        added++;
       }
-
-      setCsvImportLog(`Import complete: ${successCount} entries added, ${errorCount} errors.`);
-      triggerToast(`Imported ${successCount} leave records.`);
-      loadData();
+      setCsvImportLog({ added, messages: plan.messages });
     } catch (err: any) {
-      triggerToast(`CSV Import failed: ${err.message}`, 'error');
+      setCsvImportLog({ added, messages: [...plan.messages, `The import stopped: ${err.message}`] });
+    } finally {
+      setIsImporting(false);
+      loadData();
     }
   };
 
@@ -952,7 +888,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                 </caption>
                 <thead>
                   <tr className="border-b border-line bg-sunken text-ink">
-                    <th scope="col" className="sticky left-0 z-10 w-48 border-r border-line bg-sunken px-3 py-2 text-left font-semibold">
+                    <th scope="col" className="sticky left-0 z-10 w-48 min-w-48 border-r border-line bg-sunken px-3 py-2 text-left font-semibold">
                       Nurse
                     </th>
                     {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
@@ -1119,395 +1055,168 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       )}
       </div>
 
-      {/* --- MODAL 1: RECORD / EDIT LEAVE ENTRY --- */}
-      {isLeaveModalOpen && editingLeaveEntry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div
-            ref={leaveDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={leaveTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <div className="flex items-center gap-2">
-                <CalendarCheck2 className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                <h3 id={leaveTitleId} className="text-sm font-bold text-slate-900">
-                  {editingLeaveEntry.id ? 'Edit Leave Entry' : 'Record Staff Leave'}
-                </h3>
-              </div>
-              <button
-                onClick={() => {
-                  setIsLeaveModalOpen(false);
-                  setEditingLeaveEntry(null);
-                }}
-                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
-                aria-label="Close"
-                title="Close"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveLeaveEntry} className="space-y-3">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Nurse</label>
-                <select aria-label="Nurse"
-                  value={editingLeaveEntry.nurseId}
-                  onChange={(e) =>
-                    setEditingLeaveEntry({ ...editingLeaveEntry, nurseId: e.target.value })
-                  }
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium"
-                >
+      {/* The four dialogs on the shared Dialog (Phase 7, slice 1). */}
+      <Dialog
+        open={isLeaveModalOpen && !!editingLeaveEntry}
+        onClose={closeLeaveDialog}
+        title={editingLeaveEntry?.id ? 'Change leave' : 'Record leave'}
+        description={selectedNurseForLeave?.fullName}
+        footer={
+          editingLeaveEntry && (
+            <>
+              {editingLeaveEntry.id && (
+                <span className="flex flex-col-reverse gap-2 sm:mr-auto sm:flex-row">
+                  {editingLeaveEntry.startDate !== editingLeaveEntry.endDate &&
+                  selectedCellDate &&
+                  selectedCellDate >= (editingLeaveEntry.startDate || '') &&
+                  selectedCellDate <= (editingLeaveEntry.endDate || '') ? (
+                    <>
+                      <Button icon={Trash2} disabled={isDeletingLeave} onClick={() => handleDeleteSingleDayFromLeave(editingLeaveEntry as LeaveEntry, selectedCellDate)}>
+                        Delete {formatDayDate(selectedCellDate)} only
+                      </Button>
+                      <Button disabled={isDeletingLeave} onClick={() => handleDeleteLeave(editingLeaveEntry as LeaveEntry)}>
+                        Delete all {countDaysBetween(editingLeaveEntry.startDate || '', editingLeaveEntry.endDate || '')} days
+                      </Button>
+                    </>
+                  ) : (
+                    <Button icon={Trash2} busy={isDeletingLeave} onClick={() => handleDeleteLeave(editingLeaveEntry as LeaveEntry)}>
+                      Delete the leave
+                    </Button>
+                  )}
+                </span>
+              )}
+              <Button onClick={closeLeaveDialog}>Cancel</Button>
+              <Button variant="primary" type="submit" form="leave-editor" icon={Save} disabled={!!leaveQuotaInfo?.isExceeded || isDeletingLeave}>
+                {editingLeaveEntry.id ? 'Save changes' : 'Record leave'}
+              </Button>
+            </>
+          )
+        }
+      >
+        {editingLeaveEntry && (
+          <form id="leave-editor" onSubmit={handleSaveLeaveEntry} noValidate className="space-y-4 text-sm">
+            <Field label="Nurse">
+              {(f) => (
+                <Select {...f} value={editingLeaveEntry.nurseId} onChange={(e) => setEditingLeaveEntry({ ...editingLeaveEntry, nurseId: e.target.value })}>
                   {nurses.map((n) => (
                     <option key={n.id} value={n.id}>
-                      {n.fullName} ({n.employeeCode})
+                      {n.fullName}
+                      {n.employeeCode ? ` (${n.employeeCode})` : ''}
                     </option>
                   ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Leave Type</label>
-                <select aria-label="Leave Type"
-                  value={editingLeaveEntry.leaveTypeId}
-                  onChange={(e) =>
-                    setEditingLeaveEntry({ ...editingLeaveEntry, leaveTypeId: e.target.value })
-                  }
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium"
-                >
+                </Select>
+              )}
+            </Field>
+            <Field label="Kind of leave" hint={leaveHoursHint(selectedTypeForLeave)}>
+              {(f) => (
+                <Select {...f} value={editingLeaveEntry.leaveTypeId} onChange={(e) => setEditingLeaveEntry({ ...editingLeaveEntry, leaveTypeId: e.target.value })}>
                   {leaveTypes.map((lt) => (
                     <option key={lt.id} value={lt.id}>
-                      {lt.name} [{lt.acronym}] —{' '}
-                      {typeof lt.creditedHours === 'number' ? `${lt.creditedHours}h` : 'Match duty'}{' '}
-                      credit {lt.countsTowardHoursTarget ? '(Counts toward target)' : '(0h)'}
+                      {lt.name} ({lt.acronym})
                     </option>
                   ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Start Date</label>
-                  <input aria-label="Start Date"
-                    type="date"
-                    required
-                    value={editingLeaveEntry.startDate}
-                    onChange={(e) =>
-                      setEditingLeaveEntry({ ...editingLeaveEntry, startDate: e.target.value })
-                    }
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">End Date</label>
-                  <input aria-label="End Date"
-                    type="date"
-                    required
-                    value={editingLeaveEntry.endDate}
-                    onChange={(e) =>
-                      setEditingLeaveEntry({ ...editingLeaveEntry, endDate: e.target.value })
-                    }
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Real-time Annual Quota Status & Ceiling Banner */}
-              {leaveQuotaInfo && (
-                <div
-                  className={`p-2.5 rounded-lg border text-xs space-y-1.5 transition-colors ${
-                    leaveQuotaInfo.isExceeded
-                      ? 'bg-rose-50 border-rose-200 text-rose-900'
-                      : leaveQuotaInfo.remainingDays === 0
-                      ? 'bg-amber-50 border-amber-200 text-amber-900'
-                      : 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                  }`}
-                >
-                  <div className="flex items-center justify-between font-semibold">
-                    <span className="flex items-center gap-1.5">
-                      {leaveQuotaInfo.isExceeded ? (
-                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                      ) : (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                      )}
-                      <span>
-                        {selectedTypeForLeave?.name} Annual Quota ({leaveQuotaInfo.year})
-                      </span>
-                    </span>
-                    <span className="font-mono font-bold">
-                      {leaveQuotaInfo.alreadyUsedDays} / {leaveQuotaInfo.quotaDays} days used
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200/60">
-                    <span>
-                      This request: <strong>{leaveQuotaInfo.requestedDays} day(s)</strong>
-                    </span>
-                    <span>
-                      {leaveQuotaInfo.isExceeded ? (
-                        <strong className="text-rose-700">
-                          Exceeds annual quota by {leaveQuotaInfo.excessDays} day{leaveQuotaInfo.excessDays > 1 ? 's' : ''}!
-                        </strong>
-                      ) : (
-                        <span>
-                          Remaining after: <strong>{leaveQuotaInfo.quotaDays - leaveQuotaInfo.totalDaysAfter} day(s)</strong>
-                        </span>
-                      )}
-                    </span>
-                  </div>
-
-                  {leaveQuotaInfo.isExceeded && (
-                    <div className="text-[11px] text-rose-700 font-medium bg-rose-100/70 p-1.5 rounded border border-rose-200">
-                      {leaveQuotaInfo.quotaDays === 0
-                        ? `Scheduling blocked: ${selectedNurseForLeave?.fullName} has no ${selectedTypeForLeave?.name} allowance for ${leaveQuotaInfo.year}. Set the days allowed in their nurse record first.`
-                        : `Scheduling blocked: ${selectedNurseForLeave?.fullName} cannot be allocated more than ${leaveQuotaInfo.quotaDays} days of ${selectedTypeForLeave?.name} in ${leaveQuotaInfo.year}.`}
-                    </div>
-                  )}
-                </div>
+                </Select>
               )}
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="First day">
+                {(f) => <DateInput {...f} value={editingLeaveEntry.startDate || ''} onChange={(iso) => setEditingLeaveEntry({ ...editingLeaveEntry, startDate: iso })} />}
+              </Field>
+              <Field label="Last day">
+                {(f) => <DateInput {...f} value={editingLeaveEntry.endDate || ''} onChange={(iso) => setEditingLeaveEntry({ ...editingLeaveEntry, endDate: iso })} />}
+              </Field>
+            </div>
 
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Notes / Reason</label>
-                <input aria-label="Notes / Reason"
-                  type="text"
-                  value={editingLeaveEntry.note || ''}
-                  onChange={(e) =>
-                    setEditingLeaveEntry({ ...editingLeaveEntry, note: e.target.value })
-                  }
-                  placeholder="e.g. Annual holiday or medical certificate"
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded"
-                />
-              </div>
-
-              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded flex items-center justify-between">
-                <div>
-                  <span className="font-semibold text-slate-800">Approval Status</span>
-                  <p className="text-[10px] text-slate-500">
-                    Approved leave is honored strictly by the scheduling engine.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setEditingLeaveEntry({
-                      ...editingLeaveEntry,
-                      approved: !editingLeaveEntry.approved,
-                    })
-                  }
-                  className={`px-3 py-1 rounded text-xs font-semibold cursor-pointer transition-colors ${
-                    editingLeaveEntry.approved !== false
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-200 text-slate-600'
-                  }`}
-                >
-                  {editingLeaveEntry.approved !== false ? 'Approved ✓' : 'Waiting'}
-                </button>
-              </div>
-
-              <div className="pt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100">
-                {editingLeaveEntry.id && (
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {/* If multi-day span and user clicked a specific cell */}
-                    {editingLeaveEntry.startDate !== editingLeaveEntry.endDate &&
-                    selectedCellDate &&
-                    selectedCellDate >= (editingLeaveEntry.startDate || '') &&
-                    selectedCellDate <= (editingLeaveEntry.endDate || '') ? (
-                      <>
-                        <button
-                          type="button"
-                          disabled={isDeletingLeave}
-                          onClick={() =>
-                            handleDeleteSingleDayFromLeave(
-                              editingLeaveEntry as LeaveEntry,
-                              selectedCellDate
-                            )
-                          }
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2.5 py-1.5 rounded font-semibold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors border border-red-200 text-xs"
-                          title="Deletes ONLY this selected day, keeping all other days of this leave intact"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                          <span>Delete Only {formatDate(selectedCellDate)}</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isDeletingLeave}
-                          onClick={() => handleDeleteLeave(editingLeaveEntry as LeaveEntry)}
-                          className="text-slate-500 hover:text-red-600 hover:bg-slate-100 px-2 py-1.5 rounded text-[11px] cursor-pointer disabled:opacity-50 transition-colors"
-                          title="Deletes the entire multi-day leave"
-                        >
-                          Delete Full Range ({formatDate(editingLeaveEntry.startDate)} – {formatDate(editingLeaveEntry.endDate)})
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={isDeletingLeave}
-                        onClick={() => handleDeleteLeave(editingLeaveEntry as LeaveEntry)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2.5 py-1.5 rounded font-semibold inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50 transition-colors border border-red-200 text-xs"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                        <span>{isDeletingLeave ? 'Deleting...' : 'Delete Leave Entry'}</span>
-                      </button>
-                    )}
-                  </div>
-                )}
-                <div className="flex items-center gap-2 ml-auto">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsLeaveModalOpen(false);
-                      setEditingLeaveEntry(null);
-                      setSelectedCellDate(null);
-                    }}
-                    className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer font-medium"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={leaveQuotaInfo?.isExceeded || isDeletingLeave}
-                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded font-medium cursor-pointer shadow-xs"
-                    title={leaveQuotaInfo?.isExceeded ? 'Leave quota exceeded for this staff member' : undefined}
-                  >
-                    Save Leave Entry
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL 2: PIN SHIFT LOCK --- */}
-      {isLockModalOpen && editingLockEntry && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div
-            ref={lockDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={lockTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4 text-xs"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-amber-600" aria-hidden="true" />
-                <h3 id={lockTitleId} className="text-sm font-bold text-slate-900">Pin a day</h3>
-              </div>
-              <button
-                onClick={() => setIsLockModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
-                aria-label="Close"
-                title="Close"
+            {leaveQuotaInfo && (
+              <Notice
+                tone={leaveQuotaInfo.isExceeded ? 'danger' : leaveQuotaInfo.totalDaysAfter === leaveQuotaInfo.quotaDays ? 'warning' : 'info'}
+                title={`${selectedTypeForLeave?.name} in ${leaveQuotaInfo.year}: ${leaveQuotaInfo.alreadyUsedDays} of ${leaveQuotaInfo.quotaDays} days used`}
               >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
+                {leaveQuotaInfo.quotaDays === 0
+                  ? `${selectedNurseForLeave?.fullName} has no ${selectedTypeForLeave?.name} allowance for ${leaveQuotaInfo.year}. Set the days allowed in their nurse record first.`
+                  : leaveQuotaInfo.isExceeded
+                    ? `This leave is ${leaveQuotaInfo.requestedDays} ${leaveQuotaInfo.requestedDays === 1 ? 'day' : 'days'}, which is ${leaveQuotaInfo.excessDays} more than the ${leaveQuotaInfo.remainingDays} ${leaveQuotaInfo.remainingDays === 1 ? 'day' : 'days'} left.`
+                    : `This leave is ${leaveQuotaInfo.requestedDays} ${leaveQuotaInfo.requestedDays === 1 ? 'day' : 'days'}, leaving ${leaveQuotaInfo.quotaDays - leaveQuotaInfo.totalDaysAfter} ${leaveQuotaInfo.quotaDays - leaveQuotaInfo.totalDaysAfter === 1 ? 'day' : 'days'}.`}
+              </Notice>
+            )}
 
-            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-amber-900 text-[11px] leading-relaxed">
-              <strong>A pinned day</strong> stays as it is when a roster is filled. Removing the pin later asks you to type OVERRIDE.
-            </div>
+            <Field label="Note" optional>
+              {(f) => <Input {...f} value={editingLeaveEntry.note || ''} onChange={(e) => setEditingLeaveEntry({ ...editingLeaveEntry, note: e.target.value })} />}
+            </Field>
+            <Switch
+              label="Approved"
+              hint="Approved leave stays as it is when a roster is filled. Turn it off to keep the leave waiting for a decision."
+              checked={editingLeaveEntry.approved !== false}
+              onChange={(approved) => setEditingLeaveEntry({ ...editingLeaveEntry, approved })}
+            />
+            {leaveError && <Notice tone="danger" live title={leaveError} />}
+          </form>
+        )}
+      </Dialog>
 
-            <form onSubmit={handleSaveLockEntry} className="space-y-3">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Nurse</label>
-                <select aria-label="Nurse"
-                  value={editingLockEntry.nurseId}
-                  onChange={(e) =>
-                    setEditingLockEntry({ ...editingLockEntry, nurseId: e.target.value })
-                  }
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white font-medium"
-                >
+      <Dialog
+        open={isLockModalOpen && !!editingLockEntry}
+        onClose={() => setIsLockModalOpen(false)}
+        title="Pin a day"
+        description="A pinned day stays as it is when a roster is filled. Removing the pin later asks you to type OVERRIDE."
+        footer={
+          <>
+            <Button onClick={() => setIsLockModalOpen(false)}>Cancel</Button>
+            <Button variant="primary" type="submit" form="pin-editor" icon={Lock}>
+              Pin the day
+            </Button>
+          </>
+        }
+      >
+        {editingLockEntry && (
+          <form id="pin-editor" onSubmit={handleSaveLockEntry} noValidate className="space-y-4 text-sm">
+            <Field label="Nurse">
+              {(f) => (
+                <Select {...f} value={editingLockEntry.nurseId} onChange={(e) => setEditingLockEntry({ ...editingLockEntry, nurseId: e.target.value })}>
                   {nurses.map((n) => (
                     <option key={n.id} value={n.id}>
-                      {n.fullName} ({n.employeeCode})
+                      {n.fullName}
+                      {n.employeeCode ? ` (${n.employeeCode})` : ''}
                     </option>
                   ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Date</label>
-                <input aria-label="Date"
-                  type="date"
-                  required
-                  value={editingLockEntry.date}
-                  onChange={(e) =>
-                    setEditingLockEntry({ ...editingLockEntry, date: e.target.value })
-                  }
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">What is pinned</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setEditingLockEntry({ ...editingLockEntry, mode: 'ASSIGNMENT' })
-                    }
-                    className={`py-1.5 px-3 rounded border font-medium text-xs cursor-pointer ${
-                      editingLockEntry.mode === 'ASSIGNMENT'
-                        ? 'bg-indigo-50 border-indigo-300 text-indigo-700 font-bold'
-                        : 'border-slate-300 text-slate-600'
-                    }`}
-                  >
-                    A shift
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingLockEntry({ ...editingLockEntry, mode: 'OFF' })}
-                    className={`py-1.5 px-3 rounded border font-medium text-xs cursor-pointer ${
-                      editingLockEntry.mode === 'OFF'
-                        ? 'bg-amber-50 border-amber-300 text-amber-800 font-bold'
-                        : 'border-slate-300 text-slate-600'
-                    }`}
-                  >
-                    A day off
-                  </button>
-                </div>
-              </div>
-
-              {editingLockEntry.mode === 'ASSIGNMENT' && (
-                <div className="space-y-3 p-3 bg-slate-50 border border-slate-200 rounded">
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">Duty Window</label>
-                    <select aria-label="Duty Window"
-                      value={editingLockEntry.dutyWindowId}
-                      onChange={(e) =>
-                        setEditingLockEntry({
-                          ...editingLockEntry,
-                          dutyWindowId: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white"
-                    >
+                </Select>
+              )}
+            </Field>
+            <Field label="Day">
+              {(f) => <DateInput {...f} value={editingLockEntry.date || ''} onChange={(iso) => setEditingLockEntry({ ...editingLockEntry, date: iso })} />}
+            </Field>
+            <Field label="What is pinned">
+              {(f) => (
+                <Select {...f} value={editingLockEntry.mode || 'ASSIGNMENT'} onChange={(e) => setEditingLockEntry({ ...editingLockEntry, mode: e.target.value as LockEntry['mode'] })}>
+                  <option value="ASSIGNMENT">A shift</option>
+                  <option value="OFF">A day off</option>
+                </Select>
+              )}
+            </Field>
+            {editingLockEntry.mode !== 'OFF' && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Shift">
+                  {(f) => (
+                    <Select {...f} value={editingLockEntry.dutyWindowId} onChange={(e) => setEditingLockEntry({ ...editingLockEntry, dutyWindowId: e.target.value })}>
                       {dutyWindows.map((dw) => (
                         <option key={dw.id} value={dw.id}>
-                          {dw.name} [{dw.acronym}] ({dw.startTime}–{dw.endTime})
+                          {dw.name} ({dw.startTime} to {dw.endTime})
                         </option>
                       ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Target Assignment Pairing
-                    </label>
-                    <select aria-label="Target Assignment Pairing"
+                    </Select>
+                  )}
+                </Field>
+                <Field label="Works with">
+                  {(f) => (
+                    <Select
+                      {...f}
                       value={editingLockEntry.targetRefId}
                       onChange={(e) => {
                         const targetId = e.target.value;
                         const isDoc = doctors.some((d) => d.id === targetId);
                         const isRole = clinicalRoles.some((r) => r.id === targetId);
-                        setEditingLockEntry({
-                          ...editingLockEntry,
-                          targetRefId: targetId,
-                          assignmentKind: isDoc ? 'DOCTOR' : isRole ? 'CLINICAL_ROLE' : 'SPECIALTY',
-                        });
+                        setEditingLockEntry({ ...editingLockEntry, targetRefId: targetId, assignmentKind: isDoc ? 'DOCTOR' : isRole ? 'CLINICAL_ROLE' : 'SPECIALTY' });
                       }}
-                      className="w-full px-3 py-1.5 border border-slate-300 rounded bg-white"
                     >
                       <optgroup label="Doctors">
                         {doctors.map((d) => (
@@ -1516,220 +1225,127 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                           </option>
                         ))}
                       </optgroup>
-                      <optgroup label="Clinical Roles">
+                      <optgroup label="Nurse roles">
                         {clinicalRoles.map((r) => (
                           <option key={r.id} value={r.id}>
                             {r.name} ({r.acronym})
                           </option>
                         ))}
                       </optgroup>
-                      <optgroup label="Specialties (Pool)">
-                        {specialties.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name} ({s.code})
+                      <optgroup label="Specialties">
+                        {specialties.map((sp) => (
+                          <option key={sp.id} value={sp.id}>
+                            {sp.name}
                           </option>
                         ))}
                       </optgroup>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Note</label>
-                <input aria-label="Note"
-                  type="text"
-                  value={editingLockEntry.note || ''}
-                  onChange={(e) =>
-                    setEditingLockEntry({ ...editingLockEntry, note: e.target.value })
-                  }
-                  placeholder="For example, asked for by the clinic manager"
-                  className="w-full px-3 py-1.5 border border-slate-300 rounded"
-                />
-              </div>
-
-              <div className="pt-2 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsLockModalOpen(false)}
-                  className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded font-medium cursor-pointer shadow-xs"
-                >
-                  Pin the day
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL 3: LOCK OVERRIDE PROTOCOL --- */}
-      {isOverrideModalOpen && activeLockToOverride && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div
-            ref={overrideDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={overrideTitleId}
-            className="bg-white rounded-lg border border-red-200 shadow-2xl max-w-md w-full p-5 space-y-4 text-xs animate-in zoom-in-95 duration-150"
-          >
-            <div className="flex items-center gap-2 text-red-600">
-              <ShieldAlert className="w-5 h-5 shrink-0" aria-hidden="true" />
-              <h3 id={overrideTitleId} className="text-sm font-bold text-slate-900">
-                Remove the pin?
-              </h3>
-            </div>
-
-            <div className="p-3 bg-red-50 border border-red-200 rounded text-red-900 space-y-1.5 leading-relaxed">
-              <p className="font-semibold text-xs">
-                This day is pinned for {formatDate(activeLockToOverride.date)}, so filling a roster leaves it as it is.
-              </p>
-              <p className="text-[11px] text-red-800">
-                Nurse:{' '}
-                <strong>
-                  {nurses.find((n) => n.id === activeLockToOverride.nurseId)?.fullName}
-                </strong>{' '}
-                · What is pinned: <strong>{activeLockToOverride.mode === 'OFF' ? 'A day off' : 'A shift'}</strong>
-              </p>
-              {activeLockToOverride.note && (
-                <p className="text-[10px] text-red-700 italic">
-                  Note: "{activeLockToOverride.note}"
-                </p>
-              )}
-              {activeLockToOverride.mode === 'OFF' && activeLockToOverride.id.startsWith('lock-off-') && (
-                <p className="text-[11px] text-red-800">
-                  If this day off comes from an approved request, removing the pin also declines the request. You can approve it
-                  again in Requests, under All day off and shift requests.
-                </p>
-              )}
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block font-medium text-slate-700">
-                  To remove the pin, type OVERRIDE:
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setOverrideInput('OVERRIDE')}
-                  className="text-[11px] text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer underline"
-                >
-                  Fill in OVERRIDE
-                </button>
-              </div>
-              <input aria-label="Type OVERRIDE to confirm"
-                type="text"
-                value={overrideInput}
-                onChange={(e) => setOverrideInput(e.target.value.toUpperCase())}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleExecuteLockOverride();
-                  }
-                }}
-                placeholder="OVERRIDE"
-                className="w-full px-3 py-2 border-2 border-red-300 rounded font-mono font-bold text-center tracking-wider text-sm focus:outline-none focus:border-red-500 uppercase"
-              />
-            </div>
-
-            <div className="pt-2 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                disabled={isOverridingLock}
-                onClick={() => {
-                  setIsOverrideModalOpen(false);
-                  setActiveLockToOverride(null);
-                  setOverrideInput('');
-                }}
-                className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer disabled:opacity-50"
-              >
-                Keep the pin
-              </button>
-              <button
-                type="button"
-                disabled={isOverridingLock || overrideInput.trim().toUpperCase() !== 'OVERRIDE'}
-                onClick={handleExecuteLockOverride}
-                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-bold cursor-pointer transition-colors shadow-xs disabled:opacity-50"
-              >
-                {isOverridingLock ? 'Removing the pin…' : 'Remove the pin'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL 4: CSV LEAVE IMPORT --- */}
-      {isCsvModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
-          <div
-            ref={csvDialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={csvTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-xl max-w-lg w-full p-5 space-y-4 text-xs"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <div className="flex items-center gap-2">
-                <Upload className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                <h3 id={csvTitleId} className="text-sm font-bold text-slate-900">Import Leave via CSV</h3>
-              </div>
-              <button
-                onClick={() => setIsCsvModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
-                aria-label="Close"
-                title="Close"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-slate-600 text-[11px]">
-                Paste CSV rows with the following column headers:
-                <br />
-                <code className="bg-slate-100 px-1 py-0.5 rounded font-mono text-slate-800 text-[10px]">
-                  gmail, leaveType acronym, startDate, endDate
-                </code>
-              </p>
-              <textarea aria-label="CSV leave rows"
-                rows={6}
-                value={csvContent}
-                onChange={(e) => setCsvContent(e.target.value)}
-                placeholder="maryam.nuaimi.rn@gmail.com, AL, 2026-10-12, 2026-10-16&#10;fatima.alzahra.nurse@gmail.com, SL, 2026-10-05, 2026-10-06"
-                className="w-full p-2.5 border border-slate-300 rounded font-mono text-xs bg-slate-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              />
-            </div>
-
-            {csvImportLog && (
-              <div className="p-2.5 bg-slate-100 border border-slate-200 rounded font-mono text-[11px] text-slate-800">
-                {csvImportLog}
+                    </Select>
+                  )}
+                </Field>
               </div>
             )}
+            <Field label="Note" optional hint="For example, asked for by the clinic manager.">
+              {(f) => <Input {...f} value={editingLockEntry.note || ''} onChange={(e) => setEditingLockEntry({ ...editingLockEntry, note: e.target.value })} />}
+            </Field>
+          </form>
+        )}
+      </Dialog>
 
-            <div className="pt-2 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsCsvModalOpen(false)}
-                className="px-3 py-1.5 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded cursor-pointer"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={handleProcessLeaveCsv}
-                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium cursor-pointer shadow-xs"
-              >
-                Import Entries
-              </button>
-            </div>
+      <Dialog
+        open={isOverrideModalOpen && !!activeLockToOverride}
+        onClose={closeOverrideDialog}
+        role="alertdialog"
+        size="sm"
+        title="Remove the pin?"
+        description={
+          activeLockToOverride &&
+          `${nurses.find((n) => n.id === activeLockToOverride.nurseId)?.fullName || 'A nurse'}, ${formatDayDate(activeLockToOverride.date)}: ${activeLockToOverride.mode === 'OFF' ? 'a day off' : 'a shift'}.`
+        }
+        footer={
+          <>
+            <Button disabled={isOverridingLock} onClick={closeOverrideDialog}>
+              Keep the pin
+            </Button>
+            <Button variant="danger" busy={isOverridingLock} disabled={overrideInput.trim().toUpperCase() !== 'OVERRIDE'} onClick={handleExecuteLockOverride}>
+              Remove the pin
+            </Button>
+          </>
+        }
+      >
+        {activeLockToOverride && (
+          <div className="space-y-4 text-sm">
+            <p className="text-ink">Filling a roster leaves this day as it is while it is pinned.</p>
+            {activeLockToOverride.note && <p className="text-ink-muted">Note: {activeLockToOverride.note}</p>}
+            {activeLockToOverride.mode === 'OFF' && activeLockToOverride.id.startsWith('lock-off-') && (
+              <Notice tone="warning" title="This may decline a request">
+                If this day off comes from an approved request, removing the pin also declines the request. You can approve it again in Requests, under All day off and shift requests.
+              </Notice>
+            )}
+            <Field label="To remove the pin, type OVERRIDE">
+              {(f) => (
+                <Input
+                  {...f}
+                  autoComplete="off"
+                  value={overrideInput}
+                  onChange={(e) => setOverrideInput(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleExecuteLockOverride();
+                    }
+                  }}
+                  className="font-mono tracking-wider uppercase"
+                />
+              )}
+            </Field>
           </div>
+        )}
+      </Dialog>
+
+      <Dialog
+        open={isCsvModalOpen}
+        onClose={() => setIsCsvModalOpen(false)}
+        size="lg"
+        title="Import leave from CSV"
+        description="Each row is checked the same way as a leave recorded by hand. Imported leave is approved."
+        footer={
+          <>
+            <Button onClick={() => setIsCsvModalOpen(false)}>Close</Button>
+            <Button variant="primary" icon={Upload} busy={isImporting} onClick={handleProcessLeaveCsv}>
+              Import
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 text-sm">
+          <Field
+            label="Rows to import"
+            hint={
+              <>
+                One leave on each line: the nurse's email, the short name of the kind of leave, the first day and the last day. For example:{' '}
+                <code className="font-mono text-ink">mary@example.com, AL, 12-10-2026, 16-10-2026</code>
+              </>
+            }
+          >
+            {(f) => <Textarea {...f} rows={6} value={csvContent} onChange={(e) => setCsvContent(e.target.value)} className="font-mono" />}
+          </Field>
+          {csvImportLog && (
+            <Notice
+              live
+              tone={csvImportLog.messages.length === 0 ? 'success' : csvImportLog.added === 0 ? 'danger' : 'warning'}
+              title={`${csvImportLog.added} ${csvImportLog.added === 1 ? 'leave' : 'leaves'} imported${csvImportLog.messages.length ? `, ${csvImportLog.messages.length} ${csvImportLog.messages.length === 1 ? 'row' : 'rows'} not imported` : ''}.`}
+            >
+              {csvImportLog.messages.length > 0 && (
+                <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                  {csvImportLog.messages.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              )}
+            </Notice>
+          )}
         </div>
-      )}
+      </Dialog>
     </div>
   );
 };

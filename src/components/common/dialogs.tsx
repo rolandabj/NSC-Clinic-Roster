@@ -12,9 +12,9 @@
  * <DialogHost /> must be mounted once (App.tsx does this).
  */
 
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useState, useSyncExternalStore } from 'react';
 import { CircleCheck, Info, OctagonAlert, TriangleAlert, X } from 'lucide-react';
-import { useDialogA11y } from './useDialogA11y';
+import { isAnyDialogOpen, onDialogsChange, useDialogA11y } from './useDialogA11y';
 import { Button } from '../ui/Button';
 import { wholeDates } from '../ui/wholeDates';
 
@@ -149,9 +149,16 @@ export const DialogHost: React.FC = () => {
     };
   }, []);
 
+  // At the top while a dialog is open, so a message never covers its Save button.
+  const overDialog = useSyncExternalStore(onDialogsChange, isAnyDialogOpen);
+
   return (
     <>
-      <div className="pointer-events-none fixed bottom-4 right-4 z-[210] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2" aria-live="polite">
+      <div
+        className={`pointer-events-none fixed z-[210] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 ${overDialog ? 'top-4 left-1/2 -translate-x-1/2' : 'right-4 bottom-4'}`}
+        aria-live="polite"
+        data-over-dialog={overDialog || undefined}
+      >
         {view.notices.map((n) => (
           <div
             key={n.id}

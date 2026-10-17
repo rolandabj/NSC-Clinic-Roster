@@ -35,7 +35,7 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   const leaveDialogDates = async () => {
     const d = page.getByRole('dialog');
     await d.waitFor({ timeout: 5000 });
-    const v = [await d.getByLabel('Start Date').inputValue(), await d.getByLabel('End Date').inputValue()];
+    const v = [await d.getByLabel('First day').inputValue(), await d.getByLabel('Last day').inputValue()];
     await page.keyboard.press('Escape');
     await d.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
     return v.join(' to ');
@@ -55,12 +55,12 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   check('the first day is marked as pressed', (await day('Amy, Mon 19-10-2026: no leave, first day of the new leave').getAttribute('aria-pressed')) === 'true');
   if (shots) await page.screenshot({ path: `${shots}/leave-grid-picked.png` });
   await day('Amy, Wed 21-10-2026: no leave').click();
-  check('the second click opens the leave with both days', (await leaveDialogDates()) === '2026-10-19 to 2026-10-21');
+  check('the second click opens the leave with both days', (await leaveDialogDates()) === '19-10-2026 to 21-10-2026');
 
   // 2. One day twice is one day; Esc stops.
   await day('Sara, Thu 22-10-2026: no leave').click();
   await day('Sara, Thu 22-10-2026: no leave, first day of the new leave').click();
-  check('the same day twice is one day', (await leaveDialogDates()) === '2026-10-22 to 2026-10-22');
+  check('the same day twice is one day', (await leaveDialogDates()) === '22-10-2026 to 22-10-2026');
   await day('Sara, Fri 23-10-2026: no leave').click();
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
@@ -78,7 +78,7 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Enter');
-  check('Enter on two days opens the leave', (await leaveDialogDates()) === '2026-10-19 to 2026-10-21');
+  check('Enter on two days opens the leave', (await leaveDialogDates()) === '19-10-2026 to 21-10-2026');
 
   // 4. Dragging still works.
   const from = await day('Nina, Mon 12-10-2026: no leave').boundingBox();
@@ -87,7 +87,7 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await page.mouse.down();
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 5 });
   await page.mouse.up();
-  check('dragging across days still opens the leave', (await leaveDialogDates()) === '2026-10-12 to 2026-10-14');
+  check('dragging across days still opens the leave', (await leaveDialogDates()) === '12-10-2026 to 14-10-2026');
   // A key press right after a drag is not swallowed (Checkpoint 6).
   const k1 = await day('Mary, Mon 12-10-2026: no leave').boundingBox();
   const k2 = await day('Mary, Tue 13-10-2026: no leave').boundingBox();

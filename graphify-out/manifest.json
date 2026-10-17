@@ -96,16 +96,16 @@
     "semantic_hash": "d37bb943a4f4b5ac94f08856fbe4d028"
   },
   "src/components/common/dialogs.tsx": {
-    "mtime": 1791950940.5668406,
-    "seen": 1791951702.507727,
-    "ast_hash": "defc0685d91c41111fb6ba5ff27b46fd",
+    "mtime": 1792233184.1057303,
+    "seen": 1792233642.2486084,
+    "ast_hash": "b0640fe0373e5c6dfa16fc45ebb445b8",
     "semantic_hash": ""
   },
   "src/components/common/useDialogA11y.ts": {
-    "mtime": 1791362587.9539049,
-    "seen": 1791365225.1339629,
-    "ast_hash": "5e21b5b122c895dce73f2e1445074004",
-    "semantic_hash": "5e21b5b122c895dce73f2e1445074004"
+    "mtime": 1792233184.1048336,
+    "seen": 1792233642.2486124,
+    "ast_hash": "6c2a48858146f2b803c0c14144075a5b",
+    "semantic_hash": ""
   },
   "src/components/layout/AppShell.tsx": {
     "mtime": 1791953851.745424,
@@ -258,9 +258,9 @@
     "semantic_hash": "4c2c62984ee0483cd6eae5986a19910b"
   },
   "src/components/views/AvailabilityView.tsx": {
-    "mtime": 1792231437.9249575,
-    "seen": 1792231935.7003942,
-    "ast_hash": "51ed8c89e7f1e290ef99df7f0fbbc6db",
+    "mtime": 1792233576.223834,
+    "seen": 1792233642.2486925,
+    "ast_hash": "13da054734a33e71962a4e356d82a972",
     "semantic_hash": ""
   },
   "src/components/views/DashboardView.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1792232770.6298757,
-    "seen": 1792232779.5107818,
-    "ast_hash": "d42b78cdba8e5c94335e2a922f0ab3c3",
+    "mtime": 1792233625.8128078,
+    "seen": 1792233642.2491295,
+    "ast_hash": "a694e32421c53222e392ec157cf3c6d0",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1791957901.4976988,
-    "seen": 1791957940.74727,
-    "ast_hash": "215a946821534d4cd20299c188f7f3a9",
+    "mtime": 1792233633.1097944,
+    "seen": 1792233642.249138,
+    "ast_hash": "0dc5057a06582ce0e12cd12170604362",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -2274,9 +2274,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/leave-grid.cjs": {
-    "mtime": 1791957678.8809366,
-    "seen": 1791957940.7467425,
-    "ast_hash": "e86dd722e394153daf466811add6e531",
+    "mtime": 1792233196.675397,
+    "seen": 1792233642.2485313,
+    "ast_hash": "e872d45c54bf424f5b1fcbe0202192f5",
     "semantic_hash": ""
   },
   "src/services/availability/leaveGridPick.ts": {
@@ -2316,9 +2316,27 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/allowance.cjs": {
-    "mtime": 1792231909.1873906,
-    "seen": 1792231935.7002091,
-    "ast_hash": "2ed17602bf3d6a449148c9e6e3512506",
+    "mtime": 1792233196.6759703,
+    "seen": 1792233642.2485147,
+    "ast_hash": "c835ea9474dba3bd5abb8e20974c7898",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/leave-dialogs.cjs": {
+    "mtime": 1792233301.3844583,
+    "seen": 1792233642.248529,
+    "ast_hash": "fa7805c5f4e7cdc5b800393b7cbc651c",
+    "semantic_hash": ""
+  },
+  "src/services/availability/leaveImport.ts": {
+    "mtime": 1792233576.2243738,
+    "seen": 1792233642.248786,
+    "ast_hash": "7fc4b6bc712dc34817d55d7345b5f514",
+    "semantic_hash": ""
+  },
+  "tests/unit/leaveImport.test.ts": {
+    "mtime": 1792233576.2247732,
+    "seen": 1792233642.2490327,
+    "ast_hash": "efc21c437a131d1dbd81a7c0a08794b4",
     "semantic_hash": ""
   }
 }

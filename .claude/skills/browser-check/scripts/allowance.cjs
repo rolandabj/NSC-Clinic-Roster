@@ -67,10 +67,10 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await page.getByRole('button', { name: 'Sara, Thu 22-10-2026: no leave, first day of the new leave', exact: true }).click();
   const dlg = page.getByRole('dialog');
   await dlg.waitFor({ timeout: 5000 });
-  await dlg.getByLabel('Leave Type').selectOption('lt-al');
+  await dlg.getByLabel('Kind of leave').selectOption('lt-al');
   const dlgText = await dlg.innerText();
   check('the leave editor says Sara has no Annual Leave allowance', /Sara has no Annual Leave allowance for 2026/.test(dlgText), dlgText.slice(0, 300));
-  check('and Save is turned off', await dlg.getByRole('button', { name: 'Save Leave Entry' }).isDisabled());
+  check('and Save is turned off', await dlg.getByRole('button', { name: 'Record leave', exact: true }).isDisabled());
   if (shots) await page.screenshot({ path: `${shots}/allowance-refused.png` });
   await page.keyboard.press('Escape');
   await dlg.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
@@ -81,8 +81,8 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await page.getByRole('button', { name: 'Mary, Thu 22-10-2026: no leave', exact: true }).click();
   await page.getByRole('button', { name: 'Mary, Thu 22-10-2026: no leave, first day of the new leave', exact: true }).click();
   await dlg.waitFor({ timeout: 5000 });
-  await dlg.getByLabel('Leave Type').selectOption('lt-al');
-  check('a nurse with 30 days can take leave', /1 \/ 30 days used|0 \/ 30 days used/.test(await dlg.innerText()) && !(await dlg.getByRole('button', { name: 'Save Leave Entry' }).isDisabled()));
+  await dlg.getByLabel('Kind of leave').selectOption('lt-al');
+  check('a nurse with 30 days can take leave', /Annual Leave in 2026: 0 of 30 days used/.test(await dlg.innerText()) && !(await dlg.getByRole('button', { name: 'Record leave', exact: true }).isDisabled()));
   await page.keyboard.press('Escape');
 
   // 5. The hours report shows the allowances as set: 0 for Sara, never an assumed 30.

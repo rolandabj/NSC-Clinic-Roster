@@ -19,6 +19,16 @@ const FOCUSABLE =
 // Open dialogs, oldest first; only the last one reacts to Esc and Tab.
 const openStack: symbol[] = [];
 
+// Whether a dialog is open, for the corner messages: they move to the top while one is, so
+// they never cover a dialog's buttons (Phase 7).
+const openListeners = new Set<() => void>();
+export const isAnyDialogOpen = () => openStack.length > 0;
+export function onDialogsChange(listener: () => void): () => void {
+  openListeners.add(listener);
+  return () => openListeners.delete(listener);
+}
+const dialogsChanged = () => openListeners.forEach((l) => l());
+
 export function useDialogA11y<T extends HTMLElement>(isOpen: boolean, onClose?: () => void) {
   const ref = useRef<T | null>(null);
   const onCloseRef = useRef(onClose);
@@ -38,6 +48,7 @@ export function useDialogA11y<T extends HTMLElement>(isOpen: boolean, onClose?: 
     if (!isOpen) return;
     const id = Symbol('dialog');
     openStack.push(id);
+    dialogsChanged();
     const previouslyFocused = returnFocusRef.current;
 
     const focusables = () =>
@@ -91,6 +102,7 @@ export function useDialogA11y<T extends HTMLElement>(isOpen: boolean, onClose?: 
       document.removeEventListener('keydown', onKeyDown, true);
       const at = openStack.indexOf(id);
       if (at >= 0) openStack.splice(at, 1);
+      dialogsChanged();
       if (previouslyFocused && document.contains(previouslyFocused)) previouslyFocused.focus();
     };
   }, [isOpen]);
