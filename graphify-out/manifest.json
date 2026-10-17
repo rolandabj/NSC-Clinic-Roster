@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1792243163.662088,
-    "seen": 1792243170.2685215,
-    "ast_hash": "1dd4c90b29fdeab504a848d0ba601a72",
+    "mtime": 1792263103.6422446,
+    "seen": 1792263114.4083054,
+    "ast_hash": "981926f4c6e5d91e96b4d9564fd8e5d5",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1792242938.922756,
-    "seen": 1792243027.6784585,
-    "ast_hash": "e29224e86676ac42a8d89909b19cf6f8",
+    "mtime": 1792263103.647621,
+    "seen": 1792263114.4083145,
+    "ast_hash": "efac8c4a3e96b8b28fd0ed15886cecd6",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {

@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 17-10-2026, after UI overhaul Phase 7, slice 5 (section 16, item 89): History tidied, with one set of filters, plain names and its dialogs on the shared `Dialog`. The owner approved pushing items 83 to 89 (Phase 7, slices 1 to 5) to main on 17-10-2026; main is at the commit that records this. Slice 6 (one publish flow and Sent rosters) comes next.
+Last updated: 17-10-2026, after UI overhaul Phase 7, slice 5 (section 16, item 89): History tidied, with one set of filters, plain names and its dialogs on the shared `Dialog`. The owner approved pushing items 83 to 89 (Phase 7, slices 1 to 5) to main on 17-10-2026; main is at the commit that records this. Slice 6 (one publish flow and Sent rosters, and the Invitations tab removed from Share links, the owner's choice) comes next.
 
 ---
 
@@ -740,7 +740,7 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 - `dayNeedHours` and the first choice reservation use the raw sessions list, not `doctorSessionsOn`.
 - The hours report counts late shifts at a fixed 21:00, while the engine uses the rule threshold.
 - Version restore in History replaces all shifts of the version's roster (a backup is kept first) and does not restore locks or leave.
-- Share links has an Invitations tab that saves invitations, but nothing reads them: an invited colleague gets no access from it (the tab says so since item 87). Access is given in Settings, Access and permissions. For the owner to decide: remove the tab, or make invitations work.
+- Share links has an Invitations tab that saves invitations, but nothing reads them: an invited colleague gets no access from it (the tab says so since item 87). Access is given in Settings, Access and permissions. The owner decided on 17-10-2026 to remove the tab (option 1): Share links keeps only the links to view, with a line and a button pointing to Settings, Access and permissions. This is done in Phase 7, slice 6.
 - TopBar acceptance button is dead. `WalkthroughModal` returns null.
 - `cors` dependency unused; PLANNER and STAFF roles unused; `firebase-blueprint.json` is out of date; package name is still `react-example`.
 - Single clinic assumed (`clinics[0]`); `publicRosters` has no TypeScript collection mapping.
