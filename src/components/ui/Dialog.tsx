@@ -53,7 +53,7 @@ export const Dialog: React.FC<{
   if (!open) return null;
   return (
     <div
-      className={cx('fixed inset-0 flex items-end justify-center bg-ink/50 sm:items-center sm:p-4', stacked ? 'z-[160]' : 'z-[150]')}
+      className={cx('fixed inset-0 flex items-end justify-center bg-ink/50 sm:items-center sm:p-4 print:hidden', stacked ? 'z-[160]' : 'z-[150]')}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

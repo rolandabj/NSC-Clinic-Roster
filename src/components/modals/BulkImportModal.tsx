@@ -6,23 +6,14 @@
  * Supports downloadable CSV templates, client-side parsing, validation preview, and bulk upsert.
  */
 
-import React, { useId, useState } from 'react';
-import {
-  X,
-  Upload,
-  Download,
-  FileSpreadsheet,
-  CheckCircle2,
-  AlertTriangle,
-  Users,
-  Stethoscope,
-  Info,
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Download, Upload } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { Nurse, Doctor, SeniorityLevel, Specialty, ClinicalRole } from '../../types';
 import { getRepository } from '../../services/repository';
-import { useDialogA11y } from '../common/useDialogA11y';
-import { notify } from '../common/dialogs';
+import { readDoctorRows, readNurseRows, type DoctorImportRow, type NurseImportRow } from '../../services/import/peopleImport';
+import { localTodayIso } from '../../utils/dateUtils';
+import { Badge, Button, DataTable, Dialog, Field, Notice, TabPanel, Tabs, Textarea, type Column } from '../ui';
 
 interface BulkImportModalProps {
   seniorityLevels: SeniorityLevel[];
@@ -49,21 +40,32 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     if (isOpen) setActiveTab(initialTab);
   }, [isOpen, initialTab]);
   const [csvText, setCsvText] = useState('');
-  const [parsedRows, setParsedRows] = useState<any[]>([]);
-  const [errorCount, setErrorCount] = useState(0);
+  const [nurseRows, setNurseRows] = useState<NurseImportRow[]>([]);
+  const [doctorRows, setDoctorRows] = useState<DoctorImportRow[]>([]);
   const [isImporting, setIsImporting] = useState(false);
-  const titleId = useId();
-  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
+  const [importError, setImportError] = useState('');
+  // Who is already there, so an email or a code taken by someone else is named.
+  const [existing, setExisting] = useState<{ nurses: Nurse[]; doctors: Doctor[] }>({ nurses: [], doctors: [] });
+  useEffect(() => {
+    if (!isOpen) return;
+    const repo = getRepository();
+    Promise.all([repo.list('nurses'), repo.list('doctors')])
+      .then(([n, d]) => setExisting({ nurses: n, doctors: d }))
+      .catch((err) => console.error('[BulkImportModal] load error:', err));
+  }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const rows = activeTab === 'NURSES' ? nurseRows : doctorRows;
+  const errorCount = rows.filter((r) => r.problems.length > 0).length;
 
   // --- SAMPLE CSV DOWNLOADERS ---
   const handleDownloadNurseTemplate = () => {
     const csvContent =
       'fullName,gmail,employeeCode,seniorityLevel,contractPercent,dateOfBirth,capabilities\n' +
-      'Amina Mansoor,amina.mansoor@clinic.ae,N-109,Staff Nurse,100,1992-05-14,Clinic Nurse;Blood Collection & IV\n' +
-      'Rashid Al-Blooshi,rashid.blooshi@clinic.ae,N-110,Junior Nurse,100,1996-08-22,Clinic Nurse\n' +
-      'Nour Al-Huda,nour.alhuda@clinic.ae,N-111,Senior Nurse,50,1989-11-03,Clinic Nurse';
+      'Amina Mansoor,amina.mansoor@clinic.ae,N-109,Staff Nurse,100,14-05-1992,Clinic Nurse;Blood Collection & IV\n' +
+      'Rashid Al Blooshi,rashid.blooshi@clinic.ae,N-110,Junior Nurse,100,22-08-1996,Clinic Nurse\n' +
+      'Nour Al Huda,nour.alhuda@clinic.ae,N-111,Senior Nurse,50,03-11-1989,Clinic Nurse';
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -78,8 +80,8 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
   const handleDownloadDoctorTemplate = () => {
     const csvContent =
       'fullName,gmail,specialties,weeklyPattern\n' +
-      'Dr. Hamad Al-Suwaidi,dr.hamad@clinic.ae,Cardiology,Sun 09:00-13:00 Room 1;Tue 09:00-13:00 Room 1\n' +
-      'Dr. Reem Al-Kindi,dr.reem@clinic.ae,Pediatrics;Dermatology,Mon 09:00-14:00 Room 3;Wed 09:00-14:00 Room 3';
+      'Dr Hamad Al Suwaidi,dr.hamad@clinic.ae,Cardiology,Sun 09:00-13:00 Room 1;Tue 09:00-13:00 Room 1\n' +
+      'Dr Reem Al Kindi,dr.reem@clinic.ae,Pediatrics;Dermatology,Mon 09:00-14:00 Room 3;Wed 09:00-14:00 Room 3';
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -91,80 +93,12 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
     document.body.removeChild(link);
   };
 
-  // --- PARSE CSV ---
+  // --- READ THE CSV (services/import/peopleImport) ---
   const handleParseCsv = (text: string) => {
     setCsvText(text);
-    const lines = text.trim().split('\n');
-    if (lines.length < 2) {
-      setParsedRows([]);
-      setErrorCount(0);
-      return;
-    }
-
-    const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
-    const rows: any[] = [];
-    let errors = 0;
-
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      const values = line.split(',').map((v) => v.trim());
-
-      if (activeTab === 'NURSES') {
-        const fullName = values[0] || '';
-        const gmail = values[1] || '';
-        const employeeCode = values[2] || `N-${Math.floor(100 + Math.random() * 900)}`;
-        const seniorityName = values[3] || 'Staff Nurse';
-        const contractPercent = parseInt(values[4], 10) || 100;
-        const dateOfBirth = values[5] || '1995-01-01';
-
-        // Match seniority level
-        const matchedSeniority =
-          seniorityLevels.find(
-            (s) => s.name.toLowerCase() === seniorityName.toLowerCase()
-          ) || seniorityLevels[2] || seniorityLevels[0];
-
-        const isValidGmail = gmail.includes('@') && gmail.includes('.');
-        if (!fullName || !isValidGmail) errors++;
-
-        rows.push({
-          fullName,
-          gmail,
-          employeeCode,
-          seniorityLevelId: matchedSeniority?.id || '',
-          seniorityName: matchedSeniority?.name || seniorityName,
-          contractPercent,
-          dateOfBirth,
-          isValid: fullName && isValidGmail,
-        });
-      } else {
-        const fullName = values[0] || '';
-        const gmail = values[1] || '';
-        const specialtyNames = (values[2] || '').split(';').map((s) => s.trim());
-        const patternStr = values[3] || '';
-
-        // Match specialties
-        const matchedSpecialtyIds = specialties
-          .filter((s) =>
-            specialtyNames.some((sn) => s.name.toLowerCase().includes(sn.toLowerCase()))
-          )
-          .map((s) => s.id);
-
-        const isValid = !!fullName;
-        if (!isValid) errors++;
-
-        rows.push({
-          fullName,
-          gmail,
-          specialtyIds: matchedSpecialtyIds.length > 0 ? matchedSpecialtyIds : [specialties[0]?.id || ''],
-          patternStr,
-          isValid,
-        });
-      }
-    }
-
-    setParsedRows(rows);
-    setErrorCount(errors);
+    setImportError('');
+    if (activeTab === 'NURSES') setNurseRows(readNurseRows(text, { levels: seniorityLevels, roles, nurses: existing.nurses, today: localTodayIso() }));
+    else setDoctorRows(readDoctorRows(text, { specialties, doctors: existing.doctors }));
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,7 +114,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
 
   // --- IMPORT EXECUTION ---
   const handleExecuteImport = async () => {
-    if (parsedRows.length === 0 || errorCount > 0) return;
+    if (rows.length === 0 || errorCount > 0) return;
     setIsImporting(true);
 
     try {
@@ -188,36 +122,19 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
       const nowIso = new Date().toISOString();
 
       if (activeTab === 'NURSES') {
-        const nurseEntities: Nurse[] = parsedRows.map((r) => ({
+        const nurseEntities: Nurse[] = nurseRows.map((r) => ({
           id: uuidv4(),
-          fullName: r.fullName,
-          gmail: r.gmail,
-          employeeCode: r.employeeCode,
-          seniorityLevelId: r.seniorityLevelId,
-          contractPercent: r.contractPercent,
-          dateOfBirth: r.dateOfBirth,
-          capabilityIds: roles.slice(0, 1).map((ro) => ro.id),
+          ...r.nurse,
           isClinicNurse: true,
           preferences: [],
           active: true,
           createdAt: nowIso,
           updatedAt: nowIso,
         }));
-
         await repo.bulkUpsert('nurses', nurseEntities);
       } else {
-        const doctorEntities: Doctor[] = parsedRows.map((r) => ({
-          id: uuidv4(),
-          fullName: r.fullName,
-          gmail: r.gmail || undefined,
-          specialtyIds: r.specialtyIds,
-          weeklyPattern: [
-            { weekday: 0, startTime: '09:00', endTime: '13:00', room: 'Room 1' },
-            { weekday: 2, startTime: '09:00', endTime: '13:00', room: 'Room 1' },
-          ],
-          active: true,
-        }));
-
+        // The usual week comes from the file (it was always Sunday and Tuesday 09:00 to 13:00).
+        const doctorEntities: Doctor[] = doctorRows.map((r) => ({ id: uuidv4(), ...r.doctor, active: true }));
         await repo.bulkUpsert('doctors', doctorEntities);
       }
 
@@ -226,220 +143,134 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
         action: 'CREATE',
         entity: activeTab === 'NURSES' ? 'Nurse' : 'Doctor',
         entityId: 'bulk',
-        note: `Bulk imported ${parsedRows.length} ${activeTab.toLowerCase()} from CSV.`,
+        note: `Imported ${rows.length} ${activeTab === 'NURSES' ? 'nurses' : 'doctors'} from a CSV file.`,
         timestamp: nowIso,
       });
 
       onImportComplete();
       onClose();
     } catch (err: any) {
-      notify(`Import failed: ${err.message}`, 'error');
+      setImportError(`The import was not saved: ${err.message}`);
     } finally {
       setIsImporting(false);
     }
   };
 
+  const switchTab = (id: string) => {
+    setActiveTab(id as 'NURSES' | 'DOCTORS');
+    setCsvText('');
+    setNurseRows([]);
+    setDoctorRows([]);
+    setImportError('');
+  };
+  type Row = NurseImportRow | DoctorImportRow;
+  const person = (r: Row) => ('nurse' in r ? r.nurse : r.doctor);
+  const columns: Column<Row>[] = [
+    { key: 'row', header: 'Row', cell: (r) => rows.indexOf(r as any) + 1, align: 'right' },
+    { key: 'name', header: 'Name', cell: (r) => person(r).fullName || <span className="text-ink-muted">None</span>, phone: 'title' },
+    { key: 'email', header: 'Email', cell: (r) => person(r).gmail || <span className="text-ink-muted">None</span> },
+    {
+      key: 'details',
+      header: 'Details',
+      cell: (r) =>
+        'nurse' in r
+          ? `${seniorityLevels.find((l) => l.id === r.nurse.seniorityLevelId)?.name || 'No level'}, ${r.nurse.contractPercent}%, code ${r.nurse.employeeCode}`
+          : r.doctor.weeklyPattern.length
+            ? `${r.doctor.weeklyPattern.length} ${r.doctor.weeklyPattern.length === 1 ? 'clinic' : 'clinics'} a week`
+            : 'No usual week',
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (r) =>
+        r.problems.length === 0 ? (
+          <Badge tone="success">Ready</Badge>
+        ) : (
+          <span className="block">
+            <Badge tone="danger">To fix</Badge>
+            <span className="mt-0.5 block text-xs text-danger">{r.problems.map((m) => m.charAt(0).toUpperCase() + m.slice(1)).join('. ')}.</span>
+          </span>
+        ),
+    },
+  ];
+  const sample = activeTab === 'NURSES' ? 'fullName,gmail,employeeCode,seniorityLevel,contractPercent,dateOfBirth,capabilities' : 'fullName,gmail,specialties,weeklyPattern';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs font-sans text-slate-800"
-      >
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
-              <Upload className="w-4 h-4" aria-hidden="true" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 id={titleId} className="text-base font-bold text-slate-900">
-                  Bulk CSV Import Center
-                </h2>
-              </div>
-              <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                Batch onboarding for nurses and medical practitioners
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
-          >
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        {/* Tab Selector */}
-        <div className="px-6 py-2.5 bg-slate-100/70 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('NURSES');
-                setParsedRows([]);
-                setCsvText('');
-              }}
-              className={`px-3 py-1.5 rounded font-bold cursor-pointer transition-colors flex items-center gap-1.5 ${
-                activeTab === 'NURSES'
-                  ? 'bg-indigo-600 text-white shadow-2xs'
-                  : 'text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Import Nurses</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('DOCTORS');
-                setParsedRows([]);
-                setCsvText('');
-              }}
-              className={`px-3 py-1.5 rounded font-bold cursor-pointer transition-colors flex items-center gap-1.5 ${
-                activeTab === 'DOCTORS'
-                  ? 'bg-indigo-600 text-white shadow-2xs'
-                  : 'text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <Stethoscope className="w-3.5 h-3.5" aria-hidden="true" />
-              <span>Import Doctors</span>
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={activeTab === 'NURSES' ? handleDownloadNurseTemplate : handleDownloadDoctorTemplate}
-            className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded text-xs font-semibold cursor-pointer shadow-2xs"
-          >
-            <Download className="w-3 h-3 text-slate-500" aria-hidden="true" />
-            <span>Download Sample CSV</span>
-          </button>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-4 flex-1">
-          {/* File Upload / Paste Area */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="font-bold text-slate-800 text-xs">
-                Upload CSV File or Paste Raw Text:
-              </label>
-              <input
-                type="file"
-                accept=".csv"
-                aria-label="Upload CSV file"
-                onChange={handleFileUpload}
-                className="text-[11px] text-slate-500 file:mr-2 file:py-1 file:px-2.5 file:rounded file:border file:border-slate-300 file:text-xs file:font-semibold file:bg-slate-50 hover:file:bg-slate-100 cursor-pointer"
-              />
-            </div>
-
-            <textarea
-              rows={4}
-              aria-label="Paste CSV text"
-              placeholder={
-                activeTab === 'NURSES'
-                  ? 'fullName,gmail,employeeCode,seniorityLevel,contractPercent,dateOfBirth\nAmina Mansoor,amina@clinic.ae,N-109,Staff Nurse,100,1992-05-14'
-                  : 'fullName,gmail,specialties,weeklyPattern\nDr. Hamad,dr.hamad@clinic.ae,Cardiology,Sun 09:00-13:00'
-              }
-              value={csvText}
-              onChange={(e) => handleParseCsv(e.target.value)}
-              className="w-full p-2.5 border border-slate-300 rounded font-mono text-[11px] focus:ring-1 focus:ring-indigo-500"
-            />
-          </div>
-
-          {/* Validation & Preview Table */}
-          {parsedRows.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-800 text-xs">
-                  Validation Preview ({parsedRows.length} Rows Parsed):
-                </span>
-                {errorCount > 0 ? (
-                  <span className="text-rose-600 font-bold text-[11px] flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>{errorCount} rows with invalid data</span>
-                  </span>
-                ) : (
-                  <span className="text-emerald-700 font-bold text-[11px] flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>All {parsedRows.length} rows valid and ready</span>
-                  </span>
-                )}
-              </div>
-
-              <div className="border border-slate-200 rounded max-h-48 overflow-y-auto">
-                <table className="w-full text-left font-mono text-[11px]">
-                  <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                    <tr>
-                      <th className="py-2 px-3">Name</th>
-                      <th className="py-2 px-3">Gmail</th>
-                      <th className="py-2 px-3">Details</th>
-                      <th className="py-2 px-3 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {parsedRows.map((r, i) => (
-                      <tr key={i} className={r.isValid ? 'hover:bg-slate-50' : 'bg-rose-50/50'}>
-                        <td className="py-2 px-3 font-bold font-sans text-slate-900">{r.fullName}</td>
-                        <td className="py-2 px-3 text-slate-600">{r.gmail}</td>
-                        <td className="py-2 px-3 text-slate-500 font-sans">
-                          {activeTab === 'NURSES' ? (
-                            <span>
-                              {r.seniorityName} · {r.contractPercent}%
-                            </span>
-                          ) : (
-                            <span>{r.patternStr || 'Standard Sessions'}</span>
-                          )}
-                        </td>
-                        <td className="py-2 px-3 text-right">
-                          {r.isValid ? (
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px]">
-                              VALID
-                            </span>
-                          ) : (
-                            <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-bold text-[10px]">
-                              INVALID
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded font-medium cursor-pointer"
-          >
+    <Dialog
+      open
+      onClose={() => !isImporting && onClose()}
+      size="xl"
+      title="Import from a CSV file"
+      description="Add many nurses or doctors at once. Every row is checked before anything is saved."
+      footer={
+        <>
+          <Button disabled={isImporting} onClick={onClose}>
             Cancel
-          </button>
-
-          <button
-            type="button"
-            disabled={parsedRows.length === 0 || errorCount > 0 || isImporting}
-            onClick={handleExecuteImport}
-            className="inline-flex items-center gap-1.5 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold cursor-pointer shadow-xs disabled:opacity-40"
-          >
-            <Upload className="w-4 h-4" aria-hidden="true" />
-            <span>Confirm &amp; Import ({parsedRows.length})</span>
-          </button>
-        </div>
+          </Button>
+          <Button variant="primary" icon={Upload} busy={isImporting} disabled={rows.length === 0 || errorCount > 0} onClick={handleExecuteImport}>
+            Import {rows.length} {activeTab === 'NURSES' ? (rows.length === 1 ? 'nurse' : 'nurses') : rows.length === 1 ? 'doctor' : 'doctors'}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4 text-sm">
+        <Tabs
+          label="What to import"
+          idPrefix="bulk-import"
+          value={activeTab}
+          onChange={switchTab}
+          tabs={[
+            { id: 'NURSES', label: 'Nurses' },
+            { id: 'DOCTORS', label: 'Doctors' },
+          ]}
+        />
+        <TabPanel idPrefix="bulk-import" id={activeTab} value={activeTab}>
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-ink-muted">
+                The first line names the columns: <code className="font-mono text-ink">{sample}</code>
+              </p>
+              <Button size="sm" icon={Download} onClick={activeTab === 'NURSES' ? handleDownloadNurseTemplate : handleDownloadDoctorTemplate}>
+                Download an example
+              </Button>
+            </div>
+            <Field label="Choose a CSV file" optional>
+              {(f) => (
+                <input
+                  {...f}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileUpload}
+                  className="block text-sm text-ink-muted file:mr-3 file:h-9 file:rounded-md file:border file:border-line-strong file:bg-surface file:px-3 file:text-sm file:font-semibold file:text-ink hover:file:bg-sunken"
+                />
+              )}
+            </Field>
+            <Field
+              label="Or paste the rows"
+              hint={activeTab === 'NURSES' ? 'Dates as DD-MM-YYYY. Several skills are separated by a semicolon.' : 'A usual week like Sun 09:00-13:00 Room 1;Tue 14:00-18:00. Several specialties are separated by a semicolon.'}
+            >
+              {(f) => <Textarea {...f} rows={4} value={csvText} onChange={(e) => handleParseCsv(e.target.value)} className="font-mono" />}
+            </Field>
+            {rows.length > 0 && (
+              <>
+                <Notice
+                  live
+                  tone={errorCount > 0 ? 'danger' : 'success'}
+                  title={
+                    errorCount > 0
+                      ? `${errorCount} of ${rows.length} ${rows.length === 1 ? 'row needs' : 'rows need'} fixing. Nothing is imported until every row is ready.`
+                      : `All ${rows.length} ${rows.length === 1 ? 'row is' : 'rows are'} ready.`
+                  }
+                />
+                <div className="overflow-hidden rounded-lg border border-line">
+                  <DataTable caption="Rows to import" rows={rows as Row[]} rowKey={(r) => String(rows.indexOf(r as any))} columns={columns} maxHeight="16rem" />
+                </div>
+              </>
+            )}
+            {importError && <Notice tone="danger" live title={importError} />}
+          </div>
+        </TabPanel>
       </div>
-    </div>
+    </Dialog>
   );
 };

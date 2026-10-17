@@ -11,7 +11,7 @@ import { loadClinicSetup } from '../../services/engine/clinicSetupService';
 import { getRepository } from '../../services/repository';
 
 import { resolveFullTimeTarget } from '../../services/hours/hoursPolicy';
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   FileSpreadsheet,
@@ -53,7 +53,8 @@ import {
   getScheduleDates,
 } from '../../services/export/rosterExportService';
 import { notify } from '../common/dialogs';
-import { useDialogA11y } from '../common/useDialogA11y';
+import { formatDate, formatDateTime } from '../../utils/dateUtils';
+import { Button, Checkbox, Dialog, Field, LoadingState, Notice, Select, TabPanel, Tabs, cx } from '../ui';
 import {
   calculateNurseHoursAccounting,
   calculateDutyDurationHours,
@@ -147,8 +148,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [isPdfBusy, setIsPdfBusy] = useState(false);
   const [excelScope, setExcelScope] = useState<'ALL' | 'ACTIVE_BLOCK'>('ALL');
   const [selectedNurseId, setSelectedNurseId] = useState<string>('ALL');
-  const titleId = useId();
-  const dialogRef = useDialogA11y<HTMLDivElement>(isOpen, onClose);
 
   // Start downloading the Excel library as soon as the dialog opens, so the
   // file is ready when the user clicks (browsers may block a late download).
@@ -162,14 +161,16 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
   if (!isOpen) return null;
   const overlap = hoursHistoryOverlaps(schedule, clinicSetup?.hoursHistory)[0];
-  if (historyError || !clinicSetup?.hoursHistory || overlap) return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
-      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Export roster" className="rounded bg-white p-6 max-w-lg">
-        <p role="status">{historyError || (overlap ? `Resolve the overlap between "${overlap.first.name}" and "${overlap.second.name}" before exporting hours.` : 'Loading saved hours history…')}</p>
-        <button type="button" onClick={onClose} className="mt-4 rounded border px-3 py-2">Close</button>
-      </div>
-    </div>
-  );
+  if (historyError || !clinicSetup?.hoursHistory || overlap)
+    return (
+      <Dialog open onClose={onClose} size="sm" title="Export or print" footer={<Button onClick={onClose}>Close</Button>}>
+        {historyError || overlap ? (
+          <Notice tone="danger" live title={historyError || `Fix the overlap between ${overlap!.first.name} and ${overlap!.second.name} before exporting hours.`} />
+        ) : (
+          <LoadingState label="Loading the saved hours history…" />
+        )}
+      </Dialog>
+    );
 
   const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
   const nurseMap = new Map(nurses.map((n) => [n.id, n]));
@@ -347,408 +348,173 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       ? nurseAccountingList
       : nurseAccountingList.filter((n) => n.nurse.id === selectedNurseId);
 
+  const block = (title: string, text: React.ReactNode, children?: React.ReactNode) => (
+    <section className="space-y-2 rounded-lg border border-line p-4">
+      <h3 className="font-semibold text-ink">{title}</h3>
+      <div className="text-ink-muted">{text}</div>
+      {children}
+    </section>
+  );
+  const radio = (name: string, checked: boolean, onChange: () => void, label: React.ReactNode, disabled?: boolean) => (
+    <label className={cx('flex items-center gap-2', disabled && 'opacity-50')}>
+      <input type="radio" name={name} className="size-4 accent-brand" checked={checked} disabled={disabled} onChange={onChange} />
+      {label}
+    </label>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs select-none animate-in fade-in duration-150 print:static print:p-0 print:bg-white">
-      {/* Modal Container (Hidden during native print, print section rendered below) */}
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden text-xs print:hidden"
+    <>
+      <Dialog
+        open
+        onClose={onClose}
+        size="lg"
+        title="Export or print"
+        description={`${schedule.name}, version ${versionNumber} (${formatDate(schedule.startDate)} to ${formatDate(schedule.endDate)}).`}
+        footer={<Button onClick={onClose}>Close</Button>}
       >
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded bg-indigo-100 text-indigo-700 flex items-center justify-center">
-              <Download className="w-4 h-4" aria-hidden="true" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 id={titleId} className="text-base font-bold text-slate-900">Export and print</h2>
-              </div>
-              <p className="text-[11px] text-slate-500 font-sans mt-0.5">
-                {schedule.name} · version {versionNumber} ({schedule.startDate} to {schedule.endDate})
-              </p>
-            </div>
-          </div>
+        <div className="space-y-4 text-sm">
+          <Tabs
+            label="Export"
+            idPrefix="export"
+            value={activeTab}
+            onChange={(id) => setActiveTab(id as ExportTab)}
+            tabs={[
+              { id: 'print_roster', label: 'PDF' },
+              { id: 'excel', label: 'Excel' },
+              { id: 'csv', label: 'CSV' },
+              { id: 'print_packets', label: 'A page for each nurse' },
+              { id: 'analysis', label: 'Full report' },
+            ]}
+          />
 
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="p-1.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="px-6 border-b border-slate-200 flex items-center gap-6 bg-white text-xs">
-          <button
-            type="button"
-            onClick={() => setActiveTab('print_roster')}
-            className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
-              activeTab === 'print_roster'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <FileText className="w-4 h-4 text-rose-600" aria-hidden="true" />
-            <span>PDF (nurses and doctors)</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('excel')}
-            className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
-              activeTab === 'excel'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" aria-hidden="true" />
-            <span>Excel</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('csv')}
-            className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
-              activeTab === 'csv'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <FileText className="w-4 h-4 text-blue-600" aria-hidden="true" />
-            <span>CSV</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('print_packets')}
-            className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
-              activeTab === 'print_packets'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Users className="w-4 h-4 text-purple-600" aria-hidden="true" />
-            <span>A page for each nurse</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('analysis')}
-            className={`py-3 font-semibold transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
-              activeTab === 'analysis'
-                ? 'border-indigo-600 text-indigo-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <FileJson className="w-4 h-4 text-amber-600" aria-hidden="true" />
-            <span>Full report for analysis</span>
-          </button>
-        </div>
-
-        {/* Tab Content */}
-        <div className="p-6 overflow-y-auto space-y-4">
-          {/* TAB 1: Excel */}
-          {activeTab === 'excel' && (
+          <TabPanel idPrefix="export" id="print_roster" value={activeTab}>
             <div className="space-y-4">
-              <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-lg space-y-2">
-                <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-5 h-5 text-emerald-600 shrink-0" aria-hidden="true" />
-                  <h3 className="text-sm font-bold text-emerald-950">
-                    Excel workbook (.xlsx)
-                  </h3>
-                </div>
-                <p className="text-xs text-emerald-900 leading-relaxed font-sans">
-                  A workbook with several sheets: shift codes, the doctor each nurse works with, and shift colours.
-                </p>
-                <div className="grid grid-cols-2 gap-2 pt-2 text-[11px] text-emerald-900">
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> Roster: the calendar
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> Legend: shift codes and rules
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> Long: one row per shift
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> Hours: each nurse's hours
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> Doctors: doctors' clinics
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" aria-hidden="true" /> File name: <code>{clinicName.toLowerCase().replace(/\s+/g, '_')}_{schedule.startDate}_v{versionNumber}.xlsx</code>
-                  </span>
-                </div>
-              </div>
-
-              {/* Scope Radio */}
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded space-y-2">
-                <span className="font-semibold text-slate-800 text-xs block">Days to include:</span>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="excelScope"
-                      checked={excelScope === 'ALL'}
-                      onChange={() => setExcelScope('ALL')}
-                      className="text-indigo-600"
-                    />
-                    <span>Whole roster ({allDates.length} days)</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="excelScope"
-                      checked={excelScope === 'ACTIVE_BLOCK'}
-                      onChange={() => setExcelScope('ACTIVE_BLOCK')}
-                      className="text-indigo-600"
-                    />
-                    <span>Only the days on screen ({blockDates.length} days)</span>
-                  </label>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleDownloadExcel}
-                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
-              >
-                <Download className="w-4 h-4" aria-hidden="true" />
-                <span>Download Excel file</span>
-              </button>
-            </div>
-          )}
-
-          {/* TAB 2: CSV */}
-          {activeTab === 'csv' && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Flavor 1: Matrix CSV */}
-                <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-3 shadow-2xs">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-                    <h3 className="font-bold text-slate-900">Calendar layout</h3>
-                  </div>
-                  <p className="text-slate-500 text-[11px] leading-relaxed">
-                    Like the roster screen: one row per nurse and one column per day, with shift codes and the doctor each nurse works with.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleDownloadCsvMatrix}
-                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
-                  >
-                    <Download className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Download calendar CSV</span>
-                  </button>
-                </div>
-
-                {/* Flavor 2: Long Format CSV */}
-                <div className="p-4 bg-white border border-slate-200 rounded-lg space-y-3 shadow-2xs">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-600" aria-hidden="true" />
-                    <h3 className="font-bold text-slate-900">One row per shift</h3>
-                  </div>
-                  <p className="text-slate-500 text-[11px] leading-relaxed">
-                    Each shift on its own row: date, employee code, hours, shift times, doctor, whether it is a pinned day, and how it was set. Useful for other spreadsheets and reports.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleDownloadCsvLong}
-                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
-                  >
-                    <Download className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Download shifts CSV</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* PDF: nurses' roster and doctors' sessions */}
-          {activeTab === 'print_roster' && (
-            <div className="space-y-4">
-              <div className="p-4 bg-rose-50/60 border border-rose-200 rounded-lg space-y-2">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-rose-600" aria-hidden="true" />
-                  <h3 className="text-sm font-bold text-rose-950">Schedule PDF: Nurses &amp; Doctors</h3>
-                </div>
-                <p className="text-xs text-rose-950/80 leading-relaxed">
-                  Downloads a PDF laid out like the Schedules screen: every nurse with her shift and job for each day,
-                  then every doctor with the session hours and the nurse with them. Cells are colour coded by shift,
-                  weekends are shaded, sessions without a nurse are red, and a legend is added at the end.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <fieldset className="p-3 border border-slate-200 rounded space-y-1.5">
-                  <legend className="px-1 font-semibold text-slate-700">A4 landscape</legend>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="pdf-layout" checked={!pdfSplit} onChange={() => setPdfSplit(false)} />
-                    <span>Whole period on one page</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="pdf-layout" checked={pdfSplit} onChange={() => setPdfSplit(true)} />
-                    <span>Split into halves (larger text)</span>
-                  </label>
+              {block(
+                'Roster PDF: nurses and doctors',
+                'A PDF laid out like the roster screen: every nurse with their shift and job for each day, then every doctor with the clinic hours and the nurse with them. Cells are coloured by shift, weekends are shaded, clinics without a nurse are red, and a key comes at the end.'
+              )}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <fieldset className="space-y-2 rounded-lg border border-line p-3">
+                  <legend className="px-1 font-semibold text-ink">A4 landscape</legend>
+                  {radio('pdf-layout', !pdfSplit, () => setPdfSplit(false), 'The whole roster on one page')}
+                  {radio('pdf-layout', pdfSplit, () => setPdfSplit(true), 'In two halves (larger text)')}
                 </fieldset>
-                <fieldset className="p-3 border border-slate-200 rounded space-y-1.5">
-                  <legend className="px-1 font-semibold text-slate-700">Days</legend>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="pdf-scope" checked={pdfScope === 'ALL'} onChange={() => setPdfScope('ALL')} />
-                    <span>Whole roster ({allDates.length} days)</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="pdf-scope"
-                      checked={pdfScope === 'ACTIVE_BLOCK'}
-                      disabled={blockDates.length === 0}
-                      onChange={() => setPdfScope('ACTIVE_BLOCK')}
-                    />
-                    <span>Only the days on screen ({blockDates.length} days)</span>
-                  </label>
+                <fieldset className="space-y-2 rounded-lg border border-line p-3">
+                  <legend className="px-1 font-semibold text-ink">Days</legend>
+                  {radio('pdf-scope', pdfScope === 'ALL', () => setPdfScope('ALL'), `Whole roster (${allDates.length} days)`)}
+                  {radio('pdf-scope', pdfScope === 'ACTIVE_BLOCK', () => setPdfScope('ACTIVE_BLOCK'), `Only the days on screen (${blockDates.length} days)`, blockDates.length === 0)}
                 </fieldset>
-                <fieldset className="p-3 border border-slate-200 rounded space-y-1.5">
-                  <legend className="px-1 font-semibold text-slate-700">Include</legend>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={pdfIncludeNurses} onChange={(e) => setPdfIncludeNurses(e.target.checked)} />
-                    <span>Nurses&apos; roster ({nurses.length})</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={pdfIncludeDoctors} onChange={(e) => setPdfIncludeDoctors(e.target.checked)} />
-                    <span>Doctors&apos; sessions ({doctors.length})</span>
-                  </label>
+                <fieldset className="space-y-2 rounded-lg border border-line p-3">
+                  <legend className="px-1 font-semibold text-ink">Include</legend>
+                  <Checkbox checked={pdfIncludeNurses} onChange={(e) => setPdfIncludeNurses(e.target.checked)} label={`Nurses' roster (${nurses.length})`} />
+                  <Checkbox checked={pdfIncludeDoctors} onChange={(e) => setPdfIncludeDoctors(e.target.checked)} label={`Doctors' clinics (${doctors.length})`} />
                 </fieldset>
               </div>
-
-              <button
-                type="button"
-                onClick={handleDownloadPdf}
-                disabled={isPdfBusy}
-                className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
-              >
-                <Download className="w-4 h-4" aria-hidden="true" />
-                <span>{isPdfBusy ? 'Creating the PDF…' : 'Download PDF'}</span>
-              </button>
+              <Button variant="primary" icon={Download} busy={isPdfBusy} onClick={handleDownloadPdf}>
+                Download the PDF
+              </Button>
             </div>
-          )}
+          </TabPanel>
 
-          {/* Full report for analysis (JSON) */}
-          {activeTab === 'analysis' && (
+          <TabPanel idPrefix="export" id="excel" value={activeTab}>
             <div className="space-y-4">
-              <div className="p-4 bg-amber-50/60 border border-amber-200 rounded-lg space-y-2">
-                <div className="flex items-center gap-2">
-                  <FileJson className="w-5 h-5 text-amber-600 shrink-0" aria-hidden="true" />
-                  <h3 className="text-sm font-bold text-amber-950">Full roster report (.json)</h3>
-                </div>
-                <p className="text-xs text-amber-950/80 leading-relaxed">
-                  One file with everything about this roster, made to be read by a program or given to Claude to study
-                  how the roster was filled and to improve the way it is generated. It is not meant to be opened in Excel.
-                </p>
-                <div className="grid grid-cols-2 gap-2 pt-2 text-[11px] text-amber-950">
-                  {[
-                    'Shift types, rules, leave types, skills',
-                    'Nurses: preferences, hours goal and hours worked',
-                    'Doctors and their sessions each day',
-                    'Who worked with which doctor, and her rank for him',
-                    'Hours the clinic needs and hours rostered, per day',
-                    'Every problem the checker finds now',
-                    'Leave, day off and shift requests (followed or not)',
-                    'Pinned days and the end of the previous roster',
-                  ].map((label) => (
-                    <span key={label} className="flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-600 shrink-0" aria-hidden="true" /> {label}
-                    </span>
-                  ))}
-                </div>
-                <p className="text-[11px] text-amber-900/80 pt-1">
-                  Email addresses, dates of birth and profile notes are left out. File name:{' '}
-                  <code>{analysisFileName(clinicName, schedule, versionNumber)}</code>
-                </p>
-              </div>
-
-              {!clinicSetup && (
-                <p className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">
-                  Opening hours, public holidays and the previous roster are not loaded yet, so the file will use the
-                  default opening hours and no holidays. Reload the page first for a complete report.
+              {block(
+                'Excel workbook (.xlsx)',
+                'A workbook with several sheets: Roster (the calendar), Legend (shift codes and rules), Long (one row for each shift), Hours (each nurse\'s hours) and Doctors (the doctors\' clinics), with shift codes, the doctor each nurse works with and shift colours.',
+                <p className="text-xs text-ink-muted">
+                  File name: <code className="font-mono">{clinicName.toLowerCase().replace(/\s+/g, '_')}_{schedule.startDate}_v{versionNumber}.xlsx</code>
                 </p>
               )}
-
-              <button
-                type="button"
-                onClick={handleDownloadAnalysis}
-                className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
-              >
-                <Download className="w-4 h-4" aria-hidden="true" />
-                <span>Download full report</span>
-              </button>
+              <fieldset className="space-y-2">
+                <legend className="mb-2 font-semibold text-ink">Days to include</legend>
+                {radio('excelScope', excelScope === 'ALL', () => setExcelScope('ALL'), `Whole roster (${allDates.length} days)`)}
+                {radio('excelScope', excelScope === 'ACTIVE_BLOCK', () => setExcelScope('ACTIVE_BLOCK'), `Only the days on screen (${blockDates.length} days)`)}
+              </fieldset>
+              <Button variant="primary" icon={Download} onClick={handleDownloadExcel}>
+                Download the Excel file
+              </Button>
             </div>
-          )}
+          </TabPanel>
 
-          {/* TAB 4: Per-Nurse Packets */}
-          {activeTab === 'print_packets' && (
+          <TabPanel idPrefix="export" id="csv" value={activeTab}>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {block(
+                'Calendar layout',
+                'Like the roster screen: one row for each nurse and one column for each day, with shift codes and the doctor each nurse works with.',
+                <Button icon={Download} onClick={handleDownloadCsvMatrix}>
+                  Download the calendar CSV
+                </Button>
+              )}
+              {block(
+                'One row for each shift',
+                'Each shift on its own row: date, employee code, hours, shift times, doctor, whether it is a pinned day, and how it was set. Useful for other spreadsheets and reports.',
+                <Button icon={Download} onClick={handleDownloadCsvLong}>
+                  Download the shifts CSV
+                </Button>
+              )}
+            </div>
+          </TabPanel>
+
+          <TabPanel idPrefix="export" id="print_packets" value={activeTab}>
             <div className="space-y-4">
-              <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-2">
-                <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-purple-600" aria-hidden="true" />
-                  <h3 className="text-sm font-bold text-purple-950">A page for each nurse</h3>
-                </div>
-                <p className="text-xs text-purple-900 leading-relaxed font-sans">
-                  Prints one page per nurse for the whole roster: their hours goal, shift hours, leave hours and every day's shift in date order.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 bg-slate-50 p-3 rounded border border-slate-200">
-                <span className="font-semibold text-slate-700 text-xs">Print for:</span>
-                <select
-                  aria-label="Print for"
-                  value={selectedNurseId}
-                  onChange={(e) => setSelectedNurseId(e.target.value)}
-                  className="px-2.5 py-1.5 border border-slate-300 rounded font-medium bg-white text-slate-800"
-                >
-                  <option value="ALL">All nurses ({nurses.length} pages)</option>
-                  {nurses.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.fullName} ({n.employeeCode})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleTriggerPrint}
-                className="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
-              >
-                <Printer className="w-4 h-4" aria-hidden="true" />
-                <span>Print {selectedNurseId === 'ALL' ? 'pages' : 'page'}</span>
-              </button>
+              {block('A page for each nurse', "Prints one page for each nurse for the whole roster: their goal hours, shift hours, leave hours and every day's shift in date order.")}
+              <Field label="Print for">
+                {(f) => (
+                  <Select {...f} value={selectedNurseId} onChange={(e) => setSelectedNurseId(e.target.value)}>
+                    <option value="ALL">All nurses ({nurses.length} pages)</option>
+                    {nurses.map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.fullName}
+                        {n.employeeCode ? ` (${n.employeeCode})` : ''}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
+              <Button variant="primary" icon={Printer} onClick={handleTriggerPrint}>
+                Print {selectedNurseId === 'ALL' ? 'the pages' : 'the page'}
+              </Button>
             </div>
-          )}
-        </div>
+          </TabPanel>
 
-        {/* Footer */}
-        <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <span className="text-[11px] text-slate-500">
-            Version {versionNumber} · {clinicName}
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded font-medium cursor-pointer"
-          >
-            Close
-          </button>
+          <TabPanel idPrefix="export" id="analysis" value={activeTab}>
+            <div className="space-y-4">
+              {block(
+                'Full roster report (.json)',
+                'One file with everything about this roster, made to be read by a program or given to Claude to study how the roster was filled and to improve the way it is filled. It is not meant to be opened in Excel.',
+                <>
+                  <ul className="list-disc space-y-0.5 pl-5 text-ink-muted">
+                    {[
+                      'Shift types, rules, kinds of leave, skills',
+                      'Nurses: preferences, goal hours and hours worked',
+                      'Doctors and their clinics each day',
+                      "Who worked with which doctor, and the doctor's place in the nurse's list",
+                      'Hours the clinic needs and hours rostered, each day',
+                      'Every problem the roster check finds now',
+                      'Leave, day off and shift requests (followed or not)',
+                      'Pinned days and the end of the previous roster',
+                    ].map((label) => (
+                      <li key={label}>{label}</li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-ink-muted">
+                    Email addresses, dates of birth and profile notes are left out. File name: <code className="font-mono">{analysisFileName(clinicName, schedule, versionNumber)}</code>
+                  </p>
+                </>
+              )}
+              {!clinicSetup && (
+                <Notice tone="warning" title="Some clinic details are not loaded yet">
+                  Opening hours, public holidays and the previous roster are not loaded yet, so the file uses the usual opening hours and no holidays. Reload
+                  the page first for a complete report.
+                </Notice>
+              )}
+              <Button variant="primary" icon={Download} onClick={handleDownloadAnalysis}>
+                Download the full report
+              </Button>
+            </div>
+          </TabPanel>
         </div>
-      </div>
+      </Dialog>
 
       {/* ========================================================================= */}
       {/* NATIVE PRINT CONTAINER (Visible ONLY when window.print() is called)      */}
@@ -762,12 +528,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div>
                 <h1 className="text-xl font-bold tracking-tight uppercase">{clinicName}</h1>
                 <p className="text-xs text-slate-700 mt-0.5">
-                  NURSES' ROSTER · {schedule.name} ({schedule.startDate} to {schedule.endDate})
+                  NURSES' ROSTER · {schedule.name} ({formatDate(schedule.startDate)} to {formatDate(schedule.endDate)})
                 </p>
               </div>
               <div className="text-right font-mono text-[10px]">
                 <p className="font-bold">VERSION {versionNumber}</p>
-                <p className="text-slate-600">Printed: {new Date().toLocaleString()}</p>
+                <p className="text-slate-600">Printed: {formatDateTime(new Date())}</p>
                 <p className="text-slate-600">Base full time goal: {resolveFullTimeTarget(schedule, workingHoursPeriods).hours}h</p>
               </div>
             </div>
@@ -902,8 +668,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   </div>
                   <div className="text-right font-mono text-[10px]">
                     <p className="font-bold">{schedule.name}</p>
-                    <p>{schedule.startDate} to {schedule.endDate}</p>
-                    <p className="text-slate-600">Printed: {new Date().toLocaleDateString()}</p>
+                    <p>{formatDate(schedule.startDate)} to {formatDate(schedule.endDate)}</p>
+                    <p className="text-slate-600">Printed: {formatDate(new Date())}</p>
                   </div>
                 </div>
 
@@ -993,6 +759,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 };
