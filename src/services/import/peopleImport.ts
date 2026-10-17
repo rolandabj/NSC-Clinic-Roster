@@ -104,7 +104,9 @@ export function readDoctorRows(
     if (gmail && !EMAIL.test(gmail)) problems.push(`${gmail} is not an email address`);
     else if (gmail) {
       const owner = data.doctors.find((d) => same(d.gmail, gmail));
+      const earlier = rows.findIndex((r) => same(r.doctor.gmail, gmail));
       if (owner) problems.push(`${owner.fullName} already has the email ${gmail}`);
+      else if (earlier >= 0) problems.push(`row ${earlier + 1} already has the email ${gmail}`);
     }
 
     const specialtyIds: string[] = [];

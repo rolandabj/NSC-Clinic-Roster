@@ -61,6 +61,17 @@ export const ResumePublish: React.FC<{
     look();
   }, [scheduleId]);
 
+  // Closing the tab while emails go out stops the resume partway, so the browser asks first.
+  useEffect(() => {
+    if (!running) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [running]);
+
   if (!stopped || !plan) return null;
 
   const waitingWords = `${plan.total - plan.done} ${plan.total - plan.done === 1 ? 'nurse has' : 'nurses have'} not been sent`;
@@ -130,8 +141,9 @@ export const ResumePublish: React.FC<{
               <Button disabled={running} onClick={close}>
                 Cancel
               </Button>
-              <Button variant="primary" icon={Send} busy={running} disabled={plan.send.length === 0} onClick={handleResume}>
-                {plan.send.length > 0 ? `Email ${plan.send.length === 1 ? '1 nurse' : `${plan.send.length} nurses`}` : 'Nobody to email'}
+              {/* With nobody left who can be emailed, the send is recorded as finished, so the notice goes. */}
+              <Button variant="primary" icon={plan.send.length > 0 ? Send : undefined} busy={running} onClick={handleResume}>
+                {plan.send.length > 0 ? `Email ${plan.send.length === 1 ? '1 nurse' : `${plan.send.length} nurses`}` : 'Record as finished'}
               </Button>
             </>
           )

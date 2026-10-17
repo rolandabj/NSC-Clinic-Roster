@@ -139,6 +139,8 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     nurseTokens?: Record<string, string>;
     logId: string;
     recipients: EmailRecipientLog[];
+    /** This dialog's claim on the email log; a resume elsewhere replaces it (resumePublish.ts). */
+    claim?: string;
   } | null>(null);
 
   // Email Config
@@ -490,8 +492,10 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         status: 'WAITING' as const,
         ackToken: `ack-${uuidv4()}`,
       }));
+    run.claim = `publish-${uuidv4()}`;
     const pubLog: PublishLog = {
       id: logId,
+      claim: run.claim,
       scheduleId: schedule.id,
       versionId,
       kind: publishKind,
@@ -544,6 +548,12 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     const run = runRef.current!;
     let done = 0;
     for (const nurse of targetNurses) {
+      // If this tab slept long enough for a resume to take the send over, it stops here, so no
+      // nurse gets the email twice.
+      const current = await repo.get('emailLog', run.logId).catch(() => null);
+      if (current?.claim && run.claim && current.claim !== run.claim) {
+        throw new Error('Sending was taken over from another screen (Resume sending). See Sent rosters for who was emailed.');
+      }
       // The token listed for the nurse before sending (a nurse added on a retry gets a new one).
       const ackToken = run.recipients.find((r) => r.nurseId === nurse.id)?.ackToken || `ack-${uuidv4()}`;
       let recipientLog: EmailRecipientLog;

@@ -122,3 +122,48 @@ test('a send that is no longer stopped is not resumed twice', async () => {
     /already finished/
   );
 });
+
+// Checkpoint 7 review: no second resume while one runs, a notice that can always be cleared.
+
+const resumeOpts = { actor: 'Ana', clinicName: 'Test Clinic', emailConfig: { ...DEFAULT_EMAIL_SETTINGS, mockMode: true } };
+
+test('a send with news in the last 3 minutes is not resumed (another screen is sending it)', async () => {
+  const { repo } = fakeRepo({ emailLog: [stopped({ updatedAt: new Date().toISOString() })] });
+  await assert.rejects(runResume(repo, 'pub-1', resumeOpts), /is still being sent/);
+});
+
+test('a resume stops when another screen takes the send over', async () => {
+  const schedule = makeSchedule({ status: 'PUBLISHED', activeVersionNumber: 2 });
+  const version = { id: 'v2', scheduleId: schedule.id, number: 2, timestamp: '2026-10-17T08:00:00.000Z', author: 'Ana', note: '', snapshot: { schedule, assignments: [], leaveEntries: [], locks: [], rulesSnapshot: [] }, isPublished: true };
+  const { repo, col } = fakeRepo({ schedules: [schedule], versions: [version], nurses: ['a', 'b', 'c', 'd', 'e'].map((id) => makeNurse(id)), emailLog: [stopped()] });
+  let emailed = 0;
+  await runResume(repo, 'pub-1', {
+    ...resumeOpts,
+    onProgress: () => {
+      emailed++;
+      // Another screen claims the send after the first email.
+      if (emailed === 1) col('emailLog').set('pub-1', { ...col('emailLog').get('pub-1'), claim: 'someone-else' });
+    },
+  });
+  assert.equal(emailed, 1, 'only the first email went from this screen');
+});
+
+test('a send with nobody left who can be emailed is recorded as finished', async () => {
+  const schedule = makeSchedule({ status: 'PUBLISHED', activeVersionNumber: 2 });
+  const version = { id: 'v2', scheduleId: schedule.id, number: 2, timestamp: '2026-10-17T08:00:00.000Z', author: 'Ana', note: '', snapshot: { schedule, assignments: [], leaveEntries: [], locks: [], rulesSnapshot: [] }, isPublished: true };
+  const nurses = [makeNurse('a'), makeNurse('b'), makeNurse('c', { active: false }), makeNurse('d', { gmail: '' })];
+  const { repo, col } = fakeRepo({ schedules: [schedule], versions: [version], nurses, emailLog: [stopped()] });
+  const result = await runResume(repo, 'pub-1', resumeOpts);
+  assert.equal(result.sent, 0);
+  assert.notEqual(col('emailLog').get('pub-1').status, 'SENDING');
+  assert.equal([...col('audit').values()].length, 1);
+});
+
+test('a send whose version or roster was deleted is closed, not left stopped', async () => {
+  const { repo, col } = fakeRepo({ nurses: ['a', 'b', 'c', 'd', 'e'].map((id) => makeNurse(id)), emailLog: [stopped()] });
+  const result = await runResume(repo, 'pub-1', resumeOpts);
+  const log = col('emailLog').get('pub-1');
+  assert.equal(result.sent, 0);
+  assert.equal(log.status, 'PARTIAL');
+  assert.match(log.recipients.find((r: any) => r.nurseId === 'd').errorMessage, /deleted/);
+});

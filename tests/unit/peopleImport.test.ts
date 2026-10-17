@@ -67,3 +67,10 @@ test("a doctor's usual week is read from the file, not made up", () => {
     '"Funday 9-1" is not a clinic like Sun 09:00-13:00 Room 1',
   ]);
 });
+
+test('two doctor rows with the same email are refused (Checkpoint 7)', () => {
+  const text = 'Name,Email,Specialties\nDr Ana,ana@x.com,ENT\nDr Ann,ana@x.com,ENT';
+  const rows = readDoctorRows(text, { specialties: [{ id: 'ent', name: 'ENT', code: 'ENT' }], doctors: [] });
+  assert.equal(rows[0].problems.length, 0);
+  assert.ok(rows[1].problems.some((p) => /row 1 already has the email ana@x\.com/i.test(p)), rows[1].problems.join(' | '));
+});

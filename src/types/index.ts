@@ -435,6 +435,8 @@ export interface PublishLog {
   /** The message to all nurses and the share link token, so a resumed publish sends the same email. */
   message?: string;
   shareToken?: string;
+  /** Which screen is sending: a resume writes its own, and a screen whose claim was replaced stops. */
+  claim?: string;
 }
 
 // 19. Acknowledgment

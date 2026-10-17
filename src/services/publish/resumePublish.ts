@@ -7,7 +7,9 @@
  * email. A publish that stops partway (the tab closed, the computer slept) leaves the rest
  * Waiting. Later, the roster screen and Sent rosters offer Resume: it emails only the nurses
  * still waiting or not sent, from the same version (no new version), with the same confirm
- * links, and then writes the audit entry the stopped publish never wrote.
+ * links, and then writes the audit entry the stopped publish never wrote. A resume claims the
+ * send first, so a second screen (or the publish's own tab waking up) does not email the same
+ * nurses again.
  */
 
 import { IRepository } from '../repository/IRepository';
@@ -104,8 +106,14 @@ export async function runResume(repo: IRepository, logId: string, opts: ResumeOp
   const log = await repo.get('emailLog', logId);
   if (!log) throw new Error('This send is no longer in Sent rosters.');
   if (!isResumable(log)) throw new Error('This send has already finished or was resumed.');
-  // Claim it at once, so another screen sees it running and does not offer Resume too.
-  await repo.update('emailLog', log.id, { updatedAt: new Date().toISOString() });
+  if (Date.now() - lastNews(log) <= STOPPED_AFTER_MS) {
+    throw new Error('This send is still being sent from another screen. Try again in a few minutes if it stops.');
+  }
+  // Claim it at once: another screen then sees it running and does not offer Resume, and a screen
+  // still sending it (a tab that woke up) stops when it sees the claim is no longer its own.
+  const claim = `resume-${crypto.randomUUID()}`;
+  await repo.update('emailLog', log.id, { claim, updatedAt: new Date().toISOString() });
+  const stillMine = async () => (await repo.get('emailLog', log.id))?.claim === claim;
 
   const [schedule, version, nurses, dutyWindows, doctors, roles, specialties, leaveTypes, periods, links, versions] = await Promise.all([
     repo.get('schedules', log.scheduleId),
@@ -120,8 +128,29 @@ export async function runResume(repo: IRepository, logId: string, opts: ResumeOp
     repo.list('nurseLinks').catch(() => []),
     repo.list('versions', { field: 'scheduleId', operator: '==', value: log.scheduleId }),
   ]);
-  if (!schedule) throw new Error('The roster of this send has been deleted, so it cannot be resumed.');
-  if (!version) throw new Error('The version of this send is no longer kept, so it cannot be resumed.');
+  if (!schedule || !version) {
+    // Nothing can be sent any more: the nurses still waiting are recorded as not sent, so the
+    // notice goes and the audit says what happened.
+    const reason = !schedule ? 'The roster was deleted, so it was not sent.' : 'This version was deleted, so it was not sent.';
+    const closed = log.recipients.map((r) => (isDone(r) ? r : { ...r, status: 'FAILED' as const, errorMessage: reason }));
+    await repo.update('emailLog', log.id, {
+      recipients: recipientsForLog(closed),
+      status: overallSendStatus(closed, opts.emailConfig.mockMode),
+      updatedAt: new Date().toISOString(),
+    });
+    await repo
+      .create('audit', {
+        scheduleId: log.scheduleId,
+        actor: opts.actor,
+        action: 'PUBLISH',
+        entity: 'Schedule',
+        entityId: log.scheduleId,
+        note: `Closed a stopped send: ${reason}`,
+        timestamp: new Date().toISOString(),
+      })
+      .catch(() => {});
+    return { sent: 0, failed: closed.filter((r) => !isDone(r)).length, skipped: [], versionNumber: version?.number ?? 0 };
+  }
 
   // Changes only: the same changes as the stopped publish, from the published version before this one.
   let changesByNurse: Record<string, any[]> = {};
@@ -146,7 +175,12 @@ export async function runResume(repo: IRepository, logId: string, opts: ResumeOp
   let recipients = [...log.recipients];
   let sent = 0;
   let failed = 0;
+  let takenOver = false;
   for (const { nurse, ackToken } of plan.send) {
+    if (!(await stillMine())) {
+      takenOver = true;
+      break;
+    }
     let result: EmailRecipientLog;
     try {
       const email = RosterPublishService.generatePersonalEmailHtml({
@@ -187,6 +221,8 @@ export async function runResume(repo: IRepository, logId: string, opts: ResumeOp
       .catch(() => {});
     opts.onProgress?.(sent + failed, plan.send.length);
   }
+  // Another screen took the send over: it records the rest and writes the audit entry.
+  if (takenOver) return { sent, failed, skipped: [], versionNumber: version.number };
   // Nurses who can't be emailed now are recorded as not sent, with the reason.
   recipients = recipients.map((r) => {
     const skip = plan.skipped.find((s) => s.nurseId === r.nurseId);

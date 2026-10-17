@@ -75,6 +75,33 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   check('Sent rosters says sending stopped after 0 of 1 nurse', (await page.getByText(/^Sending stopped after 0 of 1 nurse/).count()) === 1);
   check('and offers Resume sending', (await page.getByRole('button', { name: 'Resume sending' }).count()) === 1);
 
+  // 3b. Checkpoint 7: when nobody waiting can be emailed any more, the send is recorded as finished.
+  await page.getByRole('button', { name: 'Resume sending' }).click();
+  const d2 = page.getByRole('dialog', { name: 'Resume sending?' });
+  await d2.getByRole('button', { name: 'Email 1 nurse' }).click();
+  await d2.getByRole('button', { name: 'Done' }).waitFor({ timeout: 60000 });
+  await d2.getByRole('button', { name: 'Done' }).click();
+  await page.evaluate(() => {
+    const ago = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    window.__repo.col('emailLog').set('pub-ghost', {
+      id: 'pub-ghost', scheduleId: 'nov', versionId: 'v-nov-1', kind: 'PUBLISH', status: 'SENDING', sentAt: ago, updatedAt: ago,
+      recipients: [{ email: 'gone@example.com', nurseId: 'gone', nurseName: 'Gone', subject: '', bodyPreview: '', fullBodyHtml: '', status: 'WAITING', ackToken: 'ack-gone' }],
+    });
+  });
+  await page.getByRole('link', { name: 'Dashboard' }).first().click();
+  await page.waitForTimeout(500);
+  await page.getByRole('link', { name: 'Sent rosters' }).first().click();
+  await page.getByRole('heading', { name: 'Sent rosters', level: 1 }).waitFor({ timeout: 10000 });
+  await page.waitForTimeout(1200);
+  await page.getByRole('button', { name: 'Resume sending' }).click();
+  const d3 = page.getByRole('dialog', { name: 'Resume sending?' });
+  check('nobody left to email offers Record as finished', /Gone: no longer listed/.test(await d3.innerText()) && (await d3.getByRole('button', { name: 'Record as finished' }).isEnabled()));
+  await d3.getByRole('button', { name: 'Record as finished' }).click();
+  await d3.getByRole('button', { name: 'Done' }).waitFor({ timeout: 30000 });
+  await d3.getByRole('button', { name: 'Done' }).click();
+  await page.waitForTimeout(800);
+  check('and the notice goes', (await page.getByText(/^Sending stopped after/).count()) === 0 && (await col('emailLog')).find((l) => l.id === 'pub-ghost').status === 'FAILED');
+
   // 4. A new publish lists every nurse before sending, each with a receipt token.
   await page.goto(`${base}/?view=app&seed=clean#schedules?roster=nov`);
   await page.waitForSelector('[data-cell="amy|2026-11-18"]', { timeout: 60000 });
