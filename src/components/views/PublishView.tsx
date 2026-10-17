@@ -19,6 +19,7 @@ import { RosterPublishService } from '../../services/publish/rosterPublishServic
 import { ensurePublicRosters } from '../../services/publish/publicRosterService';
 import { ensureNurseLink, regenerateNurseLink, syncNurseRosters, nurseLinkUrl } from '../../services/publish/nurseRosterService';
 import { emailKindLabel, sendResult } from '../../services/publish/sentRosters';
+import { ResumePublish } from '../publish/ResumePublish';
 import { canEditClinicData } from '../../services/auth/access';
 import { authService } from '../../services/auth/authService';
 import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
@@ -187,7 +188,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       versionId: ack.versionId,
       kind: 'REMINDER',
       recipients: [recipientLog],
-      status: recipientLog.status === 'FAILED' ? 'FAILED' : recipientLog.status,
+      status: recipientLog.status === 'SENT' ? 'SENT' : recipientLog.status === 'MOCK_SENT' ? 'MOCK_SENT' : 'FAILED',
       sentAt: nowIso,
     });
     if (recipientLog.status === 'FAILED') throw new Error(recipientLog.errorMessage || 'The email could not be sent.');
@@ -475,6 +476,18 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
 
       {loadState === 'ready' && (
         <>
+          {canEdit && activeSchedule && (
+            <ResumePublish
+              scheduleId={activeSchedule.id}
+              scheduleName={activeSchedule.name}
+              clinicName={context.clinicName}
+              actor={context.currentUser?.name || context.currentUser?.email || 'Planner'}
+              onResumed={() => {
+                loadData();
+                loadSends();
+              }}
+            />
+          )}
           <Notice tone="info" title="Rosters are published from the roster screen">
             Open the roster, then Publish. This screen shows what was sent and who has confirmed they have seen it.
           </Notice>

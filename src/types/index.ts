@@ -414,8 +414,11 @@ export interface EmailRecipientLog {
   fullBodyHtml: string;
   /** The email was sent, but its body was left out of the log to keep the record under Firestore's size limit. */
   htmlNotKept?: boolean;
-  status: EmailLogStatus;
+  /** WAITING: listed before sending, not emailed yet (a publish that stops leaves the rest waiting). */
+  status: EmailLogStatus | 'WAITING';
   errorMessage?: string;
+  /** The receipt token made before sending, so a resumed publish sends the same confirm link. */
+  ackToken?: string;
 }
 
 export interface PublishLog {
@@ -427,6 +430,11 @@ export interface PublishLog {
   providerMessageId?: string;
   status: EmailLogStatus;
   sentAt: string;
+  /** Set after each email, so a publish with no news for a while is known to have stopped. */
+  updatedAt?: string;
+  /** The message to all nurses and the share link token, so a resumed publish sends the same email. */
+  message?: string;
+  shareToken?: string;
 }
 
 // 19. Acknowledgment

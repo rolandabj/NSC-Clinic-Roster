@@ -39,6 +39,7 @@ import { ScheduleValidator, ValidationReport } from '../../services/validation/S
 import { computeScheduleDiff, ScheduleVersionDiff } from '../../services/history/diffEngine';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { recipientsForLog } from '../../services/publish/emailLogSize';
+import { overallSendStatus } from '../../services/publish/resumePublish';
 import { EmailSettingsConfig } from '../../types/settings';
 import { getRepository } from '../../services/repository';
 import { syncPublicRoster } from '../../services/publish/publicRosterService';
@@ -377,13 +378,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
 
   // --- PUBLISH AND SEND ---
   /** Overall result of a send, from each recipient's result. */
-  const overallStatus = (list: EmailRecipientLog[]): PublishLog['status'] => {
-    if (list.length === 0) return emailConfig.mockMode ? 'MOCK_SENT' : 'SENT';
-    const failed = list.filter((r) => r.status === 'FAILED').length;
-    if (failed === list.length) return 'FAILED';
-    if (failed > 0) return 'PARTIAL';
-    return list.every((r) => r.status === 'MOCK_SENT') ? 'MOCK_SENT' : 'SENT';
-  };
+  const overallStatus = (list: EmailRecipientLog[]): PublishLog['status'] => overallSendStatus(list, emailConfig.mockMode);
 
   /**
    * Saves the published version, share links and an email log once per publish.
@@ -478,20 +473,36 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       addWarning(`Nurse private pages couldn't be updated (${nurseErr?.message || nurseErr}). Open Publish, Private links, to update them.`);
     }
 
-    // The log is written before sending, and updated after each email, so an interrupted
-    // publish still shows who was emailed.
+    // The log is written before sending with every nurse to email as Waiting, each with the
+    // receipt token made now, and updated after each email. A publish that stops partway (a
+    // closed tab) can then be resumed later to the nurses still waiting (resumePublish.ts).
     const logId = `pub-${schedule.id}-${Date.now()}`;
+    run.shareToken = includeLink ? publicLink?.token : undefined;
+    run.recipients = nurses
+      .filter((n) => selectedNurseIds.has(n.id))
+      .map((n) => ({
+        email: n.gmail,
+        nurseId: n.id,
+        nurseName: n.fullName,
+        subject: '',
+        bodyPreview: '',
+        fullBodyHtml: '',
+        status: 'WAITING' as const,
+        ackToken: `ack-${uuidv4()}`,
+      }));
     const pubLog: PublishLog = {
       id: logId,
       scheduleId: schedule.id,
       versionId,
       kind: publishKind,
-      recipients: [],
+      recipients: run.recipients,
       status: 'SENDING',
       sentAt: nowIso,
+      updatedAt: new Date().toISOString(),
+      ...(generalBroadcastNote.trim() ? { message: generalBroadcastNote.trim() } : {}),
+      ...(run.shareToken ? { shareToken: run.shareToken } : {}),
     };
     await repo.create('emailLog', pubLog);
-    run.shareToken = includeLink ? publicLink?.token : undefined;
     run.logId = logId;
     return run;
   };
@@ -533,7 +544,8 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     const run = runRef.current!;
     let done = 0;
     for (const nurse of targetNurses) {
-      const ackToken = `ack-${uuidv4()}`;
+      // The token listed for the nurse before sending (a nurse added on a retry gets a new one).
+      const ackToken = run.recipients.find((r) => r.nurseId === nurse.id)?.ackToken || `ack-${uuidv4()}`;
       let recipientLog: EmailRecipientLog;
       try {
         const payload = RosterPublishService.generatePersonalEmailHtml({
@@ -592,7 +604,10 @@ export const PublishModal: React.FC<PublishModalProps> = ({
           errorMessage: err?.message || String(err),
         };
       }
-      run.recipients = [...run.recipients.filter((r) => r.nurseId !== nurse.id), recipientLog];
+      recipientLog = { ...recipientLog, ackToken };
+      run.recipients = run.recipients.some((r) => r.nurseId === nurse.id)
+        ? run.recipients.map((r) => (r.nurseId === nurse.id ? recipientLog : r))
+        : [...run.recipients, recipientLog];
       const ok = recipientLog.status !== 'FAILED';
       logs.push(
         ok
@@ -603,7 +618,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       done++;
       setProgressPercent(Math.round((done / Math.max(1, targetNurses.length)) * 100));
       try {
-        await repo.update('emailLog', run.logId, { recipients: recipientsForLog(run.recipients), status: 'SENDING' });
+        await repo.update('emailLog', run.logId, { recipients: recipientsForLog(run.recipients), status: 'SENDING', updatedAt: new Date().toISOString() });
       } catch {
         // the final update below tries again
       }
@@ -615,7 +630,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   const finishSend = async (isRetry = false) => {
     const run = runRef.current!;
     const status = overallStatus(run.recipients);
-    await repo.update('emailLog', run.logId, { recipients: recipientsForLog(run.recipients), status });
+    await repo.update('emailLog', run.logId, { recipients: recipientsForLog(run.recipients), status, updatedAt: new Date().toISOString() });
     setSendResults([...run.recipients]);
     setCurrentStep('DONE');
     if (isRetry) {
@@ -648,7 +663,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       setEmailIssue('');
       const sendingConfig = await prepareEmail();
       if (!runRef.current?.logId) await savePublish(logs);
-      const sentIds = new Set(runRef.current?.recipients.filter(r => r.status !== 'FAILED').map(r => r.nurseId));
+      const sentIds = new Set(runRef.current?.recipients.filter((r) => r.status === 'SENT' || r.status === 'MOCK_SENT').map((r) => r.nurseId));
       await sendTo(nurses.filter((n) => selectedNurseIds.has(n.id) && !sentIds.has(n.id)), logs, sendingConfig);
       await finishSend();
     } catch (err: any) {
@@ -669,7 +684,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     const run = runRef.current;
     if (!run) return;
     sendingRef.current = true;
-    const doneIds = new Set(run.recipients.filter((r) => r.status !== 'FAILED').map((r) => r.nurseId));
+    const doneIds = new Set(run.recipients.filter((r) => r.status === 'SENT' || r.status === 'MOCK_SENT').map((r) => r.nurseId));
     const retry = nurses.filter((n) => selectedNurseIds.has(n.id) && !doneIds.has(n.id));
     setCurrentStep('SENDING');
     setProgressPercent(0);
@@ -722,7 +737,9 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       return next;
     });
   const nursesWord = (n: number) => `${n} ${n === 1 ? 'nurse' : 'nurses'}`;
-  const failedCount = sendResults.filter((r) => r.status === 'FAILED').length;
+  // Not sent: failed, or still waiting because sending stopped.
+  const notSent = (r: EmailRecipientLog) => r.status === 'FAILED' || r.status === 'WAITING';
+  const failedCount = sendResults.filter(notSent).length;
 
   const footer = (() => {
     switch (currentStep) {
@@ -1115,9 +1132,9 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         {currentStep === 'DONE' &&
           createdVersion &&
           (() => {
-            const failed = sendResults.filter((r) => r.status === 'FAILED');
+            const failed = sendResults.filter(notSent);
             const sent = sendResults.length - failed.length;
-            const testMode = sendResults.length > 0 && sendResults.every((r) => r.status === 'MOCK_SENT' || r.status === 'FAILED') && sent > 0;
+            const testMode = sendResults.length > 0 && sendResults.every((r) => r.status === 'MOCK_SENT' || notSent(r)) && sent > 0;
             const emails = (n: number) => `${n} ${n === 1 ? 'email' : 'emails'}`;
             return (
               <div className="space-y-3">
@@ -1139,7 +1156,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                     <ul className="list-disc space-y-0.5 pl-5">
                       {failed.map((r) => (
                         <li key={r.nurseId}>
-                          {r.nurseName} ({r.email || 'no email'}): {r.errorMessage || 'unknown error'}
+                          {r.nurseName} ({r.email || 'no email'}): {r.status === 'WAITING' ? 'not sent yet' : r.errorMessage || 'unknown error'}
                         </li>
                       ))}
                     </ul>

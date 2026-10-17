@@ -77,6 +77,7 @@ import { VersionCompareModal } from '../modals/VersionCompareModal';
 import { ExportModal } from '../modals/ExportModal';
 import { ShareModal } from '../modals/ShareModal';
 import { PublishModal } from '../modals/PublishModal';
+import { ResumePublish } from '../publish/ResumePublish';
 import { FairnessModal } from '../modals/FairnessModal';
 import { TemplateModal } from '../modals/TemplateModal';
 import { SwapManagerModal } from '../modals/SwapManagerModal';
@@ -246,6 +247,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  // Counts publishes, so the stopped publish notice looks again after one.
+  const [publishRuns, setPublishRuns] = useState(0);
   const [publishWizardMode, setPublishWizardMode] = useState<'PUBLISH' | 'CHANGE'>('PUBLISH');
   const [isSchedulePickerOpen, setIsSchedulePickerOpen] = useState(false);
   const [isDeleteScheduleModalOpen, setIsDeleteScheduleModalOpen] = useState(false);
@@ -1658,6 +1661,20 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       {/* Steps: where this roster is, and the next thing to do */}
       {activeSchedule && !isPhone && <RosterSteps steps={steps} onStep={onStep} />}
 
+      {/* A publish of this roster that stopped partway, with Resume (Phase 7, slice 7). */}
+      {activeSchedule && !isPhone && (
+        <div className="mx-4 mt-2 empty:hidden">
+          <ResumePublish
+            key={`${activeSchedule.id}-${publishRuns}`}
+            scheduleId={activeSchedule.id}
+            scheduleName={activeSchedule.name}
+            clinicName={context.clinicName}
+            actor={context.currentUser?.name || context.currentUser?.email || 'Planner'}
+            onResumed={() => loadData()}
+          />
+        </div>
+      )}
+
       {remoteChange && (
         <div role="status" className="mx-4 mt-2 rounded border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 flex flex-wrap items-center justify-between gap-2">
           <span>Someone else changed this roster, and your last change isn't saved yet. Use Retry now at the top to save it, then Reload to see their change.</span>
@@ -2120,6 +2137,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           onClose={() => setIsPublishModalOpen(false)}
           onPublishComplete={() => {
             loadData();
+            setPublishRuns((n) => n + 1);
             triggerToast('Roster published.');
           }}
           initialMode={publishWizardMode}
