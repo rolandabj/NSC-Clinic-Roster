@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 17-10-2026, after UI overhaul Phase 8, slice 1c (section 16, item 96): Settings, Rules saved only by Save. Pushed to the working branch; main waits for the owner's word.
+Last updated: 17-10-2026, after UI overhaul Phase 8, slice 1c (section 16, item 96): Settings, Rules saved only by Save. The owner approved pushing items 94 to 96 (Phase 8, slices 1a to 1c) to main on 18-10-2026; main is at the commit that records this. Slice 1d (Time periods) comes next.
 
 ---
 
