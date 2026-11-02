@@ -72,8 +72,13 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
     await page.waitForTimeout(600);
     check('the holiday date typed as DD-MM-YYYY is saved', await page.evaluate(() => [...window.__repo.col('holidays').values()].some((h) => h.name === 'Test Day' && h.date === '2026-12-02')));
   }
-  d = await open('working-hours-periods', /^Add Dedicated Period/, 'New time period');
+  d = await open('working-hours-periods', /^New time period/, 'New time period');
   if (d) {
+    // Phase 8, slice 1d: with no periods, a new one starts on the next 19th (it always said 19-01-2026).
+    const now = new Date();
+    const n19 = new Date(now.getFullYear(), now.getMonth() + (now.getDate() > 19 ? 1 : 0), 19);
+    const want = `19-${String(n19.getMonth() + 1).padStart(2, '0')}-${n19.getFullYear()}`;
+    check('a new period starts at the next cycle', (await d.getByLabel('First day').inputValue()) === want, `${await d.getByLabel('First day').inputValue()} (expected ${want})`);
     await d.getByLabel('Year', { exact: true }).fill('2027');
     await d.getByLabel('Name', { exact: true }).fill('Test');
     await d.getByLabel('First day').fill('10-01-2027');

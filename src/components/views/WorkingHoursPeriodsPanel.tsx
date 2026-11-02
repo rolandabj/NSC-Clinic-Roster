@@ -9,33 +9,16 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  CalendarRange,
-  Clock,
-  Plus,
-  Edit2,
-  Trash2,
-  RefreshCw,
-  AlertTriangle,
-  Info,
-  Calendar,
-  Layers,
-  Calculator,
-  RotateCcw,
-  X,
-  Check,
-  ArrowRight,
-  Sparkles,
-} from 'lucide-react';
+import { Plus, Edit2, Trash2, RotateCcw, Check } from 'lucide-react';
 import { WorkingHoursPeriod } from '../../types';
-import { Button, DateInput, Dialog, Field, Input, Notice } from '../ui';
+import { Button, DataTable, DateInput, Dialog, EmptyState, ErrorState, Field, IconButton, Input, LoadingState, Notice, Select, type Column } from '../ui';
+import { nextPeriodDefaults } from '../../services/hours/nextPeriod';
 import { formatDate } from '../../utils/dateUtils';
 import { getRepository } from '../../services/repository';
 import { SEED_WORKING_HOURS_PERIODS } from '../../services/seed/seedData';
 import {
   calculateWorkingHoursForDateRange,
   getInclusiveDays,
-  getPeriodDailyRate,
 } from '../../services/periods/workingHoursPeriodService';
 import { localTodayIso } from '../../utils/dateUtils';
 import { notify, type NoticeTone } from '../common/dialogs';
@@ -128,19 +111,30 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
       const prevEnd = sortedPeriods.slice(0, i).reduce((max, p) => (p.endDate > max ? p.endDate : max), '');
       const next = sortedPeriods[i];
       if (next.startDate > dayAfter(prevEnd)) {
-        warnings.push(`No period covers ${dayAfter(prevEnd)} to ${dayBefore(next.startDate)}.`);
+        warnings.push(`No period covers ${formatDate(dayAfter(prevEnd))} to ${formatDate(dayBefore(next.startDate))}.`);
       }
     }
     const today = localTodayIso();
     const lastEnd = sortedPeriods.reduce((max, p) => (p.endDate > max ? p.endDate : max), '');
     const soon = localTodayIso(90);
-    if (!lastEnd) warnings.push('There are no dedicated periods, so rosters will use their own hours targets.');
+    if (!lastEnd) warnings.push('There are no time periods, so each roster uses its own goal hours.');
     else if (lastEnd < soon) {
       warnings.push(
-        `${lastEnd < today ? 'The periods ended' : 'The periods end'} on ${lastEnd}. Add the next ones; dates after that will use each roster's own hours target.`
+        `${lastEnd < today ? 'The periods ended' : 'The periods end'} on ${formatDate(lastEnd)}. Add the next ones; dates after that use each roster's own goal hours.`
       );
     }
     return warnings;
+  }, [sortedPeriods]);
+
+  // The tester starts on the period that holds today (or the latest one), once the periods load.
+  const testerSet = React.useRef(false);
+  useEffect(() => {
+    if (testerSet.current || sortedPeriods.length === 0) return;
+    testerSet.current = true;
+    const today = localTodayIso();
+    const current = sortedPeriods.find((p) => p.startDate <= today && p.endDate >= today) || sortedPeriods[sortedPeriods.length - 1];
+    setTestStartDate(current.startDate);
+    setTestEndDate(current.endDate);
   }, [sortedPeriods]);
 
   // Interactive Prorating Test Result
@@ -149,13 +143,16 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
   }, [testStartDate, testEndDate, sortedPeriods]);
 
   // Open Create Modal
+  // A new period starts at the next cycle (the day after the latest one ends); it always started
+  // at 19-01-2026 before (Phase 8, slice 1d). The hours are left for the planner to type.
   const handleOpenCreateModal = () => {
+    const next = nextPeriodDefaults(periods, localTodayIso());
     setEditingPeriodId(null);
-    setFormYear('2026');
-    setFormName('');
-    setFormStartDate('2026-01-19');
-    setFormEndDate('2026-02-18');
-    setFormWorkingHours(220);
+    setFormYear(next.year);
+    setFormName(next.name);
+    setFormStartDate(next.startDate);
+    setFormEndDate(next.endDate);
+    setFormWorkingHours('');
     setFormNote('');
     setFormError(null);
     setIsModalOpen(true);
@@ -238,7 +235,7 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
         });
 
         setPeriods((prev) => prev.map((p) => (p.id === editingPeriodId ? updated : p)));
-        showToast(`Period "${trimmedName}" updated successfully.`);
+        showToast(`Period "${trimmedName}" updated.`);
       } else {
         // Create
         const newId = `whp-${trimmedYear.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${trimmedName.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now().toString().slice(-4)}`;
@@ -256,13 +253,13 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
         });
 
         setPeriods((prev) => [...prev, created]);
-        showToast(`Created period "${trimmedName}" (${hours}h).`);
+        showToast(`Period "${trimmedName}" added (${hours} h).`);
       }
 
       setIsModalOpen(false);
     } catch (err: any) {
       console.error('Error saving working hours period:', err);
-      setFormError(err.message || 'Failed to save dedicated time period.');
+      setFormError(err.message || 'The time period could not be saved.');
     } finally {
       setIsSaving(false);
     }
@@ -301,12 +298,10 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
       setPeriods(reloaded);
       setIsRestoreConfirmOpen(false);
       const skipped = SEED_WORKING_HOURS_PERIODS.length - toAdd.length;
-      showToast(
-        `Loaded ${toAdd.length} standard periods.${skipped ? ` ${skipped} skipped because they overlap your own periods.` : ''}`
-      );
+      showToast(`${toAdd.length} usual periods loaded.${skipped ? ` ${skipped} left out because they overlap your own periods.` : ''}`);
     } catch (err) {
       console.error('Failed to restore standard periods:', err);
-      showToast('Error loading standard periods.', 'error');
+      showToast('The usual periods could not be loaded.', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -321,341 +316,157 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
     return formDurationDays > 0 ? (hours / formDurationDays).toFixed(2) : '0';
   }, [formWorkingHours, formDurationDays]);
 
+  // The hours of any dates (the tester), in words.
+  const testWords = (() => {
+    const t = testCalculation;
+    if (!testStartDate || !testEndDate || testEndDate < testStartDate) return 'Pick a first and a last day.';
+    if (t.isExactMatch && t.breakdown[0]) return `Exactly the period ${t.breakdown[0].periodName}.`;
+    if (t.fallbackDays === t.totalScheduleDays) return 'No time period covers these dates, so a roster on them uses its own goal hours.';
+    const parts = t.breakdown.map((b) => `${b.daysCovered} of the ${b.periodTotalDays} days of ${b.periodName}`).join(', and ');
+    return `${parts}.${t.fallbackDays > 0 ? ` ${t.fallbackDays === 1 ? '1 day is' : `${t.fallbackDays} days are`} in no period and add no hours.` : ''}`;
+  })();
+  const fmtHours = (h: number) => `${Math.round(h * 10) / 10} h`;
+
+  const periodColumns: Column<WorkingHoursPeriod>[] = [
+    {
+      key: 'name',
+      header: 'Period',
+      cell: (p) => (
+        <span>
+          <span className="block whitespace-nowrap font-semibold text-ink">
+            {p.name} <span className="font-normal text-ink-muted">{p.year}</span>
+          </span>
+          {p.note && <span className="block text-xs text-ink-muted">{p.note}</span>}
+        </span>
+      ),
+      sortValue: (p) => p.startDate,
+      phone: 'title',
+    },
+    {
+      key: 'dates',
+      header: 'Dates',
+      cell: (p) => (
+        <span className="whitespace-nowrap">
+          {formatDate(p.startDate)} to {formatDate(p.endDate)}
+        </span>
+      ),
+      sortValue: (p) => p.startDate,
+    },
+    { key: 'days', header: 'Days', align: 'right', cell: (p) => getInclusiveDays(p.startDate, p.endDate), sortValue: (p) => getInclusiveDays(p.startDate, p.endDate) },
+    { key: 'goal', header: 'Goal, full time', align: 'right', cell: (p) => <span className="font-semibold text-ink">{fmtHours(p.workingHours)}</span>, sortValue: (p) => p.workingHours },
+    { key: 'half', header: 'Half time', align: 'right', cell: (p) => fmtHours(p.workingHours * 0.5), sortValue: (p) => p.workingHours },
+    {
+      key: 'actions',
+      header: 'Actions',
+      hideHeader: true,
+      phone: 'actions',
+      align: 'right',
+      cell: (p) => (
+        <span className="inline-flex gap-1">
+          <IconButton label={`Change ${p.name} ${p.year}`} icon={Edit2} onClick={() => handleOpenEditModal(p)} />
+          <IconButton label={`Delete ${p.name} ${p.year}`} icon={Trash2} onClick={() => setDeletingPeriod(p)} />
+        </span>
+      ),
+    },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Header & Action Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+    <div className="space-y-5 text-sm">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
-              <CalendarRange className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Dedicated Time Periods & Working Hours</h2>
-              <p className="text-xs text-slate-500">
-                Configure cycle-specific working hours (e.g. 19th-to-18th cycles) and contract baselines. The engine references these numbers and prorates schedules of any duration.
-              </p>
-            </div>
-          </div>
+          <h2 className="text-lg font-semibold text-ink">Time periods</h2>
+          <p className="mt-1 max-w-2xl text-ink-muted">
+            The clinic's cycles (for example 19 January to 18 February) and the goal hours of a full time nurse in each. A roster across two
+            periods takes its share of each.
+          </p>
         </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setIsRestoreConfirmOpen(true)}
-            disabled={!!loadError || isLoading}
-            className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Load all 12 standard periods from 2025-2026 clinic roster baseline"
-          >
-            <RotateCcw className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-            <span>Load 2025–2026 Baseline</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleOpenCreateModal}
-            disabled={!!loadError || isLoading}
-            className="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Add Dedicated Period</span>
-          </button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button icon={RotateCcw} disabled={!!loadError || isLoading} onClick={() => setIsRestoreConfirmOpen(true)}>
+            Load the usual periods
+          </Button>
+          <Button variant="primary" icon={Plus} disabled={!!loadError || isLoading} onClick={handleOpenCreateModal}>
+            New time period
+          </Button>
         </div>
       </div>
 
       {loadError && (
-        <div role="alert" className="p-3 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 text-xs">
-          The time periods could not be loaded ({loadError}). Refresh the page to try again.
-        </div>
+        <ErrorState title="The time periods could not be loaded">
+          {loadError}. Refresh the page to try again.
+        </ErrorState>
       )}
 
       {!isLoading && !loadError && coverageWarnings.length > 0 && (
-        <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-xs space-y-1">
-          <p className="font-semibold">Dedicated periods set the target for covered dates. A roster that no period covers uses its own target; in a roster that a period covers only in part, the dates outside the period add no hours.</p>
-          <ul className="list-disc pl-5 space-y-0.5">
+        <Notice tone="warning" title="Some dates have no time period">
+          <p>A roster on dates that no period covers uses its own goal hours. If a roster only partly falls in a period, the dates outside it add no hours.</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-5">
             {coverageWarnings.map((w) => (
               <li key={w}>{w}</li>
             ))}
           </ul>
-        </div>
+        </Notice>
       )}
 
-      {/* Main Content Layout: Periods Table + Live Prorating Tester */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Left 2 Cols: Table and Filters */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Filters Bar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200">
-            <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mr-1">Year:</span>
-              <button
-                type="button"
-                onClick={() => setYearFilter('ALL')}
-                className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors cursor-pointer ${
-                  yearFilter === 'ALL'
-                    ? 'bg-indigo-600 text-white shadow-2xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                All
-              </button>
-              {availableYears.map((yr) => (
-                <button
-                  key={yr}
-                  type="button"
-                  onClick={() => setYearFilter(yr)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors cursor-pointer whitespace-nowrap ${
-                    yearFilter === yr
-                      ? 'bg-indigo-600 text-white shadow-2xs'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {yr}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Periods Table */}
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-semibold text-[11px] uppercase tracking-wider">
-                    <th className="py-2.5 px-3">Year</th>
-                    <th className="py-2.5 px-3">Dedicated Period</th>
-                    <th className="py-2.5 px-3">Calendar Date Range</th>
-                    <th className="py-2.5 px-3">Days</th>
-                    <th className="py-2.5 px-3">Daily Rate</th>
-                    <th className="py-2.5 px-3 text-right">Target (FT)</th>
-                    <th className="py-2.5 px-3 text-right">Part-Time (50%)</th>
-                    <th className="py-2.5 px-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-700">
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400">
-                        <RefreshCw className="w-4 h-4 animate-spin inline mr-2 text-indigo-500" />
-                        Loading dedicated periods...
-                      </td>
-                    </tr>
-                  ) : filteredPeriods.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="py-8 text-center text-slate-400">
-                        {loadError ? 'Could not load the periods.' : 'No periods yet. Add one, or load the standard 2025 to 2026 periods.'}
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredPeriods.map((period) => {
-                      const days = getInclusiveDays(period.startDate, period.endDate);
-                      const dailyRate = (period.workingHours / Math.max(1, days)).toFixed(2);
-                      const ptHours = (period.workingHours * 0.5).toFixed(1).replace('.0', '');
-
-                      return (
-                        <tr key={period.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="py-2.5 px-3 font-semibold text-slate-800 whitespace-nowrap">
-                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] font-mono font-medium">
-                              {period.year}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
-                            <span className="text-indigo-900">{period.name}</span>
-                            {period.note && (
-                              <span className="block text-[10px] font-normal text-slate-400 truncate max-w-xs">
-                                {period.note}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600 whitespace-nowrap">
-                            {period.startDate} <span className="text-slate-400">→</span> {period.endDate}
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-600 whitespace-nowrap">
-                            {days}d
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
-                            {dailyRate} h/d
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-bold text-indigo-700 whitespace-nowrap">
-                            {period.workingHours} hrs
-                          </td>
-                          <td className="py-2.5 px-3 text-right text-slate-600 whitespace-nowrap">
-                            {ptHours} hrs
-                          </td>
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                            <div className="flex items-center justify-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenEditModal(period)}
-                                className="p-1 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                                title="Edit dedicated period"
-                                aria-label={`Edit ${period.name}`}
-                              >
-                                <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeletingPeriod(period)}
-                                className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                                title="Delete dedicated period"
-                                aria-label={`Delete ${period.name}`}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+      <div className="space-y-5">
+        <div className="min-w-0 space-y-3">
+          {availableYears.length > 1 && (
+            <Field label="Year" className="w-full sm:w-48">
+              {(f) => (
+                <Select {...f} value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}>
+                  <option value="ALL">All years</option>
+                  {availableYears.map((yr) => (
+                    <option key={yr} value={yr}>
+                      {yr}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+          )}
+          {isLoading ? (
+            <LoadingState label="Loading the time periods…" />
+          ) : (
+            <DataTable
+              caption="Time periods"
+              rows={filteredPeriods}
+              rowKey={(p) => p.id}
+              columns={periodColumns}
+              initialSort={{ key: 'name', direction: 'ascending' }}
+              empty={
+                <EmptyState title={loadError ? 'The periods could not be loaded' : 'No time periods yet'}>
+                  {loadError ? undefined : 'Add one, or load the usual periods of 2025 and 2026.'}
+                </EmptyState>
+              }
+            />
+          )}
         </div>
 
-        {/* Right 1 Col: Interactive Prorating Calculator & Tester */}
-        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-              <Calculator className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-xs font-bold text-slate-900">Schedule Hours Tester</h3>
-              <p className="text-[11px] text-slate-500">
-                Preview exact and prorated working hours for any schedule duration.
-              </p>
-            </div>
+        <section aria-labelledby="period-tester" className="max-w-2xl space-y-3 rounded-lg border border-line p-4">
+          <div>
+            <h3 id="period-tester" className="text-base font-semibold text-ink">
+              Goal hours for any dates
+            </h3>
+            <p className="text-ink-muted">What a full time nurse's goal would be for a roster on these dates.</p>
           </div>
-
-          {/* Quick Presets Buttons */}
-          <div className="space-y-1">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
-              Quick Test Durations
-            </span>
-            <div className="grid grid-cols-3 gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setTestStartDate('2026-01-19');
-                  setTestEndDate('2026-01-23'); // 5 days
-                }}
-                className="py-1 px-1.5 text-[11px] font-medium rounded border border-slate-200 hover:bg-slate-50 text-slate-700 text-center transition-colors cursor-pointer"
-              >
-                5 Days
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setTestStartDate('2026-01-19');
-                  setTestEndDate('2026-02-01'); // 14 days (2 weeks)
-                }}
-                className="py-1 px-1.5 text-[11px] font-medium rounded border border-slate-200 hover:bg-slate-50 text-slate-700 text-center transition-colors cursor-pointer"
-              >
-                2 Weeks
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setTestStartDate('2026-01-19');
-                  setTestEndDate('2026-02-18'); // Full cycle
-                }}
-                className="py-1 px-1.5 text-[11px] font-medium rounded border border-slate-200 hover:bg-slate-50 text-slate-700 text-center transition-colors cursor-pointer"
-              >
-                Full Period
-              </button>
-            </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="From">{(f) => <DateInput {...f} value={testStartDate} onChange={setTestStartDate} />}</Field>
+            <Field label="To">{(f) => <DateInput {...f} value={testEndDate} onChange={setTestEndDate} />}</Field>
           </div>
-
-          {/* Date Pickers */}
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-1">Start Date</label>
-              <input aria-label="Start Date"
-                type="date"
-                value={testStartDate}
-                onChange={(e) => setTestStartDate(e.target.value)}
-                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono text-slate-800 bg-white"
-              />
+          <dl className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-line bg-sunken p-3">
+              <dt className="text-ink-muted">Full time</dt>
+              <dd className="text-xl font-semibold text-ink tabular-nums">{fmtHours(testCalculation.targetHours)}</dd>
             </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 mb-1">End Date</label>
-              <input aria-label="End Date"
-                type="date"
-                value={testEndDate}
-                onChange={(e) => setTestEndDate(e.target.value)}
-                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono text-slate-800 bg-white"
-              />
+            <div className="rounded-lg border border-line bg-sunken p-3">
+              <dt className="text-ink-muted">Half time</dt>
+              <dd className="text-xl font-semibold text-ink tabular-nums">{fmtHours(testCalculation.targetHours * 0.5)}</dd>
             </div>
-          </div>
-
-          {/* Test Calculation Output Card */}
-          <div className={`p-3.5 rounded-xl border text-xs space-y-2.5 ${
-            testCalculation.isExactMatch
-              ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
-              : 'bg-indigo-50/60 border-indigo-200 text-indigo-950'
-          }`}>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Calculated Target
-              </span>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                testCalculation.isExactMatch
-                  ? 'bg-emerald-200 text-emerald-800'
-                  : 'bg-indigo-200 text-indigo-800'
-              }`}>
-                {testCalculation.isExactMatch ? 'Exact Period Match' : testCalculation.fallbackDays === testCalculation.totalScheduleDays ? 'No Period Coverage' : 'Prorated Target'}
-              </span>
-            </div>
-
-            <div className="flex items-baseline justify-between">
-              <div>
-                <span className="text-2xl font-black text-slate-900 tracking-tight">
-                  {testCalculation.targetHours}
-                </span>
-                <span className="text-xs font-semibold text-slate-500 ml-1">hours (Full-Time)</span>
-              </div>
-              <div className="text-right">
-                <span className="text-xs font-bold text-slate-700">
-                  {Math.round(testCalculation.targetHours * 0.5)}h
-                </span>
-                <span className="text-[10px] text-slate-400 block">50% Part-Time</span>
-              </div>
-            </div>
-
-            <div className="text-[11px] leading-relaxed text-slate-700 bg-white/80 p-2.5 rounded-lg border border-slate-200/60 space-y-1">
-              <div className="font-semibold text-slate-900 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <span>{testCalculation.description}</span>
-              </div>
-              <div className="text-[10px] text-slate-500">
-                Duration: {testCalculation.totalScheduleDays} calendar days ({testStartDate} to {testEndDate})
-              </div>
-            </div>
-
-            {/* Breakdown detail list if multiple or prorated */}
-            {testCalculation.breakdown.length > 0 && (
-              <div className="space-y-1 pt-1">
-                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
-                  Contributing Periods:
-                </span>
-                {testCalculation.breakdown.map((item) => (
-                  <div
-                    key={item.periodId}
-                    className="flex items-center justify-between text-[11px] bg-white px-2 py-1 rounded border border-slate-200/70"
-                  >
-                    <span className="font-medium text-slate-800">
-                      {item.periodName} ({item.year})
-                    </span>
-                    <span className="font-mono text-slate-600 text-[10px]">
-                      {item.daysCovered}d × {item.periodDailyRate}h = <b>{item.contributedHours}h</b>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+          </dl>
+          <p className="text-ink" aria-live="polite">
+            {testCalculation.totalScheduleDays > 0 && `${testCalculation.totalScheduleDays === 1 ? '1 day' : `${testCalculation.totalScheduleDays} days`}. `}
+            {testWords}
+          </p>
+        </section>
       </div>
 
       {/* The three dialogs, on the shared Dialog since Phase 7, slice 4. */}
@@ -688,7 +499,7 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
             <Field label="First day">{(f) => <DateInput {...f} value={formStartDate} onChange={setFormStartDate} />}</Field>
             <Field label="Last day">{(f) => <DateInput {...f} value={formEndDate} onChange={setFormEndDate} />}</Field>
           </div>
-          <Field label="Goal hours for a full time nurse" hint={`${formDurationDays} days, about ${formDailyRate} hours a day.`}>
+          <Field label="Goal hours for a full time nurse" hint={`${formDurationDays === 1 ? '1 day' : `${formDurationDays} days`}, about ${formDailyRate} hours a day.`}>
             {(f) => <Input {...f} type="number" min={1} max={500} step={1} value={formWorkingHours} onChange={(e) => setFormWorkingHours(e.target.value)} className="w-32" />}
           </Field>
           <Field label="Note" optional hint="For example: Ramadan hours.">
@@ -721,7 +532,7 @@ export const WorkingHoursPeriodsPanel: React.FC = () => {
         open={isRestoreConfirmOpen}
         onClose={() => setIsRestoreConfirmOpen(false)}
         title="Load the usual periods of 2025 and 2026?"
-        description="This adds the 12 usual periods below. If you changed any of them, your changes are replaced by the usual hours. Other periods are kept."
+        description="This adds the usual periods below, except any that overlap your own periods. If you changed any of them, your changes are replaced by the usual hours. Other periods are kept."
         footer={
           <>
             <Button onClick={() => setIsRestoreConfirmOpen(false)}>Cancel</Button>

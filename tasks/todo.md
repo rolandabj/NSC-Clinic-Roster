@@ -71,8 +71,8 @@ Main moves only when the owner says "push to main".
 - [x] Checkpoint 7 (item 93)
 
 ## Phase 8: Settings, Reports, Audit
-- [ ] Settings sections with links and Save and Cancel (slice 1a, the frame: item 94; slice 1b, Clinic and Email with Save and Cancel: item 95; slice 1c, Rules: item 96)
-- [ ] Time periods: the new period form starts at the next cycle, not at 19-01-2026
+- [ ] Settings sections with links and Save and Cancel (slice 1a, the frame: item 94; slice 1b, Clinic and Email with Save and Cancel: item 95; slice 1c, Rules: item 96; slice 1d, Time periods: item 97)
+- [x] Time periods: the new period form starts at the next cycle, not at 19-01-2026 (item 97)
 - [ ] Reports in plain words
 - [ ] Audit paging and count queries
 - [ ] Checkpoint 8

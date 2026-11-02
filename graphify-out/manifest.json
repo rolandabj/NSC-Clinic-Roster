@@ -324,9 +324,9 @@
     "semantic_hash": ""
   },
   "src/components/views/WorkingHoursPeriodsPanel.tsx": {
-    "mtime": 1792241569.4697897,
-    "seen": 1792241594.8874142,
-    "ast_hash": "60f87958abab7324886efb593fb51b76",
+    "mtime": 1793613780.5821445,
+    "seen": 1793613866.5708544,
+    "ast_hash": "8f397df1a80b2f53bca0bc01821af2bf",
     "semantic_hash": ""
   },
   "src/components/views/settings/ClinicTab.tsx": {
@@ -618,10 +618,10 @@
     "semantic_hash": ""
   },
   "src/services/seed/seedData.ts": {
-    "mtime": 1791362587.980014,
-    "seen": 1791365225.134116,
-    "ast_hash": "18e3133587b9930afd7e4919b8ae4e2b",
-    "semantic_hash": "18e3133587b9930afd7e4919b8ae4e2b"
+    "mtime": 1793613533.0552037,
+    "seen": 1793613866.5710354,
+    "ast_hash": "a2720397458e6987fac1112d6df03f70",
+    "semantic_hash": ""
   },
   "src/services/seed/seedRunner.ts": {
     "mtime": 1791362587.9802833,
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1792310744.186906,
-    "seen": 1792310771.2135856,
-    "ast_hash": "306d875c545522a5c1f48509bd4a398a",
+    "mtime": 1793613795.8190453,
+    "seen": 1793613866.571194,
+    "ast_hash": "ca782a15cbf5a465f5ae94bf1b2c4fec",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1792268708.4444017,
-    "seen": 1792268765.2179794,
-    "ast_hash": "b2659cef0435e2b4668a046fa081d7be",
+    "mtime": 1793613795.8259523,
+    "seen": 1793613866.5712008,
+    "ast_hash": "7d6ca560c659dfc7dad3fbbeb9b8f356",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -2388,9 +2388,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/settings-dialogs.cjs": {
-    "mtime": 1792241422.1337564,
-    "seen": 1792241594.88715,
-    "ast_hash": "f6ae56ca62732f7756ba800959132f50",
+    "mtime": 1793613427.0985696,
+    "seen": 1793613866.5706906,
+    "ast_hash": "1725c46173316ffab6eab5ed3c6ee6cd",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/history.cjs": {
@@ -2505,6 +2505,24 @@
     "mtime": 1792268425.5076694,
     "seen": 1792268765.217903,
     "ast_hash": "008f8e377546a2aec3175f54cd348b73",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/time-periods.cjs": {
+    "mtime": 1793613474.9497392,
+    "seen": 1793613866.570701,
+    "ast_hash": "1a2c48f4c8c82e3edefc4b172afa4df8",
+    "semantic_hash": ""
+  },
+  "src/services/hours/nextPeriod.ts": {
+    "mtime": 1793613343.6295428,
+    "seen": 1793613866.5709803,
+    "ast_hash": "f4966ad1a05c2ce8caef34006d6988f3",
+    "semantic_hash": ""
+  },
+  "tests/unit/nextPeriod.test.ts": {
+    "mtime": 1793613329.6295419,
+    "seen": 1793613866.5711179,
+    "ast_hash": "0da57f4ab6b81f3798049f07260206a7",
     "semantic_hash": ""
   }
 }
