@@ -16,12 +16,11 @@ import {
   Specialty,
   Rule,
   PublicHoliday,
-  AssignmentSource,
   WorkingHoursPeriod,
   AvailabilityRequest,
 } from '../../types';
 import { ValidationReport, ValidationFinding } from '../../services/validation/ScheduleValidator';
-import { calculateDutyDurationHours, summarizeNurseHours, NurseHoursSummary } from '../../services/reports/hoursAccounting';
+import { summarizeNurseHours, NurseHoursSummary } from '../../services/reports/hoursAccounting';
 import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import { applyPreferenceFocus } from '../../services/engine/preferenceOrder';

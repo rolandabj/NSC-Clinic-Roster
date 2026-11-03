@@ -6,8 +6,6 @@ import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import {
   CalendarRange,
   Plus,
-  Send,
-  Save,
 } from 'lucide-react';
 import { PageLoading } from '../common/PageLoading';
 import { ProblemsPanel } from '../workbook/ProblemsPanel';

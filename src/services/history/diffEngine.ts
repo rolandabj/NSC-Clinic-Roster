@@ -12,7 +12,6 @@ import {
   Doctor,
   ClinicalRole,
   Specialty,
-  ScheduleVersion,
 } from '../../types';
 
 export type ChangeType = 'ADDED' | 'REMOVED' | 'MODIFIED';

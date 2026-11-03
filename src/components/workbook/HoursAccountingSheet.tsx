@@ -10,18 +10,6 @@ import { hoursHistoryOverlaps, type HoursHistory } from '../../services/hours/ho
 import React, { useState, useMemo } from 'react';
 import {
   Scale,
-  Clock,
-  Download,
-  Search,
-  Filter,
-  Users,
-  Eye,
-  Calendar,
-  AlertTriangle,
-  CheckCircle2,
-  ChevronDown,
-  Sun,
-  Moon,
 } from 'lucide-react';
 import {
   Schedule,

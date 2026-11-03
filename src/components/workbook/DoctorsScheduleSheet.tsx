@@ -3,17 +3,10 @@ import React, { useState, useMemo } from 'react';
 import {
   Stethoscope,
   Calendar,
-  Clock,
-  MapPin,
-  Ban,
   Plus,
   Edit2,
-  Filter,
   Search,
-  Maximize2,
-  Minimize2,
   RefreshCw,
-  Sparkles,
 } from 'lucide-react';
 import { Doctor, DoctorSession, Specialty, Schedule, Assignment, Nurse } from '../../types';
 import { formatDate } from '../../utils/dateUtils';

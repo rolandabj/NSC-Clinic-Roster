@@ -14,7 +14,6 @@ import { summarizeNurseHours } from '../../services/reports/hoursAccounting';
 import { isWeekendDate, isWeekendDay } from '../../utils/weekend';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { ArrowRight, CheckCircle2, Sparkles } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
 import {
   Schedule,
   Assignment,

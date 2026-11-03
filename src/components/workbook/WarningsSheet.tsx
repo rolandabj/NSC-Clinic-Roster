@@ -2,15 +2,10 @@ import React, { useState } from 'react';
 import {
   ShieldAlert,
   AlertTriangle,
-  Info,
   ArrowRight,
-  Filter,
   CheckCircle2,
-  Users,
-  Clock,
-  FileSpreadsheet,
 } from 'lucide-react';
-import { ValidationReport, ValidationFinding, FindingCategory, FindingSeverity } from '../../services/validation/ScheduleValidator';
+import { ValidationReport, FindingCategory, FindingSeverity } from '../../services/validation/ScheduleValidator';
 import { formatDate } from '../../utils/dateUtils';
 
 /** Plain names for the problem groups and how serious each one is. */

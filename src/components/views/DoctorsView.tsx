@@ -3,24 +3,13 @@ import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import {
   Stethoscope,
   Plus,
-  Calendar,
-  Clock,
-  MapPin,
   Edit2,
   Trash2,
-  AlertCircle,
-  RotateCcw,
   Save,
-  X,
   CalendarRange,
-  ChevronRight,
-  Filter,
-  Check,
-  Ban,
   RefreshCw,
   Upload,
   Search,
-  Loader2,
 } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { getRepository } from '../../services/repository';
@@ -29,7 +18,6 @@ import {
   Specialty,
   WeeklyPatternSlot,
   DoctorSession,
-  IsoDateString,
   SeniorityLevel,
   ClinicalRole,
   Schedule,
@@ -47,7 +35,7 @@ import {
 import { formatDate, formatDayDate, localTodayIso } from '../../utils/dateUtils';
 import { defaultPatternRange, defaultSessionDate } from '../../utils/dateDefaults';
 import { checkDoctorForm, doctorCounts, filterDoctors, usualWeekLines, WEEKDAY_NAMES, type DoctorFilters } from '../../services/doctors/doctorForm';
-import { Badge, Button, Checkbox, DataTable, DateInput, Dialog, EmptyState, Field, IconButton, Input, Notice, PageHeader, Select, Textarea, cx, type Column } from '../ui';
+import { Badge, Button, Checkbox, DataTable, DateInput, Dialog, EmptyState, Field, IconButton, Input, Notice, PageHeader, Select, cx, type Column } from '../ui';
 
 interface DoctorsViewProps {
   context: ClinicContextState;

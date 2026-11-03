@@ -40,7 +40,7 @@ import {
 } from '../../types';
 import { formatDate } from '../../utils/dateUtils';
 import { isExclusiveNurseClinic } from '../engine/nurseClinicUtils';
-import { hoursCeiling, leaveCreditInRange, shiftHoursAllowed } from '../hours/hoursPolicy';
+import { hoursCeiling, shiftHoursAllowed } from '../hours/hoursPolicy';
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
 import { resolveRule, LATE_DUTY_RULE_WORDS } from '../engine/SchedulingEngine';
 import { WEEK_HOURS_RULE, weekHoursSetting, weeksOverLimit } from '../engine/weekHours';

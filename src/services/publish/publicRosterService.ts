@@ -79,13 +79,12 @@ export async function syncPublicRoster(link: ShareLink): Promise<void> {
     return;
   }
 
-  const [version, current, nurses, dutyWindows, leaveTypes, seniorityLevels, doctors, clinicalRoles, specialties, clinics] =
+  const [version, current, nurses, dutyWindows, seniorityLevels, doctors, clinicalRoles, specialties, clinics] =
     await Promise.all([
       repo.get('versions', link.pointsToVersionId),
       repo.get('schedules', link.scheduleId),
       repo.list('nurses'),
       repo.list('dutyWindows'),
-      repo.list('leaveTypes'),
       repo.list('seniorityLevels'),
       repo.list('doctors'),
       repo.list('clinicalRoles'),

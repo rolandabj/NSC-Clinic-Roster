@@ -164,7 +164,6 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   }, [isOpen]);
 
   // Diff against previous published version
-  const [previousPublishedVersion, setPreviousPublishedVersion] = useState<ScheduleVersion | null>(null);
   const [computedDiff, setComputedDiff] = useState<ScheduleVersionDiff | null>(null);
 
   // Preview selection
@@ -284,7 +283,6 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       if (publishedList.length > 0) {
         publishedList.sort((a, b) => b.number - a.number);
         const lastPub = publishedList[0];
-        setPreviousPublishedVersion(lastPub);
 
         const diff = computeScheduleDiff(
           lastPub.snapshot.assignments,
@@ -301,7 +299,6 @@ export const PublishModal: React.FC<PublishModalProps> = ({
         );
         setComputedDiff(diff);
       } else {
-        setPreviousPublishedVersion(null);
         setComputedDiff(null);
       }
 

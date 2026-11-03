@@ -7,7 +7,7 @@
  * any clinical rosters, scheduling sheets, or management views.
  */
 
-import React, { useEffect, useState, Suspense, lazy } from 'react';
+import { useEffect, useState, Suspense, lazy } from 'react';
 import { LoginPage } from './components/auth/LoginPage';
 import { PageLoading } from './components/common/PageLoading';
 import { AcknowledgePage } from './components/views/AcknowledgePage';

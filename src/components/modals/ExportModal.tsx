@@ -13,19 +13,8 @@ import { getRepository } from '../../services/repository';
 import { resolveFullTimeTarget } from '../../services/hours/hoursPolicy';
 import React, { useEffect, useState } from 'react';
 import {
-  X,
-  FileSpreadsheet,
   Download,
   Printer,
-  Calendar,
-  Layers,
-  Users,
-  CheckCircle2,
-  FileText,
-  Clock,
-  Sparkles,
-  Info,
-  FileJson,
 } from 'lucide-react';
 import {
   Schedule,
@@ -57,7 +46,6 @@ import { formatDate, formatDateTime } from '../../utils/dateUtils';
 import { Button, Checkbox, Dialog, Field, LoadingState, Notice, Select, TabPanel, Tabs, cx } from '../ui';
 import {
   calculateNurseHoursAccounting,
-  calculateDutyDurationHours,
   NurseHoursAccounting,
 } from '../../services/reports/hoursAccounting';
 import { isFloatShift } from '../../services/engine/floatShift';
@@ -173,10 +161,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     );
 
   const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
-  const nurseMap = new Map(nurses.map((n) => [n.id, n]));
   const doctorMap = new Map(doctors.map((d) => [d.id, d]));
   const roleMap = new Map(roles.map((r) => [r.id, r]));
-  const specialtyMap = new Map(specialties.map((s) => [s.id, s]));
   const seniorityMap = new Map(seniorityLevels.map((s) => [s.id, s]));
   const leaveTypeMap = new Map(leaveTypes.map((l) => [l.id, l]));
 

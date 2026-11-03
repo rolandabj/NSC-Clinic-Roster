@@ -448,7 +448,6 @@ export function exportRosterToCsvMatrix(options: RosterExportOptions): string {
     dutyWindows,
     leaveEntries,
     leaveTypes,
-    seniorityLevels,
     doctors,
     roles,
     specialties,

@@ -6,17 +6,7 @@
  */
 
 import {
-  Schedule,
   Assignment,
-  LeaveEntry,
-  LockEntry,
-  DoctorSession,
-  Nurse,
-  DutyWindow,
-  ClinicalRole,
-  Specialty,
-  Rule,
-  WorkingHoursPeriod,
 } from '../../types';
 
 export interface GenerationProgress {

@@ -3,10 +3,6 @@ import React, { useState } from 'react';
 import {
   CalendarCheck2,
   Lock,
-  Plus,
-  Trash2,
-  ArrowRight,
-  Filter,
 } from 'lucide-react';
 import { LeaveEntry, LockEntry, Nurse, LeaveType, DutyWindow } from '../../types';
 import { formatDate } from '../../utils/dateUtils';

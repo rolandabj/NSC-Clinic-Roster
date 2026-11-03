@@ -10,16 +10,10 @@ import { PageLoading } from '../common/PageLoading';
 import { useDialogA11y } from '../common/useDialogA11y';
 import { ShortcutsModal } from '../modals/ShortcutsModal';
 import { repositoryManager } from '../../services/repository';
-import {
-  initializeDatabaseIfEmpty,
-  isDatabaseMarkedCleared,
-  ensureWorkingHoursPeriodsDefaults,
-} from '../../services/seed/seedRunner';
 import { testFirestoreConnection } from '../../services/firebase/firebaseConfig';
 import { canAccessRoute, permissionsFor } from '../../services/auth/access';
 import { setClinicWeekendDays } from '../../utils/weekend';
 import { authService, UserProfile } from '../../services/auth/authService';
-import { RosterPublishService } from '../../services/publish/rosterPublishService';
 import { quotaTracker } from '../../services/firebase/quotaTracker';
 import { TriangleAlert, X } from 'lucide-react';
 import { IconButton } from '../ui';
@@ -109,8 +103,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   const [nurseIdParam, setNurseIdParam] = useState<string | undefined>(initialUrl.nurse);
 
   const initialUser = propUser || authService.getCurrentUser();
-  const isInitiallyCleared =
-    typeof window !== 'undefined' && localStorage.getItem('clinic_roster_database_cleared') === 'true';
 
   const rawClinicName = typeof window !== 'undefined' ? localStorage.getItem('clinic_roster_clinic_name') : null;
   const initialClinicName =
@@ -142,7 +134,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [openCreateInSchedules, setOpenCreateInSchedules] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(() => quotaTracker.isQuotaExceeded());
   const [isQuotaBannerDismissed, setIsQuotaBannerDismissed] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -325,8 +316,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
         }
       } catch (err) {
         console.error('Failed to initialize database context:', err);
-      } finally {
-        setIsInitialized(true);
       }
     }
     bootstrap();

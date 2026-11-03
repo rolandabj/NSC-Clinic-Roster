@@ -78,7 +78,7 @@ Main moves only when the owner says "push to main".
 - [x] Checkpoint 8 (items 103 and 104)
 
 ## Phase 9: tidy up and final audit
-- [ ] Dead code and unused packages
+- [x] Dead code and unused packages (item 105)
 - [ ] Package name and page description
 - [ ] ESLint in CI
 - [ ] Final audit and guide section 13

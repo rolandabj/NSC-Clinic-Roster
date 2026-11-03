@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { deleteEntireSchedule } from '../../src/services/schedule/scheduleDeletionService';
-import { removePublicRoster } from '../../src/services/publish/publicRosterService';
 import type { IRepository } from '../../src/services/repository/IRepository';
 
 function fakeRepo(initial: Record<string, any[]> = {}) {

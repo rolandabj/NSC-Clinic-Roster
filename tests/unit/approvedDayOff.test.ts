@@ -5,7 +5,6 @@ import { ScheduleValidator } from '../../src/services/validation/ScheduleValidat
 import type { AvailabilityRequest, DoctorSession, Rule } from '../../src/types';
 import { makeNurse, makeSchedule, SENIOR } from './fixtures';
 
-const FULL = { id: 'd', name: '9-9', acronym: '9-9', startTime: '09:00', endTime: '21:00', color: '#000', active: true };
 const NINE_SEVEN = { id: 'n7', name: '9-7', acronym: '9-7', startTime: '09:00', endTime: '19:00', color: '#000', active: true };
 const ORTHO = { id: 'sp-ortho', name: 'Orthopedics', code: 'ORTH' };
 const DR = { id: 'doc-o', fullName: 'Dr Ortho', specialtyIds: [ORTHO.id], weeklyPattern: [], active: true };

@@ -1,4 +1,4 @@
-import React, { memo } from 'react';
+import { memo } from 'react';
 import type { Nurse, SeniorityLevel } from '../../../types';
 import type { CellView } from './cellView';
 import { OctagonAlert, TriangleAlert } from 'lucide-react';

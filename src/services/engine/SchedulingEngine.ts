@@ -9,8 +9,7 @@
 
 import { countHoursInRange, hoursCheckpoints, hoursHistoryOverlaps, resolveNurseHoursBalance } from '../hours/hoursBalance';
 
-import { isWeekendDate, isWeekendDay } from '../../utils/weekend';
-import { v4 as uuidv4 } from 'uuid';
+import { isWeekendDate } from '../../utils/weekend';
 import {
   Schedule,
   Assignment,
@@ -433,7 +432,6 @@ export class SchedulingEngine {
       'nurse clinic coverage',
     ]);
     const ncEnabled = ncRule ? ncRule.enabled !== false : true;
-    const ncSeverity = ncRule?.severity || 'HARD';
     const ncQuota = ncEnabled ? (ncRule?.value ?? 1) : 0;
 
     // At least +1 Additional Nurse Above Doctors During Operating Hours
@@ -1277,7 +1275,6 @@ export class SchedulingEngine {
         poolSessions.get(key)!.push({ date: d, hours: shortestCoverHours(sess.startTime, sess.endTime) });
       });
     });
-    const dayIndexOf = new Map(datesList.map((d, i) => [d, i]));
     /**
      * Hours the pool's nurses still have for its doctors. A nurse counts in full for the
      * doctors who are her first choice; for the others her hours are shared between all

@@ -19,20 +19,17 @@ import {
   Specialty,
   LeaveEntry,
   LeaveType,
-  PublishLog,
   EmailRecipientLog,
   Acknowledgment,
-  ShareLink,
   WorkingHoursPeriod,
 } from '../../types';
-import { EmailSettingsConfig, DEFAULT_EMAIL_SETTINGS } from '../../types/settings';
+import { EmailSettingsConfig } from '../../types/settings';
 import { AssignmentDiffItem } from '../history/diffEngine';
 import { getRepository } from '../repository';
 import { authService } from '../auth/authService';
 import { canEditClinicData } from '../auth/access';
 import { readEmailResponse } from '../email/emailResponse';
 import { escapeHtml, safeColor } from '../../utils/escapeHtml';
-import { leaveCreditInRange, resolveFullTimeTarget } from '../hours/hoursPolicy';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 import { isFloatShift } from '../engine/floatShift';
@@ -105,9 +102,6 @@ export class RosterPublishService {
       .filter((a) => a.nurseId === nurse.id)
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    const nurseLeaves = leaveEntries
-      .filter((le) => le.nurseId === nurse.id && le.approved)
-      .sort((a, b) => a.startDate.localeCompare(b.startDate));
 
     // Hours by the shared rule (a leave day counts its leave, not also a shift)
     const hours = summarizeNurseHours(nurse, schedule, assignments, dutyMap, leaveEntries, ltMap, workingHoursPeriods, undefined, params.hoursHistory);
