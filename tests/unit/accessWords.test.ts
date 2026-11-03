@@ -23,3 +23,27 @@ test('an email is described from its account', () => {
   assert.equal(accessWords(rec(), false), 'Can look at rosters.');
   assert.equal(accessWords(rec({ appRole: 'EDITOR', isManager: true }), false), 'Can look at and change rosters, staff and settings, and can approve requests for leave, days off and shifts.');
 });
+
+// Checkpoint 8: the "Your access" dialog lists what the signed in person can do, in plain words.
+import { computePrivileges } from '../../src/services/auth/authService';
+import { youCanDo } from '../../src/services/auth/accessWords';
+
+test('Your access lists what each person can do, in plain words', () => {
+  const owner = youCanDo(computePrivileges('OWNER'));
+  assert.deepEqual(owner.map((x) => x.words), [
+    'Change rosters, staff and settings',
+    'Fill rosters automatically',
+    'Publish rosters',
+    'Approve leave and days off',
+    'Approve shift swaps',
+    'Download reports',
+    'Give people access and restore backups',
+  ]);
+  assert.ok(owner.every((x) => x.allowed));
+  const viewer = youCanDo(computePrivileges('VIEWER'));
+  assert.ok(viewer.every((x) => !x.allowed), JSON.stringify(viewer));
+  const manager = youCanDo(computePrivileges('VIEWER', true));
+  assert.deepEqual(manager.filter((x) => x.allowed).map((x) => x.words), ['Approve leave and days off', 'Download reports']);
+  const editor = youCanDo(computePrivileges('EDITOR'));
+  assert.deepEqual(editor.filter((x) => !x.allowed).map((x) => x.words), ['Give people access and restore backups']);
+});

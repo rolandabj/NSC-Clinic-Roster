@@ -108,9 +108,9 @@
     "semantic_hash": ""
   },
   "src/components/layout/AppShell.tsx": {
-    "mtime": 1793686923.2547686,
-    "seen": 1793687346.750896,
-    "ast_hash": "6a3b655518ae255fc357ef0588ac7ba7",
+    "mtime": 1793689435.7541964,
+    "seen": 1793689575.4754522,
+    "ast_hash": "b65488324bc3bd1ec799e53d5a15d3f8",
     "semantic_hash": ""
   },
   "src/components/layout/LocalModeBanner.tsx": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/AuthModal.tsx": {
-    "mtime": 1791950940.5708406,
-    "seen": 1791951702.5077395,
-    "ast_hash": "51a1044a14d70a2813bcc2d80e70323d",
+    "mtime": 1793689524.3229666,
+    "seen": 1793689575.4754708,
+    "ast_hash": "9465380ea5d028025bdb3075dc3e97c4",
     "semantic_hash": ""
   },
   "src/components/modals/BulkImportModal.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1793689072.3358142,
-    "seen": 1793689091.543134,
-    "ast_hash": "6683a184e21d40bb74c0f32829bf4850",
+    "mtime": 1793689557.9498823,
+    "seen": 1793689575.4760888,
+    "ast_hash": "0d13ea99cc0d0ff3162003d000a17b73",
     "semantic_hash": ""
   },
   "index.html": {
@@ -2532,15 +2532,15 @@
     "semantic_hash": ""
   },
   "src/services/auth/accessWords.ts": {
-    "mtime": 1793681644.3392293,
-    "seen": 1793681905.8277721,
-    "ast_hash": "5358b85d4e75b5e5b4dc5e3506739298",
+    "mtime": 1793689406.684661,
+    "seen": 1793689575.47568,
+    "ast_hash": "3d18bcaa841398022e047bba77748dd5",
     "semantic_hash": ""
   },
   "tests/unit/accessWords.test.ts": {
-    "mtime": 1793681644.3343956,
-    "seen": 1793681905.8279066,
-    "ast_hash": "5108a15477522397c72eba406d12e8b4",
+    "mtime": 1793689406.6775646,
+    "seen": 1793689575.4758766,
+    "ast_hash": "0b9897d4124fc6f2dea8955f917c22cf",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/data-backup.cjs": {
@@ -2589,6 +2589,12 @@
     "mtime": 1793688159.939705,
     "seen": 1793688228.8910642,
     "ast_hash": "f8bea02ae623693e581724fc1a37418c",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/your-access.cjs": {
+    "mtime": 1793689493.709501,
+    "seen": 1793689575.4748645,
+    "ast_hash": "1fce94355c8a4d5137e62c9f19f1570f",
     "semantic_hash": ""
   }
 }

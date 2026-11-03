@@ -601,7 +601,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         context={clinicContext}
-        onNavigateToSettings={() => navigateTo('settings')}
       />
 
       <ShortcutsModal

@@ -7,6 +7,7 @@
  */
 
 import { UserAccessRecord, UserAccessRole, UserAccessStatus } from '../../types';
+import type { UserPrivileges } from './authService';
 
 export const roleWords = (role: UserAccessRole): string => (role === 'EDITOR' ? 'Change rosters, staff and settings' : 'Look only');
 
@@ -20,4 +21,17 @@ export function accessWords(record: UserAccessRecord | undefined, isOwner: boole
   if (record.status === 'REVOKED') return 'Access removed. They can’t see anything.';
   const role = record.appRole === 'EDITOR' ? 'Can look at and change rosters, staff and settings' : 'Can look at rosters';
   return `${role}${record.isManager ? ', and can approve requests for leave, days off and shifts' : ''}.`;
+}
+
+/** What the signed in person can do, for the "Your access" dialog (Checkpoint 8). */
+export function youCanDo(p: UserPrivileges): { words: string; allowed: boolean }[] {
+  return [
+    { words: 'Change rosters, staff and settings', allowed: p.canEditRosterAssignments },
+    { words: 'Fill rosters automatically', allowed: p.canRunSolver },
+    { words: 'Publish rosters', allowed: p.canPublishSchedules },
+    { words: 'Approve leave and days off', allowed: p.canApproveLeave },
+    { words: 'Approve shift swaps', allowed: p.canApproveSwaps },
+    { words: 'Download reports', allowed: p.canExportReports },
+    { words: 'Give people access and restore backups', allowed: p.canManageStaff },
+  ];
 }
