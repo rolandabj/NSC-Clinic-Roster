@@ -823,30 +823,43 @@
       "source_location": "L70"
     },
     {
-      "id": "src_services_email_emailreadiness_emailreadiness",
-      "label": "EmailReadiness",
+      "id": "src_services_import_peopleimport_doctorimportrow",
+      "label": "DoctorImportRow",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "emailreadiness",
-      "source_file": "src/services/email/emailReadiness.ts",
-      "source_location": "L4"
+      "norm_label": "doctorimportrow",
+      "source_file": "src/services/import/peopleImport.ts",
+      "source_location": "L90"
     },
     {
-      "id": "src_types_settings_emailprovidertype",
-      "label": "EmailProviderType",
+      "id": "src_services_import_peopleimport_nurseimportrow",
+      "label": "NurseImportRow",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "emailprovidertype",
-      "source_file": "src/types/settings.ts",
-      "source_location": "L8"
+      "norm_label": "nurseimportrow",
+      "source_file": "src/services/import/peopleImport.ts",
+      "source_location": "L28"
+    },
+    {
+      "id": "src_services_nurses_nurselist_nursefilters",
+      "label": "NurseFilters",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 114,
+      "community_name": "NursesView.tsx",
+      "file_type": "code",
+      "norm_label": "nursefilters",
+      "source_file": "src/services/nurses/nurseList.ts",
+      "source_location": "L11"
     },
     {
       "id": "src_services_hours_nextperiod_perioddefaults",
@@ -1226,19 +1239,6 @@
       "source_location": "L5"
     },
     {
-      "id": "src_components_modals_shortcutsmodal_shortcutsmodalprops",
-      "label": "ShortcutsModalProps",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 133,
-      "community_name": "react",
-      "file_type": "code",
-      "norm_label": "shortcutsmodalprops",
-      "source_file": "src/components/modals/ShortcutsModal.tsx",
-      "source_location": "L13"
-    },
-    {
       "id": "src_components_ui_badge_problemkind",
       "label": "ProblemKind",
       "_callable": true,
@@ -1432,6 +1432,19 @@
       "norm_label": "tabitem",
       "source_file": "src/components/ui/Tabs.tsx",
       "source_location": "L16"
+    },
+    {
+      "id": "tests_unit_uicomponents_test_row",
+      "label": "Row",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "react",
+      "file_type": "code",
+      "norm_label": "row",
+      "source_file": "tests/unit/uiComponents.test.ts",
+      "source_location": "L133"
     },
     {
       "id": "src_services_repository_livereconcile_livereconcileoptions",
@@ -2487,69 +2500,30 @@
       "source_location": "L28"
     },
     {
-      "id": "src_components_common_dialogs_noticetone",
-      "label": "NoticeTone",
+      "id": "src_components_modals_doctorweekchangedialog_doctorweekchangedialogprops",
+      "label": "DoctorWeekChangeDialogProps",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "noticetone",
-      "source_file": "src/components/common/dialogs.tsx",
-      "source_location": "L21"
+      "norm_label": "doctorweekchangedialogprops",
+      "source_file": "src/components/modals/DoctorWeekChangeDialog.tsx",
+      "source_location": "L24"
     },
     {
-      "id": "src_components_ui_datatable_column",
-      "label": "Column",
+      "id": "src_components_modals_shortcutsmodal_shortcutsmodalprops",
+      "label": "ShortcutsModalProps",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "column",
-      "source_file": "src/components/ui/DataTable.tsx",
-      "source_location": "L25"
-    },
-    {
-      "id": "src_components_views_approvalsqueuepanel_waiting",
-      "label": "Waiting",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "waiting",
-      "source_file": "src/components/views/ApprovalsQueuePanel.tsx",
-      "source_location": "L28"
-    },
-    {
-      "id": "src_services_nurses_nurselist_nursefilters",
-      "label": "NurseFilters",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "nursefilters",
-      "source_file": "src/services/nurses/nurseList.ts",
-      "source_location": "L11"
-    },
-    {
-      "id": "tests_unit_uicomponents_test_row",
-      "label": "Row",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "row",
-      "source_file": "tests/unit/uiComponents.test.ts",
-      "source_location": "L133"
+      "norm_label": "shortcutsmodalprops",
+      "source_file": "src/components/modals/ShortcutsModal.tsx",
+      "source_location": "L13"
     },
     {
       "id": "src_components_roster_filldialog_fillrange",
@@ -2557,12 +2531,51 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 39,
-      "community_name": "cx",
+      "community": 38,
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "fillrange",
       "source_file": "src/components/roster/FillDialog.tsx",
       "source_location": "L8"
+    },
+    {
+      "id": "src_components_workbook_grid_celleditordialog_cellchoice",
+      "label": "CellChoice",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "cellchoice",
+      "source_file": "src/components/workbook/grid/CellEditorDialog.tsx",
+      "source_location": "L14"
+    },
+    {
+      "id": "src_components_workbook_holidaydayoffpicker_holidaydayoffpickerprops",
+      "label": "HolidayDayOffPickerProps",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "holidaydayoffpickerprops",
+      "source_file": "src/components/workbook/HolidayDayOffPicker.tsx",
+      "source_location": "L13"
+    },
+    {
+      "id": "src_types_index_assignmentkind",
+      "label": "AssignmentKind",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "assignmentkind",
+      "source_file": "src/types/index.ts",
+      "source_location": "L15"
     },
     {
       "id": "src_components_views_settings_rulestab_numberfield",
@@ -2571,7 +2584,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "numberfield",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -2584,37 +2597,11 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "rulegroup",
       "source_file": "src/components/views/settings/RulesTab.tsx",
       "source_location": "L61"
-    },
-    {
-      "id": "src_components_workbook_grid_celleditordialog_cellchoice",
-      "label": "CellChoice",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 39,
-      "community_name": "cx",
-      "file_type": "code",
-      "norm_label": "cellchoice",
-      "source_file": "src/components/workbook/grid/CellEditorDialog.tsx",
-      "source_location": "L14"
-    },
-    {
-      "id": "src_types_index_assignmentkind",
-      "label": "AssignmentKind",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 39,
-      "community_name": "cx",
-      "file_type": "code",
-      "norm_label": "assignmentkind",
-      "source_file": "src/types/index.ts",
-      "source_location": "L15"
     },
     {
       "id": "src_services_auth_authservice_authservice",
@@ -3637,7 +3624,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "draft",
       "source_file": "src/components/views/AllRequestsPanel.tsx",
@@ -3650,7 +3637,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "kindfilter",
       "source_file": "src/components/views/AllRequestsPanel.tsx",
@@ -3663,76 +3650,11 @@
       "_callable_class": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "statusfilter",
       "source_file": "src/components/views/AllRequestsPanel.tsx",
       "source_location": "L34"
-    },
-    {
-      "id": "src_components_workbook_holidaydayoffpicker_holidaydayoffpickerprops",
-      "label": "HolidayDayOffPickerProps",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "holidaydayoffpickerprops",
-      "source_file": "src/components/workbook/HolidayDayOffPicker.tsx",
-      "source_location": "L13"
-    },
-    {
-      "id": "src_services_availability_leavegridpick_gridcell",
-      "label": "GridCell",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "gridcell",
-      "source_file": "src/services/availability/leaveGridPick.ts",
-      "source_location": "L10"
-    },
-    {
-      "id": "src_services_availability_leaveimport_leaveimportrow",
-      "label": "LeaveImportRow",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "leaveimportrow",
-      "source_file": "src/services/availability/leaveImport.ts",
-      "source_location": "L16"
-    },
-    {
-      "id": "src_services_import_peopleimport_doctorimportrow",
-      "label": "DoctorImportRow",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "doctorimportrow",
-      "source_file": "src/services/import/peopleImport.ts",
-      "source_location": "L90"
-    },
-    {
-      "id": "src_services_import_peopleimport_nurseimportrow",
-      "label": "NurseImportRow",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "nurseimportrow",
-      "source_file": "src/services/import/peopleImport.ts",
-      "source_location": "L28"
     },
     {
       "id": "src_services_requests_myrequests_errors",
@@ -3740,7 +3662,7 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 5,
+      "community": 48,
       "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "errors",
@@ -3753,7 +3675,7 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 5,
+      "community": 48,
       "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "myrequest",
@@ -3766,12 +3688,38 @@
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "community": 5,
+      "community": 48,
       "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "requeststatus",
       "source_file": "src/services/requests/myRequests.ts",
       "source_location": "L10"
+    },
+    {
+      "id": "src_services_availability_leavegridpick_gridcell",
+      "label": "GridCell",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 5,
+      "community_name": "AvailabilityView.tsx",
+      "file_type": "code",
+      "norm_label": "gridcell",
+      "source_file": "src/services/availability/leaveGridPick.ts",
+      "source_location": "L10"
+    },
+    {
+      "id": "src_services_availability_leaveimport_leaveimportrow",
+      "label": "LeaveImportRow",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 5,
+      "community_name": "AvailabilityView.tsx",
+      "file_type": "code",
+      "norm_label": "leaveimportrow",
+      "source_file": "src/services/availability/leaveImport.ts",
+      "source_location": "L16"
     },
     {
       "id": "src_services_navigation_address_address",
@@ -3888,7 +3836,7 @@
       "file_type": "code",
       "norm_label": "dutiestabprops",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L17"
+      "source_location": "L18"
     },
     {
       "id": "src_components_views_settings_holidaystab_holidaystabprops",
@@ -3914,7 +3862,7 @@
       "file_type": "code",
       "norm_label": "leavetabprops",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L16"
+      "source_location": "L17"
     },
     {
       "id": "src_components_views_settings_nurseskillstab_nurseskillstabprops",
@@ -4021,6 +3969,19 @@
       "source_location": "L17"
     },
     {
+      "id": "src_services_email_emailreadiness_emailreadiness",
+      "label": "EmailReadiness",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "emailreadiness",
+      "source_file": "src/services/email/emailReadiness.ts",
+      "source_location": "L4"
+    },
+    {
       "id": "src_services_repository_index_storagemode",
       "label": "StorageMode",
       "_callable": true,
@@ -4045,6 +4006,19 @@
       "norm_label": "clinicprofile",
       "source_file": "src/types/index.ts",
       "source_location": "L143"
+    },
+    {
+      "id": "src_types_settings_emailprovidertype",
+      "label": "EmailProviderType",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "emailprovidertype",
+      "source_file": "src/types/settings.ts",
+      "source_location": "L8"
     },
     {
       "id": "src_services_validation_schedulevalidator_schedulevalidator",
@@ -4229,19 +4203,6 @@
       "source_location": "L82"
     },
     {
-      "id": "src_components_modals_doctorweekchangedialog_doctorweekchangedialogprops",
-      "label": "DoctorWeekChangeDialogProps",
-      "_callable": true,
-      "_callable_class": true,
-      "_origin": "ast",
-      "community": 80,
-      "community_name": "DoctorsView.tsx",
-      "file_type": "code",
-      "norm_label": "doctorweekchangedialogprops",
-      "source_file": "src/components/modals/DoctorWeekChangeDialog.tsx",
-      "source_location": "L24"
-    },
-    {
       "id": "src_components_modals_doctorweekchangedialog_weekchangepreview",
       "label": "WeekChangePreview",
       "_callable": true,
@@ -4318,6 +4279,45 @@
       "norm_label": "nurserostericsinput",
       "source_file": "src/services/export/icsExportService.ts",
       "source_location": "L183"
+    },
+    {
+      "id": "src_components_common_dialogs_noticetone",
+      "label": "NoticeTone",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "noticetone",
+      "source_file": "src/components/common/dialogs.tsx",
+      "source_location": "L21"
+    },
+    {
+      "id": "src_components_ui_datatable_column",
+      "label": "Column",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "column",
+      "source_file": "src/components/ui/DataTable.tsx",
+      "source_location": "L25"
+    },
+    {
+      "id": "src_components_views_approvalsqueuepanel_waiting",
+      "label": "Waiting",
+      "_callable": true,
+      "_callable_class": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "waiting",
+      "source_file": "src/components/views/ApprovalsQueuePanel.tsx",
+      "source_location": "L28"
     },
     {
       "id": "src_services_engine_schedulingengine_schedulingengine",
@@ -6963,112 +6963,136 @@
       "source_location": "L16"
     },
     {
-      "id": "src_components_views_settings_emailtab_emailtab",
-      "label": "EmailTab()",
+      "id": "src_components_modals_bulkimportmodal_bulkimportmodal",
+      "label": "BulkImportModal()",
       "_callable": true,
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "emailtab()",
-      "source_file": "src/components/views/settings/EmailTab.tsx",
-      "source_location": "L30"
+      "norm_label": "bulkimportmodal()",
+      "source_file": "src/components/modals/BulkImportModal.tsx",
+      "source_location": "L29"
     },
     {
-      "id": "src_components_views_settings_shared_savebar",
-      "label": "SaveBar()",
+      "id": "src_components_views_nursesview_nursesview",
+      "label": "NursesView()",
       "_callable": true,
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "savebar()",
-      "source_file": "src/components/views/settings/shared.tsx",
-      "source_location": "L161"
+      "norm_label": "nursesview()",
+      "source_file": "src/components/views/NursesView.tsx",
+      "source_location": "L55"
     },
     {
-      "id": "src_services_email_emailreadiness_checkemailreadiness",
-      "label": "checkEmailReadiness()",
+      "id": "src_services_import_peopleimport_cellsof",
+      "label": "cellsOf()",
       "_callable": true,
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "checkemailreadiness()",
-      "source_file": "src/services/email/emailReadiness.ts",
-      "source_location": "L7"
+      "norm_label": "cellsof()",
+      "source_file": "src/services/import/peopleImport.ts",
+      "source_location": "L20"
     },
     {
-      "id": "src_services_email_emailresponse_reademailresponse",
-      "label": "readEmailResponse()",
+      "id": "src_services_import_peopleimport_readdoctorrows",
+      "label": "readDoctorRows()",
       "_callable": true,
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "reademailresponse()",
-      "source_file": "src/services/email/emailResponse.ts",
-      "source_location": "L2"
+      "norm_label": "readdoctorrows()",
+      "source_file": "src/services/import/peopleImport.ts",
+      "source_location": "L95"
     },
     {
-      "id": "src_services_settings_emailsettingsstore_cache",
-      "label": "cache()",
+      "id": "src_services_import_peopleimport_readnurserows",
+      "label": "readNurseRows()",
       "_callable": true,
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "cache()",
-      "source_file": "src/services/settings/emailSettingsStore.ts",
+      "norm_label": "readnurserows()",
+      "source_file": "src/services/import/peopleImport.ts",
+      "source_location": "L33"
+    },
+    {
+      "id": "src_services_nurses_nurseform_checknurseform",
+      "label": "checkNurseForm()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 114,
+      "community_name": "NursesView.tsx",
+      "file_type": "code",
+      "norm_label": "checknurseform()",
+      "source_file": "src/services/nurses/nurseForm.ts",
       "source_location": "L27"
     },
     {
-      "id": "src_services_settings_emailsettingsstore_cachedemailsettings",
-      "label": "cachedEmailSettings()",
+      "id": "src_services_nurses_nurseform_movepreference",
+      "label": "movePreference()",
       "_callable": true,
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "cachedemailsettings()",
-      "source_file": "src/services/settings/emailSettingsStore.ts",
-      "source_location": "L18"
+      "norm_label": "movepreference()",
+      "source_file": "src/services/nurses/nurseForm.ts",
+      "source_location": "L67"
     },
     {
-      "id": "src_services_settings_emailsettingsstore_loademailsettings",
-      "label": "loadEmailSettings()",
+      "id": "src_services_nurses_nurseform_nextemployeecode",
+      "label": "nextEmployeeCode()",
       "_callable": true,
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "loademailsettings()",
-      "source_file": "src/services/settings/emailSettingsStore.ts",
-      "source_location": "L36"
+      "norm_label": "nextemployeecode()",
+      "source_file": "src/services/nurses/nurseForm.ts",
+      "source_location": "L76"
     },
     {
-      "id": "src_services_settings_emailsettingsstore_saveemailsettings",
-      "label": "saveEmailSettings()",
+      "id": "src_services_nurses_nurselist_filternurses",
+      "label": "filterNurses()",
       "_callable": true,
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "saveemailsettings()",
-      "source_file": "src/services/settings/emailSettingsStore.ts",
-      "source_location": "L59"
+      "norm_label": "filternurses()",
+      "source_file": "src/services/nurses/nurseList.ts",
+      "source_location": "L19"
     },
     {
-      "id": "tests_unit_emailpublishing_test_close",
-      "label": "close()",
+      "id": "src_services_nurses_nurselist_nursecounts",
+      "label": "nurseCounts()",
       "_callable": true,
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "close()",
-      "source_file": "tests/unit/emailPublishing.test.ts",
-      "source_location": "L75"
+      "norm_label": "nursecounts()",
+      "source_file": "src/services/nurses/nurseList.ts",
+      "source_location": "L30"
+    },
+    {
+      "id": "src_utils_dateutils_localtodayiso",
+      "label": "localTodayIso()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 114,
+      "community_name": "NursesView.tsx",
+      "file_type": "code",
+      "norm_label": "localtodayiso()",
+      "source_file": "src/utils/dateUtils.ts",
+      "source_location": "L137"
     },
     {
       "id": "tests_unit_nurseclinicfloat_test_ncshifts",
@@ -8187,28 +8211,16 @@
       "source_location": "L21"
     },
     {
-      "id": "src_components_modals_shortcutsmodal_key",
-      "label": "Key()",
+      "id": "src_components_ui_badge_problembadge",
+      "label": "ProblemBadge()",
       "_callable": true,
       "_origin": "ast",
       "community": 133,
       "community_name": "react",
       "file_type": "code",
-      "norm_label": "key()",
-      "source_file": "src/components/modals/ShortcutsModal.tsx",
-      "source_location": "L48"
-    },
-    {
-      "id": "src_components_modals_shortcutsmodal_shortcutsmodal",
-      "label": "ShortcutsModal()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 133,
-      "community_name": "react",
-      "file_type": "code",
-      "norm_label": "shortcutsmodal()",
-      "source_file": "src/components/modals/ShortcutsModal.tsx",
-      "source_location": "L52"
+      "norm_label": "problembadge()",
+      "source_file": "src/components/ui/Badge.tsx",
+      "source_location": "L47"
     },
     {
       "id": "src_components_ui_badge_problemcounts",
@@ -8223,6 +8235,18 @@
       "source_location": "L61"
     },
     {
+      "id": "src_components_ui_button_iconbutton",
+      "label": "IconButton()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "react",
+      "file_type": "code",
+      "norm_label": "iconbutton()",
+      "source_file": "src/components/ui/Button.tsx",
+      "source_location": "L81"
+    },
+    {
       "id": "src_components_ui_card_card",
       "label": "Card()",
       "_callable": true,
@@ -8233,6 +8257,18 @@
       "norm_label": "card()",
       "source_file": "src/components/ui/Card.tsx",
       "source_location": "L56"
+    },
+    {
+      "id": "src_components_ui_card_pageheader",
+      "label": "PageHeader()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "react",
+      "file_type": "code",
+      "norm_label": "pageheader()",
+      "source_file": "src/components/ui/Card.tsx",
+      "source_location": "L19"
     },
     {
       "id": "src_components_ui_datatable_sortrows",
@@ -8259,6 +8295,42 @@
       "source_location": "L27"
     },
     {
+      "id": "src_components_ui_tabs_tabpanel",
+      "label": "TabPanel()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "react",
+      "file_type": "code",
+      "norm_label": "tabpanel()",
+      "source_file": "src/components/ui/Tabs.tsx",
+      "source_location": "L104"
+    },
+    {
+      "id": "src_components_ui_tabs_tabs",
+      "label": "Tabs()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "react",
+      "file_type": "code",
+      "norm_label": "tabs()",
+      "source_file": "src/components/ui/Tabs.tsx",
+      "source_location": "L42"
+    },
+    {
+      "id": "src_components_views_requestsview_requestsview",
+      "label": "RequestsView()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "react",
+      "file_type": "code",
+      "norm_label": "requestsview()",
+      "source_file": "src/components/views/RequestsView.tsx",
+      "source_location": "L29"
+    },
+    {
       "id": "src_components_workbook_problemspanel_problemspanel",
       "label": "ProblemsPanel()",
       "_callable": true,
@@ -8269,6 +8341,30 @@
       "norm_label": "problemspanel()",
       "source_file": "src/components/workbook/ProblemsPanel.tsx",
       "source_location": "L35"
+    },
+    {
+      "id": "src_services_requests_staffrequestservice_countpendingapprovals",
+      "label": "countPendingApprovals()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "react",
+      "file_type": "code",
+      "norm_label": "countpendingapprovals()",
+      "source_file": "src/services/requests/staffRequestService.ts",
+      "source_location": "L238"
+    },
+    {
+      "id": "tests_unit_uicomponents_test_html",
+      "label": "html()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "react",
+      "file_type": "code",
+      "norm_label": "html()",
+      "source_file": "tests/unit/uiComponents.test.ts",
+      "source_location": "L34"
     },
     {
       "id": "tests_unit_versionkinds_test_v",
@@ -11883,16 +11979,16 @@
       "source_location": "L41"
     },
     {
-      "id": "src_components_modals_bulkimportmodal_bulkimportmodal",
-      "label": "BulkImportModal()",
+      "id": "src_components_modals_createschedulemodal_createschedulemodal",
+      "label": "CreateScheduleModal()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "bulkimportmodal()",
-      "source_file": "src/components/modals/BulkImportModal.tsx",
-      "source_location": "L29"
+      "norm_label": "createschedulemodal()",
+      "source_file": "src/components/modals/CreateScheduleModal.tsx",
+      "source_location": "L38"
     },
     {
       "id": "src_components_modals_deleteschedulemodal_deleteschedulemodal",
@@ -11900,11 +11996,23 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "deleteschedulemodal()",
       "source_file": "src/components/modals/DeleteScheduleModal.tsx",
       "source_location": "L24"
+    },
+    {
+      "id": "src_components_modals_doctorweekchangedialog_doctorweekchangedialog",
+      "label": "DoctorWeekChangeDialog()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "doctorweekchangedialog()",
+      "source_file": "src/components/modals/DoctorWeekChangeDialog.tsx",
+      "source_location": "L37"
     },
     {
       "id": "src_components_modals_exportmodal_exportmodal",
@@ -11912,7 +12020,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "exportmodal()",
       "source_file": "src/components/modals/ExportModal.tsx",
@@ -11924,7 +12032,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "fairnessmodal()",
       "source_file": "src/components/modals/FairnessModal.tsx",
@@ -11936,7 +12044,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "fmthours()",
       "source_file": "src/components/modals/NurseTimesheetModal.tsx",
@@ -11948,7 +12056,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "nursetimesheetmodal()",
       "source_file": "src/components/modals/NurseTimesheetModal.tsx",
@@ -11960,23 +12068,35 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "publishmodal()",
       "source_file": "src/components/modals/PublishModal.tsx",
       "source_location": "L82"
     },
     {
-      "id": "src_components_modals_sharemodal_sharemodal",
-      "label": "ShareModal()",
+      "id": "src_components_modals_shortcutsmodal_key",
+      "label": "Key()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "sharemodal()",
-      "source_file": "src/components/modals/ShareModal.tsx",
-      "source_location": "L35"
+      "norm_label": "key()",
+      "source_file": "src/components/modals/ShortcutsModal.tsx",
+      "source_location": "L48"
+    },
+    {
+      "id": "src_components_modals_shortcutsmodal_shortcutsmodal",
+      "label": "ShortcutsModal()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "shortcutsmodal()",
+      "source_file": "src/components/modals/ShortcutsModal.tsx",
+      "source_location": "L52"
     },
     {
       "id": "src_components_modals_swapmanagermodal_swapmanagermodal",
@@ -11984,7 +12104,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "swapmanagermodal()",
       "source_file": "src/components/modals/SwapManagerModal.tsx",
@@ -11996,11 +12116,23 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "templatemodal()",
       "source_file": "src/components/modals/TemplateModal.tsx",
       "source_location": "L42"
+    },
+    {
+      "id": "src_components_roster_filldialog_filldialog",
+      "label": "FillDialog()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "filldialog()",
+      "source_file": "src/components/roster/FillDialog.tsx",
+      "source_location": "L40"
     },
     {
       "id": "src_components_roster_rosterdayview_rosterdayview",
@@ -12008,7 +12140,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "rosterdayview()",
       "source_file": "src/components/roster/RosterDayView.tsx",
@@ -12020,35 +12152,11 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "rosterpicker()",
       "source_file": "src/components/roster/RosterPicker.tsx",
       "source_location": "L24"
-    },
-    {
-      "id": "src_components_ui_badge_badge",
-      "label": "Badge()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "badge()",
-      "source_file": "src/components/ui/Badge.tsx",
-      "source_location": "L25"
-    },
-    {
-      "id": "src_components_ui_badge_problembadge",
-      "label": "ProblemBadge()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "problembadge()",
-      "source_file": "src/components/ui/Badge.tsx",
-      "source_location": "L47"
     },
     {
       "id": "src_components_ui_button_button",
@@ -12056,35 +12164,23 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "button()",
       "source_file": "src/components/ui/Button.tsx",
       "source_location": "L42"
     },
     {
-      "id": "src_components_ui_button_iconbutton",
-      "label": "IconButton()",
+      "id": "src_components_ui_cx_cx",
+      "label": "cx()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "iconbutton()",
-      "source_file": "src/components/ui/Button.tsx",
-      "source_location": "L81"
-    },
-    {
-      "id": "src_components_ui_datatable_datatable",
-      "label": "DataTable()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "datatable()",
-      "source_file": "src/components/ui/DataTable.tsx",
-      "source_location": "L67"
+      "norm_label": "cx()",
+      "source_file": "src/components/ui/cx.ts",
+      "source_location": "L7"
     },
     {
       "id": "src_components_ui_dialog_dialog",
@@ -12092,11 +12188,35 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "dialog()",
       "source_file": "src/components/ui/Dialog.tsx",
       "source_location": "L24"
+    },
+    {
+      "id": "src_components_ui_field_checkbox",
+      "label": "Checkbox()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "checkbox()",
+      "source_file": "src/components/ui/Field.tsx",
+      "source_location": "L77"
+    },
+    {
+      "id": "src_components_ui_field_dateinput",
+      "label": "DateInput()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "dateinput()",
+      "source_file": "src/components/ui/Field.tsx",
+      "source_location": "L143"
     },
     {
       "id": "src_components_ui_field_select",
@@ -12104,23 +12224,11 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "select()",
       "source_file": "src/components/ui/Field.tsx",
       "source_location": "L70"
-    },
-    {
-      "id": "src_components_ui_field_textarea",
-      "label": "Textarea()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "textarea()",
-      "source_file": "src/components/ui/Field.tsx",
-      "source_location": "L72"
     },
     {
       "id": "src_components_ui_notice_notice",
@@ -12128,119 +12236,23 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "notice()",
       "source_file": "src/components/ui/Notice.tsx",
       "source_location": "L22"
     },
     {
-      "id": "src_components_ui_states_emptystate",
-      "label": "EmptyState()",
+      "id": "src_components_views_myrosterview_myrosterview",
+      "label": "MyRosterView()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "emptystate()",
-      "source_file": "src/components/ui/States.tsx",
-      "source_location": "L13"
-    },
-    {
-      "id": "src_components_ui_states_errorstate",
-      "label": "ErrorState()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "errorstate()",
-      "source_file": "src/components/ui/States.tsx",
-      "source_location": "L36"
-    },
-    {
-      "id": "src_components_ui_states_loadingstate",
-      "label": "LoadingState()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "loadingstate()",
-      "source_file": "src/components/ui/States.tsx",
-      "source_location": "L29"
-    },
-    {
-      "id": "src_components_ui_tabs_tabpanel",
-      "label": "TabPanel()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "tabpanel()",
-      "source_file": "src/components/ui/Tabs.tsx",
-      "source_location": "L104"
-    },
-    {
-      "id": "src_components_ui_tabs_tabs",
-      "label": "Tabs()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "tabs()",
-      "source_file": "src/components/ui/Tabs.tsx",
-      "source_location": "L42"
-    },
-    {
-      "id": "src_components_views_accessmanagementpanel_accessmanagementpanel",
-      "label": "AccessManagementPanel()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "accessmanagementpanel()",
-      "source_file": "src/components/views/AccessManagementPanel.tsx",
-      "source_location": "L23"
-    },
-    {
-      "id": "src_components_views_approvalsqueuepanel_approvalsqueuepanel",
-      "label": "ApprovalsQueuePanel()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "approvalsqueuepanel()",
-      "source_file": "src/components/views/ApprovalsQueuePanel.tsx",
-      "source_location": "L37"
-    },
-    {
-      "id": "src_components_views_nursesview_nursesview",
-      "label": "NursesView()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "nursesview()",
-      "source_file": "src/components/views/NursesView.tsx",
-      "source_location": "L55"
-    },
-    {
-      "id": "src_components_views_publishview_publishview",
-      "label": "PublishView()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "publishview()",
-      "source_file": "src/components/views/PublishView.tsx",
-      "source_location": "L58"
+      "norm_label": "myrosterview()",
+      "source_file": "src/components/views/MyRosterView.tsx",
+      "source_location": "L34"
     },
     {
       "id": "src_components_views_schedulesview_schedulesview",
@@ -12248,155 +12260,119 @@
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "schedulesview()",
       "source_file": "src/components/views/SchedulesView.tsx",
       "source_location": "L123"
     },
     {
-      "id": "src_components_views_workinghoursperiodspanel_workinghoursperiodspanel",
-      "label": "WorkingHoursPeriodsPanel()",
+      "id": "src_components_workbook_grid_celleditordialog_celleditordialog",
+      "label": "CellEditorDialog()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "workinghoursperiodspanel()",
-      "source_file": "src/components/views/WorkingHoursPeriodsPanel.tsx",
-      "source_location": "L26"
+      "norm_label": "celleditordialog()",
+      "source_file": "src/components/workbook/grid/CellEditorDialog.tsx",
+      "source_location": "L56"
     },
     {
-      "id": "src_services_nurses_nurseform_checknurseform",
-      "label": "checkNurseForm()",
+      "id": "src_components_workbook_grid_celleditordialog_choiceclass",
+      "label": "choiceClass()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "checknurseform()",
-      "source_file": "src/services/nurses/nurseForm.ts",
-      "source_location": "L27"
+      "norm_label": "choiceclass()",
+      "source_file": "src/components/workbook/grid/CellEditorDialog.tsx",
+      "source_location": "L10"
     },
     {
-      "id": "src_services_nurses_nurseform_movepreference",
-      "label": "movePreference()",
+      "id": "src_components_workbook_grid_celleditordialog_withdr",
+      "label": "withDr()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "movepreference()",
-      "source_file": "src/services/nurses/nurseForm.ts",
-      "source_location": "L67"
+      "norm_label": "withdr()",
+      "source_file": "src/components/workbook/grid/CellEditorDialog.tsx",
+      "source_location": "L28"
     },
     {
-      "id": "src_services_nurses_nurselist_filternurses",
-      "label": "filterNurses()",
+      "id": "src_components_workbook_holidaydayoffpicker_holidaydayoffpicker",
+      "label": "HolidayDayOffPicker()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "filternurses()",
-      "source_file": "src/services/nurses/nurseList.ts",
-      "source_location": "L19"
+      "norm_label": "holidaydayoffpicker()",
+      "source_file": "src/components/workbook/HolidayDayOffPicker.tsx",
+      "source_location": "L21"
     },
     {
-      "id": "src_services_nurses_nurselist_nursecounts",
-      "label": "nurseCounts()",
+      "id": "src_components_workbook_warningssheet_warningssheet",
+      "label": "WarningsSheet()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "nursecounts()",
-      "source_file": "src/services/nurses/nurseList.ts",
-      "source_location": "L30"
+      "norm_label": "warningssheet()",
+      "source_file": "src/components/workbook/WarningsSheet.tsx",
+      "source_location": "L36"
     },
     {
-      "id": "src_services_publish_publicrosterservice_ensurepublicrosters",
-      "label": "ensurePublicRosters()",
+      "id": "src_services_schedule_shiftmoves_moveshift",
+      "label": "moveShift()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "ensurepublicrosters()",
-      "source_file": "src/services/publish/publicRosterService.ts",
-      "source_location": "L187"
+      "norm_label": "moveshift()",
+      "source_file": "src/services/schedule/shiftMoves.ts",
+      "source_location": "L18"
     },
     {
-      "id": "src_services_publish_publicrosterservice_syncpublicroster",
-      "label": "syncPublicRoster()",
+      "id": "src_services_schedule_shiftmoves_newmovedshiftid",
+      "label": "newMovedShiftId()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "syncpublicroster()",
-      "source_file": "src/services/publish/publicRosterService.ts",
-      "source_location": "L74"
+      "norm_label": "newmovedshiftid()",
+      "source_file": "src/services/schedule/shiftMoves.ts",
+      "source_location": "L15"
     },
     {
-      "id": "src_utils_dateutils_localtodayiso",
-      "label": "localTodayIso()",
+      "id": "src_services_schedule_shiftmoves_swapshifts",
+      "label": "swapShifts()",
       "_callable": true,
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "localtodayiso()",
+      "norm_label": "swapshifts()",
+      "source_file": "src/services/schedule/shiftMoves.ts",
+      "source_location": "L32"
+    },
+    {
+      "id": "src_utils_dateutils_formatdate",
+      "label": "formatDate()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "formatdate()",
       "source_file": "src/utils/dateUtils.ts",
-      "source_location": "L137"
-    },
-    {
-      "id": "tests_unit_uicomponents_test_html",
-      "label": "html()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "html()",
-      "source_file": "tests/unit/uiComponents.test.ts",
-      "source_location": "L34"
-    },
-    {
-      "id": "src_components_roster_filldialog_filldialog",
-      "label": "FillDialog()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 39,
-      "community_name": "cx",
-      "file_type": "code",
-      "norm_label": "filldialog()",
-      "source_file": "src/components/roster/FillDialog.tsx",
-      "source_location": "L40"
-    },
-    {
-      "id": "src_components_ui_cx_cx",
-      "label": "cx()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 39,
-      "community_name": "cx",
-      "file_type": "code",
-      "norm_label": "cx()",
-      "source_file": "src/components/ui/cx.ts",
-      "source_location": "L7"
-    },
-    {
-      "id": "src_components_ui_field_checkbox",
-      "label": "Checkbox()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 39,
-      "community_name": "cx",
-      "file_type": "code",
-      "norm_label": "checkbox()",
-      "source_file": "src/components/ui/Field.tsx",
-      "source_location": "L77"
+      "source_location": "L18"
     },
     {
       "id": "src_components_views_settings_rulestab_effectivevalue",
@@ -12404,7 +12380,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "effectivevalue()",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -12416,7 +12392,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "findrule()",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -12428,7 +12404,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "rulestab()",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -12440,7 +12416,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "slug()",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -12452,7 +12428,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "stepper()",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -12464,7 +12440,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "strictness()",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -12476,7 +12452,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "timebox()",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -12488,47 +12464,11 @@
       "_callable": true,
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "toggle()",
       "source_file": "src/components/views/settings/RulesTab.tsx",
       "source_location": "L233"
-    },
-    {
-      "id": "src_components_workbook_grid_celleditordialog_celleditordialog",
-      "label": "CellEditorDialog()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 39,
-      "community_name": "cx",
-      "file_type": "code",
-      "norm_label": "celleditordialog()",
-      "source_file": "src/components/workbook/grid/CellEditorDialog.tsx",
-      "source_location": "L56"
-    },
-    {
-      "id": "src_components_workbook_grid_celleditordialog_choiceclass",
-      "label": "choiceClass()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 39,
-      "community_name": "cx",
-      "file_type": "code",
-      "norm_label": "choiceclass()",
-      "source_file": "src/components/workbook/grid/CellEditorDialog.tsx",
-      "source_location": "L10"
-    },
-    {
-      "id": "src_components_workbook_grid_celleditordialog_withdr",
-      "label": "withDr()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 39,
-      "community_name": "cx",
-      "file_type": "code",
-      "norm_label": "withdr()",
-      "source_file": "src/components/workbook/grid/CellEditorDialog.tsx",
-      "source_location": "L28"
     },
     {
       "id": "src_services_auth_authservice_authservice_constructor",
@@ -13167,28 +13107,76 @@
       "source_location": "L6"
     },
     {
+      "id": "src_components_roster_dayview_isphonesize",
+      "label": "isPhoneSize()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "isphonesize()",
+      "source_file": "src/components/roster/dayView.ts",
+      "source_location": "L14"
+    },
+    {
+      "id": "src_components_ui_field_textarea",
+      "label": "Textarea()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "textarea()",
+      "source_file": "src/components/ui/Field.tsx",
+      "source_location": "L72"
+    },
+    {
+      "id": "src_components_ui_wholedates_wholedates",
+      "label": "wholeDates()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "wholedates()",
+      "source_file": "src/components/ui/wholeDates.tsx",
+      "source_location": "L13"
+    },
+    {
       "id": "src_components_views_allrequestspanel_allrequestspanel",
       "label": "AllRequestsPanel()",
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "allrequestspanel()",
       "source_file": "src/components/views/AllRequestsPanel.tsx",
       "source_location": "L52"
     },
     {
-      "id": "src_components_views_requestsview_requestsview",
-      "label": "RequestsView()",
+      "id": "src_components_views_nurseselfservicepanel_nurseselfservicepanel",
+      "label": "NurseSelfServicePanel()",
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
-      "norm_label": "requestsview()",
-      "source_file": "src/components/views/RequestsView.tsx",
-      "source_location": "L29"
+      "norm_label": "nurseselfservicepanel()",
+      "source_file": "src/components/views/NurseSelfServicePanel.tsx",
+      "source_location": "L51"
+    },
+    {
+      "id": "src_components_views_nurseselfservicepanel_usefocusfirsterror",
+      "label": "useFocusFirstError()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "usefocusfirsterror()",
+      "source_file": "src/components/views/NurseSelfServicePanel.tsx",
+      "source_location": "L45"
     },
     {
       "id": "src_services_repository_index_getrepository",
@@ -13196,23 +13184,107 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "getrepository()",
       "source_file": "src/services/repository/index.ts",
       "source_location": "L39"
     },
     {
-      "id": "src_services_requests_staffrequestservice_countpendingapprovals",
-      "label": "countPendingApprovals()",
+      "id": "src_services_requests_myrequests_checkdayrequest",
+      "label": "checkDayRequest()",
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
-      "norm_label": "countpendingapprovals()",
+      "norm_label": "checkdayrequest()",
+      "source_file": "src/services/requests/myRequests.ts",
+      "source_location": "L106"
+    },
+    {
+      "id": "src_services_requests_myrequests_checkleaverequest",
+      "label": "checkLeaveRequest()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "checkleaverequest()",
+      "source_file": "src/services/requests/myRequests.ts",
+      "source_location": "L87"
+    },
+    {
+      "id": "src_services_requests_myrequests_daystatus",
+      "label": "dayStatus()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "daystatus()",
+      "source_file": "src/services/requests/myRequests.ts",
+      "source_location": "L37"
+    },
+    {
+      "id": "src_services_requests_myrequests_leavestatus",
+      "label": "leaveStatus()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "leavestatus()",
+      "source_file": "src/services/requests/myRequests.ts",
+      "source_location": "L31"
+    },
+    {
+      "id": "src_services_requests_myrequests_myrequestlist",
+      "label": "myRequestList()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "myrequestlist()",
+      "source_file": "src/services/requests/myRequests.ts",
+      "source_location": "L44"
+    },
+    {
+      "id": "src_services_requests_myrequests_range",
+      "label": "range()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "range()",
+      "source_file": "src/services/requests/myRequests.ts",
+      "source_location": "L41"
+    },
+    {
+      "id": "src_services_requests_staffrequestservice_cancelavailabilityrequest",
+      "label": "cancelAvailabilityRequest()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "cancelavailabilityrequest()",
       "source_file": "src/services/requests/staffRequestService.ts",
-      "source_location": "L238"
+      "source_location": "L191"
+    },
+    {
+      "id": "src_services_requests_staffrequestservice_cancelleaverequest",
+      "label": "cancelLeaveRequest()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "cancelleaverequest()",
+      "source_file": "src/services/requests/staffRequestService.ts",
+      "source_location": "L187"
     },
     {
       "id": "src_services_requests_staffrequestservice_dayofflockid",
@@ -13220,7 +13292,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "dayofflockid()",
       "source_file": "src/services/requests/staffRequestService.ts",
@@ -13232,7 +13304,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "daysinclusive()",
       "source_file": "src/services/requests/staffRequestService.ts",
@@ -13244,7 +13316,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "deciderequest()",
       "source_file": "src/services/requests/staffRequestService.ts",
@@ -13256,7 +13328,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "deleteavailabilityrequest()",
       "source_file": "src/services/requests/staffRequestService.ts",
@@ -13268,23 +13340,11 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "emaildecision()",
       "source_file": "src/services/requests/staffRequestService.ts",
       "source_location": "L248"
-    },
-    {
-      "id": "src_services_requests_staffrequestservice_ispendingleave",
-      "label": "isPendingLeave()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 48,
-      "community_name": "getRepository",
-      "file_type": "code",
-      "norm_label": "ispendingleave()",
-      "source_file": "src/services/requests/staffRequestService.ts",
-      "source_location": "L33"
     },
     {
       "id": "src_services_requests_staffrequestservice_listallavailabilityrequests",
@@ -13292,23 +13352,23 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "listallavailabilityrequests()",
       "source_file": "src/services/requests/staffRequestService.ts",
       "source_location": "L424"
     },
     {
-      "id": "src_services_requests_staffrequestservice_listpendingapprovals",
-      "label": "listPendingApprovals()",
+      "id": "src_services_requests_staffrequestservice_listmyrequests",
+      "label": "listMyRequests()",
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
-      "norm_label": "listpendingapprovals()",
+      "norm_label": "listmyrequests()",
       "source_file": "src/services/requests/staffRequestService.ts",
-      "source_location": "L198"
+      "source_location": "L55"
     },
     {
       "id": "src_services_requests_staffrequestservice_recordholidaydayoff",
@@ -13316,7 +13376,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "recordholidaydayoff()",
       "source_file": "src/services/requests/staffRequestService.ts",
@@ -13328,7 +13388,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "reopenavailabilityrequest()",
       "source_file": "src/services/requests/staffRequestService.ts",
@@ -13340,7 +13400,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "requirenurseid()",
       "source_file": "src/services/requests/staffRequestService.ts",
@@ -13352,7 +13412,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "submitavailabilityrequest()",
       "source_file": "src/services/requests/staffRequestService.ts",
@@ -13364,7 +13424,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "submitleaverequest()",
       "source_file": "src/services/requests/staffRequestService.ts",
@@ -13376,7 +13436,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "syncdayofflock()",
       "source_file": "src/services/requests/staffRequestService.ts",
@@ -13388,7 +13448,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "updateavailabilityrequest()",
       "source_file": "src/services/requests/staffRequestService.ts",
@@ -13448,23 +13508,11 @@
       "_callable": true,
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "switch()",
       "source_file": "src/components/ui/Field.tsx",
       "source_location": "L97"
-    },
-    {
-      "id": "src_components_ui_wholedates_wholedates",
-      "label": "wholeDates()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "wholedates()",
-      "source_file": "src/components/ui/wholeDates.tsx",
-      "source_location": "L13"
     },
     {
       "id": "src_components_views_availabilityview_availabilityview",
@@ -13472,71 +13520,11 @@
       "_callable": true,
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "availabilityview()",
       "source_file": "src/components/views/AvailabilityView.tsx",
       "source_location": "L50"
-    },
-    {
-      "id": "src_components_views_myrosterview_myrosterview",
-      "label": "MyRosterView()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "myrosterview()",
-      "source_file": "src/components/views/MyRosterView.tsx",
-      "source_location": "L34"
-    },
-    {
-      "id": "src_components_views_nurseselfservicepanel_nurseselfservicepanel",
-      "label": "NurseSelfServicePanel()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "nurseselfservicepanel()",
-      "source_file": "src/components/views/NurseSelfServicePanel.tsx",
-      "source_location": "L51"
-    },
-    {
-      "id": "src_components_views_nurseselfservicepanel_usefocusfirsterror",
-      "label": "useFocusFirstError()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "usefocusfirsterror()",
-      "source_file": "src/components/views/NurseSelfServicePanel.tsx",
-      "source_location": "L45"
-    },
-    {
-      "id": "src_components_workbook_holidaydayoffpicker_holidaydayoffpicker",
-      "label": "HolidayDayOffPicker()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "holidaydayoffpicker()",
-      "source_file": "src/components/workbook/HolidayDayOffPicker.tsx",
-      "source_location": "L21"
-    },
-    {
-      "id": "src_components_workbook_warningssheet_warningssheet",
-      "label": "WarningsSheet()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "warningssheet()",
-      "source_file": "src/components/workbook/WarningsSheet.tsx",
-      "source_location": "L36"
     },
     {
       "id": "src_services_availability_leaveclash_leaveclash",
@@ -13544,7 +13532,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "leaveclash()",
       "source_file": "src/services/availability/leaveClash.ts",
@@ -13556,7 +13544,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "moveingrid()",
       "source_file": "src/services/availability/leaveGridPick.ts",
@@ -13568,7 +13556,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "pickstep()",
       "source_file": "src/services/availability/leaveGridPick.ts",
@@ -13580,7 +13568,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "daysinclusive()",
       "source_file": "src/services/availability/leaveImport.ts",
@@ -13592,7 +13580,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "planleaveimport()",
       "source_file": "src/services/availability/leaveImport.ts",
@@ -13604,215 +13592,11 @@
       "_callable": true,
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "allowancefor()",
       "source_file": "src/services/hours/leaveAllowance.ts",
       "source_location": "L27"
-    },
-    {
-      "id": "src_services_import_peopleimport_cellsof",
-      "label": "cellsOf()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "cellsof()",
-      "source_file": "src/services/import/peopleImport.ts",
-      "source_location": "L20"
-    },
-    {
-      "id": "src_services_import_peopleimport_readdoctorrows",
-      "label": "readDoctorRows()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "readdoctorrows()",
-      "source_file": "src/services/import/peopleImport.ts",
-      "source_location": "L95"
-    },
-    {
-      "id": "src_services_import_peopleimport_readnurserows",
-      "label": "readNurseRows()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "readnurserows()",
-      "source_file": "src/services/import/peopleImport.ts",
-      "source_location": "L33"
-    },
-    {
-      "id": "src_services_nurses_nurseform_nextemployeecode",
-      "label": "nextEmployeeCode()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "nextemployeecode()",
-      "source_file": "src/services/nurses/nurseForm.ts",
-      "source_location": "L76"
-    },
-    {
-      "id": "src_services_requests_myrequests_checkdayrequest",
-      "label": "checkDayRequest()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "checkdayrequest()",
-      "source_file": "src/services/requests/myRequests.ts",
-      "source_location": "L106"
-    },
-    {
-      "id": "src_services_requests_myrequests_checkleaverequest",
-      "label": "checkLeaveRequest()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "checkleaverequest()",
-      "source_file": "src/services/requests/myRequests.ts",
-      "source_location": "L87"
-    },
-    {
-      "id": "src_services_requests_myrequests_daystatus",
-      "label": "dayStatus()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "daystatus()",
-      "source_file": "src/services/requests/myRequests.ts",
-      "source_location": "L37"
-    },
-    {
-      "id": "src_services_requests_myrequests_leavestatus",
-      "label": "leaveStatus()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "leavestatus()",
-      "source_file": "src/services/requests/myRequests.ts",
-      "source_location": "L31"
-    },
-    {
-      "id": "src_services_requests_myrequests_myrequestlist",
-      "label": "myRequestList()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "myrequestlist()",
-      "source_file": "src/services/requests/myRequests.ts",
-      "source_location": "L44"
-    },
-    {
-      "id": "src_services_requests_myrequests_range",
-      "label": "range()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "range()",
-      "source_file": "src/services/requests/myRequests.ts",
-      "source_location": "L41"
-    },
-    {
-      "id": "src_services_requests_staffrequestservice_cancelavailabilityrequest",
-      "label": "cancelAvailabilityRequest()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "cancelavailabilityrequest()",
-      "source_file": "src/services/requests/staffRequestService.ts",
-      "source_location": "L191"
-    },
-    {
-      "id": "src_services_requests_staffrequestservice_cancelleaverequest",
-      "label": "cancelLeaveRequest()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "cancelleaverequest()",
-      "source_file": "src/services/requests/staffRequestService.ts",
-      "source_location": "L187"
-    },
-    {
-      "id": "src_services_requests_staffrequestservice_listmyrequests",
-      "label": "listMyRequests()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "listmyrequests()",
-      "source_file": "src/services/requests/staffRequestService.ts",
-      "source_location": "L55"
-    },
-    {
-      "id": "src_services_requests_waitingrequests_decisiontitle",
-      "label": "decisionTitle()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "decisiontitle()",
-      "source_file": "src/services/requests/waitingRequests.ts",
-      "source_location": "L26"
-    },
-    {
-      "id": "src_services_requests_waitingrequests_waitingdaytext",
-      "label": "waitingDayText()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "waitingdaytext()",
-      "source_file": "src/services/requests/waitingRequests.ts",
-      "source_location": "L19"
-    },
-    {
-      "id": "src_services_requests_waitingrequests_waitingleavetext",
-      "label": "waitingLeaveText()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "waitingleavetext()",
-      "source_file": "src/services/requests/waitingRequests.ts",
-      "source_location": "L13"
-    },
-    {
-      "id": "src_utils_dateutils_formatdate",
-      "label": "formatDate()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "formatdate()",
-      "source_file": "src/utils/dateUtils.ts",
-      "source_location": "L18"
     },
     {
       "id": "src_utils_dateutils_formatdaydate",
@@ -13820,7 +13604,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "formatdaydate()",
       "source_file": "src/utils/dateUtils.ts",
@@ -13832,7 +13616,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "parsedaymonthyear()",
       "source_file": "src/utils/dateUtils.ts",
@@ -13844,7 +13628,7 @@
       "_callable": true,
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "intimezone()",
       "source_file": "tests/unit/dateUtils.test.ts",
@@ -14391,6 +14175,18 @@
       "source_location": "L68"
     },
     {
+      "id": "src_components_views_accessmanagementpanel_accessmanagementpanel",
+      "label": "AccessManagementPanel()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "accessmanagementpanel()",
+      "source_file": "src/components/views/AccessManagementPanel.tsx",
+      "source_location": "L23"
+    },
+    {
       "id": "src_components_views_settings_clinictab_clinictab",
       "label": "ClinicTab()",
       "_callable": true,
@@ -14424,7 +14220,7 @@
       "file_type": "code",
       "norm_label": "dutiestab()",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L33"
+      "source_location": "L34"
     },
     {
       "id": "src_components_views_settings_dutiestab_shifthours",
@@ -14436,7 +14232,19 @@
       "file_type": "code",
       "norm_label": "shifthours()",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L28"
+      "source_location": "L29"
+    },
+    {
+      "id": "src_components_views_settings_emailtab_emailtab",
+      "label": "EmailTab()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "emailtab()",
+      "source_file": "src/components/views/settings/EmailTab.tsx",
+      "source_location": "L30"
     },
     {
       "id": "src_components_views_settings_holidaystab_holidaystab",
@@ -14460,7 +14268,7 @@
       "file_type": "code",
       "norm_label": "isbuiltincode()",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L24"
+      "source_location": "L25"
     },
     {
       "id": "src_components_views_settings_leavetab_leavetab",
@@ -14472,7 +14280,7 @@
       "file_type": "code",
       "norm_label": "leavetab()",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L26"
+      "source_location": "L27"
     },
     {
       "id": "src_components_views_settings_nurseskillstab_nurseskillstab",
@@ -14509,6 +14317,18 @@
       "norm_label": "colourfield()",
       "source_file": "src/components/views/settings/shared.tsx",
       "source_location": "L123"
+    },
+    {
+      "id": "src_components_views_settings_shared_savebar",
+      "label": "SaveBar()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "savebar()",
+      "source_file": "src/components/views/settings/shared.tsx",
+      "source_location": "L161"
     },
     {
       "id": "src_components_views_settings_shared_settingsdialog",
@@ -14557,6 +14377,30 @@
       "norm_label": "settingsview()",
       "source_file": "src/components/views/SettingsView.tsx",
       "source_location": "L72"
+    },
+    {
+      "id": "src_services_email_emailreadiness_checkemailreadiness",
+      "label": "checkEmailReadiness()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "checkemailreadiness()",
+      "source_file": "src/services/email/emailReadiness.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "src_services_email_emailresponse_reademailresponse",
+      "label": "readEmailResponse()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "reademailresponse()",
+      "source_file": "src/services/email/emailResponse.ts",
+      "source_location": "L2"
     },
     {
       "id": "src_services_rules_ruledraft_rulechanges",
@@ -14619,6 +14463,54 @@
       "source_location": "L357"
     },
     {
+      "id": "src_services_settings_emailsettingsstore_cache",
+      "label": "cache()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "cache()",
+      "source_file": "src/services/settings/emailSettingsStore.ts",
+      "source_location": "L27"
+    },
+    {
+      "id": "src_services_settings_emailsettingsstore_cachedemailsettings",
+      "label": "cachedEmailSettings()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "cachedemailsettings()",
+      "source_file": "src/services/settings/emailSettingsStore.ts",
+      "source_location": "L18"
+    },
+    {
+      "id": "src_services_settings_emailsettingsstore_loademailsettings",
+      "label": "loadEmailSettings()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "loademailsettings()",
+      "source_file": "src/services/settings/emailSettingsStore.ts",
+      "source_location": "L36"
+    },
+    {
+      "id": "src_services_settings_emailsettingsstore_saveemailsettings",
+      "label": "saveEmailSettings()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "saveemailsettings()",
+      "source_file": "src/services/settings/emailSettingsStore.ts",
+      "source_location": "L59"
+    },
+    {
       "id": "src_utils_weekend_getweekenddays",
       "label": "getWeekendDays()",
       "_callable": true,
@@ -14629,6 +14521,18 @@
       "norm_label": "getweekenddays()",
       "source_file": "src/utils/weekend.ts",
       "source_location": "L47"
+    },
+    {
+      "id": "tests_unit_emailpublishing_test_close",
+      "label": "close()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "close()",
+      "source_file": "tests/unit/emailPublishing.test.ts",
+      "source_location": "L75"
     },
     {
       "id": "tests_unit_dashboard_test_shift",
@@ -14859,6 +14763,18 @@
       "source_location": "L34"
     },
     {
+      "id": "src_components_ui_badge_badge",
+      "label": "Badge()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 68,
+      "community_name": "HistoryView.tsx",
+      "file_type": "code",
+      "norm_label": "badge()",
+      "source_file": "src/components/ui/Badge.tsx",
+      "source_location": "L25"
+    },
+    {
       "id": "src_components_views_historyview_historyview",
       "label": "HistoryView()",
       "_callable": true,
@@ -14943,6 +14859,30 @@
       "source_location": "L38"
     },
     {
+      "id": "src_utils_colorcontrast_contrastratio",
+      "label": "contrastRatio()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 68,
+      "community_name": "HistoryView.tsx",
+      "file_type": "code",
+      "norm_label": "contrastratio()",
+      "source_file": "src/utils/colorContrast.ts",
+      "source_location": "L33"
+    },
+    {
+      "id": "src_utils_colorcontrast_luminance",
+      "label": "luminance()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 68,
+      "community_name": "HistoryView.tsx",
+      "file_type": "code",
+      "norm_label": "luminance()",
+      "source_file": "src/utils/colorContrast.ts",
+      "source_location": "L24"
+    },
+    {
       "id": "src_utils_colorcontrast_readabletexton",
       "label": "readableTextOn()",
       "_callable": true,
@@ -14953,6 +14893,30 @@
       "norm_label": "readabletexton()",
       "source_file": "src/utils/colorContrast.ts",
       "source_location": "L45"
+    },
+    {
+      "id": "src_utils_colorcontrast_rgbof",
+      "label": "rgbOf()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 68,
+      "community_name": "HistoryView.tsx",
+      "file_type": "code",
+      "norm_label": "rgbof()",
+      "source_file": "src/utils/colorContrast.ts",
+      "source_location": "L16"
+    },
+    {
+      "id": "src_utils_colorcontrast_tint",
+      "label": "tint()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 68,
+      "community_name": "HistoryView.tsx",
+      "file_type": "code",
+      "norm_label": "tint()",
+      "source_file": "src/utils/colorContrast.ts",
+      "source_location": "L57"
     },
     {
       "id": "src_utils_dateutils_formatdatetime",
@@ -15411,30 +15375,6 @@
       "source_location": "L39"
     },
     {
-      "id": "src_components_modals_createschedulemodal_createschedulemodal",
-      "label": "CreateScheduleModal()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 80,
-      "community_name": "DoctorsView.tsx",
-      "file_type": "code",
-      "norm_label": "createschedulemodal()",
-      "source_file": "src/components/modals/CreateScheduleModal.tsx",
-      "source_location": "L38"
-    },
-    {
-      "id": "src_components_modals_doctorweekchangedialog_doctorweekchangedialog",
-      "label": "DoctorWeekChangeDialog()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 80,
-      "community_name": "DoctorsView.tsx",
-      "file_type": "code",
-      "norm_label": "doctorweekchangedialog()",
-      "source_file": "src/components/modals/DoctorWeekChangeDialog.tsx",
-      "source_location": "L37"
-    },
-    {
       "id": "src_components_modals_editdoctorshiftmodal_editdoctorshiftmodal",
       "label": "EditDoctorShiftModal()",
       "_callable": true,
@@ -15445,42 +15385,6 @@
       "norm_label": "editdoctorshiftmodal()",
       "source_file": "src/components/modals/EditDoctorShiftModal.tsx",
       "source_location": "L53"
-    },
-    {
-      "id": "src_components_roster_dayview_isphonesize",
-      "label": "isPhoneSize()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 80,
-      "community_name": "DoctorsView.tsx",
-      "file_type": "code",
-      "norm_label": "isphonesize()",
-      "source_file": "src/components/roster/dayView.ts",
-      "source_location": "L14"
-    },
-    {
-      "id": "src_components_ui_card_pageheader",
-      "label": "PageHeader()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 80,
-      "community_name": "DoctorsView.tsx",
-      "file_type": "code",
-      "norm_label": "pageheader()",
-      "source_file": "src/components/ui/Card.tsx",
-      "source_location": "L19"
-    },
-    {
-      "id": "src_components_ui_field_dateinput",
-      "label": "DateInput()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 80,
-      "community_name": "DoctorsView.tsx",
-      "file_type": "code",
-      "norm_label": "dateinput()",
-      "source_file": "src/components/ui/Field.tsx",
-      "source_location": "L143"
     },
     {
       "id": "src_components_views_doctorsview_doctorsview",
@@ -15891,52 +15795,184 @@
       "source_location": "L49"
     },
     {
-      "id": "src_utils_colorcontrast_contrastratio",
-      "label": "contrastRatio()",
+      "id": "src_components_modals_sharemodal_sharemodal",
+      "label": "ShareModal()",
       "_callable": true,
       "_origin": "ast",
       "community": 83,
-      "community_name": "colorContrast.ts",
+      "community_name": "PublishView",
       "file_type": "code",
-      "norm_label": "contrastratio()",
-      "source_file": "src/utils/colorContrast.ts",
+      "norm_label": "sharemodal()",
+      "source_file": "src/components/modals/ShareModal.tsx",
+      "source_location": "L35"
+    },
+    {
+      "id": "src_components_ui_datatable_datatable",
+      "label": "DataTable()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "datatable()",
+      "source_file": "src/components/ui/DataTable.tsx",
+      "source_location": "L67"
+    },
+    {
+      "id": "src_components_ui_states_emptystate",
+      "label": "EmptyState()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "emptystate()",
+      "source_file": "src/components/ui/States.tsx",
+      "source_location": "L13"
+    },
+    {
+      "id": "src_components_ui_states_errorstate",
+      "label": "ErrorState()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "errorstate()",
+      "source_file": "src/components/ui/States.tsx",
+      "source_location": "L36"
+    },
+    {
+      "id": "src_components_ui_states_loadingstate",
+      "label": "LoadingState()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "loadingstate()",
+      "source_file": "src/components/ui/States.tsx",
+      "source_location": "L29"
+    },
+    {
+      "id": "src_components_views_approvalsqueuepanel_approvalsqueuepanel",
+      "label": "ApprovalsQueuePanel()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "approvalsqueuepanel()",
+      "source_file": "src/components/views/ApprovalsQueuePanel.tsx",
+      "source_location": "L37"
+    },
+    {
+      "id": "src_components_views_publishview_publishview",
+      "label": "PublishView()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "publishview()",
+      "source_file": "src/components/views/PublishView.tsx",
+      "source_location": "L58"
+    },
+    {
+      "id": "src_components_views_workinghoursperiodspanel_workinghoursperiodspanel",
+      "label": "WorkingHoursPeriodsPanel()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "workinghoursperiodspanel()",
+      "source_file": "src/components/views/WorkingHoursPeriodsPanel.tsx",
+      "source_location": "L26"
+    },
+    {
+      "id": "src_services_publish_publicrosterservice_ensurepublicrosters",
+      "label": "ensurePublicRosters()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "ensurepublicrosters()",
+      "source_file": "src/services/publish/publicRosterService.ts",
+      "source_location": "L187"
+    },
+    {
+      "id": "src_services_publish_publicrosterservice_syncpublicroster",
+      "label": "syncPublicRoster()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "syncpublicroster()",
+      "source_file": "src/services/publish/publicRosterService.ts",
+      "source_location": "L74"
+    },
+    {
+      "id": "src_services_requests_staffrequestservice_ispendingleave",
+      "label": "isPendingLeave()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "ispendingleave()",
+      "source_file": "src/services/requests/staffRequestService.ts",
       "source_location": "L33"
     },
     {
-      "id": "src_utils_colorcontrast_luminance",
-      "label": "luminance()",
+      "id": "src_services_requests_staffrequestservice_listpendingapprovals",
+      "label": "listPendingApprovals()",
       "_callable": true,
       "_origin": "ast",
       "community": 83,
-      "community_name": "colorContrast.ts",
+      "community_name": "PublishView",
       "file_type": "code",
-      "norm_label": "luminance()",
-      "source_file": "src/utils/colorContrast.ts",
-      "source_location": "L24"
+      "norm_label": "listpendingapprovals()",
+      "source_file": "src/services/requests/staffRequestService.ts",
+      "source_location": "L198"
     },
     {
-      "id": "src_utils_colorcontrast_rgbof",
-      "label": "rgbOf()",
+      "id": "src_services_requests_waitingrequests_decisiontitle",
+      "label": "decisionTitle()",
       "_callable": true,
       "_origin": "ast",
       "community": 83,
-      "community_name": "colorContrast.ts",
+      "community_name": "PublishView",
       "file_type": "code",
-      "norm_label": "rgbof()",
-      "source_file": "src/utils/colorContrast.ts",
-      "source_location": "L16"
+      "norm_label": "decisiontitle()",
+      "source_file": "src/services/requests/waitingRequests.ts",
+      "source_location": "L26"
     },
     {
-      "id": "src_utils_colorcontrast_tint",
-      "label": "tint()",
+      "id": "src_services_requests_waitingrequests_waitingdaytext",
+      "label": "waitingDayText()",
       "_callable": true,
       "_origin": "ast",
       "community": 83,
-      "community_name": "colorContrast.ts",
+      "community_name": "PublishView",
       "file_type": "code",
-      "norm_label": "tint()",
-      "source_file": "src/utils/colorContrast.ts",
-      "source_location": "L57"
+      "norm_label": "waitingdaytext()",
+      "source_file": "src/services/requests/waitingRequests.ts",
+      "source_location": "L19"
+    },
+    {
+      "id": "src_services_requests_waitingrequests_waitingleavetext",
+      "label": "waitingLeaveText()",
+      "_callable": true,
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "waitingleavetext()",
+      "source_file": "src/services/requests/waitingRequests.ts",
+      "source_location": "L13"
     },
     {
       "id": "tests_unit_fixtures_hoursonlyrules",
@@ -17041,42 +17077,6 @@
       "norm_label": "ondialogschange()",
       "source_file": "src/components/common/useDialogA11y.ts",
       "source_location": "L26"
-    },
-    {
-      "id": "src_services_schedule_shiftmoves_moveshift",
-      "label": "moveShift()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "dialogs.tsx",
-      "file_type": "code",
-      "norm_label": "moveshift()",
-      "source_file": "src/services/schedule/shiftMoves.ts",
-      "source_location": "L18"
-    },
-    {
-      "id": "src_services_schedule_shiftmoves_newmovedshiftid",
-      "label": "newMovedShiftId()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "dialogs.tsx",
-      "file_type": "code",
-      "norm_label": "newmovedshiftid()",
-      "source_file": "src/services/schedule/shiftMoves.ts",
-      "source_location": "L15"
-    },
-    {
-      "id": "src_services_schedule_shiftmoves_swapshifts",
-      "label": "swapShifts()",
-      "_callable": true,
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "dialogs.tsx",
-      "file_type": "code",
-      "norm_label": "swapshifts()",
-      "source_file": "src/services/schedule/shiftMoves.ts",
-      "source_location": "L32"
     },
     {
       "id": "src_components_common_menubutton_menubutton",
@@ -18913,7 +18913,7 @@
       "node_kind": "heading",
       "norm_label": "17. known quirks and ideas for later",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L748"
+      "source_location": "L749"
     },
     {
       "id": "project_guide_1_features_at_a_glance",
@@ -19359,103 +19359,59 @@
       "source_location": "L24"
     },
     {
-      "id": "src_components_views_settings_emailtab",
-      "label": "EmailTab.tsx",
+      "id": "src_components_modals_bulkimportmodal",
+      "label": "BulkImportModal.tsx",
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "emailtab.tsx",
-      "source_file": "src/components/views/settings/EmailTab.tsx",
+      "norm_label": "bulkimportmodal.tsx",
+      "source_file": "src/components/modals/BulkImportModal.tsx",
       "source_location": "L1"
     },
     {
-      "id": "src_services_email_emailreadiness",
-      "label": "emailReadiness.ts",
+      "id": "src_components_views_nursesview",
+      "label": "NursesView.tsx",
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "emailreadiness.ts",
-      "source_file": "src/services/email/emailReadiness.ts",
+      "norm_label": "nursesview.tsx",
+      "source_file": "src/components/views/NursesView.tsx",
       "source_location": "L1"
     },
     {
-      "id": "src_services_email_emailresponse",
-      "label": "emailResponse.ts",
+      "id": "src_services_import_peopleimport",
+      "label": "peopleImport.ts",
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "emailresponse.ts",
-      "source_file": "src/services/email/emailResponse.ts",
+      "norm_label": "peopleimport.ts",
+      "source_file": "src/services/import/peopleImport.ts",
       "source_location": "L1"
     },
     {
-      "id": "src_services_settings_emailsettingsstore",
-      "label": "emailSettingsStore.ts",
+      "id": "src_services_import_peopleimport_weekdays",
+      "label": "WEEKDAYS",
       "_origin": "ast",
       "community": 114,
-      "community_name": "EmailTab.tsx",
+      "community_name": "NursesView.tsx",
       "file_type": "code",
-      "norm_label": "emailsettingsstore.ts",
-      "source_file": "src/services/settings/emailSettingsStore.ts",
+      "norm_label": "weekdays",
+      "source_file": "src/services/import/peopleImport.ts",
+      "source_location": "L18"
+    },
+    {
+      "id": "src_services_nurses_nurselist",
+      "label": "nurses/nurseList.ts",
+      "_origin": "ast",
+      "community": 114,
+      "community_name": "NursesView.tsx",
+      "file_type": "code",
+      "norm_label": "nurses/nurselist.ts",
+      "source_file": "src/services/nurses/nurseList.ts",
       "source_location": "L1"
-    },
-    {
-      "id": "src_types_settings",
-      "label": "settings.ts",
-      "_origin": "ast",
-      "community": 114,
-      "community_name": "EmailTab.tsx",
-      "file_type": "code",
-      "norm_label": "settings.ts",
-      "source_file": "src/types/settings.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_types_settings_default_email_settings",
-      "label": "DEFAULT_EMAIL_SETTINGS",
-      "_origin": "ast",
-      "community": 114,
-      "community_name": "EmailTab.tsx",
-      "file_type": "code",
-      "norm_label": "default_email_settings",
-      "source_file": "src/types/settings.ts",
-      "source_location": "L20"
-    },
-    {
-      "id": "tests_unit_emailpublishing_test",
-      "label": "emailPublishing.test.ts",
-      "_origin": "ast",
-      "community": 114,
-      "community_name": "EmailTab.tsx",
-      "file_type": "code",
-      "norm_label": "emailpublishing.test.ts",
-      "source_file": "tests/unit/emailPublishing.test.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "tests_unit_emailpublishing_test_configured",
-      "label": "configured",
-      "_origin": "ast",
-      "community": 114,
-      "community_name": "EmailTab.tsx",
-      "file_type": "code",
-      "norm_label": "configured",
-      "source_file": "tests/unit/emailPublishing.test.ts",
-      "source_location": "L13"
-    },
-    {
-      "id": "tests_unit_emailpublishing_test_live",
-      "label": "live",
-      "_origin": "ast",
-      "community": 114,
-      "community_name": "EmailTab.tsx",
-      "file_type": "code",
-      "norm_label": "live",
-      "source_file": "tests/unit/emailPublishing.test.ts",
-      "source_location": "L12"
     },
     {
       "id": "claude_skills_browser_check_scripts_roster_editing_dialogs",
@@ -21116,26 +21072,15 @@
       "source_location": "L1"
     },
     {
-      "id": "src_components_modals_shortcutsmodal",
-      "label": "ShortcutsModal.tsx",
+      "id": "src_components_modals_templatemodal",
+      "label": "TemplateModal.tsx",
       "_origin": "ast",
       "community": 133,
       "community_name": "react",
       "file_type": "code",
-      "norm_label": "shortcutsmodal.tsx",
-      "source_file": "src/components/modals/ShortcutsModal.tsx",
+      "norm_label": "templatemodal.tsx",
+      "source_file": "src/components/modals/TemplateModal.tsx",
       "source_location": "L1"
-    },
-    {
-      "id": "src_components_modals_shortcutsmodal_groups",
-      "label": "GROUPS",
-      "_origin": "ast",
-      "community": 133,
-      "community_name": "react",
-      "file_type": "code",
-      "norm_label": "groups",
-      "source_file": "src/components/modals/ShortcutsModal.tsx",
-      "source_location": "L18"
     },
     {
       "id": "src_components_ui_badge",
@@ -21347,6 +21292,17 @@
       "source_location": "L1"
     },
     {
+      "id": "src_components_views_requestsview",
+      "label": "RequestsView.tsx",
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "react",
+      "file_type": "code",
+      "norm_label": "requestsview.tsx",
+      "source_file": "src/components/views/RequestsView.tsx",
+      "source_location": "L1"
+    },
+    {
       "id": "src_components_workbook_problemspanel",
       "label": "ProblemsPanel.tsx",
       "_origin": "ast",
@@ -21367,6 +21323,28 @@
       "norm_label": "severity",
       "source_file": "src/components/workbook/ProblemsPanel.tsx",
       "source_location": "L29"
+    },
+    {
+      "id": "tests_unit_uicomponents_test",
+      "label": "uiComponents.test.ts",
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "react",
+      "file_type": "code",
+      "norm_label": "uicomponents.test.ts",
+      "source_file": "tests/unit/uiComponents.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "tests_unit_uicomponents_test_columns",
+      "label": "columns",
+      "_origin": "ast",
+      "community": 133,
+      "community_name": "react",
+      "file_type": "code",
+      "norm_label": "columns",
+      "source_file": "tests/unit/uiComponents.test.ts",
+      "source_location": "L137"
     },
     {
       "id": "ref_lucide_react",
@@ -26325,14 +26303,14 @@
       "source_location": "L1"
     },
     {
-      "id": "src_components_modals_bulkimportmodal",
-      "label": "BulkImportModal.tsx",
+      "id": "src_components_modals_createschedulemodal",
+      "label": "CreateScheduleModal.tsx",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "bulkimportmodal.tsx",
-      "source_file": "src/components/modals/BulkImportModal.tsx",
+      "norm_label": "createschedulemodal.tsx",
+      "source_file": "src/components/modals/CreateScheduleModal.tsx",
       "source_location": "L1"
     },
     {
@@ -26340,10 +26318,21 @@
       "label": "DeleteScheduleModal.tsx",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "deleteschedulemodal.tsx",
       "source_file": "src/components/modals/DeleteScheduleModal.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_components_modals_doctorweekchangedialog",
+      "label": "DoctorWeekChangeDialog.tsx",
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "doctorweekchangedialog.tsx",
+      "source_file": "src/components/modals/DoctorWeekChangeDialog.tsx",
       "source_location": "L1"
     },
     {
@@ -26351,7 +26340,7 @@
       "label": "NurseTimesheetModal.tsx",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "nursetimesheetmodal.tsx",
       "source_file": "src/components/modals/NurseTimesheetModal.tsx",
@@ -26362,7 +26351,7 @@
       "label": "SOURCE_LABELS",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "source_labels",
       "source_file": "src/components/modals/NurseTimesheetModal.tsx",
@@ -26373,32 +26362,65 @@
       "label": "STATUS_LABELS",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "status_labels",
       "source_file": "src/components/modals/NurseTimesheetModal.tsx",
       "source_location": "L21"
     },
     {
-      "id": "src_components_modals_sharemodal",
-      "label": "ShareModal.tsx",
+      "id": "src_components_modals_shortcutsmodal",
+      "label": "ShortcutsModal.tsx",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "sharemodal.tsx",
-      "source_file": "src/components/modals/ShareModal.tsx",
+      "norm_label": "shortcutsmodal.tsx",
+      "source_file": "src/components/modals/ShortcutsModal.tsx",
       "source_location": "L1"
     },
     {
-      "id": "src_components_modals_templatemodal",
-      "label": "TemplateModal.tsx",
+      "id": "src_components_modals_shortcutsmodal_groups",
+      "label": "GROUPS",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "templatemodal.tsx",
-      "source_file": "src/components/modals/TemplateModal.tsx",
+      "norm_label": "groups",
+      "source_file": "src/components/modals/ShortcutsModal.tsx",
+      "source_location": "L18"
+    },
+    {
+      "id": "src_components_modals_swapmanagermodal",
+      "label": "SwapManagerModal.tsx",
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "swapmanagermodal.tsx",
+      "source_file": "src/components/modals/SwapManagerModal.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_components_modals_swapmanagermodal_none",
+      "label": "NONE",
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "none",
+      "source_file": "src/components/modals/SwapManagerModal.tsx",
+      "source_location": "L41"
+    },
+    {
+      "id": "src_components_roster_filldialog",
+      "label": "FillDialog.tsx",
+      "_origin": "ast",
+      "community": 38,
+      "community_name": "formatDate",
+      "file_type": "code",
+      "norm_label": "filldialog.tsx",
+      "source_file": "src/components/roster/FillDialog.tsx",
       "source_location": "L1"
     },
     {
@@ -26406,118 +26428,62 @@
       "label": "RosterPicker.tsx",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
       "norm_label": "rosterpicker.tsx",
       "source_file": "src/components/roster/RosterPicker.tsx",
       "source_location": "L1"
     },
     {
-      "id": "src_components_views_accessmanagementpanel",
-      "label": "AccessManagementPanel.tsx",
+      "id": "src_components_workbook_grid_celleditordialog",
+      "label": "CellEditorDialog.tsx",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "accessmanagementpanel.tsx",
-      "source_file": "src/components/views/AccessManagementPanel.tsx",
+      "norm_label": "celleditordialog.tsx",
+      "source_file": "src/components/workbook/grid/CellEditorDialog.tsx",
       "source_location": "L1"
     },
     {
-      "id": "src_components_views_approvalsqueuepanel",
-      "label": "ApprovalsQueuePanel.tsx",
+      "id": "src_components_workbook_holidaydayoffpicker",
+      "label": "HolidayDayOffPicker.tsx",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "approvalsqueuepanel.tsx",
-      "source_file": "src/components/views/ApprovalsQueuePanel.tsx",
+      "norm_label": "holidaydayoffpicker.tsx",
+      "source_file": "src/components/workbook/HolidayDayOffPicker.tsx",
       "source_location": "L1"
     },
     {
-      "id": "src_components_views_nursesview",
-      "label": "NursesView.tsx",
+      "id": "src_services_schedule_shiftmoves",
+      "label": "shiftMoves.ts",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
+      "community_name": "formatDate",
       "file_type": "code",
-      "norm_label": "nursesview.tsx",
-      "source_file": "src/components/views/NursesView.tsx",
+      "norm_label": "shiftmoves.ts",
+      "source_file": "src/services/schedule/shiftMoves.ts",
       "source_location": "L1"
     },
     {
-      "id": "src_components_views_workinghoursperiodspanel",
-      "label": "WorkingHoursPeriodsPanel.tsx",
+      "id": "ref_uuid",
+      "label": "uuid",
       "_origin": "ast",
       "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "workinghoursperiodspanel.tsx",
-      "source_file": "src/components/views/WorkingHoursPeriodsPanel.tsx",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_services_nurses_nurselist",
-      "label": "nurses/nurseList.ts",
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "nurses/nurselist.ts",
-      "source_file": "src/services/nurses/nurseList.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "tests_unit_uicomponents_test",
-      "label": "uiComponents.test.ts",
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "uicomponents.test.ts",
-      "source_file": "tests/unit/uiComponents.test.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "tests_unit_uicomponents_test_columns",
-      "label": "columns",
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "code",
-      "norm_label": "columns",
-      "source_file": "tests/unit/uiComponents.test.ts",
-      "source_location": "L137"
-    },
-    {
-      "id": "tasks_plan_phase_2_design_system_and_app_shell",
-      "label": "Phase 2: design system and app shell",
-      "_origin": "ast",
-      "community": 38,
-      "community_name": "Button",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "phase 2: design system and app shell",
-      "source_file": "tasks/plan.md",
-      "source_location": "L176"
-    },
-    {
-      "id": "src_components_roster_filldialog",
-      "label": "FillDialog.tsx",
-      "_origin": "ast",
-      "community": 39,
-      "community_name": "cx",
-      "file_type": "code",
-      "norm_label": "filldialog.tsx",
-      "source_file": "src/components/roster/FillDialog.tsx",
-      "source_location": "L1"
+      "community_name": "formatDate",
+      "file_type": "concept",
+      "norm_label": "uuid",
+      "source_file": "package.json",
+      "source_location": "L34"
     },
     {
       "id": "src_components_views_settings_rulestab",
       "label": "RulesTab.tsx",
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "rulestab.tsx",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -26528,7 +26494,7 @@
       "label": "ALWAYS_ON",
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "always_on",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -26539,7 +26505,7 @@
       "label": "GROUPS",
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "groups",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -26550,7 +26516,7 @@
       "label": "KNOWN_KEYS",
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "known_keys",
       "source_file": "src/components/views/settings/RulesTab.tsx",
@@ -26561,22 +26527,11 @@
       "label": "ZERO_MEANS_DEFAULT",
       "_origin": "ast",
       "community": 39,
-      "community_name": "cx",
+      "community_name": "RulesTab.tsx",
       "file_type": "code",
       "norm_label": "zero_means_default",
       "source_file": "src/components/views/settings/RulesTab.tsx",
       "source_location": "L192"
-    },
-    {
-      "id": "src_components_workbook_grid_celleditordialog",
-      "label": "CellEditorDialog.tsx",
-      "_origin": "ast",
-      "community": 39,
-      "community_name": "cx",
-      "file_type": "code",
-      "norm_label": "celleditordialog.tsx",
-      "source_file": "src/components/workbook/grid/CellEditorDialog.tsx",
-      "source_location": "L1"
     },
     {
       "id": "src_services_firebase_firebaseconfig",
@@ -27856,7 +27811,7 @@
       "label": "AllRequestsPanel.tsx",
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "allrequestspanel.tsx",
       "source_file": "src/components/views/AllRequestsPanel.tsx",
@@ -27867,21 +27822,43 @@
       "label": "STATUS",
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "status",
       "source_file": "src/components/views/AllRequestsPanel.tsx",
       "source_location": "L37"
     },
     {
-      "id": "src_components_views_requestsview",
-      "label": "RequestsView.tsx",
+      "id": "src_components_views_nurseselfservicepanel",
+      "label": "NurseSelfServicePanel.tsx",
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
-      "norm_label": "requestsview.tsx",
-      "source_file": "src/components/views/RequestsView.tsx",
+      "norm_label": "nurseselfservicepanel.tsx",
+      "source_file": "src/components/views/NurseSelfServicePanel.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_components_views_nurseselfservicepanel_status",
+      "label": "STATUS",
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "status",
+      "source_file": "src/components/views/NurseSelfServicePanel.tsx",
+      "source_location": "L38"
+    },
+    {
+      "id": "src_services_requests_myrequests",
+      "label": "myRequests.ts",
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "code",
+      "norm_label": "myrequests.ts",
+      "source_file": "src/services/requests/myRequests.ts",
       "source_location": "L1"
     },
     {
@@ -27889,11 +27866,47 @@
       "label": "staffRequestService.ts",
       "_origin": "ast",
       "community": 48,
-      "community_name": "getRepository",
+      "community_name": "16. History of work (for context)",
       "file_type": "code",
       "norm_label": "staffrequestservice.ts",
       "source_file": "src/services/requests/staffRequestService.ts",
       "source_location": "L1"
+    },
+    {
+      "id": "project_guide_13_screens_in_detail",
+      "label": "13. Screens in detail",
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "13. screens in detail",
+      "source_file": "PROJECT_GUIDE.md",
+      "source_location": "L459"
+    },
+    {
+      "id": "project_guide_16_history_of_work_for_context",
+      "label": "16. History of work (for context)",
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "16. history of work (for context)",
+      "source_file": "PROJECT_GUIDE.md",
+      "source_location": "L570"
+    },
+    {
+      "id": "tasks_plan_phase_5_nurse_screens_for_phones_and_request_decision_emails",
+      "label": "Phase 5: nurse screens for phones, and request decision emails",
+      "_origin": "ast",
+      "community": 48,
+      "community_name": "16. History of work (for context)",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "phase 5: nurse screens for phones, and request decision emails",
+      "source_file": "tasks/plan.md",
+      "source_location": "L239"
     },
     {
       "id": "tests_unit_continuoushours_test",
@@ -28021,7 +28034,7 @@
       "label": "AvailabilityView.tsx",
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "availabilityview.tsx",
       "source_file": "src/components/views/AvailabilityView.tsx",
@@ -28032,51 +28045,18 @@
       "label": "WEEKDAY_ABBR",
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "weekday_abbr",
       "source_file": "src/components/views/AvailabilityView.tsx",
       "source_location": "L48"
     },
     {
-      "id": "src_components_views_nurseselfservicepanel",
-      "label": "NurseSelfServicePanel.tsx",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "nurseselfservicepanel.tsx",
-      "source_file": "src/components/views/NurseSelfServicePanel.tsx",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_components_views_nurseselfservicepanel_status",
-      "label": "STATUS",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "status",
-      "source_file": "src/components/views/NurseSelfServicePanel.tsx",
-      "source_location": "L38"
-    },
-    {
-      "id": "src_components_workbook_holidaydayoffpicker",
-      "label": "HolidayDayOffPicker.tsx",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "holidaydayoffpicker.tsx",
-      "source_file": "src/components/workbook/HolidayDayOffPicker.tsx",
-      "source_location": "L1"
-    },
-    {
       "id": "src_services_availability_leaveclash",
       "label": "leaveClash.ts",
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "leaveclash.ts",
       "source_file": "src/services/availability/leaveClash.ts",
@@ -28087,7 +28067,7 @@
       "label": "leaveGridPick.ts",
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "leavegridpick.ts",
       "source_file": "src/services/availability/leaveGridPick.ts",
@@ -28098,54 +28078,10 @@
       "label": "leaveImport.ts",
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "leaveimport.ts",
       "source_file": "src/services/availability/leaveImport.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_services_import_peopleimport",
-      "label": "peopleImport.ts",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "peopleimport.ts",
-      "source_file": "src/services/import/peopleImport.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_services_import_peopleimport_weekdays",
-      "label": "WEEKDAYS",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "weekdays",
-      "source_file": "src/services/import/peopleImport.ts",
-      "source_location": "L18"
-    },
-    {
-      "id": "src_services_requests_myrequests",
-      "label": "myRequests.ts",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "myrequests.ts",
-      "source_file": "src/services/requests/myRequests.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_services_requests_waitingrequests",
-      "label": "waitingRequests.ts",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "waitingrequests.ts",
-      "source_file": "src/services/requests/waitingRequests.ts",
       "source_location": "L1"
     },
     {
@@ -28153,7 +28089,7 @@
       "label": "dateUtils.ts",
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "dateutils.ts",
       "source_file": "src/utils/dateUtils.ts",
@@ -28164,7 +28100,7 @@
       "label": "WEEKDAYS",
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "weekdays",
       "source_file": "src/utils/dateUtils.ts",
@@ -28175,7 +28111,7 @@
       "label": "dateUtils.test.ts",
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "dateutils.test.ts",
       "source_file": "tests/unit/dateUtils.test.ts",
@@ -28186,57 +28122,11 @@
       "label": "leaveGridPick.test.ts",
       "_origin": "ast",
       "community": 5,
-      "community_name": "16. History of work (for context)",
+      "community_name": "AvailabilityView.tsx",
       "file_type": "code",
       "norm_label": "leavegridpick.test.ts",
       "source_file": "tests/unit/leaveGridPick.test.ts",
       "source_location": "L1"
-    },
-    {
-      "id": "tests_unit_waitingrequests_test",
-      "label": "waitingRequests.test.ts",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "waitingrequests.test.ts",
-      "source_file": "tests/unit/waitingRequests.test.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "tests_unit_waitingrequests_test_shifts",
-      "label": "shifts",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "code",
-      "norm_label": "shifts",
-      "source_file": "tests/unit/waitingRequests.test.ts",
-      "source_location": "L5"
-    },
-    {
-      "id": "project_guide_16_history_of_work_for_context",
-      "label": "16. History of work (for context)",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "16. history of work (for context)",
-      "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L570"
-    },
-    {
-      "id": "tasks_plan_phase_5_nurse_screens_for_phones_and_request_decision_emails",
-      "label": "Phase 5: nurse screens for phones, and request decision emails",
-      "_origin": "ast",
-      "community": 5,
-      "community_name": "16. History of work (for context)",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "phase 5: nurse screens for phones, and request decision emails",
-      "source_file": "tasks/plan.md",
-      "source_location": "L239"
     },
     {
       "id": "claude_skills_browser_check_scripts_leave_dialogs",
@@ -29398,6 +29288,17 @@
       "source_location": "L1"
     },
     {
+      "id": "src_components_views_settings_emailtab",
+      "label": "EmailTab.tsx",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "emailtab.tsx",
+      "source_file": "src/components/views/settings/EmailTab.tsx",
+      "source_location": "L1"
+    },
+    {
       "id": "src_components_views_settings_holidaystab",
       "label": "HolidaysTab.tsx",
       "_origin": "ast",
@@ -29428,7 +29329,7 @@
       "file_type": "code",
       "norm_label": "built_in_leave_codes",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L23"
+      "source_location": "L24"
     },
     {
       "id": "src_components_views_settings_nurseskillstab",
@@ -29552,6 +29453,28 @@
       "source_location": "L1"
     },
     {
+      "id": "src_services_email_emailreadiness",
+      "label": "emailReadiness.ts",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "emailreadiness.ts",
+      "source_file": "src/services/email/emailReadiness.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_services_email_emailresponse",
+      "label": "emailResponse.ts",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "emailresponse.ts",
+      "source_file": "src/services/email/emailResponse.ts",
+      "source_location": "L1"
+    },
+    {
       "id": "src_services_firebase_firebaseconfig_defaultfirebaseconfig",
       "label": "defaultFirebaseConfig",
       "_origin": "ast",
@@ -29627,6 +29550,72 @@
       "norm_label": "seed_working_hours_periods",
       "source_file": "src/services/seed/seedData.ts",
       "source_location": "L23"
+    },
+    {
+      "id": "src_services_settings_emailsettingsstore",
+      "label": "emailSettingsStore.ts",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "emailsettingsstore.ts",
+      "source_file": "src/services/settings/emailSettingsStore.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_types_settings",
+      "label": "settings.ts",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "settings.ts",
+      "source_file": "src/types/settings.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_types_settings_default_email_settings",
+      "label": "DEFAULT_EMAIL_SETTINGS",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "default_email_settings",
+      "source_file": "src/types/settings.ts",
+      "source_location": "L20"
+    },
+    {
+      "id": "tests_unit_emailpublishing_test",
+      "label": "emailPublishing.test.ts",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "emailpublishing.test.ts",
+      "source_file": "tests/unit/emailPublishing.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "tests_unit_emailpublishing_test_configured",
+      "label": "configured",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "configured",
+      "source_file": "tests/unit/emailPublishing.test.ts",
+      "source_location": "L13"
+    },
+    {
+      "id": "tests_unit_emailpublishing_test_live",
+      "label": "live",
+      "_origin": "ast",
+      "community": 6,
+      "community_name": "SettingsView.tsx",
+      "file_type": "code",
+      "norm_label": "live",
+      "source_file": "tests/unit/emailPublishing.test.ts",
+      "source_location": "L12"
     },
     {
       "id": "claude",
@@ -30573,6 +30562,50 @@
       "norm_label": "kind_labels",
       "source_file": "src/services/history/versionKinds.ts",
       "source_location": "L14"
+    },
+    {
+      "id": "src_utils_colorcontrast",
+      "label": "colorContrast.ts",
+      "_origin": "ast",
+      "community": 68,
+      "community_name": "HistoryView.tsx",
+      "file_type": "code",
+      "norm_label": "colorcontrast.ts",
+      "source_file": "src/utils/colorContrast.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_utils_colorcontrast_ink",
+      "label": "INK",
+      "_origin": "ast",
+      "community": 68,
+      "community_name": "HistoryView.tsx",
+      "file_type": "code",
+      "norm_label": "ink",
+      "source_file": "src/utils/colorContrast.ts",
+      "source_location": "L8"
+    },
+    {
+      "id": "src_utils_colorcontrast_ink_muted",
+      "label": "INK_MUTED",
+      "_origin": "ast",
+      "community": 68,
+      "community_name": "HistoryView.tsx",
+      "file_type": "code",
+      "norm_label": "ink_muted",
+      "source_file": "src/utils/colorContrast.ts",
+      "source_location": "L9"
+    },
+    {
+      "id": "tests_unit_colorcontrast_test",
+      "label": "colorContrast.test.ts",
+      "_origin": "ast",
+      "community": 68,
+      "community_name": "HistoryView.tsx",
+      "file_type": "code",
+      "norm_label": "colorcontrast.test.ts",
+      "source_file": "tests/unit/colorContrast.test.ts",
+      "source_location": "L1"
     },
     {
       "id": "tasks_plan",
@@ -32120,28 +32153,6 @@
       "source_location": "L11"
     },
     {
-      "id": "src_components_modals_createschedulemodal",
-      "label": "CreateScheduleModal.tsx",
-      "_origin": "ast",
-      "community": 80,
-      "community_name": "DoctorsView.tsx",
-      "file_type": "code",
-      "norm_label": "createschedulemodal.tsx",
-      "source_file": "src/components/modals/CreateScheduleModal.tsx",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_components_modals_doctorweekchangedialog",
-      "label": "DoctorWeekChangeDialog.tsx",
-      "_origin": "ast",
-      "community": 80,
-      "community_name": "DoctorsView.tsx",
-      "file_type": "code",
-      "norm_label": "doctorweekchangedialog.tsx",
-      "source_file": "src/components/modals/DoctorWeekChangeDialog.tsx",
-      "source_location": "L1"
-    },
-    {
       "id": "src_components_modals_editdoctorshiftmodal",
       "label": "EditDoctorShiftModal.tsx",
       "_origin": "ast",
@@ -32261,18 +32272,6 @@
       "norm_label": "doctors",
       "source_file": "tests/unit/doctorForm.test.ts",
       "source_location": "L5"
-    },
-    {
-      "id": "project_guide_13_screens_in_detail",
-      "label": "13. Screens in detail",
-      "_origin": "ast",
-      "community": 80,
-      "community_name": "DoctorsView.tsx",
-      "file_type": "document",
-      "node_kind": "heading",
-      "norm_label": "13. screens in detail",
-      "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L459"
     },
     {
       "id": "claude_skills_browser_check_scripts_links",
@@ -32429,48 +32428,93 @@
       "source_location": "L64"
     },
     {
-      "id": "src_utils_colorcontrast",
-      "label": "colorContrast.ts",
+      "id": "src_components_modals_sharemodal",
+      "label": "ShareModal.tsx",
       "_origin": "ast",
       "community": 83,
-      "community_name": "colorContrast.ts",
+      "community_name": "PublishView",
       "file_type": "code",
-      "norm_label": "colorcontrast.ts",
-      "source_file": "src/utils/colorContrast.ts",
+      "norm_label": "sharemodal.tsx",
+      "source_file": "src/components/modals/ShareModal.tsx",
       "source_location": "L1"
     },
     {
-      "id": "src_utils_colorcontrast_ink",
-      "label": "INK",
+      "id": "src_components_views_accessmanagementpanel",
+      "label": "AccessManagementPanel.tsx",
       "_origin": "ast",
       "community": 83,
-      "community_name": "colorContrast.ts",
+      "community_name": "PublishView",
       "file_type": "code",
-      "norm_label": "ink",
-      "source_file": "src/utils/colorContrast.ts",
-      "source_location": "L8"
-    },
-    {
-      "id": "src_utils_colorcontrast_ink_muted",
-      "label": "INK_MUTED",
-      "_origin": "ast",
-      "community": 83,
-      "community_name": "colorContrast.ts",
-      "file_type": "code",
-      "norm_label": "ink_muted",
-      "source_file": "src/utils/colorContrast.ts",
-      "source_location": "L9"
-    },
-    {
-      "id": "tests_unit_colorcontrast_test",
-      "label": "colorContrast.test.ts",
-      "_origin": "ast",
-      "community": 83,
-      "community_name": "colorContrast.ts",
-      "file_type": "code",
-      "norm_label": "colorcontrast.test.ts",
-      "source_file": "tests/unit/colorContrast.test.ts",
+      "norm_label": "accessmanagementpanel.tsx",
+      "source_file": "src/components/views/AccessManagementPanel.tsx",
       "source_location": "L1"
+    },
+    {
+      "id": "src_components_views_approvalsqueuepanel",
+      "label": "ApprovalsQueuePanel.tsx",
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "approvalsqueuepanel.tsx",
+      "source_file": "src/components/views/ApprovalsQueuePanel.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_components_views_workinghoursperiodspanel",
+      "label": "WorkingHoursPeriodsPanel.tsx",
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "workinghoursperiodspanel.tsx",
+      "source_file": "src/components/views/WorkingHoursPeriodsPanel.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "src_services_requests_waitingrequests",
+      "label": "waitingRequests.ts",
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "waitingrequests.ts",
+      "source_file": "src/services/requests/waitingRequests.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "tests_unit_waitingrequests_test",
+      "label": "waitingRequests.test.ts",
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "waitingrequests.test.ts",
+      "source_file": "tests/unit/waitingRequests.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "tests_unit_waitingrequests_test_shifts",
+      "label": "shifts",
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "code",
+      "norm_label": "shifts",
+      "source_file": "tests/unit/waitingRequests.test.ts",
+      "source_location": "L5"
+    },
+    {
+      "id": "tasks_plan_phase_2_design_system_and_app_shell",
+      "label": "Phase 2: design system and app shell",
+      "_origin": "ast",
+      "community": 83,
+      "community_name": "PublishView",
+      "file_type": "document",
+      "node_kind": "heading",
+      "norm_label": "phase 2: design system and app shell",
+      "source_file": "tasks/plan.md",
+      "source_location": "L176"
     },
     {
       "id": "tests_unit_generatorrequests_test",
@@ -34284,50 +34328,6 @@
       "norm_label": "tone_icons",
       "source_file": "src/components/common/dialogs.tsx",
       "source_location": "L99"
-    },
-    {
-      "id": "src_components_modals_swapmanagermodal",
-      "label": "SwapManagerModal.tsx",
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "dialogs.tsx",
-      "file_type": "code",
-      "norm_label": "swapmanagermodal.tsx",
-      "source_file": "src/components/modals/SwapManagerModal.tsx",
-      "source_location": "L1"
-    },
-    {
-      "id": "src_components_modals_swapmanagermodal_none",
-      "label": "NONE",
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "dialogs.tsx",
-      "file_type": "code",
-      "norm_label": "none",
-      "source_file": "src/components/modals/SwapManagerModal.tsx",
-      "source_location": "L41"
-    },
-    {
-      "id": "src_services_schedule_shiftmoves",
-      "label": "shiftMoves.ts",
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "dialogs.tsx",
-      "file_type": "code",
-      "norm_label": "shiftmoves.ts",
-      "source_file": "src/services/schedule/shiftMoves.ts",
-      "source_location": "L1"
-    },
-    {
-      "id": "ref_uuid",
-      "label": "uuid",
-      "_origin": "ast",
-      "community": 97,
-      "community_name": "dialogs.tsx",
-      "file_type": "concept",
-      "norm_label": "uuid",
-      "source_file": "package.json",
-      "source_location": "L34"
     },
     {
       "id": "src_components_common_menubutton",
@@ -47050,7 +47050,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L136",
+      "source_location": "L137",
       "weight": 1.0
     },
     {
@@ -47062,7 +47062,19 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L217",
+      "source_location": "L218",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_views_settings_dutiestab_dutiestab",
+      "target": "src_utils_colorcontrast_readabletexton",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "src/components/views/settings/DutiesTab.tsx",
+      "source_location": "L224",
       "weight": 1.0
     },
     {
@@ -47074,7 +47086,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L310",
+      "source_location": "L311",
       "weight": 1.0
     },
     {
@@ -47086,7 +47098,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L316",
+      "source_location": "L317",
       "weight": 1.0
     },
     {
@@ -47098,7 +47110,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L317",
+      "source_location": "L318",
       "weight": 1.0
     },
     {
@@ -47110,7 +47122,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L323",
+      "source_location": "L324",
       "weight": 1.0
     },
     {
@@ -47122,7 +47134,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L333",
+      "source_location": "L334",
       "weight": 1.0
     },
     {
@@ -47134,7 +47146,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L34",
+      "source_location": "L35",
       "weight": 1.0
     },
     {
@@ -47146,7 +47158,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L40",
+      "source_location": "L41",
       "weight": 1.0
     },
     {
@@ -47158,7 +47170,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L42",
+      "source_location": "L43",
       "weight": 1.0
     },
     {
@@ -47170,7 +47182,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L44",
+      "source_location": "L45",
       "weight": 1.0
     },
     {
@@ -47182,7 +47194,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L48",
+      "source_location": "L49",
       "weight": 1.0
     },
     {
@@ -47194,7 +47206,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L30",
+      "source_location": "L31",
       "weight": 1.0
     },
     {
@@ -47482,7 +47494,19 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L102",
+      "source_location": "L103",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_views_settings_leavetab_leavetab",
+      "target": "src_utils_colorcontrast_readabletexton",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "src/components/views/settings/LeaveTab.tsx",
+      "source_location": "L174",
       "weight": 1.0
     },
     {
@@ -47494,7 +47518,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L235",
+      "source_location": "L236",
       "weight": 1.0
     },
     {
@@ -47506,7 +47530,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L241",
+      "source_location": "L242",
       "weight": 1.0
     },
     {
@@ -47518,7 +47542,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L242",
+      "source_location": "L243",
       "weight": 1.0
     },
     {
@@ -47530,7 +47554,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L264",
+      "source_location": "L265",
       "weight": 1.0
     },
     {
@@ -47542,7 +47566,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L27",
+      "source_location": "L28",
       "weight": 1.0
     },
     {
@@ -47554,7 +47578,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L283",
+      "source_location": "L284",
       "weight": 1.0
     },
     {
@@ -47566,7 +47590,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L32",
+      "source_location": "L33",
       "weight": 1.0
     },
     {
@@ -47578,7 +47602,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L35",
+      "source_location": "L36",
       "weight": 1.0
     },
     {
@@ -47590,7 +47614,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L39",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -62051,7 +62075,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L18",
+      "source_location": "L19",
       "weight": 1.0
     },
     {
@@ -62063,7 +62087,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L22",
+      "source_location": "L23",
       "weight": 1.0
     },
     {
@@ -62111,7 +62135,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L17",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -62123,7 +62147,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L19",
+      "source_location": "L20",
       "weight": 1.0
     },
     {
@@ -81608,7 +81632,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L10",
+      "source_location": "L11",
       "weight": 1.0
     },
     {
@@ -81620,7 +81644,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L11",
+      "source_location": "L12",
       "weight": 1.0
     },
     {
@@ -81632,7 +81656,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -81644,7 +81668,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -81656,7 +81680,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -81668,7 +81692,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0
     },
     {
@@ -81680,7 +81704,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0
     },
     {
@@ -81692,7 +81716,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -81704,7 +81728,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -81716,7 +81740,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -81728,7 +81752,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -81740,7 +81764,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -81752,7 +81776,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L15",
+      "source_location": "L16",
       "weight": 1.0
     },
     {
@@ -81764,7 +81788,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L15",
+      "source_location": "L16",
       "weight": 1.0
     },
     {
@@ -81776,7 +81800,19 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L15",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_views_settings_dutiestab",
+      "target": "src_utils_colorcontrast_readabletexton",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/components/views/settings/DutiesTab.tsx",
+      "source_location": "L8",
       "weight": 1.0
     },
     {
@@ -82124,7 +82160,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L10",
+      "source_location": "L11",
       "weight": 1.0
     },
     {
@@ -82136,7 +82172,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L11",
+      "source_location": "L12",
       "weight": 1.0
     },
     {
@@ -82148,7 +82184,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -82160,7 +82196,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L12",
+      "source_location": "L13",
       "weight": 1.0
     },
     {
@@ -82172,7 +82208,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0
     },
     {
@@ -82184,7 +82220,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0
     },
     {
@@ -82196,7 +82232,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0
     },
     {
@@ -82208,7 +82244,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0
     },
     {
@@ -82220,7 +82256,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L13",
+      "source_location": "L14",
       "weight": 1.0
     },
     {
@@ -82232,7 +82268,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -82244,7 +82280,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
       "weight": 1.0
     },
     {
@@ -82256,7 +82292,19 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_views_settings_leavetab",
+      "target": "src_utils_colorcontrast_readabletexton",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/components/views/settings/LeaveTab.tsx",
+      "source_location": "L8",
       "weight": 1.0
     },
     {
@@ -110617,7 +110665,7 @@
     },
     {
       "source": "src_components_views_settings_dutiestab",
-      "target": "src_services_repository_index",
+      "target": "ref_lucide_react",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -110629,7 +110677,7 @@
     },
     {
       "source": "src_components_views_settings_dutiestab",
-      "target": "src_types_index",
+      "target": "src_services_repository_index",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -110641,7 +110689,7 @@
     },
     {
       "source": "src_components_views_settings_dutiestab",
-      "target": "src_services_engine_clinicmodel",
+      "target": "src_types_index",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -110653,7 +110701,7 @@
     },
     {
       "source": "src_components_views_settings_dutiestab",
-      "target": "src_components_common_dialogs",
+      "target": "src_services_engine_clinicmodel",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -110665,7 +110713,7 @@
     },
     {
       "source": "src_components_views_settings_dutiestab",
-      "target": "src_components_views_settings_shared",
+      "target": "src_components_common_dialogs",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -110677,7 +110725,7 @@
     },
     {
       "source": "src_components_views_settings_dutiestab",
-      "target": "src_components_ui_index",
+      "target": "src_components_views_settings_shared",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -110689,7 +110737,19 @@
     },
     {
       "source": "src_components_views_settings_dutiestab",
-      "target": "ref_react",
+      "target": "src_components_ui_index",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/components/views/settings/DutiesTab.tsx",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_views_settings_dutiestab",
+      "target": "src_utils_colorcontrast",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -110701,7 +110761,7 @@
     },
     {
       "source": "src_components_views_settings_dutiestab",
-      "target": "ref_lucide_react",
+      "target": "ref_react",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -110953,7 +111013,7 @@
     },
     {
       "source": "src_components_views_settings_leavetab",
-      "target": "src_services_repository_index",
+      "target": "ref_lucide_react",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -110965,7 +111025,7 @@
     },
     {
       "source": "src_components_views_settings_leavetab",
-      "target": "src_types_index",
+      "target": "src_services_repository_index",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -110977,7 +111037,7 @@
     },
     {
       "source": "src_components_views_settings_leavetab",
-      "target": "src_components_common_dialogs",
+      "target": "src_types_index",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -110989,7 +111049,7 @@
     },
     {
       "source": "src_components_views_settings_leavetab",
-      "target": "src_components_views_settings_shared",
+      "target": "src_components_common_dialogs",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -111001,7 +111061,7 @@
     },
     {
       "source": "src_components_views_settings_leavetab",
-      "target": "src_components_ui_index",
+      "target": "src_components_views_settings_shared",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -111013,7 +111073,19 @@
     },
     {
       "source": "src_components_views_settings_leavetab",
-      "target": "ref_react",
+      "target": "src_components_ui_index",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "src/components/views/settings/LeaveTab.tsx",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "src_components_views_settings_leavetab",
+      "target": "src_utils_colorcontrast",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -111025,7 +111097,7 @@
     },
     {
       "source": "src_components_views_settings_leavetab",
-      "target": "ref_lucide_react",
+      "target": "ref_react",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -131084,7 +131156,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L748",
+      "source_location": "L749",
       "weight": 1.0
     },
     {
@@ -135022,7 +135094,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L17",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -135033,7 +135105,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L28",
+      "source_location": "L29",
       "weight": 1.0
     },
     {
@@ -135044,7 +135116,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/views/settings/DutiesTab.tsx",
-      "source_location": "L33",
+      "source_location": "L34",
       "weight": 1.0
     },
     {
@@ -135099,7 +135171,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L16",
+      "source_location": "L17",
       "weight": 1.0
     },
     {
@@ -135110,7 +135182,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L23",
+      "source_location": "L24",
       "weight": 1.0
     },
     {
@@ -135121,7 +135193,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L24",
+      "source_location": "L25",
       "weight": 1.0
     },
     {
@@ -135132,7 +135204,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/components/views/settings/LeaveTab.tsx",
-      "source_location": "L26",
+      "source_location": "L27",
       "weight": 1.0
     },
     {
@@ -152229,7 +152301,7 @@
       "confidence_score": 0.95,
       "context": "WalkthroughModal",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L762",
+      "source_location": "L763",
       "weight": 1.0
     },
     {
@@ -152949,7 +153021,7 @@
       "confidence_score": 0.95,
       "context": "doctorSessionsOn",
       "source_file": "PROJECT_GUIDE.md",
-      "source_location": "L757",
+      "source_location": "L758",
       "weight": 1.0
     },
     {
@@ -154826,5 +154898,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "ecf9c66e7ca37677caa8b845676a0ba700939df7"
+  "built_at_commit": "4b5b63be4778f3b2e56737f47267c924255123d1"
 }

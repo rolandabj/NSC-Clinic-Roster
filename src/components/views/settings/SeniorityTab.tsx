@@ -192,8 +192,8 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
               <tr>
                 <th className="py-2.5 px-3 w-24 text-center"><span className="sr-only">Order</span></th>
                 <th className="py-2.5 px-3 w-16">Rank</th>
-                <th className="py-2.5 px-3">Seniority Level Name</th>
-                <th className="py-2.5 px-3">Senior?</th>
+                <th className="py-2.5 px-3">Name</th>
+                <th className="py-2.5 px-3">Senior</th>
                 <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -252,7 +252,7 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
                           aria-label={`Move ${level.name} up`}
                           disabled={idx === 0}
                           onClick={() => moveLevel(idx, idx - 1)}
-                          className="px-1 text-slate-500 hover:text-slate-800 disabled:opacity-30 cursor-pointer"
+                          className="flex size-7 items-center justify-center rounded text-ink-muted hover:bg-sunken hover:text-ink disabled:opacity-30 cursor-pointer"
                         >
                           ▲
                         </button>
@@ -261,7 +261,7 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
                           aria-label={`Move ${level.name} down`}
                           disabled={idx === seniority.length - 1}
                           onClick={() => moveLevel(idx, idx + 1)}
-                          className="px-1 text-slate-500 hover:text-slate-800 disabled:opacity-30 cursor-pointer"
+                          className="flex size-7 items-center justify-center rounded text-ink-muted hover:bg-sunken hover:text-ink disabled:opacity-30 cursor-pointer"
                         >
                           ▼
                         </button>
@@ -286,7 +286,7 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium cursor-pointer transition-colors ${
                           level.isSenior
                             ? 'bg-indigo-50 border border-indigo-200 text-indigo-700'
-                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                            : 'bg-sunken text-ink-muted hover:bg-line'
                         }`}
                       >
                         <Shield className="w-3 h-3" />
@@ -301,7 +301,7 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
                             setEditingSeniority(level);
                             setIsSeniorityModalOpen(true);
                           }}
-                          className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
+                          className="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-sunken hover:text-ink cursor-pointer"
                           title="Edit seniority level"
                         >
                           <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
@@ -309,7 +309,7 @@ export const SeniorityTab: React.FC<SeniorityTabProps> = ({
                         <button
                           aria-label="Delete seniority level"
                           onClick={() => handleDeleteSeniority(level.id, level.name)}
-                          className="p-1 hover:bg-red-50 rounded text-red-600 cursor-pointer"
+                          className="flex size-9 items-center justify-center rounded-md text-danger hover:bg-danger-soft cursor-pointer"
                           title="Delete seniority level"
                         >
                           <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />

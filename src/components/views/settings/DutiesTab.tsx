@@ -5,6 +5,7 @@
  * Settings > Duties tab.
  */
 
+import { readableTextOn } from '../../../utils/colorContrast';
 import React, { useState } from 'react';
 import { Plus, Trash2, Edit2, Star } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
@@ -77,7 +78,7 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
     if (duty.id) {
       const { id, ...fields } = duty;
       await repo.update('dutyWindows', id, { ...fields, name, acronym: acronymClean } as any);
-      triggerSaveNotification(`Duty "${duty.name}" updated.`);
+      triggerSaveNotification(`Shift "${duty.name}" updated.`);
     } else {
       await repo.create('dutyWindows', {
         name,
@@ -89,7 +90,7 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
         isPriority: Boolean(duty.isPriority),
         priorityRank: duty.priorityRank || 100,
       });
-      triggerSaveNotification(`Duty "${duty.name}" created.`);
+      triggerSaveNotification(`Shift "${duty.name}" added.`);
     }
     setIsDutyModalOpen(false);
     setEditingDuty(null);
@@ -101,8 +102,8 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
     await repo.update('dutyWindows', duty.id, { isPriority: nextPriority } as any);
     triggerSaveNotification(
       nextPriority
-        ? `Duty "${duty.name}" marked as Priority (will be scheduled first).`
-        : `Duty "${duty.name}" set to Standard priority.`
+        ? `Shift "${duty.name}" is now used first.`
+        : `Shift "${duty.name}" is no longer used first.`
     );
     loadData();
   });
@@ -202,12 +203,12 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-medium">
               <tr>
-                <th className="py-2.5 px-3">Acronym</th>
-                <th className="py-2.5 px-3">Duty Name</th>
-                <th className="py-2.5 px-3">Scheduling Priority</th>
-                <th className="py-2.5 px-3">Operating Hours</th>
+                <th className="py-2.5 px-3">Short name</th>
+                <th className="py-2.5 px-3">Name</th>
+                <th className="py-2.5 px-3">Used first</th>
+                <th className="py-2.5 px-3">Times</th>
                 <th className="py-2.5 px-3">Duration</th>
-                <th className="py-2.5 px-3">Palette Color</th>
+                <th className="py-2.5 px-3">Colour</th>
                 <th className="py-2.5 px-3">Status</th>
                 <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
@@ -219,8 +220,8 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
                   <tr key={duty.id} className="hover:bg-slate-50/80">
                     <td className="py-2.5 px-3">
                       <span
-                        className="inline-block px-2 py-0.5 rounded text-white font-mono font-bold text-[11px]"
-                        style={{ backgroundColor: duty.color }}
+                        className="inline-block px-2 py-0.5 rounded font-mono font-bold text-xs"
+                        style={{ backgroundColor: duty.color, color: readableTextOn(duty.color) }}
                       >
                         {duty.acronym}
                       </span>
@@ -230,15 +231,15 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
                       <button
                         type="button"
                         onClick={() => handleToggleDutyPriority(duty)}
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-semibold transition-colors cursor-pointer border ${
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold transition-colors cursor-pointer border ${
                           duty.isPriority
                             ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100 shadow-2xs'
                             : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
                         }`}
                         title={
                           duty.isPriority
-                            ? 'Priority Duty: The generator will attempt to schedule this duty first. Click to toggle.'
-                            : 'Standard Duty: Scheduled if priority duties cannot fill requirements. Click to set as priority.'
+                            ? 'The roster generator fills this shift first. Click to stop.'
+                            : 'Filled after the shifts used first. Click to use it first.'
                         }
                       >
                         <Star
@@ -246,11 +247,11 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
                             duty.isPriority ? 'fill-amber-500 text-amber-500' : 'text-slate-400'
                           }`}
                         />
-                        <span>{duty.isPriority ? 'Priority Duty' : 'Standard'}</span>
+                        <span>{duty.isPriority ? 'Used first' : 'No'}</span>
                       </button>
                     </td>
                     <td className="py-2.5 px-3 font-mono text-slate-600">
-                      {duty.startTime} – {duty.endTime}
+                      {duty.startTime} to {duty.endTime}
                     </td>
                     <td className="py-2.5 px-3 font-mono text-slate-500 tabular-nums">
                       {durationHours > 0 ? `${durationHours} hours` : 'Times missing'}
@@ -261,12 +262,12 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
                           className="w-3.5 h-3.5 rounded border border-slate-300"
                           style={{ backgroundColor: duty.color }}
                         />
-                        <span className="font-mono text-slate-400 text-[10px]">{duty.color}</span>
+                        <span className="font-mono text-ink-muted text-xs">{duty.color}</span>
                       </div>
                     </td>
                     <td className="py-2.5 px-3">
                       <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        className={`px-1.5 py-0.5 rounded text-xs font-medium ${
                           duty.active !== false
                             ? 'bg-emerald-50 text-emerald-700'
                             : 'bg-slate-100 text-slate-500'
@@ -278,20 +279,20 @@ export const DutiesTab: React.FC<DutiesTabProps> = ({ duties, openTime, closeTim
                     <td className="py-2.5 px-3 text-right">
                       <div className="inline-flex items-center gap-1">
                         <button
-                          aria-label="Edit duty"
+                          aria-label={`Change ${duty.name}`}
                           onClick={() => {
                             setEditingDuty(duty);
                             setIsDutyModalOpen(true);
                           }}
-                          className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
-                          title="Edit duty"
+                          className="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-sunken hover:text-ink cursor-pointer"
+                          title="Change"
                         >
                           <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>
                         <button
                           aria-label={`Delete or archive ${duty.name}`}
                           onClick={() => handleDeleteDuty(duty)}
-                          className="p-1 hover:bg-red-50 rounded text-red-600 cursor-pointer"
+                          className="flex size-9 items-center justify-center rounded-md text-danger hover:bg-danger-soft cursor-pointer"
                           title="Delete, or archive if it is in use"
                         >
                           <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />

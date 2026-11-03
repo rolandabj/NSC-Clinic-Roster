@@ -1,17 +1,17 @@
 # Graph Report - NSC-Clinic-Roster  (2026-11-03)
 
 ## Corpus Check
-- 421 files · ~431,966 words
+- 421 files · ~432,254 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 12 file(s) not represented in the graph (top: (none) 5, .css 4, .example 1)
 
 ## Summary
-- 2967 nodes · 10159 edges · 157 communities (128 shown, 29 thin omitted)
+- 2967 nodes · 10165 edges · 157 communities (128 shown, 29 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 434 edges (avg confidence: 0.91)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ecf9c66e`
+- Built from commit: `4b5b63be`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -21,7 +21,7 @@
 - fixtures.ts
 - clinicModel.test.ts
 - authService
-- 16. History of work (for context)
+- AvailabilityView.tsx
 - SettingsView.tsx
 - Handover for a new chat
 - ui-audit.cjs
@@ -54,8 +54,8 @@
 - Code Review and Quality
 - What You Must Do When Invoked
 - authorizedFetch
-- Button
-- cx
+- formatDate
+- RulesTab.tsx
 - Optimization Patterns
 - Assignment
 - savingSafety.test.ts
@@ -64,7 +64,7 @@
 - resumePublish.ts
 - fakeAuth.ts
 - firestore-rules/package.json
-- getRepository
+- 16. History of work (for context)
 - continuousHours.test.ts
 - leave-dialogs.cjs
 - Debugging and Error Recovery
@@ -99,7 +99,7 @@
 - DoctorsView.tsx
 - links.cjs
 - icsExportService.ts
-- colorContrast.ts
+- PublishView
 - makeNurse
 - PublishView.tsx
 - cellView.test.ts
@@ -130,7 +130,7 @@
 - AuditTrailView.tsx
 - authService.ts
 - FirestoreRepository
-- EmailTab.tsx
+- NursesView.tsx
 - roster-editing-dialogs.cjs
 - nurseClinicFloat.test.ts
 - nextPeriod.ts
@@ -223,13 +223,13 @@ Nodes (20): D, DOCTORS, DR_X, DUTIES, E, freeNurse, generate(), HOURS (+12 more)
 Cohesion: 0.12
 Nodes (7): authService, computePrivileges(), FirebaseConfig, getAppAuth(), getAppFirestore(), getFirebaseApp(), googleAuthProvider
 
-### Community 5 - "16. History of work (for context)"
-Cohesion: 0.08
-Nodes (48): 16. History of work (for context), Switch(), wholeDates(), AvailabilityView(), WEEKDAY_ABBR, MyRosterView(), NurseSelfServicePanel(), STATUS (+40 more)
+### Community 5 - "AvailabilityView.tsx"
+Cohesion: 0.22
+Nodes (14): Switch(), AvailabilityView(), WEEKDAY_ABBR, leaveClash(), GridCell, moveInGrid(), pickStep(), daysInclusive() (+6 more)
 
 ### Community 6 - "SettingsView.tsx"
-Cohesion: 0.11
-Nodes (53): useAppContext(), confirmDialog(), dismissNotice(), notify(), setState(), Field(), Input(), ClinicTab() (+45 more)
+Cohesion: 0.08
+Nodes (67): useAppContext(), confirmDialog(), dismissNotice(), notify(), setState(), Field(), Input(), AccessManagementPanel() (+59 more)
 
 ### Community 7 - "Handover for a new chat"
 Cohesion: 0.25
@@ -355,13 +355,13 @@ Nodes (24): For /graphify add and --watch, For /graphify query, For the commit h
 Cohesion: 0.27
 Nodes (8): authorizedFetch(), fetchRosterInsights(), GeminiGenerateResponse, GeminiInsightsResponse, GeminiStatus, generateWithGemini(), getGeminiStatus(), RosterInsightsPayload
 
-### Community 38 - "Button"
-Cohesion: 0.14
-Nodes (48): NoticeTone, BulkImportModal(), DeleteScheduleModal(), ExportModal(), FairnessModal(), fmtHours(), NurseTimesheetModal(), SOURCE_LABELS (+40 more)
+### Community 38 - "formatDate"
+Cohesion: 0.13
+Nodes (43): uuid, CreateScheduleModal(), DeleteScheduleModal(), DoctorWeekChangeDialog(), DoctorWeekChangeDialogProps, ExportModal(), FairnessModal(), fmtHours() (+35 more)
 
-### Community 39 - "cx"
-Cohesion: 0.14
-Nodes (23): FillDialog(), FillRange, cx(), Checkbox(), ALWAYS_ON, effectiveValue(), findRule(), GROUPS (+15 more)
+### Community 39 - "RulesTab.tsx"
+Cohesion: 0.20
+Nodes (14): ALWAYS_ON, effectiveValue(), findRule(), GROUPS, KNOWN_KEYS, NumberField, RuleGroup, RulesTab() (+6 more)
 
 ### Community 40 - "Optimization Patterns"
 Cohesion: 0.07
@@ -395,9 +395,9 @@ Nodes (4): AuthService, MASTER_ADMIN_EMAIL, PEOPLE, Things that went wrong befor
 Cohesion: 0.14
 Nodes (13): @firebase/rules-unit-testing, firebase-tools, description, devDependencies, firebase, @firebase/rules-unit-testing, firebase-tools, firebase (+5 more)
 
-### Community 48 - "getRepository"
-Cohesion: 0.20
-Nodes (23): AllRequestsPanel(), Draft, KindFilter, STATUS, StatusFilter, RequestsView(), getRepository(), countPendingApprovals() (+15 more)
+### Community 48 - "16. History of work (for context)"
+Cohesion: 0.12
+Nodes (40): 13. Screens in detail, 16. History of work (for context), isPhoneSize(), Textarea(), wholeDates(), AllRequestsPanel(), Draft, KindFilter (+32 more)
 
 ### Community 49 - "continuousHours.test.ts"
 Cohesion: 0.14
@@ -456,8 +456,8 @@ Cohesion: 0.14
 Nodes (13): Common Skill Categories, Find Skills, How to Help Users Find Skills, Step 1: Understand What They Need, Step 2: Check the Leaderboard First, Step 3: Search for Skills, Step 4: Verify Quality Before Recommending, Step 5: Present Options to the User (+5 more)
 
 ### Community 68 - "HistoryView.tsx"
-Cohesion: 0.19
-Nodes (26): shiftTargetName(), VersionRoster(), WEEKDAY_NAMES, DeleteVersionModal(), plural(), CHANGE_LABELS, CHANGE_TONES, VersionCompareModal() (+18 more)
+Cohesion: 0.15
+Nodes (33): shiftTargetName(), VersionRoster(), WEEKDAY_NAMES, DeleteVersionModal(), plural(), CHANGE_LABELS, CHANGE_TONES, VersionCompareModal() (+25 more)
 
 ### Community 69 - "NSC Clinic Roster: UI review and overhaul in phases"
 Cohesion: 0.10
@@ -500,8 +500,8 @@ Cohesion: 0.20
 Nodes (9): repoRoot, swaps, @tailwindcss/vite, vite, @vitejs/plugin-react, createApiApp(), startServer(), requireAuth() (+1 more)
 
 ### Community 80 - "DoctorsView.tsx"
-Cohesion: 0.11
-Nodes (36): 13. Screens in detail, CreateScheduleModal(), DoctorWeekChangeDialog(), DoctorWeekChangeDialogProps, WeekChangePreview, EditDoctorShiftModal(), TIME_PRESETS, isPhoneSize() (+28 more)
+Cohesion: 0.13
+Nodes (29): WeekChangePreview, EditDoctorShiftModal(), TIME_PRESETS, DoctorsView(), DoctorsScheduleSheet(), WEEKDAY_ABBR, byDayAndTime(), checkDoctorForm() (+21 more)
 
 ### Community 81 - "links.cjs"
 Cohesion: 0.22
@@ -511,9 +511,9 @@ Nodes (4): assert, base, checks, { chromium }
 Cohesion: 0.16
 Nodes (18): RFC-5545, buildNurseIcs(), buildNurseRosterIcs(), escapeIcsText(), foldLine(), formatIcsDate(), nextDayCompact(), NurseRosterIcsInput (+10 more)
 
-### Community 83 - "colorContrast.ts"
-Cohesion: 0.50
-Nodes (6): contrastRatio(), INK, INK_MUTED, luminance(), rgbOf(), tint()
+### Community 83 - "PublishView"
+Cohesion: 0.19
+Nodes (20): NoticeTone, ShareModal(), Column, DataTable(), EmptyState(), ErrorState(), LoadingState(), ApprovalsQueuePanel() (+12 more)
 
 ### Community 84 - "makeNurse"
 Cohesion: 0.10
@@ -568,8 +568,8 @@ Cohesion: 0.15
 Nodes (12): 1. Classical register, 2. Particles carry structure, 3. Each fact once, 4. Payload in original script, 5. Tool runs, 6. Never perform, Floor, megacave (+4 more)
 
 ### Community 97 - "dialogs.tsx"
-Cohesion: 0.14
-Nodes (16): uuid, ConfirmBox(), ConfirmOptions, DialogHost(), DialogState, listeners, Notice, PendingConfirm (+8 more)
+Cohesion: 0.22
+Nodes (12): ConfirmBox(), ConfirmOptions, DialogHost(), DialogState, listeners, Notice, PendingConfirm, settleConfirm() (+4 more)
 
 ### Community 98 - "RosterToolbar.tsx"
 Cohesion: 0.08
@@ -615,9 +615,9 @@ Nodes (13): LoginPageProps, signOutSafely(), AppShellProps, AccountMenu(), TopBa
 Cohesion: 0.31
 Nodes (3): FirestoreRepository, sanitizePayload(), toScheduleRange()
 
-### Community 114 - "EmailTab.tsx"
-Cohesion: 0.20
-Nodes (13): EmailTab(), SaveBar(), checkEmailReadiness(), EmailReadiness, readEmailResponse(), cache(), cachedEmailSettings(), loadEmailSettings() (+5 more)
+### Community 114 - "NursesView.tsx"
+Cohesion: 0.24
+Nodes (15): BulkImportModal(), NursesView(), cellsOf(), DoctorImportRow, NurseImportRow, readDoctorRows(), readNurseRows(), WEEKDAYS (+7 more)
 
 ### Community 116 - "nurseClinicFloat.test.ts"
 Cohesion: 0.22
@@ -689,7 +689,7 @@ Nodes (5): DR_PEDS, ENT, FULL, PEDS, RULES
 
 ### Community 133 - "react"
 Cohesion: 0.09
-Nodes (35): lucide-react, react, LocalModeBannerProps, GROUPS, Key(), ShortcutsModal(), ShortcutsModalProps, PROBLEM_MARKS (+27 more)
+Nodes (40): lucide-react, react, LocalModeBannerProps, PROBLEM_MARKS, ProblemBadge(), ProblemCounts(), ProblemKind, Tone (+32 more)
 
 ### Community 134 - "versionKinds.test.ts"
 Cohesion: 0.25
@@ -723,11 +723,11 @@ Nodes (3): Report, What to check, What to look at
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `react` connect `react` to `ExportModal.tsx`, `fixtures.ts`, `16. History of work (for context)`, `SettingsView.tsx`, `PublishedRosterView.tsx`, `package.json`, `WorkbookGrid.tsx`, `usePhoneLayout.ts`, `SchedulesView.tsx`, `handMoves.test.ts`, `NurseSample.tsx`, `App.tsx`, `GridTable.tsx`, `PlannerSample.tsx`, `ui.tsx`, `access.ts`, `Button`, `cx`, `Assignment`, `resumePublish.ts`, `getRepository`, `AppShell.tsx`, `HistoryView.tsx`, `DoctorsView.tsx`, `PublishView.tsx`, `DashboardView.tsx`, `ClinicContextState`, `harness/main.tsx`, `nurseRosterService.ts`, `dialogs.tsx`, `RosterToolbar.tsx`, `NSC Clinic Roster: complete project guide`, `AuditTrailView.tsx`, `authService.ts`, `EmailTab.tsx`, `RosterSheetTabs.tsx`, `RosterSteps.tsx`, `ref_node_assert`?**
+- **Why does `react` connect `react` to `ExportModal.tsx`, `fixtures.ts`, `AvailabilityView.tsx`, `SettingsView.tsx`, `PublishedRosterView.tsx`, `package.json`, `WorkbookGrid.tsx`, `usePhoneLayout.ts`, `SchedulesView.tsx`, `handMoves.test.ts`, `NurseSample.tsx`, `App.tsx`, `GridTable.tsx`, `PlannerSample.tsx`, `ui.tsx`, `access.ts`, `formatDate`, `RulesTab.tsx`, `Assignment`, `resumePublish.ts`, `16. History of work (for context)`, `AppShell.tsx`, `HistoryView.tsx`, `DoctorsView.tsx`, `PublishView`, `PublishView.tsx`, `DashboardView.tsx`, `ClinicContextState`, `harness/main.tsx`, `nurseRosterService.ts`, `dialogs.tsx`, `RosterToolbar.tsx`, `NSC Clinic Roster: complete project guide`, `AuditTrailView.tsx`, `authService.ts`, `NursesView.tsx`, `RosterSheetTabs.tsx`, `RosterSteps.tsx`, `ref_node_assert`?**
   _High betweenness centrality (0.072) - this node is a cross-community bridge._
-- **Why does `lucide-react` connect `react` to `ExportModal.tsx`, `16. History of work (for context)`, `SettingsView.tsx`, `PublishedRosterView.tsx`, `package.json`, `WorkbookGrid.tsx`, `SchedulesView.tsx`, `NurseSample.tsx`, `App.tsx`, `GridTable.tsx`, `PlannerSample.tsx`, `ui.tsx`, `access.ts`, `Button`, `cx`, `Assignment`, `resumePublish.ts`, `getRepository`, `AppShell.tsx`, `HistoryView.tsx`, `DoctorsView.tsx`, `PublishView.tsx`, `DashboardView.tsx`, `harness/main.tsx`, `nurseRosterService.ts`, `dialogs.tsx`, `RosterToolbar.tsx`, `AuditTrailView.tsx`, `authService.ts`, `EmailTab.tsx`, `RosterSheetTabs.tsx`, `RosterSteps.tsx`?**
+- **Why does `lucide-react` connect `react` to `ExportModal.tsx`, `AvailabilityView.tsx`, `SettingsView.tsx`, `PublishedRosterView.tsx`, `package.json`, `WorkbookGrid.tsx`, `SchedulesView.tsx`, `NurseSample.tsx`, `App.tsx`, `GridTable.tsx`, `PlannerSample.tsx`, `ui.tsx`, `access.ts`, `formatDate`, `RulesTab.tsx`, `Assignment`, `resumePublish.ts`, `16. History of work (for context)`, `AppShell.tsx`, `HistoryView.tsx`, `DoctorsView.tsx`, `PublishView`, `PublishView.tsx`, `DashboardView.tsx`, `harness/main.tsx`, `nurseRosterService.ts`, `dialogs.tsx`, `RosterToolbar.tsx`, `AuditTrailView.tsx`, `authService.ts`, `NursesView.tsx`, `RosterSheetTabs.tsx`, `RosterSteps.tsx`?**
   _High betweenness centrality (0.045) - this node is a cross-community bridge._
-- **Why does `16. History of work (for context)` connect `16. History of work (for context)` to `leaveAllowance.test.ts`, `checkScheduler.test.ts`, `SchedulingEngine.ts`, `react`, `SettingsView.tsx`, `PublishedRosterView.tsx`, `WorkbookGrid.tsx`, `usePhoneLayout.ts`, `SchedulesView.tsx`, `seedRunner.ts`, `IRepository`, `GridTable.tsx`, `dateDefaults.ts`, `access.ts`, `Button`, `cx`, `Assignment`, `resumePublish.ts`, `getRepository`, `AppShell.tsx`, `EntityForCollection`, `HistoryView.tsx`, `DoctorsView.tsx`, `colorContrast.ts`, `PublishView.tsx`, `emailLogSize.ts`, `types/index.ts`, `ClinicContextState`, `nurseRosterService.ts`, `RosterToolbar.tsx`, `NSC Clinic Roster: complete project guide`, `AuditTrailView.tsx`, `authService.ts`, `FirestoreRepository`, `EmailTab.tsx`, `firestoreRest.ts`, `RosterSheetTabs.tsx`, `IRepository.ts`, `RosterSteps.tsx`, `ref_node_assert`?**
+- **Why does `16. History of work (for context)` connect `16. History of work (for context)` to `leaveAllowance.test.ts`, `checkScheduler.test.ts`, `SchedulingEngine.ts`, `react`, `SettingsView.tsx`, `AvailabilityView.tsx`, `PublishedRosterView.tsx`, `WorkbookGrid.tsx`, `usePhoneLayout.ts`, `SchedulesView.tsx`, `seedRunner.ts`, `IRepository`, `GridTable.tsx`, `dateDefaults.ts`, `access.ts`, `formatDate`, `Assignment`, `resumePublish.ts`, `AppShell.tsx`, `EntityForCollection`, `HistoryView.tsx`, `DoctorsView.tsx`, `PublishView`, `PublishView.tsx`, `emailLogSize.ts`, `types/index.ts`, `ClinicContextState`, `nurseRosterService.ts`, `RosterToolbar.tsx`, `NSC Clinic Roster: complete project guide`, `AuditTrailView.tsx`, `authService.ts`, `FirestoreRepository`, `NursesView.tsx`, `firestoreRest.ts`, `RosterSheetTabs.tsx`, `IRepository.ts`, `RosterSteps.tsx`, `ref_node_assert`?**
   _High betweenness centrality (0.026) - this node is a cross-community bridge._
 - **Are the 118 inferred relationships involving `16. History of work (for context)` (e.g. with `getDocumentAs()` and `setTextFieldsAs()`) actually correct?**
   _`16. History of work (for context)` has 118 INFERRED edges - model-reasoned connections that need verification._

@@ -132,8 +132,8 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-medium">
               <tr>
-                <th className="py-2.5 px-3">Specialty Code</th>
-                <th className="py-2.5 px-3">Specialty Name</th>
+                <th className="py-2.5 px-3">Code</th>
+                <th className="py-2.5 px-3">Name</th>
                 <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -152,14 +152,14 @@ export const SpecialtiesTab: React.FC<SpecialtiesTabProps> = ({
                           setEditingSpecialty(sp);
                           setIsSpecialtyModalOpen(true);
                         }}
-                        className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
+                        className="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-sunken hover:text-ink cursor-pointer"
                       >
                         <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>
                       <button
                         aria-label={`Delete specialty ${sp.name}`}
                         onClick={() => handleDeleteSpecialty(sp.id, sp.name)}
-                        className="p-1 hover:bg-red-50 rounded text-red-600 cursor-pointer"
+                        className="flex size-9 items-center justify-center rounded-md text-danger hover:bg-danger-soft cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>

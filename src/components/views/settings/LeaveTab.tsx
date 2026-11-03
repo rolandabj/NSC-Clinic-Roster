@@ -5,6 +5,7 @@
  * Settings > Leave tab.
  */
 
+import { readableTextOn } from '../../../utils/colorContrast';
 import React, { useState } from 'react';
 import { Plus, Trash2, Edit2 } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
@@ -156,11 +157,11 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 text-slate-600 border-b border-slate-200 font-medium">
               <tr>
-                <th className="py-2.5 px-3">Acronym</th>
+                <th className="py-2.5 px-3">Short name</th>
                 <th className="py-2.5 px-3">Name</th>
-                <th className="py-2.5 px-3">Credited Hours</th>
-                <th className="py-2.5 px-3">Counts Toward Target</th>
-                <th className="py-2.5 px-3">Badge Color</th>
+                <th className="py-2.5 px-3">Hours a day</th>
+                <th className="py-2.5 px-3">Counts toward the goal</th>
+                <th className="py-2.5 px-3">Colour</th>
                 <th className="py-2.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -169,13 +170,13 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
                 <tr key={lt.id} className="hover:bg-slate-50/80">
                   <td className="py-2.5 px-3">
                     <span
-                      className="inline-block px-2 py-0.5 rounded text-white font-mono font-bold text-[11px]"
-                      style={{ backgroundColor: lt.color }}
+                      className="inline-block px-2 py-0.5 rounded font-mono font-bold text-xs"
+                      style={{ backgroundColor: lt.color, color: readableTextOn(lt.color) }}
                     >
                       {lt.acronym}
                     </span>
                     {isBuiltInCode(lt.acronym) && (
-                      <span className="ml-1.5 text-[10px] text-slate-400" title="The app finds this leave type by its code">
+                      <span className="ml-1.5 text-xs text-ink-muted" title="The app finds this leave type by its code">
                         built in
                       </span>
                     )}
@@ -186,7 +187,7 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
                   </td>
                   <td className="py-2.5 px-3">
                     <span
-                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium ${
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
                         lt.countsTowardHoursTarget
                           ? 'bg-emerald-50 text-emerald-700'
                           : 'bg-slate-100 text-slate-500'
@@ -209,7 +210,7 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
                           setEditingLeave(lt);
                           setIsLeaveModalOpen(true);
                         }}
-                        className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
+                        className="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-sunken hover:text-ink cursor-pointer"
                         title="Edit leave type"
                       >
                         <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
@@ -217,7 +218,7 @@ export const LeaveTab: React.FC<LeaveTabProps> = ({ leaveTypes, loadData, trigge
                       <button
                         aria-label="Delete leave type"
                         onClick={() => handleDeleteLeaveType(lt.id, lt.name)}
-                        className="p-1 hover:bg-red-50 rounded text-red-600 cursor-pointer"
+                        className="flex size-9 items-center justify-center rounded-md text-danger hover:bg-danger-soft cursor-pointer"
                         title="Delete leave type"
                       >
                         <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />

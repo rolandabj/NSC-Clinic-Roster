@@ -188,30 +188,30 @@ export const NurseSkillsTab: React.FC<NurseSkillsTabProps> = ({ clinicalRoles, l
                     <div className="flex items-center gap-1.5">
                       <span className="font-mono font-bold text-indigo-700">{def.key}</span>
                       <span className="font-semibold text-slate-900">{role?.name || def.name}</span>
-                      <span className="inline-flex items-center gap-0.5 rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+                      <span className="inline-flex items-center gap-0.5 rounded bg-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-600">
                         <Lock className="w-2.5 h-2.5" aria-hidden="true" /> Built in
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{def.explain}</p>
+                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">{def.explain}</p>
                   </div>
                   {role && (
                     <button
                       type="button"
                       aria-label={`Edit ${role.name}`}
                       onClick={() => setEditing(role)}
-                      className="p-1 hover:bg-slate-200 rounded text-slate-600 cursor-pointer shrink-0"
+                      className="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-sunken hover:text-ink cursor-pointer shrink-0"
                     >
                       <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                   )}
                 </div>
                 {role ? (
-                  <p className={`text-[11px] font-medium ${count === 0 ? 'text-rose-700' : 'text-slate-700'}`}>
+                  <p className={`text-xs font-medium ${count === 0 ? 'text-rose-700' : 'text-slate-700'}`}>
                     {count === 0 ? 'No active nurse has this skill yet.' : `${count} active nurse${count === 1 ? '' : 's'} have this skill.`}
                   </p>
                 ) : (
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-[11px] text-amber-800">Not set up, so the generator doesn't check this skill.</p>
+                    <p className="text-xs text-amber-800">Not set up, so the generator doesn't check this skill.</p>
                     <button
                       type="button"
                       onClick={() => handleSetUpBuiltIn(def.key)}
@@ -272,7 +272,7 @@ export const NurseSkillsTab: React.FC<NurseSkillsTabProps> = ({ clinicalRoles, l
                       <td className="py-2.5 px-3 font-mono font-bold text-indigo-700">{role.acronym}</td>
                       <td className="py-2.5 px-3">
                         <span className="font-medium text-slate-800">{role.name}</span>
-                        {role.description && <span className="block text-[11px] text-slate-500">{role.description}</span>}
+                        {role.description && <span className="block text-xs text-slate-500">{role.description}</span>}
                       </td>
                       <td className="py-2.5 px-3 font-mono">{role.defaultDailyQuota || 1}</td>
                       <td className="py-2.5 px-3 font-mono text-slate-600">
@@ -284,7 +284,7 @@ export const NurseSkillsTab: React.FC<NurseSkillsTabProps> = ({ clinicalRoles, l
                           type="button"
                           aria-label={`Edit ${role.name}`}
                           onClick={() => setEditing(role)}
-                          className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
+                          className="flex size-9 items-center justify-center rounded-md text-ink-muted hover:bg-sunken hover:text-ink cursor-pointer"
                         >
                           <Edit2 className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>
@@ -292,7 +292,7 @@ export const NurseSkillsTab: React.FC<NurseSkillsTabProps> = ({ clinicalRoles, l
                           type="button"
                           aria-label={`Delete ${role.name}`}
                           onClick={() => handleDelete(role)}
-                          className="p-1 hover:bg-red-50 rounded text-red-600 cursor-pointer"
+                          className="flex size-9 items-center justify-center rounded-md text-danger hover:bg-danger-soft cursor-pointer"
                         >
                           <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
                         </button>

@@ -158,7 +158,7 @@ export const HolidaysTab: React.FC<HolidaysTabProps> = ({ holidays, loadData, tr
                     {visible
                       .filter((h) => h.date.startsWith(year))
                       .map((h) => (
-                        <tr key={h.id} className={`hover:bg-slate-50/80 ${h.date < today ? 'text-slate-400' : ''}`}>
+                        <tr key={h.id} className={`hover:bg-slate-50/80 ${h.date < today ? 'text-ink-muted' : ''}`}>
                           <td className="py-2 px-3 font-mono font-semibold whitespace-nowrap">
                             {new Date(`${h.date}T00:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
                           </td>
