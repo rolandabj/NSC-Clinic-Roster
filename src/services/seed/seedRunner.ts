@@ -8,6 +8,7 @@
 
 import { mergeScheduleRanges, toScheduleRange } from '../schedule/scheduleRanges';
 
+import { countOf } from '../repository/paging';
 import { IRepository } from '../repository/IRepository';
 import { SEED_WORKING_HOURS_PERIODS } from './seedData';
 import { CollectionName } from '../../types';
@@ -200,6 +201,7 @@ export interface DatabaseStats {
   lastUpdated: string;
 }
 
+/** The number of records in each part of the clinic's data, counted without reading them (countOf). */
 export async function getDatabaseStatistics(repo: IRepository): Promise<DatabaseStats> {
   const [
     nurses,
@@ -216,38 +218,27 @@ export async function getDatabaseStatistics(repo: IRepository): Promise<Database
     swaps,
     audit,
     periods,
-  ] = await Promise.all([
-    repo.list('nurses'),
-    repo.list('doctors'),
-    repo.list('doctorSessions'),
-    repo.list('schedules'),
-    repo.list('assignments'),
-    repo.list('leaveEntries'),
-    repo.list('locks'),
-    repo.list('rules'),
-    repo.list('holidays'),
-    repo.list('versions'),
-    repo.list('templates'),
-    repo.list('swaps'),
-    repo.list('audit'),
-    repo.list('workingHoursPeriods'),
-  ]);
+  ] = await Promise.all(
+    (
+      ['nurses', 'doctors', 'doctorSessions', 'schedules', 'assignments', 'leaveEntries', 'locks', 'rules', 'holidays', 'versions', 'templates', 'swaps', 'audit', 'workingHoursPeriods'] as const
+    ).map((c) => countOf(repo, c))
+  );
 
   return {
-    nursesCount: nurses.length,
-    doctorsCount: doctors.length,
-    sessionsCount: sessions.length,
-    schedulesCount: schedules.length,
-    assignmentsCount: assignments.length,
-    leaveEntriesCount: leaveEntries.length,
-    locksCount: locks.length,
-    rulesCount: rules.length,
-    holidaysCount: holidays.length,
-    versionsCount: versions.length,
-    templatesCount: templates.length,
-    swapsCount: swaps.length,
-    auditCount: audit.length,
-    workingHoursPeriodsCount: periods.length,
+    nursesCount: nurses,
+    doctorsCount: doctors,
+    sessionsCount: sessions,
+    schedulesCount: schedules,
+    assignmentsCount: assignments,
+    leaveEntriesCount: leaveEntries,
+    locksCount: locks,
+    rulesCount: rules,
+    holidaysCount: holidays,
+    versionsCount: versions,
+    templatesCount: templates,
+    swapsCount: swaps,
+    auditCount: audit,
+    workingHoursPeriodsCount: periods,
     lastUpdated: new Date().toISOString(),
   };
 }

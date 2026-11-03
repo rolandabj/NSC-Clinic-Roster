@@ -47,3 +47,12 @@ export async function listPage<C extends CollectionName>(
   if (repo.listPage) return repo.listPage(collection, req);
   return pageFromList((await repo.list(collection)) as (EntityForCollection<C> & { id: string })[], req);
 }
+
+/**
+ * How many records a collection has (Phase 8, slice 1f): Firestore counts on the server without
+ * sending the records; a repository that cannot count is read in full.
+ */
+export async function countOf(repo: IRepository, collection: CollectionName): Promise<number> {
+  if (repo.count) return repo.count(collection);
+  return (await repo.list(collection)).length;
+}

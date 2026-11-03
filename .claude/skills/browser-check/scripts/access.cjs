@@ -60,7 +60,7 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   check('Give access back gives it back', (await rec('lee@example.com')).status === 'APPROVED');
 
   // 4. Check an email.
-  await page.getByLabel('Email', { exact: true }).fill('mary@example.com');
+  await page.getByRole('textbox', { name: 'Email', exact: true }).fill('mary@example.com');
   check('checking an email says what they can do and their record', /Can look at and change rosters, staff and settings, and can approve requests/.test(await main.innerText()) && /Linked to the nurse Mary/.test(await main.innerText()));
 
   // 5. Staff without an account.

@@ -369,8 +369,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="hidden space-y-4 md:block">
           {tabGroups.map((group) => (
             <div key={group.title}>
-              <h2 className="px-2.5 pb-1 text-xs font-semibold text-ink-muted">{group.title}</h2>
-              <ul className="space-y-0.5">
+              {/* A label for its list, not a heading: the section open beside has the heading. */}
+              <p id={`settings-group-${group.title.replace(/\s+/g, '-')}`} className="px-2.5 pb-1 text-xs font-semibold text-ink-muted">
+                {group.title}
+              </p>
+              <ul className="space-y-0.5" aria-labelledby={`settings-group-${group.title.replace(/\s+/g, '-')}`}>
                 {group.tabs.map((t) => {
                   const Icon = t.icon;
                   const isActive = activeTab === t.id;

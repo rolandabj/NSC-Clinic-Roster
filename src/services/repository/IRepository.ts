@@ -30,6 +30,9 @@ export interface IRepository {
    */
   listPage?<T extends CollectionName>(collection: T, req: PageRequest): Promise<Page<EntityForCollection<T>>>;
 
+  /** How many records a collection has, counted where it is kept. Optional: callers use countOf() in paging.ts. */
+  count?(collection: CollectionName): Promise<number>;
+
   /**
    * Get a single document by ID
    */

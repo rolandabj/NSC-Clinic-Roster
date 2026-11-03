@@ -2,11 +2,12 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Settings > Database & Storage tab.
+ * Settings, Data and backup (owner only): the record counts (counted by Firestore, Phase 8
+ * slice 1f), download a backup, restore one, and delete all clinic data.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Trash2, AlertTriangle, Download, Upload, RefreshCw, X } from 'lucide-react';
+import { Trash2, Download, Upload, RefreshCw } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import {
   checkBackup,
@@ -36,6 +37,7 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
   // Database & Storage management state
   const [dbStats, setDbStats] = useState<DatabaseStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [statsError, setStatsError] = useState('');
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   const [clearConfirmInput, setClearConfirmInput] = useState('');
   const [importJsonText, setImportJsonText] = useState('');
@@ -46,11 +48,13 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
   // --- 12. Database & Seed Data Management (Phase 15) ---
   const loadStats = async () => {
     setIsLoadingStats(true);
+    setStatsError('');
     try {
       const stats = await getDatabaseStatistics(repo);
       setDbStats(stats);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to load database stats:', e);
+      setStatsError(e?.message || String(e));
     } finally {
       setIsLoadingStats(false);
     }
@@ -63,7 +67,7 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
 
   const handleClearDatabase = async () => {
     if (clearConfirmInput.trim() !== 'CLEAR') {
-      notify('Please type CLEAR to confirm.', 'warning');
+      notify('Type CLEAR to delete everything.', 'warning');
       return;
     }
     setIsBusyAction(true);
@@ -82,12 +86,12 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
       setClearConfirmInput('');
       clinicDataCleared?.();
       if (failed.length > 0) {
-        notify(`Some data could not be deleted: ${failed.join(', ')}. A backup was downloaded before the wipe.`, 'error');
+        notify(`Some data could not be deleted: ${failed.join(', ')}. A backup was downloaded first.`, 'error');
       } else {
         triggerSaveNotification('All clinic data was deleted. A backup was downloaded first. User access was kept.');
       }
     } catch (err: any) {
-      notify(`The wipe failed: ${err.message}`, 'error');
+      notify(`The data was not deleted: ${err.message}`, 'error');
     } finally {
       setIsBusyAction(false);
     }
@@ -99,7 +103,7 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
       await downloadFullDatabaseBackup(repo);
       triggerSaveNotification('Backup downloaded.');
     } catch (err: any) {
-      notify(`The backup failed: ${err.message}`, 'error');
+      notify(`The backup was not downloaded: ${err.message}`, 'error');
     } finally {
       setIsBusyAction(false);
     }
@@ -152,143 +156,105 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
 
   return (
     <>
-      <div className="space-y-6 text-xs">
-        {/* Live Database Statistics Grid */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                Records in the database
-              </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                How many records the clinic has saved. Data is stored in Cloud Firestore (project{' '}
-                <span className="font-mono">{defaultFirebaseConfig.projectId}</span>, database{' '}
-                <span className="font-mono">{defaultFirebaseConfig.firestoreDatabaseId || '(default)'}</span>).
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={loadStats}
-              disabled={isLoadingStats}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingStats ? 'animate-spin' : ''}`} />
-              <span>Refresh</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Nurses</span>
-              <span className="text-xl font-bold font-mono text-slate-900 dark:text-white">{dbStats?.nursesCount ?? '—'}</span>
-            </div>
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Doctors</span>
-              <span className="text-xl font-bold font-mono text-slate-900 dark:text-white">{dbStats?.doctorsCount ?? '—'}</span>
-            </div>
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Sessions</span>
-              <span className="text-xl font-bold font-mono text-slate-900 dark:text-white">{dbStats?.sessionsCount ?? '—'}</span>
-            </div>
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Assignments</span>
-              <span className="text-xl font-bold font-mono text-indigo-600 dark:text-indigo-400">{dbStats?.assignmentsCount ?? '—'}</span>
-            </div>
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Leave Entries</span>
-              <span className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400">{dbStats?.leaveEntriesCount ?? '—'}</span>
-            </div>
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Pinned Locks</span>
-              <span className="text-xl font-bold font-mono text-rose-600 dark:text-rose-400">{dbStats?.locksCount ?? '—'}</span>
-            </div>
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Safety Rules</span>
-              <span className="text-xl font-bold font-mono text-slate-900 dark:text-white">{dbStats?.rulesCount ?? '—'}</span>
-            </div>
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Versions</span>
-              <span className="text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">{dbStats?.versionsCount ?? '—'}</span>
-            </div>
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Templates</span>
-              <span className="text-xl font-bold font-mono text-slate-900 dark:text-white">{dbStats?.templatesCount ?? '—'}</span>
-            </div>
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Shift Swaps</span>
-              <span className="text-xl font-bold font-mono text-slate-900 dark:text-white">{dbStats?.swapsCount ?? '—'}</span>
-            </div>
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Audit Events</span>
-              <span className="text-xl font-bold font-mono text-purple-600 dark:text-purple-400">{dbStats?.auditCount ?? '—'}</span>
-            </div>
-            <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 text-center">
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Holidays</span>
-              <span className="text-xl font-bold font-mono text-slate-900 dark:text-white">{dbStats?.holidaysCount ?? '—'}</span>
-            </div>
-          </div>
+      <div className="space-y-6 text-sm">
+        <div>
+          <h2 className="text-lg font-semibold text-ink">Data and backup</h2>
+          <p className="mt-1 max-w-2xl text-ink-muted">How much the clinic has saved, a backup of everything to keep, and putting a backup back.</p>
         </div>
 
-        {/* Database Backup & Migration Suite */}
-        <div className="p-4 rounded-lg border border-slate-200 dark:border-slate-800 space-y-3">
+        <section aria-labelledby="data-counts" className="space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 id="data-counts" className="text-base font-semibold text-ink">
+                What is saved
+              </h3>
+              <p className="text-ink-muted">
+                Counted in Cloud Firestore (project {defaultFirebaseConfig.projectId}, database {defaultFirebaseConfig.firestoreDatabaseId || 'default'}).
+              </p>
+            </div>
+            <Button size="sm" icon={RefreshCw} busy={isLoadingStats} onClick={loadStats}>
+              Count again
+            </Button>
+          </div>
+          {statsError && (
+            <Notice tone="danger" title="The records could not be counted" live>
+              {statsError}
+            </Notice>
+          )}
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-busy={isLoadingStats}>
+            {(
+              [
+            ['Nurses', dbStats?.nursesCount],
+            ['Doctors', dbStats?.doctorsCount],
+            ['Doctor clinics', dbStats?.sessionsCount],
+            ['Rosters', dbStats?.schedulesCount],
+            ['Shifts', dbStats?.assignmentsCount],
+            ['Leave entries', dbStats?.leaveEntriesCount],
+            ['Pinned days', dbStats?.locksCount],
+            ['Rules', dbStats?.rulesCount],
+            ['Saved versions', dbStats?.versionsCount],
+            ['Templates', dbStats?.templatesCount],
+            ['Swaps', dbStats?.swapsCount],
+            ['History of changes', dbStats?.auditCount],
+            ['Public holidays', dbStats?.holidaysCount],
+            ['Time periods', dbStats?.workingHoursPeriodsCount],
+              ] as [string, number | undefined][]
+            ).map(([label, count]) => (
+              <div key={label} className="rounded-lg border border-line bg-sunken p-3">
+                <dt className="text-ink-muted">{label}</dt>
+                <dd className="text-xl font-semibold text-ink tabular-nums">{count ?? '…'}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        <section aria-labelledby="data-backup" className="space-y-3 rounded-lg border border-line p-4">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+            <h3 id="data-backup" className="text-base font-semibold text-ink">
               Backup and restore
             </h3>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Download a copy of all clinic data (staff, rosters, settings, history), or put a copy back. A backup of the current data always downloads before a restore.
+            <p className="text-ink-muted">
+              Download a backup of all clinic data (staff, rosters, settings and history), or put a backup back. A backup of the current data always
+              downloads before a restore.
             </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-3 pt-1">
-            <button
-              type="button"
-              onClick={handleExportBackup}
-              disabled={isBusyAction}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded font-medium transition-colors shadow-xs cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download backup</span>
-            </button>
-
-            <button
-              type="button"
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" icon={Download} busy={isBusyAction} onClick={handleExportBackup}>
+              Download a backup
+            </Button>
+            <Button
+              icon={Upload}
               onClick={() => {
                 setImportJsonText('');
                 setBackupStatusMessage(null);
                 setIsImportModalOpen(true);
               }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded font-medium transition-colors shadow-2xs cursor-pointer"
             >
-              <Upload className="w-3.5 h-3.5 text-slate-500" />
-              <span>Restore from a backup...</span>
-            </button>
+              Restore from a backup
+            </Button>
           </div>
-        </div>
+        </section>
 
-        {/* Danger Zone: Clear Database */}
-        <div className="p-4 rounded-lg border border-red-200 dark:border-red-950 bg-red-50/40 dark:bg-red-950/20 space-y-2">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400" />
-            <h4 className="text-sm font-bold text-red-900 dark:text-red-300">Danger Zone</h4>
+        <section aria-labelledby="data-delete" className="space-y-3 rounded-lg border border-danger-line bg-danger-soft p-4">
+          <div>
+            <h3 id="data-delete" className="text-base font-semibold text-danger">
+              Delete all clinic data
+            </h3>
+            <p className="text-ink">
+              Deletes staff, rosters, settings and history to start again. User access is kept, and a backup downloads first.
+            </p>
           </div>
-          <p className="text-[11px] text-red-700 dark:text-red-400 leading-relaxed">
-            Delete all clinic data (staff, rosters, settings and history) to start again from scratch. User access is kept, and a backup downloads first.
-          </p>
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={() => {
-                setClearConfirmInput('');
-                setIsClearConfirmOpen(true);
-              }}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-medium transition-colors shadow-xs cursor-pointer text-xs"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete all clinic data...</span>
-            </button>
-          </div>
-        </div>
+          <Button
+            variant="danger"
+            icon={Trash2}
+            onClick={() => {
+              setClearConfirmInput('');
+              setIsClearConfirmOpen(true);
+            }}
+          >
+            Delete all clinic data
+          </Button>
+        </section>
       </div>
 
       {isClearConfirmOpen && (

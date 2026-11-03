@@ -25,6 +25,7 @@ import {
   limit,
   startAfter,
   QueryDocumentSnapshot,
+  getCountFromServer,
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import { CollectionName, EntityForCollection, Schedule } from '../../types';
@@ -160,6 +161,18 @@ export class FirestoreRepository implements IRepository {
       console.warn(`[FirestoreRepository] list failed for ${colName}:`, err?.message || err);
       // Never pretend a failed read is an empty collection: screens would show
       // an empty roster and a later save could delete the real records.
+      throw err;
+    }
+  }
+
+  /** How many records a collection has, counted by Firestore (the records are not sent). */
+  async count(colName: CollectionName): Promise<number> {
+    try {
+      const snapshot = await getCountFromServer(collection(this.db, colName));
+      return snapshot.data().count;
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
+      console.warn(`[FirestoreRepository] count failed for ${colName}:`, err?.message || err);
       throw err;
     }
   }
