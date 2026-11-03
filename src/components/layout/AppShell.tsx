@@ -494,7 +494,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentUser: propUser }) => 
       case 'publish':
         return <PublishView context={clinicContext} />;
       case 'reports':
-        return <ReportsView context={clinicContext} />;
+        return <ReportsView context={clinicContext} tab={routeParams.tab} onAddressChange={updateAddress} />;
       case 'audit':
         return <AuditTrailView context={clinicContext} />;
       case 'settings':

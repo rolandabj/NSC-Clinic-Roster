@@ -86,14 +86,13 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await page.keyboard.press('Escape');
 
   // 5. The hours report shows the allowances as set: 0 for Sara, never an assumed 30.
-  await go('reports', 'Hours Accounting & Payroll Ledger');
-  await page.getByRole('button', { name: /Leave Quotas/ }).click();
-  await page.waitForTimeout(500);
+  await go('reports?tab=leave', 'Reports');
+  await page.getByRole('table', { name: 'Leave allowance this year' }).waitFor({ timeout: 10000 });
   const row = (name) => page.locator('tbody tr').filter({ hasText: name }).first().innerText();
   const saraRow = await row('Sara');
-  check("Sara's row shows 0 of 0 days", /0 \/ 0 days/.test(saraRow) && !/\/ 30 days/.test(saraRow), saraRow.replace(/\s+/g, ' '));
+  check("Sara's row shows 0 of 0 days", /0 of 0 days/.test(saraRow) && !/of 30 days/.test(saraRow), saraRow.replace(/\s+/g, ' '));
   const maryRow = await row('Mary');
-  check("Mary's row shows her 30 days", /\/ 30 days/.test(maryRow), maryRow.replace(/\s+/g, ' '));
+  check("Mary's row shows her 30 days", /of 30 days/.test(maryRow), maryRow.replace(/\s+/g, ' '));
   if (shots) await page.screenshot({ path: `${shots}/allowance-report.png` });
 
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));

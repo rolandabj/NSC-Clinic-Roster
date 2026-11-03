@@ -14,17 +14,10 @@ import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
 import { readableTextOn } from '../../utils/colorContrast';
 import { Badge, Button, DataTable, Dialog, cx, type Column } from '../ui';
 import { usePermissions } from '../common/usePermissions';
+import { differenceWords, statusWord } from '../../services/reports/reportWords';
 
 /** Hours as shown to people: at most one decimal. */
 const fmtHours = (h: number) => `${Math.round((h || 0) * 10) / 10} h`;
-
-const STATUS_LABELS: Record<string, string> = {
-  OPTIMAL: 'On goal',
-  UNDER: 'A little short',
-  CRITICAL_UNDER: 'Very short',
-  OVER: 'A little over',
-  CRITICAL_OVER: 'Too many hours',
-};
 
 const SOURCE_LABELS: Record<string, string> = {
   GENERATED: 'Filled automatically',
@@ -175,17 +168,17 @@ export const NurseTimesheetModal: React.FC<NurseTimesheetModalProps> = ({
     { key: 'notes', header: 'Notes', cell: (d) => d.notes || <span className="text-ink-muted">None</span> },
   ];
   const tiles: { label: string; value: string; note: string; tone?: string }[] = [
-    { label: 'Goal hours', value: fmtHours(targetHours), note: `${contractPercent}% contract` },
-    { label: 'Shifts', value: fmtHours(dutyHours), note: `${totalShiftsCount} ${totalShiftsCount === 1 ? 'shift' : 'shifts'}` },
+    { label: 'Goal', value: fmtHours(targetHours), note: `${contractPercent}% contract` },
+    { label: 'Worked', value: fmtHours(dutyHours), note: `${totalShiftsCount} ${totalShiftsCount === 1 ? 'shift' : 'shifts'}` },
     { label: 'Leave', value: fmtHours(leaveHours), note: `${Object.keys(leaveBreakdown).length} ${Object.keys(leaveBreakdown).length === 1 ? 'kind' : 'kinds'} of leave` },
     { label: 'Total', value: fmtHours(totalEarnedHours), note: 'Shifts and leave' },
     {
-      label: 'Closing balance',
+      label: 'Difference',
       value: varianceHours > 0 ? `+${fmtHours(varianceHours)}` : fmtHours(varianceHours),
-      note: varianceHours > 0 ? 'Over the goal' : varianceHours < 0 ? 'Under the goal' : 'On the goal',
+      note: differenceWords(varianceHours),
       tone: varianceHours > 0 ? 'text-success' : varianceHours < 0 ? 'text-danger' : 'text-ink',
     },
-    { label: 'Share of goal', value: `${pacePercent}%`, note: STATUS_LABELS[status] || status, tone: status === 'OPTIMAL' ? 'text-success' : isUnder ? 'text-danger' : 'text-ink' },
+    { label: 'Share of goal', value: `${pacePercent}%`, note: statusWord(status), tone: status === 'OPTIMAL' ? 'text-success' : isUnder ? 'text-danger' : 'text-ink' },
   ];
   const filters = [
     { id: 'ALL', label: `All days (${timeline.length})` },
