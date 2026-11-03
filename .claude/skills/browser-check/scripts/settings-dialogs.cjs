@@ -95,7 +95,7 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   }
   d = await open('database', /^Restore from a backup/, 'Restore from a backup');
   if (d) await esc(d, 'Restore from a backup');
-  d = await open('access-roles', /^Pre-Approve User/, 'Add a person');
+  d = await open('access-roles', /^Add a person/, 'Add a person');
   if (d) {
     if (shots) await page.screenshot({ path: `${shots}/settings-person.png` });
     await esc(d, 'Add a person');

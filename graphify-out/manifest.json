@@ -234,9 +234,9 @@
     "semantic_hash": "730953817e7a18e02d0574068cb873fc"
   },
   "src/components/views/AccessManagementPanel.tsx": {
-    "mtime": 1792241110.2455003,
-    "seen": 1792241594.8873787,
-    "ast_hash": "64d9fd9fedff0abd7ec7706159c3f158",
+    "mtime": 1793681830.5064065,
+    "seen": 1793681905.827696,
+    "ast_hash": "a7eaf2151b3197065e0f5ab800ffa8f9",
     "semantic_hash": ""
   },
   "src/components/views/AcknowledgePage.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1793613795.8190453,
-    "seen": 1793613866.571194,
-    "ast_hash": "ca782a15cbf5a465f5ae94bf1b2c4fec",
+    "mtime": 1793681844.104972,
+    "seen": 1793681905.8280482,
+    "ast_hash": "745bc1a63aa4953721931d0ea05905ec",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1793613795.8259523,
-    "seen": 1793613866.5712008,
-    "ast_hash": "7d6ca560c659dfc7dad3fbbeb9b8f356",
+    "mtime": 1793681844.1101525,
+    "seen": 1793681905.828056,
+    "ast_hash": "e4bd2fb725a29b897071d9895ded8a96",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -2388,9 +2388,9 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/settings-dialogs.cjs": {
-    "mtime": 1793613427.0985696,
-    "seen": 1793613866.5706906,
-    "ast_hash": "1725c46173316ffab6eab5ed3c6ee6cd",
+    "mtime": 1793681722.7459028,
+    "seen": 1793681905.8275533,
+    "ast_hash": "89d725d5c40c463af8b914640ca4252e",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/history.cjs": {
@@ -2523,6 +2523,24 @@
     "mtime": 1793613329.6295419,
     "seen": 1793613866.5711179,
     "ast_hash": "0da57f4ab6b81f3798049f07260206a7",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/access.cjs": {
+    "mtime": 1793681830.5090487,
+    "seen": 1793681905.827503,
+    "ast_hash": "e1447ad3f74eb00430935b4d3a73fdf7",
+    "semantic_hash": ""
+  },
+  "src/services/auth/accessWords.ts": {
+    "mtime": 1793681644.3392293,
+    "seen": 1793681905.8277721,
+    "ast_hash": "5358b85d4e75b5e5b4dc5e3506739298",
+    "semantic_hash": ""
+  },
+  "tests/unit/accessWords.test.ts": {
+    "mtime": 1793681644.3343956,
+    "seen": 1793681905.8279066,
+    "ast_hash": "5108a15477522397c72eba406d12e8b4",
     "semantic_hash": ""
   }
 }
