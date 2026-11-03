@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 03-11-2026, after UI overhaul Phase 9, slice 1 (section 16, item 105): dead code and unused packages removed. Main is at item 102; items 103 to 105 wait on the branch for the owner's push to main. The package name and page description come next.
+Last updated: 03-11-2026, after UI overhaul Phase 9, slice 1 (section 16, item 105): dead code and unused packages removed. The owner approved pushing items 103 to 105 (Checkpoint 8 and Phase 9, slice 1) to main on 03-11-2026; main is at the commit that records this. The package name and page description come next.
 
 ---
 
