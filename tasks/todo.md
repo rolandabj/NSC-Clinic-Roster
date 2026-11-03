@@ -74,7 +74,7 @@ Main moves only when the owner says "push to main".
 - [x] Settings sections with links and Save and Cancel (slice 1a, the frame: item 94; slice 1b, Clinic and Email with Save and Cancel: item 95; slice 1c, Rules: item 96; slice 1d, Time periods: item 97; slice 1e, Access and permissions: item 98; slice 1f, Data and backup: item 99; slice 1g, the six lists: item 100)
 - [x] Time periods: the new period form starts at the next cycle, not at 19-01-2026 (item 97)
 - [x] Reports in plain words (item 101)
-- [ ] Audit paging and count queries
+- [x] Audit paging and count queries (item 102)
 - [ ] Checkpoint 8
 
 ## Phase 9: tidy up and final audit

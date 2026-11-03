@@ -1,294 +1,230 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
- * Immutable Audit Trail Ledger View (Phase 14.5)
- * Filterable operational ledger with before/after state diff inspector and CSV export.
+ *
+ * Audit trail (Phase 8): who changed what, newest first, 100 records at a time with "Load more"
+ * (listPage, ordered by time only, so no new Firestore index is needed), and the total from a
+ * count query. The filter and the search look through the records loaded so far. "What
+ * changed" opens on the shared Dialog and lists the fields that changed, before and after,
+ * with the full records under it. Words in services/audit/auditWords.ts.
  */
 
-import React, { useState, useEffect, useId } from 'react';
-import {
-  ShieldCheck,
-  Search,
-  Filter,
-  Download,
-  Eye,
-  Calendar,
-  User,
-  History,
-  CheckCircle2,
-  X,
-  Layers,
-  ArrowRight,
-} from 'lucide-react';
-import { ClinicContextState } from '../../types/navigation';
-import { AuditEvent, AuditAction } from '../../types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Download, History, Search } from 'lucide-react';
+import type { ClinicContextState } from '../../types/navigation';
+import type { AuditEvent } from '../../types';
 import { getRepository } from '../../services/repository';
+import { countOf, listPage } from '../../services/repository/paging';
+import { AUDIT_ACTIONS, actionWord, changedFields, entityWord, filterAudit, type AuditFilters } from '../../services/audit/auditWords';
+import { formatDateTime, localTodayIso } from '../../utils/dateUtils';
 import { toCsv, downloadCsv, CsvValue } from '../../utils/csv';
-import { useDialogA11y } from '../common/useDialogA11y';
+import { Button, Card, DataTable, Dialog, EmptyState, ErrorState, Field, Input, LoadingState, PageHeader, Select, type Column } from '../ui';
+
+/** Records read at a time. */
+export const AUDIT_PAGE_SIZE = 100;
 
 interface AuditTrailViewProps {
   context: ClinicContextState;
 }
 
-export const AuditTrailView: React.FC<AuditTrailViewProps> = ({ context }) => {
-  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
-  const [filterAction, setFilterAction] = useState<string>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedEvent, setSelectedEvent] = useState<AuditEvent | null>(null);
-  const inspectorTitleId = useId();
-  const inspectorRef = useDialogA11y<HTMLDivElement>(!!selectedEvent, () => setSelectedEvent(null));
-
+export const AuditTrailView: React.FC<AuditTrailViewProps> = () => {
   const repo = getRepository();
+  const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [cursor, setCursor] = useState<unknown>(undefined);
+  const [hasMore, setHasMore] = useState(false);
+  const [total, setTotal] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filters, setFilters] = useState<AuditFilters>({ action: 'ALL', search: '' });
+  const [open, setOpen] = useState<AuditEvent | null>(null);
 
-  const loadAuditEvents = async () => {
+  const load = async (from?: unknown) => {
+    setLoading(true);
+    setError('');
     try {
-      const list = await repo.list('audit');
-      list.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      setAuditEvents(list);
-    } catch (e) {
-      console.error('Failed to load audit events:', e);
+      const page = await listPage(repo, 'audit', { orderBy: 'timestamp', direction: 'desc', limit: AUDIT_PAGE_SIZE, cursor: from });
+      setEvents((prev) => (from === undefined ? page.items : [...prev, ...page.items]));
+      setCursor(page.cursor);
+      setHasMore(page.hasMore);
+    } catch (err: any) {
+      setError(err?.message || String(err));
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadAuditEvents();
+    load();
+    // The total is only shown beside the list: a count that fails leaves it out.
+    countOf(repo, 'audit')
+      .then(setTotal)
+      .catch(() => setTotal(null));
   }, []);
 
-  const filteredEvents = auditEvents.filter((ev) => {
-    if (filterAction !== 'ALL' && ev.action !== filterAction) return false;
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const matchActor = ev.actor.toLowerCase().includes(q);
-      const matchEntity = ev.entity.toLowerCase().includes(q);
-      const matchNote = ev.note?.toLowerCase().includes(q) || false;
-      if (!matchActor && !matchEntity && !matchNote) return false;
-    }
-    return true;
-  });
+  const shown = useMemo(() => filterAudit(events, filters), [events, filters]);
+  const filtering = filters.action !== 'ALL' || filters.search.trim() !== '';
 
+  // The file keeps its column names; it holds the records shown.
   const handleExportCsv = () => {
-    const headers = ['Timestamp', 'Actor', 'Action', 'Entity', 'Entity ID', 'Note'];
-    const rows: CsvValue[][] = filteredEvents.map((ev) => [
-      ev.timestamp,
-      ev.actor,
-      ev.action,
-      ev.entity,
-      ev.entityId,
-      ev.note || '',
-    ]);
-
-    downloadCsv(`audit_trail_${new Date().toISOString().split('T')[0]}.csv`, toCsv([headers, ...rows]));
+    const rows: CsvValue[][] = shown.map((ev) => [ev.timestamp, ev.actor, ev.action, ev.entity, ev.entityId, ev.note || '']);
+    downloadCsv(`audit_trail_${localTodayIso()}.csv`, toCsv([['Timestamp', 'Actor', 'Action', 'Entity', 'Entity ID', 'Note'], ...rows]));
   };
 
-  const getActionBadgeColor = (action: AuditAction) => {
-    switch (action) {
-      case 'OVERRIDE_LOCK':
-        return 'bg-rose-100 text-rose-900 border-rose-200';
-      case 'PUBLISH':
-        return 'bg-purple-100 text-purple-900 border-purple-200';
-      case 'SWAP':
-        return 'bg-indigo-100 text-indigo-900 border-indigo-200';
-      case 'REBALANCE':
-        return 'bg-amber-100 text-amber-900 border-amber-200';
-      case 'CREATE':
-        return 'bg-emerald-100 text-emerald-900 border-emerald-200';
-      case 'DELETE':
-        return 'bg-red-100 text-red-900 border-red-200';
-      default:
-        return 'bg-slate-100 text-slate-800 border-slate-200';
-    }
-  };
+  const columns: Column<AuditEvent>[] = [
+    { key: 'when', header: 'When', sortValue: (ev) => ev.timestamp, cell: (ev) => <span className="whitespace-nowrap font-normal">{formatDateTime(ev.timestamp)}</span> },
+    { key: 'who', header: 'Who', sortValue: (ev) => ev.actor, cell: (ev) => <span className="break-all">{ev.actor}</span> },
+    { key: 'what', header: 'What', sortValue: (ev) => actionWord(ev.action), cell: (ev) => actionWord(ev.action) },
+    { key: 'record', header: 'Record', sortValue: (ev) => entityWord(ev.entity), cell: (ev) => entityWord(ev.entity) },
+    { key: 'note', header: 'Note', cell: (ev) => <span className="text-ink-muted">{ev.note || 'No note'}</span> },
+    {
+      key: 'open',
+      header: 'What changed',
+      hideHeader: true,
+      phone: 'actions',
+      align: 'right',
+      cell: (ev) =>
+        ev.before !== undefined || ev.after !== undefined ? (
+          <Button size="sm" onClick={() => setOpen(ev)} aria-label={`What changed for ${entityWord(ev.entity)} on ${formatDateTime(ev.timestamp)}`}>
+            What changed
+          </Button>
+        ) : null,
+    },
+  ];
+
+  const changes = open ? changedFields(open.before, open.after) : [];
+  const countWords =
+    total !== null && total > events.length ? `The newest ${events.length} of ${total} records` : `${events.length} ${events.length === 1 ? 'record' : 'records'}`;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6 select-none font-sans text-slate-800">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-              Clinical Audit Trail &amp; Ledger
-            </h1>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Immutable log of all operational changes, lock overrides, shift swaps, and publish broadcasts.
-          </p>
-        </div>
+    <div className="mx-auto max-w-7xl space-y-5 p-4 text-ink sm:p-6">
+      <PageHeader
+        title="Audit trail"
+        meta={<span>Who changed what, newest first: rosters, shifts, pinned days, requests and sent rosters.</span>}
+        actions={
+          <Button icon={Download} onClick={handleExportCsv} disabled={shown.length === 0}>
+            Download (CSV)
+          </Button>
+        }
+      />
 
-        <button
-          onClick={handleExportCsv}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 rounded text-xs font-semibold text-slate-700 cursor-pointer shadow-2xs"
-        >
-          <Download className="w-3.5 h-3.5 text-slate-500" aria-hidden="true" />
-          <span>Export Audit CSV</span>
-        </button>
+      <div role="search" aria-label="Filter the audit trail" className="grid grid-cols-1 gap-3 rounded-lg border border-line bg-surface p-3 shadow-card sm:grid-cols-2">
+        <Field label="Search" hint="Who, the record or the note">
+          {(p) => (
+            <div className="relative">
+              <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-ink-muted" />
+              <Input {...p} type="search" value={filters.search} onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))} className="pl-8" />
+            </div>
+          )}
+        </Field>
+        <Field label="Kind of change">
+          {(p) => (
+            <Select {...p} value={filters.action} onChange={(e) => setFilters((f) => ({ ...f, action: e.target.value as AuditFilters['action'] }))}>
+              <option value="ALL">All changes</option>
+              {AUDIT_ACTIONS.map((a) => (
+                <option key={a} value={a}>
+                  {actionWord(a)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="p-3 bg-white border border-slate-200 rounded-lg flex flex-wrap items-center justify-between gap-3 text-xs shadow-xs">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <span className="font-semibold text-slate-700">Action:</span>
-            <select aria-label="Filter by action"
-              value={filterAction}
-              onChange={(e) => setFilterAction(e.target.value)}
-              className="px-2.5 py-1 border border-slate-300 rounded bg-white font-medium"
-            >
-              <option value="ALL">All Actions</option>
-              <option value="PUBLISH">Publish Broadcast</option>
-              <option value="SWAP">Shift Swap</option>
-              <option value="OVERRIDE_LOCK">Lock Override</option>
-              <option value="REBALANCE">Fairness Rebalance</option>
-              <option value="TEMPLATE_APPLY">Template Applied</option>
-              <option value="CREATE">Create</option>
-              <option value="UPDATE">Update</option>
-              <option value="DELETE">Delete</option>
-            </select>
-          </div>
-
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" />
-            <input aria-label="Search audit events"
-              type="text"
-              placeholder="Search actor, entity or note..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 pr-3 py-1 border border-slate-300 rounded text-xs w-64"
-            />
-          </div>
-        </div>
-
-        <span className="font-mono text-slate-500 text-[11px]">
-          Showing {filteredEvents.length} of {auditEvents.length} recorded audit events
-        </span>
-      </div>
-
-      {/* Table */}
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs text-xs">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 text-slate-600 font-mono text-[11px] border-b border-slate-200">
-            <tr>
-              <th className="py-2.5 px-4">Timestamp</th>
-              <th className="py-2.5 px-3">Actor</th>
-              <th className="py-2.5 px-3">Action</th>
-              <th className="py-2.5 px-3">Entity</th>
-              <th className="py-2.5 px-3">Audit Details</th>
-              <th className="py-2.5 px-4 text-right">State Diff</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 font-mono">
-            {filteredEvents.map((ev) => (
-              <tr key={ev.id} className="hover:bg-slate-50/80 transition-colors">
-                <td className="py-2.5 px-4 text-slate-500 text-[11px]">
-                  {new Date(ev.timestamp).toLocaleString()}
-                </td>
-                <td className="py-2.5 px-3 font-bold font-sans text-slate-900">
-                  {ev.actor}
-                </td>
-                <td className="py-2.5 px-3">
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getActionBadgeColor(
-                      ev.action
-                    )}`}
-                  >
-                    {ev.action}
-                  </span>
-                </td>
-                <td className="py-2.5 px-3 text-slate-700 font-sans">
-                  {ev.entity}
-                </td>
-                <td className="py-2.5 px-3 font-sans text-slate-600 text-[11px] max-w-sm truncate">
-                  {ev.note || 'Operational state modification recorded'}
-                </td>
-                <td className="py-2.5 px-4 text-right font-sans">
-                  {(ev.before || ev.after) && (
-                    <button
-                      onClick={() => setSelectedEvent(ev)}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold cursor-pointer"
-                    >
-                      <Eye className="w-3 h-3 text-slate-500" aria-hidden="true" />
-                      <span>Inspect Diff</span>
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-
-            {filteredEvents.length === 0 && (
-              <tr>
-                <td colSpan={6} className="p-8 text-center text-slate-400 text-xs font-sans">
-                  No matching audit entries recorded yet.
-                </td>
-              </tr>
+      <Card
+        title="Changes"
+        actions={<span className="text-sm text-ink-muted">{filtering ? `${shown.length} found in ${countWords.toLowerCase()}` : countWords}</span>}
+        bodyClassName=""
+      >
+        {error && events.length === 0 ? (
+          <ErrorState title="The audit trail could not be loaded" onRetry={() => load()}>
+            {error}
+          </ErrorState>
+        ) : loading && events.length === 0 ? (
+          <LoadingState label="Loading the audit trail…" />
+        ) : (
+          <>
+            {filtering && hasMore && (
+              <p className="border-b border-line px-4 py-2 text-sm text-ink-muted">The search and the filter look through the records loaded. Load more to look further back.</p>
             )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* State Diff Modal */}
-      {selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs select-none animate-in fade-in duration-150">
-          <div
-            ref={inspectorRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={inspectorTitleId}
-            className="bg-white rounded-lg border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden text-xs"
-          >
-            <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50">
-              <div>
-                <h3 id={inspectorTitleId} className="font-bold text-slate-900 text-sm">Audit Snapshot Inspector</h3>
-                <p className="text-[11px] text-slate-500 font-mono mt-0.5">
-                  Action: {selectedEvent.action} · Actor: {selectedEvent.actor}
-                </p>
+            <DataTable
+              caption="Changes"
+              columns={columns}
+              rows={shown}
+              rowKey={(ev) => ev.id}
+              empty={
+                <EmptyState icon={History} title={events.length ? 'No change matches' : 'No changes yet'}>
+                  {events.length ? 'Change the search or the filter, or load more.' : 'Changes appear here as rosters are made, published and changed.'}
+                </EmptyState>
+              }
+            />
+            {(hasMore || error) && (
+              <div className="flex flex-wrap items-center justify-center gap-3 border-t border-line p-3">
+                {error && <span className="text-sm font-semibold text-danger">Could not load more: {error}</span>}
+                <Button busy={loading} onClick={() => load(cursor)}>
+                  {error ? 'Try again' : `Load ${AUDIT_PAGE_SIZE} more`}
+                </Button>
               </div>
+            )}
+          </>
+        )}
+      </Card>
 
-              <button
-                onClick={() => setSelectedEvent(null)}
-                className="p-1 rounded text-slate-400 hover:text-slate-600 cursor-pointer"
-                aria-label="Close"
-                title="Close"
-              >
-                <X className="w-4 h-4" aria-hidden="true" />
-              </button>
-            </div>
-
-            <div className="p-4 overflow-y-auto space-y-4 flex-1">
-              {selectedEvent.note && (
-                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded text-slate-700 italic">
-                  "{selectedEvent.note}"
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <span className="font-bold text-slate-700 text-xs">Before State:</span>
-                  <pre className="p-3 bg-slate-900 text-rose-300 rounded font-mono text-[10px] overflow-x-auto max-h-60">
-                    {JSON.stringify(selectedEvent.before, null, 2) || '// No prior state'}
-                  </pre>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="font-bold text-slate-700 text-xs">After State:</span>
-                  <pre className="p-3 bg-slate-900 text-emerald-300 rounded font-mono text-[10px] overflow-x-auto max-h-60">
-                    {JSON.stringify(selectedEvent.after, null, 2) || '// State removed'}
-                  </pre>
-                </div>
+      <Dialog
+        open={!!open}
+        onClose={() => setOpen(null)}
+        size="lg"
+        title="What changed"
+        description={open ? `${actionWord(open.action)}: ${entityWord(open.entity)}, by ${open.actor} on ${formatDateTime(open.timestamp)}.` : undefined}
+        footer={
+          <Button variant="primary" onClick={() => setOpen(null)}>
+            Done
+          </Button>
+        }
+      >
+        {open && (
+          <div className="space-y-4 text-sm">
+            {open.note && <p className="rounded-lg bg-sunken px-3 py-2 text-ink">{open.note}</p>}
+            {changes.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <caption className="sr-only">Fields that changed</caption>
+                  <thead className="bg-sunken text-xs font-semibold text-ink-muted">
+                    <tr>
+                      <th scope="col" className="px-3 py-2">Field</th>
+                      <th scope="col" className="px-3 py-2">Before</th>
+                      <th scope="col" className="px-3 py-2">After</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {changes.map((c) => (
+                      <tr key={c.field}>
+                        <th scope="row" className="px-3 py-2 align-top font-semibold">{c.field}</th>
+                        <td className="max-w-xs px-3 py-2 align-top break-words text-ink-muted">{c.before}</td>
+                        <td className="max-w-xs px-3 py-2 align-top break-words">{c.after}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-
-            <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end">
-              <button
-                onClick={() => setSelectedEvent(null)}
-                className="px-4 py-1.5 bg-slate-900 text-white rounded font-bold cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
+            ) : (
+              <p className="text-ink-muted">No field changed.</p>
+            )}
+            <details className="rounded-lg border border-line">
+              <summary className="cursor-pointer px-3 py-2 font-semibold">The records as saved</summary>
+              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+                {(['before', 'after'] as const).map((side) => (
+                  <div key={side} className="min-w-0 space-y-1">
+                    <p className="text-xs font-semibold text-ink-muted">{side === 'before' ? 'Before' : 'After'}</p>
+                    <pre className="max-h-60 overflow-auto rounded bg-sunken p-3 font-mono text-xs text-ink">
+                      {open[side] === undefined ? (side === 'before' ? 'Nothing before' : 'Nothing after') : JSON.stringify(open[side], null, 2)}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+            </details>
           </div>
-        </div>
-      )}
+        )}
+      </Dialog>
     </div>
   );
 };
