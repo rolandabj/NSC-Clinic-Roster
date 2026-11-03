@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 03-11-2026, after UI overhaul Phase 8, slice 1g (section 16, item 100): the six Settings lists made readable. Pushed to the working branch; main waits for the owner's word.
+Last updated: 03-11-2026, after UI overhaul Phase 8, slice 1g (section 16, item 100): the six Settings lists made readable. The owner approved pushing items 97 to 100 (Phase 8, slices 1d to 1g) to main on 03-11-2026; main is at the commit that records this. Reports in plain words come next.
 
 ---
 
