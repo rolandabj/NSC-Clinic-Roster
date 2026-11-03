@@ -79,6 +79,6 @@ Main moves only when the owner says "push to main".
 
 ## Phase 9: tidy up and final audit
 - [x] Dead code and unused packages (item 105)
-- [ ] Package name and page description
+- [x] Package name and page description (item 106)
 - [ ] ESLint in CI
 - [ ] Final audit and guide section 13

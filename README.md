@@ -1,66 +1,47 @@
-# ClinicRoster
+# NSC Clinic Roster
 
-> Outpatient clinic nursing roster and shift scheduling web application with deterministic nurse-to-doctor pairing, leave & locked day enforcement, and an Excel-like workbook.
+> Nurse rosters for an outpatient clinic: made around the doctors' clinics and the nurses' leave, checked against the clinic's rules, and sent to each nurse.
 
-## Overview
+## What it does
 
-**ClinicRoster** is a web-based clinical workforce management system designed for outpatient clinics, specialty centers, and healthcare departments. It automates complex scheduling constraints, balances contract hours, preserves strict doctor-nurse pairing continuity, and supports real-time roster publishing, export, and verification.
+- **Rosters.** Fill a roster for two weeks or a month. Each doctor's clinic gets its nurses, each nurse's leave, days off and pinned days are kept, and the hours go towards each nurse's goal. Change any shift by hand; the roster is checked again at once, and each problem is named with what to do about it.
+- **Hours.** Every nurse has a goal for each time period, worked out from their contract. Hours ahead or short carry into the next roster, within limits that protect nurses from overwork.
+- **Leave and requests.** Nurses ask for leave, days off and shifts; planners and managers approve or decline them, and the nurse gets an email.
+- **Publishing.** Publish a roster to email each nurse their shifts, with a private link to their own roster and a public link to the whole one. History keeps every published version and saved copy.
+- **Reports and audit.** Hours against each nurse's goal, how fairly weekends and late finishes were shared, leave allowances, and who changed what.
+- **Access.** People sign in with Google. The owner approves each account and decides who can change rosters and who can only look.
 
----
+## Built with
 
-## Key Features
+- React 19, TypeScript, Vite and Tailwind CSS, with the Inter font and Lucide icons
+- Node.js and Express for the email and sign in server
+- Google Cloud Firestore and Firebase Auth
+- jsPDF and XLSX for PDF and Excel files
 
-1. **Deterministic Scheduling Engine**
-   - Automatically generates conflict-free duty schedules respecting physician assignments, working hour limits, contract targets, and fairness quotas.
-   - Prevents consecutive duty violations, enforces minimum rest periods, and manages float nurse allocations.
-
-2. **Excel-Like Roster Workbook**
-   - Interactive scheduling grid with live formula updates, shift badges, undo/redo history, and instant problem diagnostics.
-   - Supports keyboard navigation, inline cell editing, and status validation.
-
-3. **Multi-Staff & Availability Management**
-   - Nurse and doctor directory with seniority levels, clinical roles, specialty credentials, and custom shift preferences.
-   - Dedicated leave tracking (Annual, Sick, Maternity, Study, Compassionate) and locked day-off constraints.
-
-4. **Dedicated Working Hours Periods**
-   - Period-based contract target tracking with automated daily-rate prorating for shorter schedule ranges.
-   - Year-to-date duty balancing across weekends, public holidays, and night rotations.
-
-5. **Role-Based Access & Publishing**
-   - Granular permissions with Google Authentication and Firestore persistence.
-   - Public read-only roster views, individualized nurse rosters, PDF/Excel export, and automated notification workflows.
-
----
-
-## Tech Stack
-
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS
-- **Icons & Typography**: Lucide React, Google Fonts (Plus Jakarta Sans, JetBrains Mono)
-- **Backend**: Node.js, Express (dual SPA & REST middleware mode)
-- **Database & Auth**: Google Cloud Firestore & Firebase Auth
-- **Reporting & Export**: jsPDF, jsPDF-AutoTable, XLSX
-
----
-
-## Getting Started
+## Getting started
 
 ### Development
+
 ```bash
 npm install --legacy-peer-deps
 npm run dev
 ```
-The application will be accessible at `http://localhost:3000`.
 
-### Production Build
+The app opens at `http://localhost:3000`.
+
+### Production build
+
 ```bash
 npm run build
 npm start
 ```
 
-### Running Tests
-```bash
-npm run test
-```
-Runs the full suite of unit tests validating the scheduling engine, cascade deletions, period calculations, and constraints.
+### Tests
 
-See [PROJECT_GUIDE.md](PROJECT_GUIDE.md) for architecture, deployment, security, and the full testing workflow. Browser assets build into `dist/`; the backend builds separately into `build/server.js` and is loaded by `npm start`.
+```bash
+npm test
+```
+
+Runs the unit tests of the roster engine, the roster check, hours, leave, publishing and the screens' logic.
+
+See [PROJECT_GUIDE.md](PROJECT_GUIDE.md) for how the app is built, deployed and tested. The browser files build into `dist/`; the server builds into `build/server.js`, which `npm start` loads.
