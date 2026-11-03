@@ -29,7 +29,7 @@ export function youCanDo(p: UserPrivileges): { words: string; allowed: boolean }
     { words: 'Change rosters, staff and settings', allowed: p.canEditRosterAssignments },
     { words: 'Fill rosters automatically', allowed: p.canRunSolver },
     { words: 'Publish rosters', allowed: p.canPublishSchedules },
-    { words: 'Approve leave and days off', allowed: p.canApproveLeave },
+    { words: 'Approve requests for leave, days off and shifts', allowed: p.canApproveLeave },
     { words: 'Approve shift swaps', allowed: p.canApproveSwaps },
     { words: 'Download reports', allowed: p.canExportReports },
     { words: 'Give people access and restore backups', allowed: p.canManageStaff },

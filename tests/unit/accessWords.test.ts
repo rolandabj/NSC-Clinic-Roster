@@ -34,7 +34,7 @@ test('Your access lists what each person can do, in plain words', () => {
     'Change rosters, staff and settings',
     'Fill rosters automatically',
     'Publish rosters',
-    'Approve leave and days off',
+    'Approve requests for leave, days off and shifts',
     'Approve shift swaps',
     'Download reports',
     'Give people access and restore backups',
@@ -43,7 +43,7 @@ test('Your access lists what each person can do, in plain words', () => {
   const viewer = youCanDo(computePrivileges('VIEWER'));
   assert.ok(viewer.every((x) => !x.allowed), JSON.stringify(viewer));
   const manager = youCanDo(computePrivileges('VIEWER', true));
-  assert.deepEqual(manager.filter((x) => x.allowed).map((x) => x.words), ['Approve leave and days off', 'Download reports']);
+  assert.deepEqual(manager.filter((x) => x.allowed).map((x) => x.words), ['Approve requests for leave, days off and shifts', 'Download reports']);
   const editor = youCanDo(computePrivileges('EDITOR'));
   assert.deepEqual(editor.filter((x) => !x.allowed).map((x) => x.words), ['Give people access and restore backups']);
 });

@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1793689557.9498823,
-    "seen": 1793689575.4760888,
-    "ast_hash": "0d13ea99cc0d0ff3162003d000a17b73",
+    "mtime": 1793689611.2690914,
+    "seen": 1793689620.3459218,
+    "ast_hash": "532977662b8614726fc61c73bb2b3073",
     "semantic_hash": ""
   },
   "index.html": {
@@ -2532,15 +2532,15 @@
     "semantic_hash": ""
   },
   "src/services/auth/accessWords.ts": {
-    "mtime": 1793689406.684661,
-    "seen": 1793689575.47568,
-    "ast_hash": "3d18bcaa841398022e047bba77748dd5",
+    "mtime": 1793689597.2035372,
+    "seen": 1793689620.3455973,
+    "ast_hash": "446bacf65da9dd1932dc897db657cf8e",
     "semantic_hash": ""
   },
   "tests/unit/accessWords.test.ts": {
-    "mtime": 1793689406.6775646,
-    "seen": 1793689575.4758766,
-    "ast_hash": "0b9897d4124fc6f2dea8955f917c22cf",
+    "mtime": 1793689597.204125,
+    "seen": 1793689620.3457565,
+    "ast_hash": "da501827e8dab27e8318d4620ef4f643",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/data-backup.cjs": {
