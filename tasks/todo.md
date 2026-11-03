@@ -75,7 +75,7 @@ Main moves only when the owner says "push to main".
 - [x] Time periods: the new period form starts at the next cycle, not at 19-01-2026 (item 97)
 - [x] Reports in plain words (item 101)
 - [x] Audit paging and count queries (item 102)
-- [ ] Checkpoint 8
+- [x] Checkpoint 8 (items 103 and 104)
 
 ## Phase 9: tidy up and final audit
 - [ ] Dead code and unused packages

@@ -26,14 +26,13 @@ const STATUS_TONES: Record<HoursAccountingStatus, Tone> = {
   CRITICAL_OVER: 'warning',
 };
 
-/** The order and the share of the goal each status stands for, for the Status filter. */
-export const STATUS_CHOICES: { id: HoursAccountingStatus; label: string }[] = [
-  { id: 'OPTIMAL', label: 'On goal (90 to 110%)' },
-  { id: 'UNDER', label: 'A little short (75 to 89%)' },
-  { id: 'CRITICAL_UNDER', label: 'Very short (under 75%)' },
-  { id: 'OVER', label: 'A little over (111 to 120%)' },
-  { id: 'CRITICAL_OVER', label: 'Too many hours (over 120%)' },
-];
+/**
+ * The statuses in the order of the Status filter. A status is judged on the balance, counting
+ * the rosters before, so the filter names no share of this roster's goal (Checkpoint 8).
+ */
+export const STATUS_CHOICES: { id: HoursAccountingStatus; label: string }[] = (
+  ['OPTIMAL', 'UNDER', 'CRITICAL_UNDER', 'OVER', 'CRITICAL_OVER'] as HoursAccountingStatus[]
+).map((id) => ({ id, label: STATUS_WORDS[id] }));
 
 export function statusWord(status: HoursAccountingStatus | string): string {
   return STATUS_WORDS[status as HoursAccountingStatus] ?? String(status);
@@ -41,6 +40,15 @@ export function statusWord(status: HoursAccountingStatus | string): string {
 
 export function statusTone(status: HoursAccountingStatus | string): Tone {
   return STATUS_TONES[status as HoursAccountingStatus] ?? 'neutral';
+}
+
+/** The colour of a Share of goal bar, from the share it shows (the same bands as the statuses). */
+export function shareTone(percent: number): Tone {
+  if (percent < 75) return 'danger';
+  if (percent < 90) return 'warning';
+  if (percent <= 110) return 'success';
+  if (percent <= 120) return 'info';
+  return 'warning';
 }
 
 /** "12 h ahead", "8.5 h short" or "Even", to one decimal place. */

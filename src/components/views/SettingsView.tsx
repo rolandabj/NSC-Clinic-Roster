@@ -41,8 +41,8 @@ import {
   EmailSettingsConfig,
 } from '../../types/settings';
 import { Badge, Field, PageHeader, Select, cx } from '../ui';
-import { addLeaveGuard, isChanged } from '../common/leaveGuard';
-import { ruleChanges } from '../../services/rules/ruleDraft';
+import { addLeaveGuard, isChanged, rebaseDraft } from '../common/leaveGuard';
+import { rebaseRules, ruleChanges } from '../../services/rules/ruleDraft';
 import { MAX_CONSECUTIVE_SHIFTS_NAME } from '../../services/rules/ruleSyncService';
 import { SEED_CLINIC_PROFILE } from '../../services/seed/seedData';
 import { notify } from '../common/dialogs';
@@ -161,12 +161,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const [clinicDraft, setClinicDraft] = useState<ClinicProfile | null>(null);
   const [clinicSaving, setClinicSaving] = useState(false);
-  // The draft starts as the saved profile, and again whenever the saved one is loaded.
-  useEffect(() => setClinicDraft(clinic), [clinic]);
+  // The draft starts as the saved profile. A new copy of it (a list tab saved and Settings read
+  // everything again) replaces the draft only when the draft has no changes (Checkpoint 8).
+  const savedClinicRef = useRef<ClinicProfile | null>(null);
+  useEffect(() => {
+    const previous = savedClinicRef.current;
+    savedClinicRef.current = clinic;
+    if (clinic) setClinicDraft((d) => rebaseDraft(previous, d, clinic));
+  }, [clinic]);
   const clinicChanged = isChanged(clinic, clinicDraft);
 
   const saveClinic = async () => {
     if (!clinicDraft || clinicSaving) return;
+    const submitted = clinicDraft;
     setClinicSaving(true);
     try {
       const clinicToSave: ClinicProfile = {
@@ -188,6 +195,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       localStorage.setItem('clinic_roster_clinic_name', clinicToSave.name);
       localStorage.setItem('clinic_roster_clinic_timezone', clinicToSave.timezone);
       updateClinicRef.current?.({ name: clinicToSave.name, timezone: clinicToSave.timezone });
+      // A change typed while saving stays in the draft.
+      setClinicDraft((d) => (isChanged(submitted, d) ? d : clinicToSave));
       setClinic(clinicToSave);
       triggerSaveNotification('Clinic and opening hours saved.');
     } catch (err: any) {
@@ -200,7 +209,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const [emailDraft, setEmailDraft] = useState<EmailSettingsConfig>(emailConfig);
   const [emailSaving, setEmailSaving] = useState(false);
-  useEffect(() => setEmailDraft(emailConfig), [emailConfig]);
+  const savedEmailRef = useRef<EmailSettingsConfig>(emailConfig);
+  useEffect(() => {
+    const previous = savedEmailRef.current;
+    savedEmailRef.current = emailConfig;
+    setEmailDraft((d) => rebaseDraft(previous, d, emailConfig));
+  }, [emailConfig]);
   const emailChanged = isChanged(emailConfig, emailDraft);
 
   // Load the clinic's shared email settings (this browser's copy shows until they arrive)
@@ -227,7 +241,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // Rules: a draft of the whole list, saved only by Save (Phase 8, slice 1c).
   const [rulesDraft, setRulesDraft] = useState<Rule[]>([]);
   const [rulesSaving, setRulesSaving] = useState(false);
-  useEffect(() => setRulesDraft(rules), [rules]);
+  // A new copy of the saved rules keeps the draft's changes (rebaseRules, Checkpoint 8).
+  const savedRulesRef = useRef<Rule[]>([]);
+  useEffect(() => {
+    const previous = savedRulesRef.current;
+    savedRulesRef.current = rules;
+    setRulesDraft((d) => rebaseRules(previous, d, rules));
+  }, [rules]);
   const rulesToSave = ruleChanges(rules, rulesDraft);
   const rulesChanged = rulesToSave.length > 0;
   // An old consecutive shifts rule name with a number in it ("... = 6") is renamed once, so it
@@ -248,7 +268,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       triggerSaveNotification(`Rules saved: ${rulesToSave.length === 1 ? '1 rule' : `${rulesToSave.length} rules`} changed. They apply the next time you fill or check a roster.`);
     } catch (err: any) {
       notify(`The rules were not all saved. ${err?.message || err}`, 'error');
-      // What was saved before the failure is read again; the draft keeps the rest.
+      // What was saved before the failure is read again; the draft keeps the rest (rebaseRules).
       const fresh = await repo.list('rules').catch(() => null);
       if (fresh) setRules(fresh);
     } finally {

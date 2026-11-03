@@ -27,3 +27,15 @@ test('a draft is changed only when a value differs from the saved one', () => {
   assert.equal(isChanged(saved, { ...saved, weekendDays: [5, 6] }), true);
   assert.equal(isChanged(null, { ...saved }), false, 'nothing loaded yet is not a change');
 });
+
+// Checkpoint 8 review: a new copy of what is saved replaces a draft only when the draft has no changes.
+import { rebaseDraft } from '../../src/components/common/leaveGuard';
+
+test('a reload keeps a changed draft and refreshes an unchanged one', () => {
+  const saved = { name: 'Clinic', closeTime: '21:00' };
+  const reloaded = { name: 'Clinic', closeTime: '21:00', updatedAt: 'x' };
+  assert.deepEqual(rebaseDraft(saved, { ...saved }, reloaded), reloaded);
+  const changed = { ...saved, closeTime: '20:00' };
+  assert.equal(rebaseDraft(saved, changed, reloaded), changed);
+  assert.deepEqual(rebaseDraft(null, null, reloaded), reloaded);
+});

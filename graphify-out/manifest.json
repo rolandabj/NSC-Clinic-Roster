@@ -234,9 +234,9 @@
     "semantic_hash": "730953817e7a18e02d0574068cb873fc"
   },
   "src/components/views/AccessManagementPanel.tsx": {
-    "mtime": 1793681830.5064065,
-    "seen": 1793681905.827696,
-    "ast_hash": "a7eaf2151b3197065e0f5ab800ffa8f9",
+    "mtime": 1793689860.684525,
+    "seen": 1793690301.5997655,
+    "ast_hash": "6a1b8b24e3d40fda74edf21d2a44a8a1",
     "semantic_hash": ""
   },
   "src/components/views/AcknowledgePage.tsx": {
@@ -306,9 +306,9 @@
     "semantic_hash": ""
   },
   "src/components/views/ReportsView.tsx": {
-    "mtime": 1793687364.5126047,
-    "seen": 1793687440.8275077,
-    "ast_hash": "53376dacb1b2a84d17ede32f8fd7b094",
+    "mtime": 1793689878.1998584,
+    "seen": 1793690301.5997894,
+    "ast_hash": "6e2af72787c4f27c382e862aa7fa9993",
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
@@ -318,9 +318,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
-    "mtime": 1793682031.456671,
-    "seen": 1793682221.8449714,
-    "ast_hash": "0c3194e8334673fe57ab59784f16d3fb",
+    "mtime": 1793690004.2505195,
+    "seen": 1793690301.599794,
+    "ast_hash": "bc44d509746710c21433faf1401cbb1f",
     "semantic_hash": ""
   },
   "src/components/views/WorkingHoursPeriodsPanel.tsx": {
@@ -372,9 +372,9 @@
     "semantic_hash": ""
   },
   "src/components/views/settings/RulesTab.tsx": {
-    "mtime": 1792268695.6252613,
-    "seen": 1792268765.217622,
-    "ast_hash": "04a2e2ed754a9cab0496ab31ff1bce6b",
+    "mtime": 1793689837.6311138,
+    "seen": 1793690301.599805,
+    "ast_hash": "dce1f3c4b46d7f372ff3f0cc66b71602",
     "semantic_hash": ""
   },
   "src/components/views/settings/SeniorityTab.tsx": {
@@ -966,9 +966,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1793689611.2690914,
-    "seen": 1793689620.3459218,
-    "ast_hash": "532977662b8614726fc61c73bb2b3073",
+    "mtime": 1793690273.6990693,
+    "seen": 1793690301.600142,
+    "ast_hash": "a22519069417546707e61a92ff379146",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1584,9 +1584,9 @@
     "semantic_hash": ""
   },
   "tasks/todo.md": {
-    "mtime": 1793688219.122881,
-    "seen": 1793688228.8912327,
-    "ast_hash": "fe3f6d78f32fda83b832b19e620a9854",
+    "mtime": 1793690273.7046607,
+    "seen": 1793690301.60015,
+    "ast_hash": "e72ca86e33b13767e7aeb8af505915be",
     "semantic_hash": ""
   },
   "src/utils/dateDefaults.ts": {
@@ -2478,33 +2478,33 @@
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/settings-save.cjs": {
-    "mtime": 1792268567.1963043,
-    "seen": 1792268765.217446,
-    "ast_hash": "2d0d0887693f7862d97fe4cdc90e70d8",
+    "mtime": 1793689917.3535798,
+    "seen": 1793690301.5996,
+    "ast_hash": "352838d8a2925b9598dc0593b85f2771",
     "semantic_hash": ""
   },
   "src/components/common/leaveGuard.ts": {
-    "mtime": 1792268084.5874991,
-    "seen": 1792268404.1561544,
-    "ast_hash": "95f7ce89ddfdf00bcf2e95227a9d600e",
+    "mtime": 1793689795.525519,
+    "seen": 1793690301.5996783,
+    "ast_hash": "387cf6b1bbf0bf47cf4831c4268fd217",
     "semantic_hash": ""
   },
   "tests/unit/leaveGuard.test.ts": {
-    "mtime": 1792268084.5841823,
-    "seen": 1792268404.156478,
-    "ast_hash": "77e7876f35db9256f6728dd740df6263",
+    "mtime": 1793689773.4775176,
+    "seen": 1793690301.6000457,
+    "ast_hash": "1c6c48309344f4b42efe03d92eee0a8e",
     "semantic_hash": ""
   },
   "src/services/rules/ruleDraft.ts": {
-    "mtime": 1792268431.852203,
-    "seen": 1792268765.2177572,
-    "ast_hash": "a13c6354ace99e3ebe144b8e37e16312",
+    "mtime": 1793689795.525519,
+    "seen": 1793690301.5999496,
+    "ast_hash": "5a2df59cbaa586e4398a16776cace996",
     "semantic_hash": ""
   },
   "tests/unit/ruleDraft.test.ts": {
-    "mtime": 1792268425.5076694,
-    "seen": 1792268765.217903,
-    "ast_hash": "008f8e377546a2aec3175f54cd348b73",
+    "mtime": 1793689773.4735177,
+    "seen": 1793690301.6000807,
+    "ast_hash": "2a6214977622449371012492072f6195",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/time-periods.cjs": {
@@ -2562,15 +2562,15 @@
     "semantic_hash": ""
   },
   "src/services/reports/reportWords.ts": {
-    "mtime": 1793687364.5132053,
-    "seen": 1793687440.8276448,
-    "ast_hash": "04492163ec4d4d8220678a454999c2ae",
+    "mtime": 1793689878.1991978,
+    "seen": 1793690301.5999296,
+    "ast_hash": "73ac552c6a7c30b0303738d613feba9e",
     "semantic_hash": ""
   },
   "tests/unit/reportWords.test.ts": {
-    "mtime": 1793686899.0358555,
-    "seen": 1793687346.7512708,
-    "ast_hash": "8feb819b157b204918e3336789178eab",
+    "mtime": 1793689869.1335232,
+    "seen": 1793690301.6000686,
+    "ast_hash": "20766aaf1aca4ca367039dd4b7258266",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/audit.cjs": {

@@ -105,12 +105,11 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
       notify('Enter an email address like name@gmail.com.', 'warning');
       return false;
     }
-    // Link the matching nurse profile automatically (by Gmail) so the user can
-    // file their own leave and availability requests.
-    const matchedNurse = !linkedNurseId
-      ? nurses.find((n) => n.gmail && n.gmail.trim().toLowerCase() === key)
-      : undefined;
-    const nurseLink = linkedNurseId || matchedNurse?.id || '';
+    // With no choice made (undefined), link the matching nurse profile automatically (by Gmail)
+    // so the user can file their own leave and availability requests. '' is a choice of None.
+    const matchedNurse =
+      linkedNurseId === undefined ? nurses.find((n) => n.gmail && n.gmail.trim().toLowerCase() === key) : undefined;
+    const nurseLink = linkedNurseId ?? matchedNurse?.id ?? '';
 
     setIsBusy(true);
     try {
@@ -419,7 +418,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
                           variant="primary"
                           icon={Check}
                           busy={isBusy}
-                          onClick={() => handleApproveUser(u.email, c.role, c.isManager, c.nurseId || undefined, u.name)}
+                          onClick={() => handleApproveUser(u.email, c.role, c.isManager, c.nurseId, u.name)}
                           aria-label={`Approve ${u.email}`}
                         >
                           Approve

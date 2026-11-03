@@ -25,3 +25,16 @@ export function ruleChanges(saved: Rule[], draft: Rule[]): { id: string; updates
   }
   return out;
 }
+
+/**
+ * The draft over a new copy of the saved rules (Checkpoint 8): each rule the draft changed keeps
+ * its changed fields; the others take the new copy; rules added since come in and rules deleted
+ * go. So a reload after a list tab saves, Add missing rules, Delete or a failed save loses no edit.
+ */
+export function rebaseRules(previousSaved: Rule[], draft: Rule[], nextSaved: Rule[]): Rule[] {
+  const changes = new Map(ruleChanges(previousSaved, draft).map((c) => [c.id, c.updates]));
+  return nextSaved.map((r) => {
+    const updates = changes.get(r.id);
+    return updates ? { ...r, ...updates } : r;
+  });
+}

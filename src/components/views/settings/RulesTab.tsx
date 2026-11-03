@@ -348,8 +348,8 @@ export const RulesTab: React.FC<RulesTabProps> = ({ rules, setRules, loadData, t
   const addMissingRules = async () => {
     setIsSyncing(true);
     try {
-      const result = await RuleSyncService.syncStandardRules();
-      setRules(result.rules);
+      // The new rules arrive with the reload, which keeps the changes not saved yet.
+      await RuleSyncService.syncStandardRules();
       triggerSaveNotification('The missing rules were added.');
       loadData();
     } catch (err) {

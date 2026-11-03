@@ -38,6 +38,18 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   await nav.getByRole('link', { name: /Clinic and opening hours/ }).click();
   await page.waitForTimeout(300);
   check('the draft is kept while moving between sections', (await page.getByLabel('Clinic name').inputValue()) === 'North Clinic');
+  // Checkpoint 8 review: saving on a list tab reads Settings again; the draft must survive it.
+  await page.evaluate(() => { window.location.hash = 'settings?tab=holidays'; });
+  await main.getByRole('button', { name: /^Add Public Holiday/ }).click();
+  const hd = page.getByRole('dialog', { name: 'Add a public holiday' });
+  await hd.getByLabel('Name', { exact: true }).fill('Draft Day');
+  await hd.getByLabel('Date', { exact: true }).fill('03-12-2026');
+  await hd.getByRole('button', { name: 'Add the public holiday' }).click();
+  await page.waitForTimeout(800);
+  check('a holiday saved on its tab', (await col('holidays')).some((h) => h.name === 'Draft Day'));
+  await nav.getByRole('link', { name: /Clinic and opening hours/ }).click();
+  await page.waitForTimeout(400);
+  check('the clinic draft survives a save on another tab', (await page.getByLabel('Clinic name').inputValue()) === 'North Clinic' && /Not saved/.test(await nav.innerText()));
 
   // 2. Cancel.
   await main.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -71,6 +83,23 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
     await add.click();
     await main.getByRole('switch').first().waitFor({ timeout: 10000 });
     check('Add the missing rules saves them at once', (await col('rules')).length > 0 && !/Not saved/.test(await nav.innerText()));
+  }
+  // Checkpoint 8 review: a rule switched, then a save on a list tab: the switch stays a draft.
+  {
+    const sw0 = main.getByRole('switch').first();
+    const on0 = (await sw0.getAttribute('aria-checked')) === 'true';
+    await sw0.click();
+    await nav.getByRole('link', { name: /Public holidays/ }).click();
+    await main.getByRole('button', { name: /^Add Public Holiday/ }).click();
+    const hd2 = page.getByRole('dialog', { name: 'Add a public holiday' });
+    await hd2.getByLabel('Name', { exact: true }).fill('Rule Day');
+    await hd2.getByLabel('Date', { exact: true }).fill('04-12-2026');
+    await hd2.getByRole('button', { name: 'Add the public holiday' }).click();
+    await page.waitForTimeout(800);
+    await nav.getByRole('link', { name: /^Rules/ }).click();
+    await page.waitForTimeout(400);
+    check('the rules draft survives a save on another tab', ((await main.getByRole('switch').first().getAttribute('aria-checked')) === 'true') !== on0 && /Not saved/.test(await nav.getByRole('link', { name: /^Rules/ }).innerText()));
+    await main.getByRole('button', { name: 'Cancel', exact: true }).click();
   }
   const sw = main.getByRole('switch').first();
   const swName = (await sw.getAttribute('aria-label')).replace(/ on$/, '');

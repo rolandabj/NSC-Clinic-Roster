@@ -33,3 +33,11 @@ export function isChanged<T>(saved: T | null | undefined, draft: T | null | unde
   if (saved == null || draft == null) return false;
   return JSON.stringify(saved) !== JSON.stringify(draft);
 }
+
+/**
+ * The draft after a new copy of what is saved arrives (Checkpoint 8): a draft with changes is kept,
+ * an unchanged one takes the new copy. So a reload never wipes edits that are not saved yet.
+ */
+export function rebaseDraft<T>(previousSaved: T | null | undefined, draft: T | null | undefined, nextSaved: T): T {
+  return draft != null && isChanged(previousSaved, draft) ? draft : nextSaved;
+}

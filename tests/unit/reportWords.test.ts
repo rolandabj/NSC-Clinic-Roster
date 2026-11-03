@@ -65,3 +65,18 @@ test('a bar is its share of the longest, kept between 0 and 100', () => {
   assert.equal(barShare(5, 4), 100);
   assert.equal(barShare(-1, 4), 0);
 });
+
+// Checkpoint 8 review: the Share of goal bar is coloured by the share it shows, not by the status
+// (which is judged on the balance, counting the rosters before).
+import { shareTone, STATUS_CHOICES } from '../../src/services/reports/reportWords';
+
+test('the share bar takes its colour from the share shown', () => {
+  assert.equal(shareTone(100), 'success');
+  assert.equal(shareTone(90), 'success');
+  assert.equal(shareTone(110), 'success');
+  assert.equal(shareTone(80), 'warning');
+  assert.equal(shareTone(70), 'danger');
+  assert.equal(shareTone(115), 'info');
+  assert.equal(shareTone(130), 'warning');
+  assert.ok(STATUS_CHOICES.every((c) => !/%/.test(c.label)), 'the status filter names no share');
+});

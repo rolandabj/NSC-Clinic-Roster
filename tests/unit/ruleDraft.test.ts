@@ -27,3 +27,26 @@ test('a rule only in the draft or only saved is not written here (added and dele
   assert.deepEqual(ruleChanges([rule('a')], [rule('a'), rule('new')]), []);
   assert.deepEqual(ruleChanges([rule('a'), rule('gone')], [rule('a')]), []);
 });
+
+// Checkpoint 8 review: a new copy of the saved rules (after a list tab saves, Add missing rules,
+// Delete, or a save that failed partway) keeps the changes the draft made.
+import { rebaseRules } from '../../src/services/rules/ruleDraft';
+
+test('a reload keeps the draft’s changes, adds new rules and drops deleted ones', () => {
+  const before = [rule('a'), rule('b'), rule('c')];
+  const draft = [rule('a', { value: 9 }), rule('b'), rule('c', { enabled: false })];
+  const after = [rule('a'), rule('b', { name: 'Renamed' }), rule('d')];
+  const next = rebaseRules(before, draft, after);
+  assert.deepEqual(next.map((r) => r.id), ['a', 'b', 'd']);
+  assert.equal(next[0].value, 9, 'the unsaved change to a stays');
+  assert.equal(next[1].name, 'Renamed', 'b had no change, so it takes the saved copy');
+  assert.deepEqual(ruleChanges(after, next), [{ id: 'a', updates: { value: 9 } }]);
+});
+
+test('a save that failed partway keeps what was not saved', () => {
+  const before = [rule('a'), rule('b')];
+  const draft = [rule('a', { value: 9 }), rule('b', { value: 7 })];
+  const fresh = [rule('a', { value: 9 }), rule('b')];
+  const next = rebaseRules(before, draft, fresh);
+  assert.deepEqual(ruleChanges(fresh, next), [{ id: 'b', updates: { value: 7 } }]);
+});

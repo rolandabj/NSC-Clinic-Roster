@@ -42,6 +42,7 @@ import {
   differenceWords,
   filterReportRows,
   reportTab,
+  shareTone,
   statusTone,
   statusWord,
   type ReportFilters,
@@ -426,7 +427,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context, tab, onAddres
       cell: (r) => (
         <div className="space-y-1">
           <span className="tabular-nums">{r.pacePercent}%</span>
-          <Meter percent={r.pacePercent} tone={statusTone(r.status)} label={`${r.nurse.fullName}, share of goal`} />
+          <Meter percent={r.pacePercent} tone={shareTone(r.pacePercent)} label={`${r.nurse.fullName}, share of goal`} />
         </div>
       ),
     },
@@ -634,7 +635,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context, tab, onAddres
                   bodyClassName=""
                 >
                   <p className="border-b border-line px-4 py-2 text-sm text-ink-muted">
-                    Difference is the balance at the end of this roster, counting the rosters before it. Open a nurse to see the timesheet.
+                    Difference is the balance at the end of this roster, counting the rosters before it, and Status is judged on that balance. Share of goal counts this roster only. Open a nurse to see the timesheet.
                   </p>
                   <DataTable
                     caption={`Hours for ${activeSchedule.name}`}
