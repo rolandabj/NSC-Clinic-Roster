@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 03-11-2026, after UI overhaul Phase 8, the audit trail in pages (section 16, item 102). Main is at item 100; items 101 and 102 wait on the branch for the owner's push to main. Checkpoint 8 comes next (the sign in dialog moves to the shared Dialog there).
+Last updated: 03-11-2026, after UI overhaul Phase 8, the audit trail in pages (section 16, item 102). The owner approved pushing items 101 and 102 (Reports in plain words, the audit trail in pages) to main on 03-11-2026; main is at the commit that records this. Checkpoint 8 comes next (the sign in dialog moves to the shared Dialog there).
 
 ---
 
