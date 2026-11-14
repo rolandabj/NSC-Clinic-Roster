@@ -5,8 +5,14 @@ import { createApiApp } from './apiApp';
 
 export async function startServer() {
   const app = createApiApp();
-  const PORT = parseInt(process.env.PORT || '3000', 10);
   const isProduction = process.env.NODE_ENV === 'production';
+  const portArgIndex = process.argv.indexOf('--port');
+  const cliPort = portArgIndex !== -1 && process.argv[portArgIndex + 1]
+    ? parseInt(process.argv[portArgIndex + 1], 10)
+    : null;
+  // Dev server must always run on port 3000 (per AI Studio environment constraints).
+  // In production (Cloud Run), process.env.PORT is respected (falling back to 3000).
+  const PORT = cliPort || (isProduction && process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
 
   // Frontend Integration: Vite middleware in development, static bundle in production
   if (!isProduction) {

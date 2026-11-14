@@ -16,8 +16,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const builtServer = path.resolve(__dirname, 'build', 'server.js');
 
-if (fs.existsSync(builtServer)) {
-  process.env.NODE_ENV ||= 'production';
+const isProduction = process.env.NODE_ENV === 'production';
+
+if (isProduction && fs.existsSync(builtServer)) {
   const builtServerPath = './build/server.js';
   await import(builtServerPath);
 } else {

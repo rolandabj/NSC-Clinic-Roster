@@ -1,31 +1,17 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig, type Plugin} from 'vite';
-import { createApiApp } from './server/apiApp';
-
-/** AI Studio may launch Vite directly. Mount the same protected API before its SPA fallback. */
-function clinicApi(): Plugin {
-  return {
-    name: 'clinic-api',
-    configureServer(server) {
-      // Express already owns the API when it embeds Vite in middleware mode.
-      if (!server.config.server.middlewareMode) server.middlewares.use(createApiApp());
-    },
-    configurePreviewServer(server) {
-      server.middlewares.use(createApiApp());
-    },
-  };
-}
+import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
+  const rootDir = import.meta.dirname || process.cwd();
   return {
-    plugins: [clinicApi(), react(), tailwindcss()],
+    plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
-        react: path.resolve(__dirname, 'node_modules/react'),
-        'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
+        '@': path.resolve(rootDir, '.'),
+        react: path.resolve(rootDir, 'node_modules/react'),
+        'react-dom': path.resolve(rootDir, 'node_modules/react-dom'),
       },
       dedupe: ['react', 'react-dom'],
     },
