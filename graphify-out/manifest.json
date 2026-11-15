@@ -444,9 +444,9 @@
     "semantic_hash": ""
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1794653737.436818,
-    "seen": 1794731511.100484,
-    "ast_hash": "01ac307ecb1cdebd885b5891aa0c629f",
+    "mtime": 1794734919.8093984,
+    "seen": 1794735103.5493395,
+    "ast_hash": "8e153d3f0a3f571e3f37c9aac22ba284",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
@@ -960,9 +960,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1794734070.713532,
-    "seen": 1794734077.1858373,
-    "ast_hash": "c82355d019fa7c2ed8084d81580773c4",
+    "mtime": 1794735049.8981578,
+    "seen": 1794735103.5495636,
+    "ast_hash": "7d4e564dbf509c848d73d6a7108e2167",
     "semantic_hash": ""
   },
   "index.html": {
@@ -2595,6 +2595,24 @@
     "mtime": 1794731418.8861961,
     "seen": 1794731511.100679,
     "ast_hash": "30a6aa39b7bbd4735b272dfc09d66c2b",
+    "semantic_hash": ""
+  },
+  "src/services/engine/futureCapacity.ts": {
+    "mtime": 1794734444.111753,
+    "seen": 1794735103.5493472,
+    "ast_hash": "4e2868c5440458ada742ae5df40c077c",
+    "semantic_hash": ""
+  },
+  "tests/unit/futureCapacity.test.ts": {
+    "mtime": 1794734241.911678,
+    "seen": 1794735103.5494704,
+    "ast_hash": "afc28607685a2da313d381ef112e256a",
+    "semantic_hash": ""
+  },
+  "tests/unit/futureReservations.test.ts": {
+    "mtime": 1794735000.9628997,
+    "seen": 1794735103.5494714,
+    "ast_hash": "c074456d4080ac8231e9a3962a0f9fd9",
     "semantic_hash": ""
   }
 }
