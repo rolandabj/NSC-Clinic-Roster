@@ -16,7 +16,10 @@
  * nurse profiles (not needed to study the roster).
  */
 
+import { rosterReviewText } from './rosterReviewText';
 import { hasReviewedDoctorEligibility } from '../engine/nurseList';
+import { allocationAssessment, buildRosterReview } from '../reports/rosterReview';
+import { problemRule } from '../validation/findingRule';
 import { countHoursInRange } from '../hours/hoursBalance';
 import {
   Assignment,
@@ -54,6 +57,8 @@ import { calculateDutyDurationHours, summarizeNurseHours } from '../reports/hour
 import { ScheduleValidator, ValidationReport } from '../validation/ScheduleValidator';
 import { getWeekendDays, isWeekendDate } from '../../utils/weekend';
 import { getScheduleDates } from './rosterExportService';
+
+export { problemRule } from '../validation/findingRule';
 
 export const ANALYSIS_FORMAT = 'nsc-roster-analysis';
 export const ANALYSIS_FORMAT_VERSION = 1;
@@ -94,10 +99,15 @@ const FIELD_GUIDE: string[] = [
   'hours: one shift per day counts its real length; an approved leave day counts the leave hours instead of any shift on it.',
   'nurses[].hours.target = full time target x contract percent. difference = total minus target.',
   'days[].hoursNeeded: doctorSessions = sum of doctor session lengths (ignored on public holidays); freeNurse = opening hours, because every opening hour needs one free nurse (Nurse Clinic); total = both.',
+  'Doctor session hours measure clinic demand, not a minimum nurse hours requirement: one nurse may cover two low acuity doctors. Exact gaps are in review.coverage.',
   'days[].hoursRostered = sum of the shift lengths of nurses working that day (leave days not counted).',
   'days[].doctorSessions[].nurses: nurses assigned to that doctor that day, with the minutes of the session their shift covers; uncovered lists the parts of the session no assigned nurse covers.',
   'preferenceRank on a doctor shift: the best rank the nurse gave that doctor by name, or one of the doctor\'s specialties (null = not in her list). nurse.preferenceFocus decides whether doctors or specialties come first when both need her.',
   'source: GENERATED = filled by the engine, MANUAL = changed by hand, LOCK = from a pinned day.',
+  'review: publication blockers from the same policy as Publish, exact missing coverage minutes, pairing review status and profile reviews for the planner. canProceed does not send or approve anything.',
+  'shifts[].allocation: clinical eligibility and permission under the saved profile, separate from preferenceRank. LEGACY means clinical eligibility has not been separately verified.',
+  'summary.doctorSessions.pairedOutsideList counts shifts outside the saved allocation profile; pairedWithoutMatchingPreference counts shifts with no matching ranked preference.',
+  'review.coverage.missingNurseClinicMinutes counts missing nurse capacity: interval minutes multiplied by nursesMissing. Doctor minutes count each uncovered session once; paired shift hours still count once.',
   'problems: every finding from the checker at export time. severity ERROR = must fix, WARN = check, INFO = note.',
   'requests[].honoured: a day off request is honoured when she has no shift that day; a shift request when she has a shift (of the asked shift type, if one was given).',
   'hourlyCoverage[date][HH:mm]: exact interval start; end is its end time. Nurses on duty, doctors, coveredDoctors, uncoveredDoctors, freeNurses and deficit (free nurses still missing) are separate counts.',
@@ -254,6 +264,7 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
         clinicalRoleId: a.clinicalRoleId || null,
         clinicalRole: isFloatShift(a) ? 'Float' : a.clinicalRoleId ? roleMap.get(a.clinicalRoleId)?.acronym || a.clinicalRoleId : null,
         float: isFloatShift(a),
+        allocation: allocationAssessment(a, nurse, { doctors, specialties, sessions }),
         preferenceRank: combinedRank,
         preferenceMatchedBy: combinedBy,
         source: a.source,
@@ -567,7 +578,8 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
       pairedWithRank1: doctorShifts.filter((s) => s.preferenceRank === 1).length,
       pairedWithRank2: doctorShifts.filter((s) => s.preferenceRank === 2).length,
       pairedWithRank3Plus: doctorShifts.filter((s) => s.preferenceRank !== null && s.preferenceRank >= 3).length,
-      pairedOutsideList: doctorShifts.filter((s) => s.preferenceRank === null).length,
+      pairedOutsideList: doctorShifts.filter(s => !s.allocation.allowedByProfile).length,
+      pairedWithoutMatchingPreference: doctorShifts.filter(s => s.preferenceRank === null).length,
     },
     problems: {
       ERROR: report.errorCount,
@@ -612,6 +624,8 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
       fullTimeTargetSource: fullTime.source,
     },
     summary,
+    review: buildRosterReview(report, assignments, nurses, { doctors, specialties, sessions },
+      days.flatMap(day => day.publicHoliday ? [] : day.doctorSessions.map(session => ({ ...session, date: day.date })))),
     settings: {
       shiftTypes: dutyWindows.map((d) => ({
         id: d.id,
@@ -695,20 +709,6 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
 
 export type RosterAnalysis = ReturnType<typeof buildRosterAnalysis>;
 
-/** The checker's finding id prefixes, longest first, so 'h7-hours-over-' wins over 'hours-over-'. */
-const PROBLEM_RULES = [
-  'cov-gap', 'day-off-for-holiday', 'dayoff-lock', 'doctor-not-in-clinic', 'evening-tail', 'exclusive-nc-doctor-conflict', 'h1-senior', 'h2-days', 'h3-rest',
-  'h4-dup', 'h6-phl-capability', 'h7-hours-over', 'h7-period', 'h8-doctor-allocation', 'h8-specialty-allocation', 'h9-week-hours', 'holiday-gap', 'holiday-leave',
-  'holiday-no-nurse', 'holiday-senior', 'hours-deferred', 'hours-history-unavailable', 'hours-low', 'hours-over',
-  'hours-part-short', 'hours-written-off', 'leave-overlap', 'low-acuity-pair', 'missing-gmail', 'nc-coverage',
-  'nc-doctor-conflict', 'nc-not-qualified', 'pending-leave-shift', 'period-gap', 'request-dayoff-shift', 'request-shift',
-  'role-quota', 's1-late', 'scale-ratio-warning', 'schedule-overlap', 'session-no-overlap', 'session-overlap', 'session-partial', 'unassigned-session',
-].sort((a, b) => b.length - a.length);
-
-/** Which check a finding came from, e.g. 'cov-gap-2026-10-05-09:00' gives 'cov-gap'. */
-export function problemRule(findingId: string): string {
-  return PROBLEM_RULES.find((r) => findingId === r || findingId.startsWith(`${r}-`)) || findingId;
-}
 
 function countBy(values: string[]): Record<string, number> {
   const out: Record<string, number> = {};
@@ -726,16 +726,27 @@ export function analysisFileName(clinicName: string, schedule: Schedule, version
 /** Builds the analysis and downloads it as a JSON file. */
 export function downloadRosterAnalysis(input: RosterAnalysisInput): RosterAnalysis {
   const analysis = buildRosterAnalysis(input);
+  downloadAnalysisContent(JSON.stringify(analysis, null, 2), analysisFileName(input.clinicName, input.schedule, input.versionNumber), 'application/json');
+  return analysis;
+}
+
+/** Downloads a readable action list without changing or publishing the roster. */
+export function downloadRosterReview(input: RosterAnalysisInput): RosterAnalysis {
+  const analysis = buildRosterAnalysis(input);
+  downloadAnalysisContent(rosterReviewText(analysis), analysisFileName(input.clinicName, input.schedule, input.versionNumber).replace(/\.json$/, '_actions.txt'), 'text/plain');
+  return analysis;
+}
+
+function downloadAnalysisContent(content: string, name: string, mimeType: string): void {
   if (typeof document !== 'undefined') {
-    const blob = new Blob([JSON.stringify(analysis, null, 2)], { type: 'application/json;charset=utf-8' });
+    const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', analysisFileName(input.clinicName, input.schedule, input.versionNumber));
+    link.setAttribute('download', name);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  return analysis;
 }

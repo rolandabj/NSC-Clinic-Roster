@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import { rosterReviewText } from '../../src/services/export/rosterReviewText';
+import { approveAllocation } from '../../src/services/engine/allocationReview';
 import assert from 'node:assert/strict';
 import {
   ANALYSIS_FORMAT,
@@ -192,4 +194,120 @@ test('analysis exports exact coverage intervals and groups shared doctor coverag
   assert.equal(a.hourlyCoverage['2026-10-06']['09:00'].end, '10:00');
   assert.equal(a.problems.filter(p => p.rule === 'session-overlap').length, 1);
   assert.equal(a.summary.problems.byRule['session-overlap'].WARN, 1);
+});
+
+// Stage 5: clinical permission, ranked preferences and publication checks are separate.
+function reviewInput(overrides: Partial<RosterAnalysisInput> = {}): RosterAnalysisInput {
+  return input({ schedule: { ...SCHEDULE, endDate: SCHEDULE.startDate, hoursTargetFullTime: 8 },
+    nurses: [makeNurse('amy', { fullName: 'Amy' })], assignments: [shift('a1', 'amy', SCHEDULE.startDate)],
+    sessions: [SESSIONS[0]], leaveEntries: [], availabilityRequests: [], locks: [], ...overrides });
+}
+const verified = { doctorIds: [KHAN.id], specialtyIds: [], reviewedBy: 'private-clinical-reviewer', reviewedAt: '2026-11-15T10:00:00Z' };
+
+test('eligible nonpreferred pairings are not reported as outside the nurse profile', () => {
+  const a = buildRosterAnalysis(reviewInput({ nurses: [makeNurse('amy', { doctorEligibility: verified })] }));
+  assert.equal(a.shifts[0].preferenceRank, null);
+  assert.equal(a.shifts[0].allocation.allowedByProfile, true);
+  assert.equal(a.shifts[0].allocation.clinicalEligibility, 'REVIEWED');
+  assert.equal(a.summary.doctorSessions.pairedOutsideList, 0);
+  assert.equal(a.summary.doctorSessions.pairedWithoutMatchingPreference, 1);
+  assert.equal(a.review.publication.canProceed, true);
+});
+
+test('a preferred but clinically ineligible pairing has an eligibility action and blocks publication', () => {
+  const a = buildRosterAnalysis(reviewInput({ nurses: [makeNurse('amy', { preferences: [{ kind: 'DOCTOR', refId: KHAN.id, rank: 1 }],
+    doctorEligibility: { ...verified, doctorIds: [] } })] }));
+  assert.equal(a.shifts[0].preferenceRank, 1);
+  assert.equal(a.shifts[0].allocation.allowedByProfile, false);
+  assert.equal(a.shifts[0].allocation.exceptionReview, 'NOT_PERMITTED');
+  assert.equal(a.review.publication.canProceed, false);
+  assert.ok(a.review.userActions.some(x => x.type === 'REVIEW_ELIGIBILITY'));
+  assert.ok(!a.review.userActions.some(x => x.type === 'REVIEW_PAIRING'));
+});
+
+test('the report distinguishes a clean draft check from missing cover that blocks publication', () => {
+  const a = buildRosterAnalysis(reviewInput({ sessions: [{ ...SESSIONS[0], endTime: '19:00' }] }));
+  assert.equal(a.summary.problems.ERROR, 0);
+  assert.equal(a.review.publication.canProceed, false);
+  assert.ok(a.review.publication.blockers.some(x => x.rule === 'session-partial'));
+  assert.equal(a.review.coverage.uncoveredDoctorMinutes, 120);
+  assert.deepEqual(a.review.coverage.doctorGaps.map(g => [g.start, g.end, g.minutes]), [['17:00', '19:00', 120]]);
+  assert.ok(a.review.userActions.some(x => x.type === 'ARRANGE_COVER'));
+});
+
+test('a paired shift reports both doctors, missing second doctor cover and hours counted once', () => {
+  const second = { ...KHAN, id: 'second', fullName: 'Dr Second', lowAcuity: true };
+  const a = buildRosterAnalysis(reviewInput({ doctors: [{ ...KHAN, lowAcuity: true }, second],
+    nurses: [makeNurse('amy', { doctorEligibility: { ...verified, doctorIds: [KHAN.id, second.id] } })],
+    assignments: [shift('pair', 'amy', SCHEDULE.startDate, { secondDoctorId: second.id })],
+    sessions: [SESSIONS[0], { ...SESSIONS[0], id: 's-second', doctorId: second.id, endTime: '19:00' }] }));
+  assert.deepEqual(a.shifts[0].allocation.doctors.map(d => [d.doctorId, d.allowedByProfile]), [[KHAN.id, true], [second.id, true]]);
+  assert.equal(a.review.coverage.uncoveredDoctorMinutes, 120);
+  assert.equal(a.review.coverage.doctorGaps[0].doctorId, second.id);
+  assert.equal(a.summary.hours.shiftHoursTotal, 8);
+});
+
+test('free nurse gaps keep exact minutes and multiply missing nurse capacity by the rule quota', () => {
+  const odd = { ...DAY_DUTY, startTime: '09:20' };
+  const a = buildRosterAnalysis(reviewInput({ dutyWindows: [odd], sessions: [],
+    assignments: [shift('float', 'amy', SCHEDULE.startDate, { kind: 'CLINICAL_ROLE', doctorId: undefined, clinicalRoleId: 'role-float' })],
+    rules: hoursOnlyRules().map(r => r.templateKey === 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS' ? { ...r, enabled: true, severity: 'HARD', value: 2 } : r),
+    clinicSetup: { openTime: '09:00', closeTime: '17:00' } }));
+  assert.equal(a.review.coverage.missingNurseClinicMinutes, 500);
+  assert.deepEqual(a.review.coverage.nurseClinicGaps.map(g => [g.start, g.end, g.nursesMissing]), [['09:00', '09:20', 2], ['09:20', '17:00', 1]]);
+});
+
+test('profile review recommendations do not invent clinical approval or block legacy profiles automatically', () => {
+  const a = buildRosterAnalysis(reviewInput({ nurses: [makeNurse('amy'), makeNurse('inactive', { active: false }),
+    makeNurse('new', { doctorEligibility: { ...verified, reviewedBy: '', reviewedAt: '' } }),
+    makeNurse('nc-only', { isClinicNurse: false })] }));
+  assert.deepEqual(new Set(a.review.profileReviews.map(n => n.nurseId)), new Set(['amy', 'new']));
+  assert.equal(a.shifts[0].allocation.clinicalEligibility, 'LEGACY');
+  assert.equal(a.review.publication.canProceed, true);
+});
+
+test('a stale pairing review stays pending and exported review data contains no reviewer or reason', () => {
+  const assignment = shift('review', 'amy', SCHEDULE.startDate, { note: 'Last resort: none of the nurses who list this doctor was free' });
+  const legacy = makeNurse('amy', { preferences: [{ kind: 'DOCTOR', refId: 'other', rank: 1 }] });
+  assignment.allocationReview = approveAllocation(assignment, 'private-pair-reviewer', 'private-review-reason', '2026-11-15T10:00:00Z');
+  const valid = buildRosterAnalysis(reviewInput({ nurses: [legacy], assignments: [assignment] }));
+  assert.equal(valid.shifts[0].allocation.exceptionReview, 'REVIEWED');
+  assert.equal(valid.review.pairingExceptions.reviewed, 1);
+  const stale = buildRosterAnalysis(reviewInput({ nurses: [legacy], assignments: [{ ...assignment, id: 'copied' }] }));
+  assert.equal(stale.shifts[0].allocation.exceptionReview, 'STALE');
+  assert.equal(stale.review.pairingExceptions.stale, 1);
+  assert.equal(stale.review.publication.canProceed, false);
+  for (const report of [valid, stale]) {
+    assert.ok(!JSON.stringify(report).includes('private-pair-reviewer'));
+    assert.ok(!JSON.stringify(report).includes('private-review-reason'));
+  }
+});
+
+test('public holiday doctor clinics do not create false uncovered doctor totals', () => {
+  const a = buildRosterAnalysis(reviewInput({ assignments: [], clinicSetup: { holidayDates: [SCHEDULE.startDate] } }));
+  assert.equal(a.review.coverage.uncoveredDoctorMinutes, 0);
+  assert.deepEqual(a.review.coverage.doctorGaps, []);
+  assert.equal(a.review.coverage.missingNurseClinicMinutes, 0, 'holiday cover does not require Nurse Clinic qualification');
+  assert.equal(a.review.coverage.missingHolidayCoverMinutes, 720);
+  assert.ok(a.review.userActions.some(x => x.instruction.includes('holiday opening hours')));
+});
+
+test('one manual legacy exception produces one user action even with two blocking findings', () => {
+  const a = buildRosterAnalysis(reviewInput({ nurses: [makeNurse('amy', { preferences: [{ kind: 'DOCTOR', refId: 'other', rank: 1 }] })] }));
+  assert.equal(a.review.publication.blockerCount, 2);
+  assert.equal(a.review.userActions.filter(x => x.type === 'REVIEW_PAIRING').length, 1);
+  assert.equal(a.review.pairingExceptions.pending, 1);
+});
+
+test('the readable action list keeps exact gap times and leaves out private review details', () => {
+  const data = reviewInput({ sessions: [{ ...SESSIONS[0], endTime: '19:20' }], nurses: [makeNurse('amy', { doctorEligibility: verified })] });
+  const before = JSON.stringify(data);
+  const a = buildRosterAnalysis(data);
+  const text = rosterReviewText(a);
+  assert.ok(text.includes('Missing doctor cover: 2h 20m'));
+  assert.ok(text.includes('05-10-2026: Dr Khan, 17:00 to 19:20'));
+  assert.ok(text.includes('Fix before publishing.'));
+  assert.ok(!text.includes('private-clinical-reviewer'));
+  assert.equal(JSON.stringify(data), before, 'reporting does not change saved roster inputs');
+  assert.deepEqual(buildRosterAnalysis(data), a);
 });

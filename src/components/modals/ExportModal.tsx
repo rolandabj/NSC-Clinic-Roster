@@ -34,7 +34,8 @@ import {
   AvailabilityRequest,
 } from '../../types';
 import type { ClinicSetup } from '../../services/engine/clinicModel';
-import { analysisFileName, downloadRosterAnalysis } from '../../services/export/analysisExportService';
+import { analysisFileName } from '../../services/export/analysisExportService';
+import { RosterAnalysisPanel } from '../reports/RosterAnalysisPanel';
 import {
   exportRosterToExcel,
   exportRosterToCsvMatrix,
@@ -275,39 +276,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     });
   };
 
-  // 5. Analysis file (JSON): everything about the roster, for study by a program or Claude
-  const handleDownloadAnalysis = () => {
-    try {
-      const analysis = downloadRosterAnalysis({
-        clinicName,
-        timezone,
-        schedule,
-        versionNumber,
-        assignments,
-        nurses,
-        dutyWindows,
-        leaveEntries,
-        leaveTypes,
-        seniorityLevels,
-        doctors,
-        sessions,
-        roles,
-        specialties,
-        rules,
-        workingHoursPeriods,
-        locks,
-        availabilityRequests,
-        clinicSetup,
-      });
-      notify(
-        `Analysis file downloaded: ${analysis.shifts.length} shifts, ${analysis.problems.length} problems.`,
-        'success'
-      );
-    } catch (err: any) {
-      notify(`The analysis file could not be created: ${err?.message || err}`, 'error');
-    }
-  };
-
   // 4. Trigger Native Print
   const handleTriggerPrint = () => {
     window.print();
@@ -468,6 +436,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
           <TabPanel idPrefix="export" id="analysis" value={activeTab}>
             <div className="space-y-4">
+              {activeTab === 'analysis' && <RosterAnalysisPanel input={{ clinicName, timezone, schedule, versionNumber,
+                assignments, nurses, dutyWindows, leaveEntries, leaveTypes, seniorityLevels, doctors, sessions,
+                roles, specialties, rules, workingHoursPeriods, locks, availabilityRequests, clinicSetup }} />}
               {block(
                 'Full roster report (.json)',
                 'One file with everything about this roster, made to be read by a program or given to Claude to study how the roster was filled and to improve the way it is filled. It is not meant to be opened in Excel.',
@@ -475,11 +446,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   <ul className="list-disc space-y-0.5 pl-5 text-ink-muted">
                     {[
                       'Shift types, rules, kinds of leave, skills',
-                      'Nurses: preferences, goal hours and hours worked',
+                      'Nurses: clinical eligibility, preferences, goal hours and hours worked',
                       'Doctors and their clinics each day',
                       "Who worked with which doctor, and the doctor's place in the nurse's list",
                       'Hours the clinic needs and hours rostered, each day',
-                      'Every problem the roster check finds now',
+                      'Every problem, exact coverage gaps and findings that block publication',
+                      'Pairing exceptions and clinical eligibility profiles needing review',
                       'Leave, day off and shift requests (followed or not)',
                       'Pinned days and the end of the previous roster',
                     ].map((label) => (
@@ -487,7 +459,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     ))}
                   </ul>
                   <p className="text-xs text-ink-muted">
-                    Email addresses, dates of birth and profile notes are left out. File name: <code className="font-mono">{analysisFileName(clinicName, schedule, versionNumber)}</code>
+                    Email addresses, dates of birth and profile notes are left out. File name: <code className="break-all font-mono">{analysisFileName(clinicName, schedule, versionNumber)}</code>
                   </p>
                 </>
               )}
@@ -497,9 +469,6 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                   the page first for a complete report.
                 </Notice>
               )}
-              <Button variant="primary" icon={Download} onClick={handleDownloadAnalysis}>
-                Download the full report
-              </Button>
             </div>
           </TabPanel>
         </div>

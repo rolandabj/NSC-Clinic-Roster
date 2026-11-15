@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "src/components/modals/ExportModal.tsx": {
-    "mtime": 1794745235.0067556,
-    "seen": 1794748483.7472687,
-    "ast_hash": "620e7e25c7c2c55d9c897d8a48f57ac7",
+    "mtime": 1794749858.847256,
+    "seen": 1794750403.5711951,
+    "ast_hash": "9e0540fa3b058bb20ccf70c271afaa6f",
     "semantic_hash": ""
   },
   "src/components/modals/FairnessModal.tsx": {
@@ -960,9 +960,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1794748510.2762985,
-    "seen": 1794748517.5960371,
-    "ast_hash": "5882bf96091802b2c427613a6ea61e8b",
+    "mtime": 1794750394.2669334,
+    "seen": 1794750403.5715919,
+    "ast_hash": "2886e1fb9b0a1e247439f9d3a60d9f20",
     "semantic_hash": ""
   },
   "index.html": {
@@ -984,15 +984,15 @@
     "semantic_hash": ""
   },
   "src/services/export/analysisExportService.ts": {
-    "mtime": 1794745235.013942,
-    "seen": 1794748483.7473834,
-    "ast_hash": "4a8add3f39c830d67a29da6bc04fcd5b",
+    "mtime": 1794749858.8489313,
+    "seen": 1794750403.571316,
+    "ast_hash": "989d7212a7fc53444cd040122d50d628",
     "semantic_hash": ""
   },
   "tests/unit/analysisExport.test.ts": {
-    "mtime": 1794741697.458509,
-    "seen": 1794741893.943806,
-    "ast_hash": "bab5e1ac7fc8fa8db04993b80943cd8f",
+    "mtime": 1794750062.8240402,
+    "seen": 1794750403.5714695,
+    "ast_hash": "48112effc969452ddf6917648a8a1c90",
     "semantic_hash": ""
   },
   ".claude/skills/graphify/SKILL.md": {
@@ -2709,6 +2709,36 @@
     "mtime": 1794748356.320028,
     "seen": 1794748483.747544,
     "ast_hash": "98abbed5b2114c1fd55390cbad922b02",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/analysis-report.cjs": {
+    "mtime": 1794750305.6717467,
+    "seen": 1794750403.5710974,
+    "ast_hash": "a435bce7effdac1397f39b3bbeb7272f",
+    "semantic_hash": ""
+  },
+  "src/components/reports/RosterAnalysisPanel.tsx": {
+    "mtime": 1794750062.3609347,
+    "seen": 1794750403.5712068,
+    "ast_hash": "1829f117f55401d86c617a3694597afc",
+    "semantic_hash": ""
+  },
+  "src/services/export/rosterReviewText.ts": {
+    "mtime": 1794750062.8246279,
+    "seen": 1794750403.571319,
+    "ast_hash": "17402a3a30aecdba2a4e5566bbdbb61f",
+    "semantic_hash": ""
+  },
+  "src/services/reports/rosterReview.ts": {
+    "mtime": 1794750061.0809264,
+    "seen": 1794750403.5713527,
+    "ast_hash": "d95ffd7c6e23e873f30f70d202d98d89",
+    "semantic_hash": ""
+  },
+  "src/services/validation/findingRule.ts": {
+    "mtime": 1794749115.990708,
+    "seen": 1794750403.5714514,
+    "ast_hash": "f5c0c182bb82ca0b5f9880d120619f86",
     "semantic_hash": ""
   }
 }
