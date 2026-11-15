@@ -84,6 +84,15 @@ test('the file says what it is and leaves out private profile fields', () => {
   assert.equal(a.nurses.find((n) => n.id === 'amy')?.hasEmail, true);
 });
 
+test('analysis includes clinical eligibility without exposing the reviewer account', () => {
+  const nurses = [makeNurse('amy', { doctorEligibility: { doctorIds: [KHAN.id], specialtyIds: [],
+    reviewedBy: 'private-reviewer-account', reviewedAt: '2026-11-15T10:00:00Z' } })];
+  const a = buildRosterAnalysis(input({ nurses }));
+  assert.deepEqual(a.nurses[0].doctorEligibility, { doctorIds: [KHAN.id], specialtyIds: [],
+    reviewed: true, reviewedAt: '2026-11-15T10:00:00Z' });
+  assert.ok(!JSON.stringify(a).includes('private-reviewer-account'));
+});
+
 test('shifts carry names, hours and the nurse\'s rank for the doctor; other rosters are left out', () => {
   const a = buildRosterAnalysis(input());
   assert.equal(a.shifts.length, 3);

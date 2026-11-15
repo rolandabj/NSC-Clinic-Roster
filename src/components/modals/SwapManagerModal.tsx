@@ -29,6 +29,8 @@ import {
   SwapRequest,
 } from '../../types';
 import { getRepository } from '../../services/repository';
+import { approveAllocation } from '../../services/engine/allocationReview';
+import { isAgreedException } from '../../services/engine/lastResort';
 import { checkSwap, RosterCheck, SwapCheck, swapNotes } from '../../services/engine/handMoveChecks';
 import { readableTextOn } from '../../utils/colorContrast';
 import { Button, Dialog, Field, Input, Notice, Select } from '../ui';
@@ -188,6 +190,10 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
   const handleExecuteSwap = async (asException = false) => {
     if (!selectedAsgnA || !selectedAsgnB) return;
     if (!(validation.ok || (asException && validation.exceptionOnly))) return;
+    if (asException && !swapReason.trim()) {
+      notify('Enter a reason before approving this pairing exception.', 'error');
+      return;
+    }
     setIsExecuting(true);
 
     try {
@@ -202,12 +208,19 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
       const exceptionText = asException ? ` as an agreed exception (${listReasons.join('; ')})` : '';
 
       // Both shifts change nurse, so both get new ids (see shiftMoves).
-      const updatedAssignments = swapShifts(
+      let updatedAssignments = swapShifts(
         assignments,
         selectedAsgnA,
         selectedAsgnB,
         swapNotes(nurseA?.fullName || 'the first nurse', nurseB?.fullName || 'the second nurse', reasonText, exception)
       );
+
+      const oldIds = new Set(assignments.map(a => a.id));
+      updatedAssignments = updatedAssignments.map(a => {
+        if (oldIds.has(a.id)) return a;
+        return { ...a, allocationReview: asException && isAgreedException(a)
+          ? approveAllocation(a, user?.uid || '', reasonText, new Date().toISOString()) : null };
+      });
 
       // Record SwapRequest and AuditEvent
       const repo = getRepository();

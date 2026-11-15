@@ -131,6 +131,11 @@ export function checkAssignment(ctx: AssignmentCheckContext, cell: Assignment): 
     }
   }
 
+  if (nurse?.doctorEligibility != null) {
+    const outside = outsideNurseList(nurse, cell, { doctors: ctx.doctors || [], specialties: ctx.specialties || [], sessions: ctx.sessions || [] });
+    if (outside) reasons.push(`${name} is not eligible for ${outside.name}. Review clinical eligibility in the nurse profile.`);
+  }
+
   // H2: maximum consecutive working days (counting the run this day belongs to)
   const h2 = hardRule(
     ctx.rules,
@@ -211,6 +216,7 @@ export function listProblem(ctx: AssignmentCheckContext, cell: Assignment): stri
   if (!nurse || !ctx.doctors || !ctx.specialties) return null;
   const outside = outsideNurseList(nurse, cell, { doctors: ctx.doctors, specialties: ctx.specialties, sessions: ctx.sessions || [] });
   if (!outside) return null;
+  if (outside.eligibility) return `${nurse.fullName} is not eligible for ${outside.name}`;
   return outside.kind === 'DOCTOR'
     ? `${outside.name} isn't in ${nurse.fullName}'s list`
     : `${outside.name} isn't one of ${nurse.fullName}'s specialties`;

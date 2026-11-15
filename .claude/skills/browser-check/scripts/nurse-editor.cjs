@@ -28,7 +28,7 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   check('nothing is marked wrong before a field is left', (await editor.locator('[aria-invalid="true"]').count()) === 0);
   await editor.getByRole('button', { name: 'Add nurse' }).click();
   await page.waitForTimeout(300);
-  check('Save says how many fields need fixing', /3 fields need fixing/.test(await editor.innerText()), (await editor.innerText()).slice(0, 120));
+  check('Save says how many fields need fixing', /4 fields need fixing/.test(await editor.innerText()), (await editor.innerText()).slice(0, 120));
   check('Save puts the focus on the first field to fix', (await page.evaluate(() => document.activeElement?.closest('div')?.querySelector('label')?.textContent)) === 'Full name');
   if (shots) await page.screenshot({ path: `${shots}/editor-errors.png` });
 
@@ -44,6 +44,7 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   await editor.getByLabel('Contract (%)').fill('80');
   check('the contract says part time', /Part time: 80% of the goal hours/.test(await editor.innerText()));
   await editor.getByLabel('Date of birth').fill('02-03-1990');
+  await editor.getByLabel('I have checked these clinical eligibility choices').check();
   await editor.getByRole('button', { name: 'Add nurse' }).click();
   await editor.waitFor({ state: 'detached', timeout: 5000 }).catch(() => {});
   const saved = await page.evaluate(() => [...window.__repo.col('nurses').values()].find((n) => n.fullName === 'Lina Haddad'));

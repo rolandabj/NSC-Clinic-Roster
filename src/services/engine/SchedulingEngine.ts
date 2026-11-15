@@ -37,6 +37,7 @@ import {
 } from './types';
 import { isExclusiveNurseClinic } from './nurseClinicUtils';
 import { FLOAT_ROLE_ID, isFloatShift } from './floatShift';
+import { outsideNurseList } from './nurseList';
 import { LAST_RESORT_NOTE } from './lastResort';
 import { resolveFullTimeTarget, leaveDaysInRange, shiftHoursAllowed } from '../hours/hoursPolicy';
 import { calculateWorkingHoursForDateRange } from '../periods/workingHoursPeriodService';
@@ -1087,8 +1088,15 @@ export class SchedulingEngine {
 
     const canWorkWithDoctor = (nurse: Nurse, doctorId: string, session?: DoctorSession): boolean => {
       if (!nurse.isClinicNurse || isExclusiveNurseClinic(nurse, roles)) return false;
+      if (nurse.doctorEligibility != null) return !outsideNurseList(nurse,
+        { kind: 'DOCTOR', doctorId, date: session?.date || schedule.startDate },
+        { doctors, specialties, sessions: session ? [session] : sessions });
       return isNurseAllocatedToDoctorOrSpecialty(nurse, doctorId, undefined, doctorSpecialtyIds(doctorId, session));
     };
+
+    const canFallbackWithDoctor = (nurse: Nurse, session: DoctorSession): boolean =>
+      nurse.isClinicNurse && !isExclusiveNurseClinic(nurse, roles) &&
+      (nurse.doctorEligibility == null || canWorkWithDoctor(nurse, session.doctorId, session));
 
     /** The specialties a doctor's session counts as (see doctorSpecialtyIds). */
     const sessionSpecialties = (doctorId: string, session?: DoctorSession): Specialty[] =>
@@ -2081,7 +2089,7 @@ export class SchedulingEngine {
               }
               if (asgn.kind === 'SPECIALTY') {
                 if (!senior.isClinicNurse || isExclusiveNurseClinic(senior, roles)) continue;
-                if (!isNurseAllocatedToDoctorOrSpecialty(senior, undefined, asgn.specialtyId)) continue;
+                if (outsideNurseList(senior, asgn, { doctors, specialties, sessions })) continue;
               }
               if (isNurseClinicAssignment(asgn) && !canBeFreeNurse(senior, roles)) continue;
               if (asgn.kind === 'CLINICAL_ROLE' && asgn.clinicalRoleId) {
@@ -2386,6 +2394,7 @@ export class SchedulingEngine {
           fromOwnNurses = ownNurses;
           for (const nurse of dayOrder) {
             if (!nurse.isClinicNurse || isExclusiveNurseClinic(nurse, roles)) continue;
+            if (!canFallbackWithDoctor(nurse, sess)) continue;
             if (canWorkWithDoctor(nurse, sess.doctorId, sess) !== ownNurses) continue; // his own nurses were asked first
             const own = resultAssignmentsMap.get(`${nurse.id}_${date}`);
             if (own && !(own.source === 'GENERATED' && !own.locked && isFloatShift(own))) continue;
@@ -2458,6 +2467,7 @@ export class SchedulingEngine {
           const nurse = nurseMap.get(asgn.nurseId);
           const duty = dutyMapGlobal.get(asgn.dutyWindowId);
           if (!nurse || !duty || !nurse.isClinicNurse || isExclusiveNurseClinic(nurse, roles)) continue;
+          if (!canFallbackWithDoctor(nurse, sess)) continue;
           const cover = gaps.reduce((sum, g) => sum + coveredMinutes(duty, g.start, g.end), 0);
           if (cover === 0) continue;
           if (plusOneEnabled) {
@@ -2659,6 +2669,7 @@ export class SchedulingEngine {
       if (!nurse.isClinicNurse || isExclusiveNurseClinic(nurse, roles) || clinic.holidays.has(date)) return undefined;
       const onDay = Array.from(resultAssignmentsMap.values()).filter((a) => a.date === date);
       return doctorSessionsOn(sessions, date).find((sess) => {
+        if (!canFallbackWithDoctor(nurse, sess)) return false;
         const linked = onDay
           .filter((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId)
           .map((a) => dutyMapGlobal.get(a.dutyWindowId))

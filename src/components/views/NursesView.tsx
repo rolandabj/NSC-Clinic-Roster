@@ -24,15 +24,18 @@ import {
   Specialty,
   Doctor,
   NursePreference,
+  NurseDoctorEligibility,
   PreferenceFocus,
   LeaveType,
 } from '../../types';
+import { authService } from '../../services/auth/authService';
+import { eligibilityNeedsReview, reviewedDoctorEligibility } from '../../services/nurses/doctorEligibilityForm';
 import { PREFERENCE_FOCUS_LABELS } from '../../services/engine/preferenceOrder';
 import { BulkImportModal } from '../modals/BulkImportModal';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import { revokeNurseLink } from '../../services/publish/nurseRosterService';
 import { filterNurses, nurseCounts, type NurseFilters } from '../../services/nurses/nurseList';
-import { checkNurseForm, movePreference, nextEmployeeCode } from '../../services/nurses/nurseForm';
+import { checkNurseForm, movePreference, nextEmployeeCode, type NurseFormErrors } from '../../services/nurses/nurseForm';
 import { localTodayIso } from '../../utils/dateUtils';
 import { Badge, Button, Checkbox, DataTable, DateInput, Dialog, EmptyState, Field, IconButton, Input, Notice, PageHeader, Select, Textarea, cx, type Column } from '../ui';
 
@@ -93,6 +96,16 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
     notes: '',
   });
 
+  const [doctorEligibility, setDoctorEligibility] = useState<NurseDoctorEligibility | null>(null);
+  const [eligibilityConfirmed, setEligibilityConfirmed] = useState(false);
+  const needsEligibilityReview = eligibilityNeedsReview(doctorEligibility, editingNurse?.doctorEligibility);
+  const toggleEligibility = (kind: 'doctorIds' | 'specialtyIds', id: string) => {
+    if (!doctorEligibility) return;
+    const current = doctorEligibility[kind];
+    setDoctorEligibility({ ...doctorEligibility, [kind]: current.includes(id) ? current.filter(x => x !== id) : [...current, id] });
+    setEligibilityConfirmed(false);
+  };
+
   const isOnlyNcCapability =
     formData.capabilityIds.length > 0 &&
     formData.capabilityIds.every(
@@ -107,7 +120,8 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
   // left, or for every field after Save was pressed (Phase 6, slice 2).
   const [touched, setTouched] = useState<Set<string>>(new Set());
   const [triedSave, setTriedSave] = useState(false);
-  const allErrors = checkNurseForm(formData, nurses, formData.id, localTodayIso());
+  const allErrors: NurseFormErrors = { ...checkNurseForm(formData, nurses, formData.id, localTodayIso()),
+    ...(needsEligibilityReview && !eligibilityConfirmed ? { doctorEligibility: 'Confirm the eligibility choices before saving.' } : {}) };
   const errorFor = (field: string) => (triedSave || touched.has(field) ? allErrors[field] : undefined);
   const leave = (field: string) => () => setTouched((t) => (t.has(field) ? t : new Set(t).add(field)));
   const formRef = useRef<HTMLFormElement>(null);
@@ -154,6 +168,8 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
   const handleOpenAdd = () => {
     const defaultSeniority = seniorityLevels[2]?.id || seniorityLevels[0]?.id || '';
     setEditingNurse(null);
+    setDoctorEligibility({ doctorIds: [], specialtyIds: [], reviewedAt: '', reviewedBy: '' });
+    setEligibilityConfirmed(false);
     setFormData({
       fullName: '',
       gmail: '',
@@ -178,6 +194,8 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
 
   const handleOpenEdit = (nurse: Nurse) => {
     setEditingNurse(nurse);
+    setDoctorEligibility(nurse.doctorEligibility || null);
+    setEligibilityConfirmed(false);
     const rawQuotas = nurse.leaveQuotas || {};
     const normalizedQuotas: Record<string, number> = {};
     for (const [k, v] of Object.entries(rawQuotas)) {
@@ -267,6 +285,8 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
       : formData.preferences;
 
     try {
+      const eligibility = reviewedDoctorEligibility(doctorEligibility, editingNurse?.doctorEligibility,
+        eligibilityConfirmed, authService.getCurrentUser()?.uid || '', new Date().toISOString());
       if (formData.id) {
         await repo.update('nurses', formData.id, {
           fullName: formData.fullName.trim(),
@@ -278,6 +298,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
           capabilityIds: formData.capabilityIds,
           isClinicNurse: formData.isClinicNurse,
           preferences: finalPreferences,
+          doctorEligibility: eligibility,
           preferenceFocus: formData.preferenceFocus,
           leaveQuotas: cleanQuotas,
           active: formData.active,
@@ -300,6 +321,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
           capabilityIds: formData.capabilityIds,
           isClinicNurse: formData.isClinicNurse,
           preferences: finalPreferences,
+          doctorEligibility: eligibility,
           preferenceFocus: formData.preferenceFocus,
           leaveQuotas: cleanQuotas,
           active: formData.active,
@@ -759,13 +781,47 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
             )}
           </fieldset>
 
+          <fieldset className="space-y-3">
+            <legend className="text-base font-semibold text-ink">Clinical eligibility</legend>
+            <p className="text-ink-muted">Choose only doctors and specialties the clinic has verified this nurse can cover. Preferences rank work within this list.</p>
+            <Checkbox label="Use separate clinical eligibility" checked={doctorEligibility !== null}
+              disabled={editingNurse?.doctorEligibility != null || !editingNurse}
+              hint={editingNurse?.doctorEligibility ? 'This profile already uses a separate list. Edit the choices below.' :
+                !editingNurse ? 'New nurses need a confirmed eligibility list. An empty list permits no doctor work.' : 'Until this is selected and saved, the existing profile rules stay in use.'}
+              onChange={e => {
+                setDoctorEligibility(e.target.checked ? { doctorIds: [], specialtyIds: [], reviewedAt: '', reviewedBy: '' } : null);
+                setEligibilityConfirmed(false);
+              }} />
+            {doctorEligibility && <>
+              <fieldset className="space-y-2">
+                <legend className="font-medium text-ink">Eligible doctors</legend>
+                <div className="grid gap-2 sm:grid-cols-2">{doctors.map(doctor => <Checkbox key={doctor.id}
+                  label={`Eligible doctor: ${doctor.fullName}`} checked={doctorEligibility.doctorIds.includes(doctor.id)}
+                  onChange={() => toggleEligibility('doctorIds', doctor.id)} />)}</div>
+              </fieldset>
+              <fieldset className="space-y-2">
+                <legend className="font-medium text-ink">Eligible specialties</legend>
+                <div className="grid gap-2 sm:grid-cols-2">{specialties.map(specialty => <Checkbox key={specialty.id}
+                  label={`Eligible specialty: ${specialty.name}`} checked={doctorEligibility.specialtyIds.includes(specialty.id)}
+                  onChange={() => toggleEligibility('specialtyIds', specialty.id)} />)}</div>
+              </fieldset>
+              {doctorEligibility.doctorIds.length === 0 && doctorEligibility.specialtyIds.length === 0 &&
+                <Notice tone="info" title="No doctor work permitted">This nurse can still cover their other verified roles.</Notice>}
+              {needsEligibilityReview && <Checkbox label="I have checked these clinical eligibility choices"
+                checked={eligibilityConfirmed} aria-invalid={!!errorFor('doctorEligibility')}
+                onChange={e => setEligibilityConfirmed(e.target.checked)} />}
+              {errorFor('doctorEligibility') && <p role="alert" className="text-danger">{errorFor('doctorEligibility')}</p>}
+            </>}
+          </fieldset>
+
           <section aria-labelledby="nurse-prefs" className="space-y-3">
             <div>
               <h3 id="nurse-prefs" className="text-base font-semibold text-ink">
                 Preferences
               </h3>
               <p className="text-ink-muted">
-                The doctors and specialties this nurse works with, most wanted first. A nurse with preferences is put only with them; a nurse without goes where needed.
+                {doctorEligibility ? 'The doctors and specialties this nurse prefers, most wanted first. Eligibility decides which work is allowed.' :
+                  'This profile uses the existing allocation rules: a nurse with preferences works only with them, while a nurse without preferences goes where needed. Set separate clinical eligibility to use preferences only for ranking.'}
               </p>
             </div>
             {isConfiguredExclusiveNC ? (

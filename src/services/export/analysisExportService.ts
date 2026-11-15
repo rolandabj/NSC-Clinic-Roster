@@ -16,6 +16,7 @@
  * nurse profiles (not needed to study the roster).
  */
 
+import { hasReviewedDoctorEligibility } from '../engine/nurseList';
 import { countHoursInRange } from '../hours/hoursBalance';
 import {
   Assignment,
@@ -439,6 +440,9 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
         canBeFreeNurse: canBeFreeNurse(n, roles),
         skills: (n.capabilityIds || []).map((id) => roleMap.get(id)?.acronym || id),
         preferenceFocus: n.preferenceFocus || 'LIST',
+        doctorEligibility: n.doctorEligibility ? { doctorIds: n.doctorEligibility.doctorIds,
+          specialtyIds: n.doctorEligibility.specialtyIds, reviewed: hasReviewedDoctorEligibility(n),
+          reviewedAt: n.doctorEligibility.reviewedAt || null } : null,
         preferences: prefs.map((p) => ({
           rank: p.rank,
           kind: p.kind,

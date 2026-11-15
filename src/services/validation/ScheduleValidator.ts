@@ -18,6 +18,7 @@
 
 import { countHoursInRange, hoursCheckpoints, hoursHistoryOverlaps, resolveNurseHoursBalance } from '../hours/hoursBalance';
 
+import { hasAllocationReview } from '../engine/allocationReview';
 import { isAgreedException, isLastResortShift } from '../engine/lastResort';
 import { outsideNurseList } from '../engine/nurseList';
 import { summarizeNurseHours } from '../reports/hoursAccounting';
@@ -837,13 +838,15 @@ export class ScheduleValidator {
           // The generator's last resort (no nurse who lists this doctor was free) and an exception
           // agreed by hand (a swap confirmed as one) are only a Check.
           const lastResort = isLastResortShift(currentAsgn);
-          const agreed = isAgreedException(currentAsgn);
+          const agreed = isAgreedException(currentAsgn) || hasAllocationReview(currentAsgn);
           if (outside?.kind === 'DOCTOR') {
             findings.push({
               id: `h8-doctor-allocation-${nurse.id}-${date}`,
               category: 'RULE_VIOLATION',
-              severity: lastResort || agreed ? 'WARN' : 'ERROR',
-              message: lastResort
+              severity: !outside.eligibility && (lastResort || agreed) ? 'WARN' : 'ERROR',
+              message: outside.eligibility
+                ? `${nurse.fullName} is not eligible for ${outside.name} on ${formatDate(date)}. Review clinical eligibility in the nurse profile; a pairing exception cannot override it.`
+                : lastResort
                 ? `${nurse.fullName} is with ${outside.name} (${outside.specialtyName}) on ${formatDate(date)} as a last resort: none of the nurses who list this doctor was free.`
                 : agreed
                 ? `${nurse.fullName} is with ${outside.name} (${outside.specialtyName}) on ${formatDate(date)} as an agreed exception: this doctor isn't in their list.`
@@ -856,8 +859,10 @@ export class ScheduleValidator {
             findings.push({
               id: `h8-specialty-allocation-${nurse.id}-${date}`,
               category: 'RULE_VIOLATION',
-              severity: agreed ? 'WARN' : 'ERROR',
-              message: agreed
+              severity: !outside.eligibility && agreed ? 'WARN' : 'ERROR',
+              message: outside.eligibility
+                ? `${nurse.fullName} is not eligible for ${outside.name} on ${formatDate(date)}. Review clinical eligibility in the nurse profile; a pairing exception cannot override it.`
+                : agreed
                 ? `${nurse.fullName} works in ${outside.name} on ${formatDate(date)} as an agreed exception: it isn't one of their specialties.`
                 : `${nurse.fullName} works in ${outside.name} on ${formatDate(date)}, which isn't one of their specialties.`,
               affectedNurseIds: [nurse.id],

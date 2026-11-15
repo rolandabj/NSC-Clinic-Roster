@@ -212,6 +212,14 @@ export interface NursePreference {
 
 export type PreferenceFocus = 'LIST' | 'DOCTOR' | 'SPECIALTY';
 
+export interface NurseDoctorEligibility {
+  doctorIds: string[];
+  specialtyIds: string[];
+  reviewedAt: string;
+  /** Account that confirmed these eligibility choices, not a clinical credential. */
+  reviewedBy: string;
+}
+
 export interface Nurse {
   id: string;
   fullName: string;
@@ -223,6 +231,8 @@ export interface Nurse {
   capabilityIds: string[]; // ClinicalRole ids (e.g. PHL)
   isClinicNurse: boolean; // default capability flag
   preferences: NursePreference[];
+  /** Absent/null keeps legacy allocation. A reviewed empty list permits no doctor work. */
+  doctorEligibility?: NurseDoctorEligibility | null;
   /**
    * Where she goes first when her doctors and her specialties all need a nurse the same day:
    * 'LIST' (or unset) follows her list order, 'DOCTOR' puts her named doctors first,
@@ -342,6 +352,13 @@ export interface Schedule {
   updatedAt: string;
 }
 
+export interface AllocationReview {
+  signature: string;
+  reviewedAt: string;
+  reviewedBy: string;
+  reason: string;
+}
+
 // 14. Assignment (a filled roster cell)
 export interface Assignment {
   id: string;
@@ -356,6 +373,7 @@ export interface Assignment {
   locked: boolean;
   source: AssignmentSource;
   note?: string;
+  allocationReview?: AllocationReview | null;
 }
 
 // 15. ScheduleVersion

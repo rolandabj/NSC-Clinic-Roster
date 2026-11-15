@@ -22,6 +22,7 @@ import {
 import { ValidationReport, ValidationFinding } from '../../services/validation/ScheduleValidator';
 import { summarizeNurseHours, NurseHoursSummary } from '../../services/reports/hoursAccounting';
 import { formatDate } from '../../utils/dateUtils';
+import { outsideNurseList } from '../../services/engine/nurseList';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import { applyPreferenceFocus } from '../../services/engine/preferenceOrder';
 import { confirmDialog, notify } from '../common/dialogs';
@@ -721,6 +722,11 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         source: isLocked ? 'LOCK' : 'MANUAL',
         note: editorNote.trim() || (isLocked ? 'Pinned duty shift' : undefined),
       };
+      const nurse = nurseMap.get(nurseId);
+      if (nurse?.doctorEligibility != null && outsideNurseList(nurse, newAssignment, { doctors, specialties, sessions })) {
+        notify('This nurse is not eligible for that doctor or specialty. Review clinical eligibility in the nurse profile.', 'error');
+        return false;
+      }
       nextAssignments.push(newAssignment);
 
       if (isLocked) {
@@ -869,6 +875,11 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       locked: false,
       source: 'MANUAL',
     };
+    const nurse = nurseMap.get(nurseId);
+    if (nurse?.doctorEligibility != null && outsideNurseList(nurse, pasted, { doctors, specialties, sessions })) {
+      notify('This nurse is not eligible for the copied doctor or specialty. Review clinical eligibility in the nurse profile.', 'error');
+      return;
+    }
     onAssignmentsChange([...filtered, pasted]);
   };
 

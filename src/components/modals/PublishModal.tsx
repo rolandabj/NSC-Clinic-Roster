@@ -10,6 +10,10 @@
 import type { HoursHistory } from '../../services/hours/hoursBalance';
 
 import React, { useState, useEffect, useId, useRef } from 'react';
+import { authService } from '../../services/auth/authService';
+import { assertPublicationCurrent } from '../../services/publish/publicationInputs';
+import { AllocationReviews } from '../publish/AllocationReviews';
+import { applyAllocationDrafts, publicationReport, type AllocationDrafts } from '../../services/publish/publicationChecks';
 import { notify } from '../common/dialogs';
 import { AlertTriangle, Check, ChevronRight, Mail, RotateCcw, Send, XCircle } from 'lucide-react';
 import { Badge, Button, Checkbox, Dialog, Field, Input, Notice, Select, Textarea, cx } from '../ui';
@@ -117,7 +121,11 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [currentStep]);
-  const [validationReport, setValidationReport] = useState<ValidationReport | null>(null);
+  const [baseValidationReport, setValidationReport] = useState<ValidationReport | null>(null);
+  const [allocationDrafts, setAllocationDrafts] = useState<AllocationDrafts>({});
+  const publishAssignments = applyAllocationDrafts(assignments, allocationDrafts, authService.getCurrentUser()?.uid || '', new Date().toISOString());
+  const validationReport = baseValidationReport
+    ? publicationReport(baseValidationReport, publishAssignments, nurses, { doctors, specialties, sessions }) : null;
   const [acknowledgeWarnings, setAcknowledgeWarnings] = useState(false);
 
   // Version & Mode Details
@@ -204,6 +212,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     if (isOpen) {
       setCurrentStep('VALIDATION');
       setAcknowledgeWarnings(false);
+      setAllocationDrafts({});
       // The mode the dialog was opened with (it stays mounted between openings).
       setPublishKind(initialMode);
       runRef.current = null;
@@ -386,13 +395,25 @@ export const PublishModal: React.FC<PublishModalProps> = ({
    */
   const savePublish = async (logs: string[]) => {
     const setup = await loadClinicSetup(repo, schedule);
-    const freshCheck = ScheduleValidator.validate(schedule, assignments, nurses, seniorityLevels, dutyWindows, sessions,
+    await assertPublicationCurrent(repo, { schedule, assignments, nurses, seniorityLevels, dutyWindows, sessions,
+      leaveEntries, locks, roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes });
+    const approvedAssignments = applyAllocationDrafts(assignments, allocationDrafts, authService.getCurrentUser()?.uid || '', new Date().toISOString());
+    const freshBase = ScheduleValidator.validate(schedule, approvedAssignments, nurses, seniorityLevels, dutyWindows, sessions,
       leaveEntries, locks, roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes, setup);
-    setValidationReport(freshCheck);
+    const freshCheck = publicationReport(freshBase, approvedAssignments, nurses, { doctors, specialties, sessions });
+    setValidationReport(freshBase);
     if (freshCheck.errorCount > 0) throw new Error('The roster has problems that must be fixed before publishing. Review Problems and try again.');
     hoursHistoryRef.current = setup.hoursHistory;
     setHoursHistory(setup.hoursHistory);
-    if (!runRef.current) await saveVersion();
+    if (!runRef.current) {
+      for (const a of approvedAssignments) {
+        const before = assignments.find(x => x.id === a.id);
+        if (a.allocationReview && a.allocationReview !== before?.allocationReview) {
+          await repo.update('assignments', a.id, { allocationReview: a.allocationReview });
+        }
+      }
+      await saveVersion(approvedAssignments);
+    }
     const run = runRef.current!;
     const { version: newVersion } = run;
     const versionId = newVersion.id;
@@ -509,7 +530,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   };
 
   /** Writes the new version and remembers it, so it is never written twice. */
-  const saveVersion = async () => {
+  const saveVersion = async (approvedAssignments: Assignment[]) => {
     const scheduleVersions = await repo.list('versions', { field: 'scheduleId', operator: '==', value: schedule.id });
     const newVersionNumber = Math.max(schedule.activeVersionNumber || 1, ...scheduleVersions.map((v) => v.number || 0)) + 1;
     const versionId = `v-${schedule.id}-${newVersionNumber}-${Date.now()}`;
@@ -525,7 +546,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       note: versionNote.trim(),
       snapshot: {
         schedule,
-        assignments,
+        assignments: approvedAssignments,
         // Only this roster's leave and pinned days are kept with the version.
         leaveEntries: leaveEntries.filter((l) => inRoster(l.startDate, l.endDate)),
         locks: locks.filter((l) => inRoster(l.date, l.date)),
@@ -883,6 +904,9 @@ export const PublishModal: React.FC<PublishModalProps> = ({
                 <dd className="text-2xl font-semibold text-ink tabular-nums">{selectedNurseIds.size}</dd>
               </div>
             </dl>
+
+            <AllocationReviews assignments={assignments} nurses={nurses} refs={{ doctors, specialties, sessions }}
+              drafts={allocationDrafts} onChange={drafts => { setAllocationDrafts(drafts); setAcknowledgeWarnings(false); }} />
 
             {validationReport.errorCount > 0 && (
               <Notice

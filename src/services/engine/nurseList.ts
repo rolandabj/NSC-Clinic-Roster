@@ -13,6 +13,8 @@ import type { Assignment, Doctor, DoctorSession, Nurse, Specialty } from '../../
 
 export interface OutsideList {
   kind: 'DOCTOR' | 'SPECIALTY';
+  /** This is a clinical eligibility limit, which an allocation exception cannot bypass. */
+  eligibility?: true;
   /** The doctor's name, or the specialty as "Name (CODE)". */
   name: string;
   /** For a doctor: the name of their specialty ("Department" when unknown). */
@@ -36,33 +38,51 @@ function namesSpecialty(ref: string, specialtyIds: string[], specialties: Specia
   });
 }
 
+export function hasReviewedDoctorEligibility(nurse: Pick<Nurse, 'doctorEligibility'>): boolean {
+  const e = nurse.doctorEligibility;
+  return !!e && Array.isArray(e.doctorIds) && Array.isArray(e.specialtyIds) &&
+    typeof e.reviewedBy === 'string' && !!e.reviewedBy.trim() &&
+    typeof e.reviewedAt === 'string' && Number.isFinite(Date.parse(e.reviewedAt));
+}
+
 /** What makes this cell break the nurse's list (null when it fits, or the nurse has no list). */
 export function outsideNurseList(
-  nurse: Pick<Nurse, 'preferences'>,
+  nurse: Pick<Nurse, 'preferences' | 'doctorEligibility'>,
   cell: Pick<Assignment, 'kind' | 'doctorId' | 'specialtyId' | 'date'>,
   refs: { doctors: Doctor[]; specialties: Specialty[]; sessions: DoctorSession[] }
 ): OutsideList | null {
-  const prefs = nurse.preferences || [];
-  if (!prefs.some((p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY')) return null;
+  const explicit = nurse.doctorEligibility != null;
+  const eligibility = nurse.doctorEligibility;
+  const reviewed = hasReviewedDoctorEligibility(nurse);
+  const prefs = explicit ? (reviewed ? [
+    ...eligibility!.doctorIds.map(refId => ({ kind: 'DOCTOR' as const, refId, rank: 0 })),
+    ...eligibility!.specialtyIds.map(refId => ({ kind: 'SPECIALTY' as const, refId, rank: 0 })),
+  ] : []) : nurse.preferences || [];
+  if (!explicit && !prefs.some((p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY')) return null;
   const specialtyRefs = prefs.filter((p) => p.kind === 'SPECIALTY').map((p) => p.refId);
 
   if (cell.kind === 'DOCTOR' && cell.doctorId) {
     const doctor = refs.doctors.find((d) => d.id === cell.doctorId);
     const session = refs.sessions.find((s) => s.doctorId === cell.doctorId && s.date === cell.date && !s.cancelled);
     const sessionSpecialty = session?.specialtyId || doctor?.specialtyIds?.[0];
-    const specialtyIds = doctor?.specialtyIds || (sessionSpecialty ? [sessionSpecialty] : []);
+    const profileIds = doctor?.specialtyIds || (sessionSpecialty ? [sessionSpecialty] : []);
+    // A specialty approval is not approval for every specialty of a doctor with several.
+    // A stale session cannot grant a specialty absent from the current doctor profile.
+    const specialtyIds = explicit && profileIds.length > 1
+      ? (session?.specialtyId && profileIds.includes(session.specialtyId) ? [session.specialtyId] : []) : profileIds;
     if (prefs.some((p) => p.kind === 'DOCTOR' && p.refId === cell.doctorId)) return null;
-    if (specialtyRefs.some((ref) => namesSpecialty(ref, specialtyIds, refs.specialties))) return null;
+    if (specialtyRefs.some((ref) => explicit ? specialtyIds.includes(ref) : namesSpecialty(ref, specialtyIds, refs.specialties))) return null;
     return {
       kind: 'DOCTOR',
+      ...(explicit ? { eligibility: true as const } : {}),
       name: doctor ? doctor.fullName : 'Doctor',
       specialtyName: refs.specialties.find((s) => specialtyIds.includes(s.id))?.name || 'Department',
     };
   }
   if (cell.kind === 'SPECIALTY' && cell.specialtyId) {
-    if (specialtyRefs.some((ref) => namesSpecialty(ref, [cell.specialtyId!], refs.specialties))) return null;
+    if (specialtyRefs.some((ref) => explicit ? ref === cell.specialtyId : namesSpecialty(ref, [cell.specialtyId!], refs.specialties))) return null;
     const specialty = refs.specialties.find((s) => s.id === cell.specialtyId);
-    return { kind: 'SPECIALTY', name: specialty ? `${specialty.name} (${specialty.code})` : 'Specialty', specialtyName: specialty?.name || 'Specialty' };
+    return { kind: 'SPECIALTY', ...(explicit ? { eligibility: true as const } : {}), name: specialty ? `${specialty.name} (${specialty.code})` : 'Specialty', specialtyName: specialty?.name || 'Specialty' };
   }
   return null;
 }

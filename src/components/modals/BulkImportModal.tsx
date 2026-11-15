@@ -127,6 +127,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
           ...r.nurse,
           isClinicNurse: true,
           preferences: [],
+          doctorEligibility: { doctorIds: [], specialtyIds: [], reviewedAt: '', reviewedBy: '' },
           active: true,
           createdAt: nowIso,
           updatedAt: nowIso,
@@ -234,6 +235,7 @@ export const BulkImportModal: React.FC<BulkImportModalProps> = ({
                 Download an example
               </Button>
             </div>
+            {activeTab === 'NURSES' && <p className="text-ink-muted">New imported nurses need their clinical eligibility checked in their profile before doctor work is allowed.</p>}
             <Field label="Choose a CSV file" optional>
               {(f) => (
                 <input
