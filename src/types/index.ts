@@ -109,6 +109,7 @@ export interface TemplateSlotPattern {
   dutyWindowId: string;
   kind: AssignmentKind;
   targetRefId?: string; // doctorId, specialtyId, or clinicalRoleId
+  secondTargetRefId?: string; // optional second low acuity doctorId when kind === 'DOCTOR'
 }
 
 export interface RosterTemplate {
@@ -262,6 +263,8 @@ export interface Doctor {
   weeklyPattern: WeeklyPatternSlot[];
   notes?: string;
   active: boolean;
+  /** When true, one nurse can cover up to two low acuity doctors on the same day. */
+  lowAcuity?: boolean;
   /**
    * The first day of the current week (weeklyPattern) and on/off state; days before
    * it follow previousWeeklyPattern. Set when a change is applied "from a date".
@@ -316,6 +319,7 @@ export interface LockEntry {
   dutyWindowId?: string; // required if mode === 'ASSIGNMENT'
   assignmentKind?: AssignmentKind;
   targetRefId?: string; // doctorId, specialtyId, or clinicalRoleId
+  secondTargetRefId?: string; // optional second low acuity doctorId when assignmentKind === 'DOCTOR'
   note?: string;
   createdAt: string;
 }
@@ -368,6 +372,7 @@ export interface Assignment {
   dutyWindowId: string;
   kind: AssignmentKind;
   doctorId?: string;
+  secondDoctorId?: string;
   specialtyId?: string;
   clinicalRoleId?: string;
   locked: boolean;

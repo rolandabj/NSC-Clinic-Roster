@@ -81,15 +81,17 @@ export const VersionCompareModal: React.FC<VersionCompareModalProps> = ({
     return 'DRAFT';
   });
 
+  const hasSchedule = !!schedule;
+  const scheduleId = schedule?.id;
   // The modal stays mounted, so the versions to compare are set again each time it opens
   // (and when the roster's versions change): by default the latest published one against now.
   useEffect(() => {
-    if (!isOpen || !schedule) return;
+    if (!isOpen || !hasSchedule) return;
     const known = (id?: string) => !!id && (id === 'DRAFT' || versions.some((v) => v.id === id));
     const latestPublished = [...versions].filter((v) => v.isPublished).sort((a, b) => b.number - a.number)[0];
     setBaseId(known(initialBaseVersionId) ? initialBaseVersionId! : latestPublished?.id || versions[0]?.id || 'DRAFT');
     setTargetId(known(initialTargetVersionId) ? initialTargetVersionId! : 'DRAFT');
-  }, [isOpen, initialBaseVersionId, initialTargetVersionId, schedule?.id, versions.length]);
+  }, [isOpen, initialBaseVersionId, initialTargetVersionId, hasSchedule, scheduleId, versions]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [changeTypeFilter, setChangeTypeFilter] = useState<'ALL' | 'ADDED' | 'REMOVED' | 'MODIFIED'>('ALL');

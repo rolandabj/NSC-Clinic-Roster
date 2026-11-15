@@ -81,7 +81,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
     }).catch((err) => {
       console.error('Failed to load doctors in CreateScheduleModal:', err);
     });
-  }, []);
+  }, [suggested.start, suggested.end]);
 
   // Compute duration metrics
   const getDurationMetrics = (startStr: string, endStr: string, blocks: number) => {
@@ -153,7 +153,7 @@ export const CreateScheduleModal: React.FC<CreateScheduleModalProps> = ({
         setHoursTarget(metrics.suggestedHours);
       }
     }
-  }, [startDate, endDate, periodCalculation?.targetHours]);
+  }, [startDate, endDate, isNameManuallyEdited, metrics.isValid, metrics.suggestedHours, periodCalculation]);
 
   // Apply Quick Dedicated Period Preset
   const handleSelectDedicatedPeriodPreset = (periodId: string) => {

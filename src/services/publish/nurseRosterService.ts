@@ -162,14 +162,22 @@ type ShiftRefs = {
  * "Blood Collection", or "Float" as in the emails.
  */
 export function shiftDetail(
-  a: Pick<Assignment, 'doctorId' | 'clinicalRoleId' | 'specialtyId'>,
+  a: Pick<Assignment, 'doctorId' | 'clinicalRoleId' | 'specialtyId'> & { secondDoctorId?: string },
   refs: ShiftRefs
 ): string {
   if (isFloatShift(a)) return 'Float';
   if (a.doctorId) {
-    const name = refs.doctors.find((d) => d.id === a.doctorId)?.fullName?.trim();
-    if (!name) return 'With a doctor';
-    return /^dr\b/i.test(name) ? `With ${name}` : `With Dr ${name}`;
+    const formatDr = (id: string) => {
+      const name = refs.doctors.find((d) => d.id === id)?.fullName?.trim();
+      if (!name) return undefined;
+      return /^dr\b/i.test(name) ? name : `Dr ${name}`;
+    };
+    const first = formatDr(a.doctorId);
+    const second = a.secondDoctorId && a.secondDoctorId !== a.doctorId ? formatDr(a.secondDoctorId) : undefined;
+    if (first && second) return `With ${first} and ${second}`;
+    if (first) return `With ${first}`;
+    if (second) return `With ${second}`;
+    return 'With a doctor';
   }
   if (a.clinicalRoleId) return refs.clinicalRoles.find((r) => r.id === a.clinicalRoleId)?.name || 'Clinical role';
   if (a.specialtyId) {

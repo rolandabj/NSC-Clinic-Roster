@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { Check, RefreshCw, UserCheck, UserPlus, UserX, X } from 'lucide-react';
 import { UserProfile } from '../../services/auth/authService';
 import { getRepository } from '../../services/repository';
@@ -44,7 +45,7 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
   // document id, which is what the Firestore security rules look up.
   const MASTER_EMAIL = 'rolandabj@gmail.com';
 
-  const fetchDirectory = async () => {
+  const fetchDirectory = useLatestCallback(async () => {
     setIsLoading(true);
     try {
       const repo = getRepository();
@@ -62,11 +63,11 @@ export const AccessManagementPanel: React.FC<AccessManagementPanelProps> = ({ cu
     } finally {
       setIsLoading(false);
     }
-  };
+  });
 
   useEffect(() => {
     fetchDirectory();
-  }, []);
+  }, [fetchDirectory]);
 
   /**
    * Writes an access record under its email key. Records created before this

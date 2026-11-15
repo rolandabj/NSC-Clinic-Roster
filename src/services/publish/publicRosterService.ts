@@ -103,7 +103,7 @@ export async function syncPublicRoster(link: ShareLink): Promise<void> {
   const inRoster = (d: string) => d >= schedule.startDate && d <= schedule.endDate;
   const snapshotAssignments = (version.snapshot?.assignments || [])
     .filter((a) => inRoster(a.date))
-    .map((a) => pick(a, ['id', 'nurseId', 'date', 'dutyWindowId', 'kind', 'doctorId', 'specialtyId', 'clinicalRoleId']));
+    .map((a) => pick(a, ['id', 'nurseId', 'date', 'dutyWindowId', 'kind', 'doctorId', 'secondDoctorId', 'specialtyId', 'clinicalRoleId']));
   const snapshotLeave = (version.snapshot?.leaveEntries || [])
     .filter((le) => le.approved && le.endDate >= schedule.startDate && le.startDate <= schedule.endDate)
     .map((le) => ({
@@ -116,7 +116,7 @@ export async function syncPublicRoster(link: ShareLink): Promise<void> {
     }));
   // Only the people on this roster (no employee codes or other details).
   const nurseIds = new Set([...snapshotAssignments.map((a) => a.nurseId), ...snapshotLeave.map((l) => l.nurseId)]);
-  const doctorIds = new Set(snapshotAssignments.map((a) => a.doctorId).filter(Boolean) as string[]);
+  const doctorIds = new Set(snapshotAssignments.flatMap((a) => [a.doctorId, a.secondDoctorId]).filter(Boolean) as string[]);
 
   const doc: PublicRosterDoc = {
     id: link.token,

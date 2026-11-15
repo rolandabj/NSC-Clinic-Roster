@@ -14,6 +14,7 @@ import { isWeekendDay } from '../../utils/weekend';
 import { formatDate } from '../../utils/dateUtils';
 import { readableTextOn } from '../../utils/colorContrast';
 import { isFloatShift } from '../../services/engine/floatShift';
+import { assignmentDoctorIds } from '../../services/engine/clinicModel';
 import { versionName } from '../../services/history/versionKinds';
 import { Field, IconButton, Input, Switch, cx } from '../ui';
 
@@ -39,10 +40,15 @@ export const shiftTargetName = (
   short = false
 ): string => {
   if (isFloatShift(a)) return 'Float';
-  if (a.doctorId) {
-    const doc = maps.doctors.get(a.doctorId);
-    if (!doc) return 'Doctor';
-    return short ? doc.fullName.split(' ').slice(-1)[0] : doc.fullName;
+  const docIds = assignmentDoctorIds(a);
+  if (docIds.length > 0) {
+    return docIds
+      .map((id) => {
+        const doc = maps.doctors.get(id);
+        if (!doc) return 'Doctor';
+        return short ? doc.fullName.split(' ').slice(-1)[0] : doc.fullName;
+      })
+      .join(' + ');
   }
   if (a.clinicalRoleId) return maps.roles.get(a.clinicalRoleId)?.name || 'Duty';
   if (a.specialtyId) return maps.specialties.get(a.specialtyId)?.name || 'Specialty';

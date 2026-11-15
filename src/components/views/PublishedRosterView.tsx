@@ -123,7 +123,7 @@ export const PublishedRosterView: React.FC<PublishedRosterViewProps> = ({
     }
 
     loadPublishedRoster();
-  }, [shareToken, nurseIdParam]);
+  }, [shareToken, nurseIdParam, currentUser]);
 
   const backButton = onExitPreview && (
     <Button size="lg" icon={ArrowLeft} onClick={onExitPreview}>

@@ -8,6 +8,7 @@
  * firestore.rules) see it.
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { Check, RefreshCw, X } from 'lucide-react';
 import { UserProfile } from '../../services/auth/authService';
 import { listPendingApprovals, decideRequest } from '../../services/requests/staffRequestService';
@@ -45,7 +46,7 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({ curren
 
   // Only the latest load is shown: one started before the shift names arrived may finish last.
   const loadRun = useRef(0);
-  const load = async () => {
+  const load = useLatestCallback(async () => {
     const run = ++loadRun.current;
     setIsLoading(true);
     try {
@@ -69,12 +70,12 @@ export const ApprovalsQueuePanel: React.FC<ApprovalsQueuePanelProps> = ({ curren
     } finally {
       if (run === loadRun.current) setIsLoading(false);
     }
-  };
+  });
 
   useEffect(() => {
     load();
     // The shift names arrive with the screen's data; the words follow them.
-  }, [dutyWindows.length]);
+  }, [dutyWindows.length, load]);
 
   const open = (item: Waiting, d: 'APPROVED' | 'REJECTED') => {
     setNote('');

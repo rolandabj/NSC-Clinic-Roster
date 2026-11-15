@@ -26,7 +26,7 @@ import { outsideNurseList } from '../../services/engine/nurseList';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import { applyPreferenceFocus } from '../../services/engine/preferenceOrder';
 import { confirmDialog, notify } from '../common/dialogs';
-import { coveredMinutes, doctorSessionsOn, nurseClinicRoleOf, toMinutes } from '../../services/engine/clinicModel';
+import { assignmentDoctorIds, coveredMinutes, doctorSessionsOn, nurseClinicRoleOf, toMinutes } from '../../services/engine/clinicModel';
 import { isFloatShift } from '../../services/engine/floatShift';
 import { QuickCellPopup, QuickWorkOption, QuickLeaveOption, QuickDayNote, QuickWish } from './grid/QuickCellPopup';
 import { GridRowActions, rowViewsOf } from './grid/GridRow';
@@ -311,7 +311,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
   // Per cell lookups, keyed `${nurseId}_${date}`, so each cell does not scan every list.
   const rosterStart = schedule.startDate;
   const rosterEnd = schedule.endDate;
-  const inRosterDates = (date: string) => date >= rosterStart && date <= rosterEnd;
+  const inRosterDates = useCallback((date: string) => date >= rosterStart && date <= rosterEnd, [rosterStart, rosterEnd]);
   const assignmentByCell = useMemo(() => {
     const map = new Map<string, Assignment>();
     for (const a of assignments) {
@@ -359,17 +359,26 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       else map.set(k, [r]);
     }
     return map;
-  }, [availabilityRequests, rosterStart, rosterEnd]);
-  const assignmentOn = (nurseId: string, date: string) => assignmentByCell.get(`${nurseId}_${date}`);
-  const lockOn = (nurseId: string, date: string) => lockByCell.get(`${nurseId}_${date}`);
-  const approvedLeaveOn = (nurseId: string, date: string) =>
-    inRosterDates(date)
-      ? leaveByCell.approved.get(`${nurseId}_${date}`)
-      : leaveEntries.find((le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate);
-  const waitingLeaveOn = (nurseId: string, date: string) =>
-    inRosterDates(date) ? leaveByCell.pending.get(`${nurseId}_${date}`) : pendingLeaveOn(leaveEntries, nurseId, date);
-  const cellRequestOn = (nurseId: string, date: string) =>
-    requestOn(inRosterDates(date) ? requestsByCell.get(`${nurseId}_${date}`) : availabilityRequests, nurseId, date);
+  }, [availabilityRequests, inRosterDates]);
+  const assignmentOn = useCallback((nurseId: string, date: string) => assignmentByCell.get(`${nurseId}_${date}`), [assignmentByCell]);
+  const lockOn = useCallback((nurseId: string, date: string) => lockByCell.get(`${nurseId}_${date}`), [lockByCell]);
+  const approvedLeaveOn = useCallback(
+    (nurseId: string, date: string) =>
+      inRosterDates(date)
+        ? leaveByCell.approved.get(`${nurseId}_${date}`)
+        : leaveEntries.find((le) => le.nurseId === nurseId && le.approved && date >= le.startDate && date <= le.endDate),
+    [inRosterDates, leaveByCell.approved, leaveEntries]
+  );
+  const waitingLeaveOn = useCallback(
+    (nurseId: string, date: string) =>
+      inRosterDates(date) ? leaveByCell.pending.get(`${nurseId}_${date}`) : pendingLeaveOn(leaveEntries, nurseId, date),
+    [inRosterDates, leaveByCell.pending, leaveEntries]
+  );
+  const cellRequestOn = useCallback(
+    (nurseId: string, date: string) =>
+      requestOn(inRosterDates(date) ? requestsByCell.get(`${nurseId}_${date}`) : availabilityRequests, nurseId, date),
+    [inRosterDates, requestsByCell, availabilityRequests]
+  );
 
   // What each cell shows, worked out once per change of the roster, its problems or the days
   // shown. A view that did not change stays the same object, so its cell is not drawn again.
@@ -398,7 +407,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       }
     }
     return reuseCellViews(previousViewsRef.current, views);
-  }, [displayNurses, dayInfo, assignmentByCell, lockByCell, leaveByCell, requestsByCell, leaveEntries, availabilityRequests, cellViolationMessages, cellMustFix, cellLookups]);
+  }, [displayNurses, dayInfo, approvedLeaveOn, assignmentOn, lockOn, waitingLeaveOn, cellRequestOn, cellViolationMessages, cellMustFix, cellLookups]);
   previousViewsRef.current = cellViews;
   // What a cell holds, for the line under the grid (`cellSummary`).
   const cellWords = useCallback((nurseId: string, date: string) => {
@@ -453,6 +462,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         dutyId: dutyWindows[0]?.id || '',
         kind: 'DOCTOR',
         targetRefId: doctors[0]?.id || '',
+        secondTargetRefId: '',
         leaveHours,
       };
     }
@@ -465,6 +475,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         dutyId: dutyWindows[0]?.id || '',
         kind: 'DOCTOR',
         targetRefId: doctors[0]?.id || '',
+        secondTargetRefId: '',
         leaveHours,
       };
     }
@@ -474,6 +485,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         dutyId: existingAsgn.dutyWindowId,
         kind: existingAsgn.kind,
         targetRefId: existingAsgn.doctorId || existingAsgn.clinicalRoleId || existingAsgn.specialtyId || '',
+        secondTargetRefId: existingAsgn.kind === 'DOCTOR' ? existingAsgn.secondDoctorId || '' : '',
         note: existingAsgn.note || '',
         allowOverwrite: !existingAsgn.locked && existingAsgn.source !== 'LOCK' && !existingLock,
         leaveTypeId: leaveTypes.find((l) => l.acronym === 'BL')?.id || leaveTypes[0]?.id || '',
@@ -489,6 +501,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       dutyId: dutyWindows[0]?.id || '',
       kind: isTargetExclusiveNC ? 'CLINICAL_ROLE' : 'DOCTOR',
       targetRefId: isTargetExclusiveNC ? ncRole?.id || roles[0]?.id || '' : doctors[0]?.id || '',
+      secondTargetRefId: '',
       note: isTargetExclusiveNC ? 'Nurse Clinic only (not with a doctor)' : '',
       allowOverwrite: false, // Default to kept (pinned)
       leaveTypeId: leaveTypes.find((l) => l.acronym === 'BL')?.id || leaveTypes[0]?.id || '',
@@ -527,7 +540,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     if (isActive) return;
     selection.closePopup();
     setContextMenu(null);
-  }, [isActive]);
+  }, [isActive, selection]);
 
   // Focus follows the selection, and "Show in grid" brings a cell into view (`useGridSelection`).
   const { findCellElement } = useGridSelection({ selection, tableRef, gridScrollRef, focusRequest, onRequest: () => setContextMenu(null) });
@@ -684,6 +697,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       dutyId: editorDutyId,
       kind: editorKind,
       targetRefId: editorTargetRefId,
+      secondTargetRefId: editorSecondTargetRefId,
       note: editorNote,
       leaveTypeId: editorLeaveTypeId,
       allowOverwrite: editorAllowOverwrite,
@@ -707,6 +721,14 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
 
     if (editorCategory === 'DUTY') {
       const isLocked = !editorAllowOverwrite;
+      const validSecondDoctorId =
+        editorKind === 'DOCTOR' &&
+        editorSecondTargetRefId &&
+        editorSecondTargetRefId !== editorTargetRefId &&
+        doctorMap.get(editorTargetRefId)?.lowAcuity &&
+        doctorMap.get(editorSecondTargetRefId)?.lowAcuity
+          ? editorSecondTargetRefId
+          : undefined;
 
       const newAssignment: Assignment = {
         id: `asgn-manual-${nurseId}-${date}-${Date.now()}`,
@@ -716,6 +738,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         dutyWindowId: editorDutyId,
         kind: editorKind,
         doctorId: editorKind === 'DOCTOR' ? editorTargetRefId : undefined,
+        ...(validSecondDoctorId ? { secondDoctorId: validSecondDoctorId } : {}),
         clinicalRoleId: editorKind === 'CLINICAL_ROLE' ? editorTargetRefId : undefined,
         specialtyId: editorKind === 'SPECIALTY' ? editorTargetRefId : undefined,
         locked: isLocked,
@@ -738,6 +761,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
           dutyWindowId: editorDutyId,
           assignmentKind: editorKind,
           targetRefId: editorTargetRefId,
+          ...(validSecondDoctorId ? { secondTargetRefId: validSecondDoctorId } : {}),
           note: editorNote.trim() || 'Pinned duty assignment',
           createdAt: new Date().toISOString(),
         };
@@ -964,10 +988,36 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
           key: `doc-${sess.doctorId}`,
           label: doc.fullName,
           detail: `${sess.startTime} to ${sess.endTime}${duty ? ` · ${shiftWords(duty)}` : ''}`,
-          tag: docRankOf(sess) < Infinity ? 'Usual' : specRankOf(sess) < Infinity ? 'Usual department' : undefined,
-          current: asgn?.kind === 'DOCTOR' && asgn.doctorId === sess.doctorId,
-          onSelect: pick({ category: 'DUTY', kind: 'DOCTOR', targetRefId: sess.doctorId, dutyId: duty?.id || base.dutyId }),
+          tag: docRankOf(sess) < Infinity ? 'Usual' : specRankOf(sess) < Infinity ? 'Usual department' : doc.lowAcuity ? 'Low acuity' : undefined,
+          current: asgn?.kind === 'DOCTOR' && asgn.doctorId === sess.doctorId && !asgn.secondDoctorId,
+          onSelect: pick({ category: 'DUTY', kind: 'DOCTOR', targetRefId: sess.doctorId, secondTargetRefId: '', dutyId: duty?.id || base.dutyId }),
         });
+      }
+      if (asgn?.kind === 'DOCTOR' && asgn.doctorId && doctorMap.get(asgn.doctorId)?.lowAcuity) {
+        const firstDoc = doctorMap.get(asgn.doctorId)!;
+        const firstSess = daySessions.find((s) => s.doctorId === asgn.doctorId);
+        for (const sess of daySessions) {
+          if (sess.doctorId === asgn.doctorId) continue;
+          const doc = doctorMap.get(sess.doctorId);
+          if (!doc?.lowAcuity) continue;
+          const minStart = firstSess ? (firstSess.startTime < sess.startTime ? firstSess.startTime : sess.startTime) : sess.startTime;
+          const maxEnd = firstSess ? (firstSess.endTime > sess.endTime ? firstSess.endTime : sess.endTime) : sess.endTime;
+          const pairDuty = bestDutyFor(minStart, maxEnd, asgn.dutyWindowId);
+          work.push({
+            key: `pair-${asgn.doctorId}-${sess.doctorId}`,
+            label: `${firstDoc.fullName} + ${doc.fullName}`,
+            detail: `${minStart} to ${maxEnd}${pairDuty ? ` · ${shiftWords(pairDuty)}` : ''}`,
+            tag: 'Low acuity pair',
+            current: asgn.secondDoctorId === sess.doctorId,
+            onSelect: pick({
+              category: 'DUTY',
+              kind: 'DOCTOR',
+              targetRefId: asgn.doctorId,
+              secondTargetRefId: sess.doctorId,
+              dutyId: pairDuty?.id || base.dutyId,
+            }),
+          });
+        }
       }
     }
 
@@ -981,7 +1031,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         label: role.id === nc?.id ? 'Nurse Clinic' : role.name,
         detail: shiftWords(duty || dutyMap.get(base.dutyId)),
         current: asgn?.kind === 'CLINICAL_ROLE' && asgn.clinicalRoleId === role.id,
-        onSelect: pick({ category: 'DUTY', kind: 'CLINICAL_ROLE', targetRefId: role.id, dutyId: duty?.id || base.dutyId }),
+        onSelect: pick({ category: 'DUTY', kind: 'CLINICAL_ROLE', targetRefId: role.id, secondTargetRefId: '', dutyId: duty?.id || base.dutyId }),
       });
     }
 
@@ -997,7 +1047,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
           label: `${sp.name} (any doctor)`,
           detail: shiftWords(duty),
           current: asgn?.kind === 'SPECIALTY' && asgn.specialtyId === sp.id,
-          onSelect: pick({ category: 'DUTY', kind: 'SPECIALTY', targetRefId: sp.id, dutyId: duty?.id || base.dutyId }),
+          onSelect: pick({ category: 'DUTY', kind: 'SPECIALTY', targetRefId: sp.id, secondTargetRefId: '', dutyId: duty?.id || base.dutyId }),
         });
       }
     }
@@ -1052,8 +1102,9 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     if (!asgn) return '';
     const duty = dutyMap.get(asgn.dutyWindowId);
     if (isFloatShift(asgn)) return `${duty ? `${duty.name} shift` : 'Shift'}, float${pinned}`;
-    const what = asgn.doctorId
-      ? doctorMap.get(asgn.doctorId)?.fullName || 'a doctor'
+    const docIds = assignmentDoctorIds(asgn);
+    const what = docIds.length > 0
+      ? docIds.map((id) => doctorMap.get(id)?.fullName || 'a doctor').join(' and ')
       : asgn.clinicalRoleId
       ? asgn.clinicalRoleId === nurseClinicRoleOf(roles)?.id
         ? 'Nurse Clinic'
@@ -1116,7 +1167,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
 
       {/* 6.2 ROSTER SHEET MAIN GRID VIEWPORT */}
       <div className="flex-1 flex overflow-hidden relative">
-        <div ref={gridScrollRef} onKeyDown={onGridKeyDown} className="flex-1 overflow-auto bg-slate-200 p-px scroll-pb-16">
+        <div ref={gridScrollRef} role="presentation" onKeyDown={onGridKeyDown} className="flex-1 overflow-auto bg-slate-200 p-px scroll-pb-16">
           <GridTable
             tableRef={tableRef}
             dayInfo={dayInfo}

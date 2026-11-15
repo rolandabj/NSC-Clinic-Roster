@@ -32,6 +32,7 @@ import {
   NurseHoursAccounting,
 } from '../reports/hoursAccounting';
 import { isFloatShift } from '../engine/floatShift';
+import { assignmentCoversDoctor, assignmentDoctorIds } from '../engine/clinicModel';
 
 export interface RosterExportOptions {
   clinicName: string;
@@ -181,8 +182,8 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
         if (isFloatShift(asgn)) {
           targetLabel = 'FLOAT';
         } else if (asgn.doctorId) {
-          const doc = doctorMap.get(asgn.doctorId);
-          targetLabel = doc ? doc.fullName.replace('Dr. ', '') : 'Doctor';
+          const ids = assignmentDoctorIds(asgn);
+          targetLabel = ids.map((id) => doctorMap.get(id)?.fullName.replace(/^Dr\.?\s+/i, '') || 'Doctor').join(' + ');
         } else if (asgn.clinicalRoleId) {
           const r = roleMap.get(asgn.clinicalRoleId);
           targetLabel = r ? r.acronym : 'ROLE';
@@ -295,8 +296,8 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
     if (isFloatShift(a)) {
       targetName = 'Float';
     } else if (a.doctorId) {
-      const doc = doctorMap.get(a.doctorId);
-      targetName = doc ? doc.fullName : 'Doctor';
+      const ids = assignmentDoctorIds(a);
+      targetName = ids.map((id) => doctorMap.get(id)?.fullName || 'Doctor').join(' + ');
     } else if (a.clinicalRoleId) {
       const role = roleMap.get(a.clinicalRoleId);
       targetName = role ? role.name : 'Clinical Role';
@@ -405,7 +406,7 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
 
     // Find paired nurse
     const asgn = assignments.find(
-      (a) => a.date === sess.date && a.doctorId === sess.doctorId
+      (a) => a.date === sess.date && assignmentCoversDoctor(a, sess.doctorId)
     );
     const pairedNurse = asgn ? nurseMap.get(asgn.nurseId)?.fullName : 'Unassigned';
 
@@ -483,8 +484,11 @@ export function exportRosterToCsvMatrix(options: RosterExportOptions): string {
         if (isFloatShift(asgn)) {
           targetLabel = 'FLOAT';
         } else if (asgn.doctorId) {
-          const doc = doctorMap.get(asgn.doctorId);
-          targetLabel = doc ? doc.fullName.replace('Dr. ', '') : '';
+          const ids = assignmentDoctorIds(asgn);
+          targetLabel = ids
+            .map((id) => doctorMap.get(id)?.fullName.replace(/^Dr\.?\s+/i, '') || '')
+            .filter(Boolean)
+            .join('+');
         } else if (asgn.clinicalRoleId) {
           const r = roleMap.get(asgn.clinicalRoleId);
           targetLabel = r ? r.acronym : '';
@@ -561,8 +565,8 @@ export function exportRosterToCsvLong(options: RosterExportOptions): string {
     if (isFloatShift(a)) {
       targetName = 'Float';
     } else if (a.doctorId) {
-      const doc = doctorMap.get(a.doctorId);
-      targetName = doc ? doc.fullName : 'Doctor';
+      const ids = assignmentDoctorIds(a);
+      targetName = ids.map((id) => doctorMap.get(id)?.fullName || 'Doctor').join(' + ');
     } else if (a.clinicalRoleId) {
       const role = roleMap.get(a.clinicalRoleId);
       targetName = role ? role.name : 'Clinical Role';

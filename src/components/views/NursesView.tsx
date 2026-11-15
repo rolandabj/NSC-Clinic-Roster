@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import {
   Users,
   Plus,
@@ -138,7 +139,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
 
   const repo = getRepository();
 
-  const loadAllData = async () => {
+  const loadAllData = useLatestCallback(async () => {
     try {
       const [nList, sList, crList, spList, dList, ltList] = await Promise.all([
         repo.list('nurses'),
@@ -157,11 +158,11 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
     } catch (err) {
       console.error('Error loading nurses data:', err);
     }
-  };
+  });
 
   useEffect(() => {
     loadAllData();
-  }, []);
+  }, [loadAllData]);
 
   const triggerNotification = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
@@ -192,7 +193,7 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
     setIsModalOpen(true);
   };
 
-  const handleOpenEdit = (nurse: Nurse) => {
+  const handleOpenEdit = useLatestCallback((nurse: Nurse) => {
     setEditingNurse(nurse);
     setDoctorEligibility(nurse.doctorEligibility || null);
     setEligibilityConfirmed(false);
@@ -229,25 +230,31 @@ export const NursesView: React.FC<NursesViewProps> = ({ context, nurseId, onAddr
     setPrefToAdd('');
     setPrefStatus('');
     setIsModalOpen(true);
-  };
+  });
 
   // A link to a nurse opens their details once the list has loaded.
   const linkHandledRef = useRef(!nurseId);
-  useEffect(() => {
+  const openLinkedNurse = useLatestCallback(() => {
     if (!nurseId || nurses.length === 0) return;
     linkHandledRef.current = true;
     if (isModalOpen && editingNurse?.id === nurseId) return;
     const nurse = nurses.find((n) => n.id === nurseId);
     if (nurse) handleOpenEdit(nurse);
-  }, [nurseId, nurses.length]);
+  });
+  useEffect(() => {
+    openLinkedNurse();
+  }, [nurseId, nurses.length, openLinkedNurse]);
 
   // The address follows the open details (#nurses?nurse=mary), so the link can be copied.
   // Back is left alone: opening details is not a new step.
-  useEffect(() => {
+  const syncNurseAddress = useLatestCallback(() => {
     if (!linkHandledRef.current) return;
     const open = isModalOpen && editingNurse ? editingNurse.id : undefined;
     if (open !== nurseId) onAddressChange?.({ nurse: open }, 'replace');
-  }, [isModalOpen, editingNurse?.id]);
+  });
+  useEffect(() => {
+    syncNurseAddress();
+  }, [isModalOpen, editingNurse?.id, syncNurseAddress]);
 
   const handleSaveNurse = async (e: React.FormEvent) => {
     e.preventDefault();

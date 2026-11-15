@@ -90,10 +90,10 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, 
                 <div className="flex items-start gap-1.5">
                   <span className="mt-0.5 shrink-0" aria-hidden="true">{s.icon}</span>
                   <div className="min-w-0">
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600">{s.label}</span>
+                    <span className="text-xs font-bold uppercase tracking-wide text-slate-600">{s.label}</span>
                     <p className="text-slate-800 leading-snug">{f.message}</p>
                     {cell && (
-                      <p className="text-[11px] text-slate-500 mt-0.5">
+                      <p className="text-xs text-slate-500 mt-0.5">
                         {'wholeDay' in cell ? 'Whole day' : nurseName(cell.nurseId)} · {formatDate(cell.date)}
                       </p>
                     )}
@@ -104,7 +104,7 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, 
                     <button
                       type="button"
                       onClick={() => onShowInGrid(cell.nurseId, cell.date)}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
                     >
                       Show in grid <ArrowRight className="w-3 h-3" aria-hidden="true" />
                     </button>
@@ -114,7 +114,7 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, 
                       type="button"
                       aria-expanded={openHelpId === f.id}
                       onClick={() => setOpenHelpId(openHelpId === f.id ? null : f.id)}
-                      className="text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
+                      className="text-xs font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
                     >
                       {openHelpId === f.id ? 'Hide' : helpLabel?.(f) || 'Who could cover?'}
                     </button>
@@ -129,14 +129,14 @@ export const ProblemsPanel: React.FC<ProblemsPanelProps> = ({ validationReport, 
 
       <div className="px-3 py-2 border-t border-slate-200 bg-white flex items-center justify-between gap-2">
         {notes > 0 ? (
-          <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+          <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
             <input type="checkbox" checked={showNotes} onChange={(e) => setShowNotes(e.target.checked)} />
             Show {notes} note{notes === 1 ? '' : 's'}
           </label>
         ) : (
           <span />
         )}
-        <button type="button" onClick={onOpenFullList} className="text-[11px] font-semibold text-indigo-700 hover:underline cursor-pointer">
+        <button type="button" onClick={onOpenFullList} className="text-xs font-semibold text-indigo-700 hover:underline cursor-pointer">
           Full list
         </button>
       </div>

@@ -10,6 +10,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { CalendarClock, Download, FileSpreadsheet, Printer, Search } from 'lucide-react';
 import { HoursHistory, hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
 import { loadHoursHistory } from '../../services/hours/hoursHistoryService';
@@ -170,7 +171,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context, tab, onAddres
 
   const repo = getRepository();
 
-  const loadData = async () => {
+  const loadData = useLatestCallback(async () => {
     try {
       const [schedList, nList, dwList, leList, ltList, sList, dList, crList, spList, qList, whpList] = await Promise.all([
         repo.list('schedules'),
@@ -207,7 +208,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context, tab, onAddres
     } finally {
       setLoaded(true);
     }
-  };
+  });
 
   useEffect(() => {
     loadData();
@@ -224,7 +225,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context, tab, onAddres
       stopPeriods();
       stopDuties();
     };
-  }, []);
+  }, [loadData, repo]);
 
   // Balances carry from the published rosters of the same period (reloaded when a roster changes).
   useEffect(() => {
@@ -244,14 +245,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ context, tab, onAddres
     return () => {
       cancelled = true;
     };
-  }, [activeSchedule?.id, schedules, workingHoursPeriods]);
+  }, [activeSchedule, schedules, workingHoursPeriods, repo]);
 
   // The open roster's shifts, kept live (edits in another tab or by another planner show at once).
   useEffect(() => {
     if (!activeSchedule?.id) return;
     setAssignments([]);
     return repo.subscribe('assignments', setAssignments, { field: 'scheduleId', operator: '==', value: activeSchedule.id });
-  }, [activeSchedule?.id]);
+  }, [activeSchedule?.id, repo]);
 
   const rows: NurseHoursAccounting[] = useMemo(() => {
     if (!activeSchedule || !hoursHistory || loadError || hoursHistoryOverlaps(activeSchedule, hoursHistory).length) return [];

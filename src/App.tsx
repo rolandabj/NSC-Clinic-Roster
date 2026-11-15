@@ -72,20 +72,18 @@ export default function App() {
   // 1. Splash Screen while checking initial credentials
   if (isAuthChecking) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-slate-950 text-slate-100 select-none">
-        <div className="flex flex-col items-center space-y-4 animate-in fade-in duration-200">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner">
-            <Building2 className="w-7 h-7" />
+      <main className="min-h-dvh w-full flex flex-col items-center justify-center bg-canvas text-ink select-none p-4">
+        <div role="status" className="flex flex-col items-center space-y-3">
+          <div className="size-12 rounded-xl bg-brand-soft flex items-center justify-center text-brand">
+            <Building2 className="size-6" aria-hidden="true" />
           </div>
           <div className="text-center space-y-1">
-            <h1 className="text-base font-bold text-white tracking-tight">
-              {clinicName}
-            </h1>
-            <p className="text-xs text-slate-400">Verifying clinic credentials...</p>
+            <h1 className="text-base font-bold text-ink">{clinicName}</h1>
+            <p className="text-xs text-ink-muted">Checking your sign in…</p>
           </div>
-          <Loader2 className="w-5 h-5 animate-spin text-indigo-500 mt-2" />
+          <Loader2 className="size-5 animate-spin text-brand mt-1" aria-hidden="true" />
         </div>
-      </div>
+      </main>
     );
   }
 

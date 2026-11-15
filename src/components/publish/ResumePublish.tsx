@@ -8,7 +8,7 @@
  * version, and then writes the audit entry.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Send } from 'lucide-react';
 import { PublishLog } from '../../types';
 import { getRepository } from '../../services/repository';
@@ -37,7 +37,7 @@ export const ResumePublish: React.FC<{
   const [error, setError] = useState('');
   const [versionNumber, setVersionNumber] = useState<number | null>(null);
 
-  const look = async () => {
+  const look = useCallback(async () => {
     if (!scheduleId) {
       setStopped(null);
       return;
@@ -55,11 +55,11 @@ export const ResumePublish: React.FC<{
       // Not knowing about a stopped send must never stop the screen.
       setStopped(null);
     }
-  };
+  }, [scheduleId, repo]);
 
   useEffect(() => {
-    look();
-  }, [scheduleId]);
+    void look();
+  }, [look]);
 
   // Closing the tab while emails go out stops the resume partway, so the browser asks first.
   useEffect(() => {

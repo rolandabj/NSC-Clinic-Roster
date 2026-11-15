@@ -37,6 +37,7 @@ import {
 } from '../../types';
 import {
   ClinicSetup,
+  assignmentCoversDoctor,
   canBeFreeNurse,
   coveredMinutes,
   doctorSessionsOn,
@@ -198,11 +199,36 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
     .map((a) => {
       const nurse = nurseMap.get(a.nurseId);
       const duty = dutyMap.get(a.dutyWindowId);
-      const session = a.doctorId ? doctorSessionsOn(sessions, a.date).find((s) => s.doctorId === a.doctorId) : undefined;
+      const dayDocSessions = doctorSessionsOn(sessions, a.date);
+      const session = a.doctorId ? dayDocSessions.find((s) => s.doctorId === a.doctorId) : undefined;
+      const secondDocId =
+        a.kind === 'DOCTOR' && a.doctorId && a.secondDoctorId && a.secondDoctorId !== a.doctorId ? a.secondDoctorId : undefined;
+      const secondSession = secondDocId ? dayDocSessions.find((s) => s.doctorId === secondDocId) : undefined;
       const pairing = a.doctorId ? pairingRank(nurse, a.doctorId, session?.specialtyId) : null;
+      const secondPairing = secondDocId ? pairingRank(nurse, secondDocId, secondSession?.specialtyId) : null;
       const specialtyRank =
         !a.doctorId && a.specialtyId
           ? (nurse?.preferences || []).find((p) => p.kind === 'SPECIALTY' && p.refId === a.specialtyId)?.rank ?? null
+          : null;
+      const combinedRank =
+        pairing && secondPairing
+          ? pairing.rank !== null && secondPairing.rank !== null
+            ? Math.max(pairing.rank, secondPairing.rank)
+            : null
+          : pairing
+          ? pairing.rank
+          : specialtyRank;
+      const combinedBy =
+        pairing && secondPairing
+          ? combinedRank === null
+            ? null
+            : pairing.by === secondPairing.by
+            ? pairing.by
+            : 'DOCTOR'
+          : pairing
+          ? pairing.by
+          : specialtyRank !== null
+          ? 'SPECIALTY'
           : null;
       return {
         id: a.id,
@@ -220,13 +246,16 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
         doctorId: a.doctorId || null,
         doctor: a.doctorId ? doctorMap.get(a.doctorId)?.fullName || a.doctorId : null,
         doctorSession: session ? { start: session.startTime, end: session.endTime } : null,
+        secondDoctorId: secondDocId || null,
+        secondDoctor: secondDocId ? doctorMap.get(secondDocId)?.fullName || secondDocId : null,
+        secondDoctorSession: secondSession ? { start: secondSession.startTime, end: secondSession.endTime } : null,
         specialtyId: a.specialtyId || null,
         specialty: a.specialtyId ? specialtyMap.get(a.specialtyId)?.name || a.specialtyId : null,
         clinicalRoleId: a.clinicalRoleId || null,
         clinicalRole: isFloatShift(a) ? 'Float' : a.clinicalRoleId ? roleMap.get(a.clinicalRoleId)?.acronym || a.clinicalRoleId : null,
         float: isFloatShift(a),
-        preferenceRank: pairing ? pairing.rank : specialtyRank,
-        preferenceMatchedBy: pairing ? pairing.by : specialtyRank !== null ? 'SPECIALTY' : null,
+        preferenceRank: combinedRank,
+        preferenceMatchedBy: combinedBy,
         source: a.source,
         pinned: !!a.locked,
         onApprovedLeave: !!approvedLeaveOn(a.nurseId, a.date),
@@ -295,6 +324,9 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
           roleMap.get(l.targetRefId)?.acronym ||
           l.targetRefId
         : null;
+      const secondTarget = l.secondTargetRefId
+        ? doctorMap.get(l.secondTargetRefId)?.fullName || l.secondTargetRefId
+        : null;
       return {
         id: l.id,
         date: l.date,
@@ -305,6 +337,8 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
         assignmentKind: l.assignmentKind || null,
         targetId: l.targetRefId || null,
         target,
+        secondTargetId: l.secondTargetRefId || null,
+        secondTarget,
         fromApprovedDayOffRequest: l.id.startsWith('lock-off-'),
       };
     });
@@ -336,7 +370,7 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
     const workingNurseIds = Array.from(new Set(dayShifts.map((a) => a.nurseId)));
 
     const doctorSessions = daySessions.map((s) => {
-      const withDoctor = dayShifts.filter((a) => a.kind === 'DOCTOR' && a.doctorId === s.doctorId);
+      const withDoctor = dayShifts.filter((a) => assignmentCoversDoctor(a, s.doctorId));
       const coverDuties = withDoctor.map((a) => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d);
       return {
         sessionId: s.id,
@@ -630,11 +664,14 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
         id: d.id,
         name: d.fullName,
         active: d.active,
+        lowAcuity: !!d.lowAcuity,
         specialties: d.specialtyIds.map((id) => specialtyMap.get(id)?.name || id),
         weeklyPattern: (d.weeklyPattern || []).map((p) => ({ weekday: WEEKDAYS[p.weekday], start: p.startTime, end: p.endTime })),
         sessionsInRoster: allSessions.filter((s) => s.doctorId === d.id).length,
         sessionsWithNoNurse: allSessions.filter((s) => s.doctorId === d.id && s.nurses.length === 0).length,
-        nursesWorkedWith: countBy(doctorShifts.filter((s) => s.doctorId === d.id).map((s) => s.nurse)),
+        nursesWorkedWith: countBy(
+          doctorShifts.filter((s) => s.doctorId === d.id || s.secondDoctorId === d.id).map((s) => s.nurse)
+        ),
       })),
     days,
     shifts,
@@ -663,7 +700,7 @@ const PROBLEM_RULES = [
   'cov-gap', 'day-off-for-holiday', 'dayoff-lock', 'doctor-not-in-clinic', 'evening-tail', 'exclusive-nc-doctor-conflict', 'h1-senior', 'h2-days', 'h3-rest',
   'h4-dup', 'h6-phl-capability', 'h7-hours-over', 'h7-period', 'h8-doctor-allocation', 'h8-specialty-allocation', 'h9-week-hours', 'holiday-gap', 'holiday-leave',
   'holiday-no-nurse', 'holiday-senior', 'hours-deferred', 'hours-history-unavailable', 'hours-low', 'hours-over',
-  'hours-part-short', 'hours-written-off', 'leave-overlap', 'missing-gmail', 'nc-coverage',
+  'hours-part-short', 'hours-written-off', 'leave-overlap', 'low-acuity-pair', 'missing-gmail', 'nc-coverage',
   'nc-doctor-conflict', 'nc-not-qualified', 'pending-leave-shift', 'period-gap', 'request-dayoff-shift', 'request-shift',
   'role-quota', 's1-late', 'scale-ratio-warning', 'schedule-overlap', 'session-no-overlap', 'session-overlap', 'session-partial', 'unassigned-session',
 ].sort((a, b) => b.length - a.length);

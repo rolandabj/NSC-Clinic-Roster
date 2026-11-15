@@ -140,11 +140,11 @@ export function useRosterChecks(o: {
             x.specialties,
             x.doctors,
             x.leaveTypes,
-            clinicSetupRef.current,
+            clinicSetupRef.current && { ...clinicSetupRef.current, hoursHistory },
             availabilityRequests
           ).findings
         : [],
-    [activeSchedule, x.nurses, x.seniorityLevels, x.dutyWindows, x.sessions, x.leaveEntries, x.locks, x.roles, x.rules, x.workingHoursPeriods, x.specialties, x.doctors, x.leaveTypes, availabilityRequests, hoursHistory]
+    [activeSchedule, x.nurses, x.seniorityLevels, x.dutyWindows, x.sessions, x.leaveEntries, x.locks, x.roles, x.rules, x.workingHoursPeriods, x.specialties, x.doctors, x.leaveTypes, clinicSetupRef, availabilityRequests, hoursHistory]
   );
 
   return { validationReport, setValidationReport, checks, runValidation, checkRoster, lastCheckedHistoryRef };

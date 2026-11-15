@@ -129,7 +129,7 @@ export const GridCell = memo(function GridCell({
           {/* Spaces between the parts, so the text reads as the spoken name does ("Lee #1 09:00"); the grid does not show them. */}
           {view.rankBadge && ' '}
           {view.rankBadge && (
-            <span className={`rounded-sm text-[0.75em] font-bold ${view.rankBadge === '!' ? 'px-0.5 bg-danger-soft text-danger' : 'text-ink-muted'}`}>{view.rankBadge}</span>
+            <span className={`rounded-sm text-xs font-bold ${view.rankBadge === '!' ? 'px-0.5 bg-danger-soft text-danger' : 'text-ink-muted'}`}>{view.rankBadge}</span>
           )}{' '}
           {(view.startTime || view.pinned || view.handChange || view.pendingMark || ProblemIcon) && (
             // The problem's icon first, so a narrow cell (75 % zoom) cuts off the time, not the problem.

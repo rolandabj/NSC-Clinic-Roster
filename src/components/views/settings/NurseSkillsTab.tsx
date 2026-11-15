@@ -60,7 +60,7 @@ export const NurseSkillsTab: React.FC<NurseSkillsTabProps> = ({ clinicalRoles, l
       .list('nurses')
       .then(setNurses)
       .catch((err) => console.warn('Could not load nurses for the skills page:', err));
-  }, [clinicalRoles]);
+  }, [clinicalRoles, repo]);
 
   const ncRole = nurseClinicRoleOf(clinicalRoles);
   const phlRole = bloodCollectionRole(clinicalRoles);

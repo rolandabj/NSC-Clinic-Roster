@@ -29,7 +29,7 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <div>
-          <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+          <h4 className="font-semibold text-slate-700 mb-1.5 text-xs uppercase">
             Shifts
           </h4>
           <div className="space-y-1">
@@ -37,20 +37,20 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
               <div key={dw.id} className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <span
-                    className="min-w-5 h-5 px-0.5 rounded text-white font-mono font-bold text-[10px] flex items-center justify-center"
+                    className="min-w-5 h-5 px-0.5 rounded text-white font-mono font-bold text-xs flex items-center justify-center"
                     style={{ backgroundColor: dw.color }}
                   >
                     {dw.acronym}
                   </span>
                   <span className="text-slate-800 font-medium">{dw.name}</span>
                   {dw.isPriority && (
-                    <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">
+                    <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">
                       <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" aria-hidden="true" />
                       Used first
                     </span>
                   )}
                 </div>
-                <span className="font-mono text-slate-500 text-[10px]">
+                <span className="font-mono text-slate-500 text-xs">
                   {dw.startTime} to {dw.endTime}
                 </span>
               </div>
@@ -59,7 +59,7 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
         </div>
 
         <div>
-          <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+          <h4 className="font-semibold text-slate-700 mb-1.5 text-xs uppercase">
             Leave and days off
           </h4>
           <div className="space-y-1">
@@ -67,14 +67,14 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
               <div key={lt.id} className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <span
-                    className="min-w-5 h-5 px-0.5 rounded text-white font-mono font-bold text-[10px] flex items-center justify-center"
+                    className="min-w-5 h-5 px-0.5 rounded text-white font-mono font-bold text-xs flex items-center justify-center"
                     style={{ backgroundColor: lt.color }}
                   >
                     {lt.acronym}
                   </span>
                   <span className="text-slate-800">{lt.name}</span>
                 </div>
-                <span className="font-mono text-slate-500 text-[10px]">
+                <span className="font-mono text-slate-500 text-xs">
                   {typeof lt.creditedHours === 'number' ? `${lt.creditedHours} h a day` : '8 h a day'}
                 </span>
               </div>
@@ -83,15 +83,15 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
         </div>
 
         <div>
-          <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+          <h4 className="font-semibold text-slate-700 mb-1.5 text-xs uppercase">
             A cell
           </h4>
-          <div className="space-y-1.5 text-[11px] text-slate-600">
+          <div className="space-y-1.5 text-xs text-slate-600">
             <div className="flex items-center gap-2">
-              <span className="w-12 h-12 rounded-sm border-l-3 px-1 flex flex-col justify-center leading-tight text-ink shrink-0" style={{ backgroundColor: '#eef2ff', borderLeftColor: '#4f46e5' }} aria-hidden="true">
-                <span className="font-semibold text-[11px]">Lee</span>
-                <span className="text-ink-muted text-[10px]">09:00</span>
-                <span className="text-ink-muted text-[10px]">17:00</span>
+              <span className="w-12 h-14 rounded-sm border-l-3 px-1 flex flex-col justify-center leading-tight text-ink shrink-0" style={{ backgroundColor: '#eef2ff', borderLeftColor: '#4f46e5' }} aria-hidden="true">
+                <span className="font-semibold text-xs">Lee</span>
+                <span className="text-ink-muted text-xs">09:00</span>
+                <span className="text-ink-muted text-xs">17:00</span>
               </span>
               <span>The doctor's first name, the role or the leave on the first line, the start time and the marks on the second, the end time on the third; the edge has the shift's colour</span>
             </div>
@@ -100,7 +100,7 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
               <span>Pinned: kept when the roster is filled again</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-12 h-5 rounded-sm bg-sunken text-ink-muted font-semibold text-[10px] flex items-center justify-center shrink-0" aria-hidden="true">
+              <span className="w-12 h-5 rounded-sm bg-sunken text-ink-muted font-semibold text-xs flex items-center justify-center shrink-0" aria-hidden="true">
                 Day off
               </span>
               <span>Pinned day off</span>
@@ -125,7 +125,7 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
             </div>
             <div className="flex items-center gap-2">
               <span
-                className="w-6 h-5 rounded border border-dashed border-amber-500 text-ink-muted font-bold text-[10px] flex items-center justify-center shrink-0"
+                className="w-6 h-5 rounded border border-dashed border-amber-500 text-ink-muted font-bold text-xs flex items-center justify-center shrink-0"
                 style={{ backgroundImage: 'repeating-linear-gradient(135deg, #f59e0b40 0 3px, transparent 3px 7px)' }}
                 aria-hidden="true"
               >
@@ -159,23 +159,23 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
               <span>Request not followed: a shift on a day asked off, or another shift than the one asked for</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-8 text-[11px] font-semibold text-ink shrink-0">NC</span>
+              <span className="w-8 text-xs font-semibold text-ink shrink-0">NC</span>
               <span>Nurse Clinic (no doctor)</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-8 text-[11px] font-semibold text-ink shrink-0">Float</span>
+              <span className="w-8 text-xs font-semibold text-ink shrink-0">Float</span>
               <span>Float: not with a doctor</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-8 text-[10px] font-bold text-ink-muted shrink-0">#1</span>
+              <span className="w-8 text-xs font-bold text-ink-muted shrink-0">#1</span>
               <span>One of the nurse’s usual doctors (1 = first choice)</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-8 text-[10px] font-bold text-ink-muted shrink-0">Pool</span>
+              <span className="w-8 text-xs font-bold text-ink-muted shrink-0">Pool</span>
               <span>Doctor shared by any nurse</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-8 shrink-0"><span className="text-[10px] font-bold px-0.5 rounded-sm bg-danger-soft text-danger">!</span></span>
+              <span className="w-8 shrink-0"><span className="text-xs font-bold px-0.5 rounded-sm bg-danger-soft text-danger">!</span></span>
               <span>Not one of the nurse’s usual doctors</span>
             </div>
             <div className="flex items-center gap-2">
@@ -186,10 +186,10 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
         </div>
 
         <div>
-          <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+          <h4 className="font-semibold text-slate-700 mb-1.5 text-xs uppercase">
             Days
           </h4>
-          <div className="space-y-1.5 text-[11px] text-slate-600">
+          <div className="space-y-1.5 text-xs text-slate-600">
             <div className="flex items-center gap-2">
               <span className="w-6 h-5 rounded-sm bg-sunken border border-line shrink-0" aria-hidden="true" />
               <span>Weekend</span>
@@ -208,10 +208,10 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
         </div>
 
         <div>
-          <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+          <h4 className="font-semibold text-slate-700 mb-1.5 text-xs uppercase">
             Day totals (under the grid)
           </h4>
-          <div className="space-y-1.5 text-[11px] text-slate-600">
+          <div className="space-y-1.5 text-xs text-slate-600">
             <div className="flex items-center gap-2">
               <Stethoscope className="w-3.5 h-3.5 text-slate-400 shrink-0" aria-hidden="true" />
               <span>Doctors in session that day</span>
@@ -221,7 +221,7 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
               <span>Nurses on duty</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-px text-[10px] font-bold text-rose-700 shrink-0">
+              <span className="inline-flex items-center gap-px text-xs font-bold text-rose-700 shrink-0">
                 <Clock className="w-2.5 h-2.5" aria-hidden="true" />2 h
               </span>
               <span>
@@ -229,17 +229,17 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-bold text-rose-700 whitespace-nowrap shrink-0">No senior</span>
+              <span className="text-xs font-bold text-rose-700 whitespace-nowrap shrink-0">No senior</span>
               <span>No senior nurse on duty that day</span>
             </div>
           </div>
         </div>
 
         <div>
-          <h4 className="font-semibold text-slate-700 mb-1.5 text-[11px] uppercase">
+          <h4 className="font-semibold text-slate-700 mb-1.5 text-xs uppercase">
             Hours
           </h4>
-          <div className="space-y-1.5 text-[11px] text-slate-600">
+          <div className="space-y-1.5 text-xs text-slate-600">
             <div className="flex items-center gap-2">
               <span className="w-6 h-1.5 rounded bg-emerald-500 shrink-0" aria-hidden="true" />
               <span>Within about 2 h of the goal</span>

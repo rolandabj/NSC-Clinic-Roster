@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { Check, Copy, Eye, RotateCcw, Share2, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { syncPublicRoster, removePublicRoster } from '../../services/publish/publicRosterService';
@@ -51,7 +52,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
   const repo = getRepository();
 
-  const loadData = async () => {
+  const loadData = useLatestCallback(async () => {
     try {
       const links = await repo.list('shareLinks');
       const schedLinks = links.filter((l) => l.scheduleId === schedule.id);
@@ -61,13 +62,13 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     } catch (err) {
       console.error('Error loading share links:', err);
     }
-  };
+  });
 
   useEffect(() => {
     if (isOpen) {
       loadData();
     }
-  }, [isOpen, schedule.id]);
+  }, [isOpen, schedule.id, loadData]);
 
 
   if (!isOpen) return null;

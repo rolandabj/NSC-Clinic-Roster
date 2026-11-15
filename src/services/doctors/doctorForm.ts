@@ -21,7 +21,8 @@ export interface DoctorFilters {
 export function filterDoctors(doctors: Doctor[], { query, specialtyId, status }: DoctorFilters): Doctor[] {
   const q = query.trim().toLowerCase();
   return doctors.filter((d) => {
-    const found = !q || [d.fullName, d.notes].some((text) => (text || '').toLowerCase().includes(q));
+    const found =
+      !q || [d.fullName, d.notes, d.lowAcuity ? 'low acuity' : ''].some((text) => (text || '').toLowerCase().includes(q));
     const specialty = specialtyId === 'ALL' || (d.specialtyIds || []).includes(specialtyId);
     const state = status === 'ALL' || (status === 'ACTIVE') === !!d.active;
     return found && specialty && state;

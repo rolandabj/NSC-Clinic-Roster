@@ -12,7 +12,7 @@
  * <DialogHost /> must be mounted once (App.tsx does this).
  */
 
-import React, { useEffect, useId, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { CircleCheck, Info, OctagonAlert, TriangleAlert, X } from 'lucide-react';
 import { isAnyDialogOpen, onDialogsChange, useDialogA11y } from './useDialogA11y';
 import { Button } from '../ui/Button';
@@ -107,8 +107,18 @@ const ConfirmBox: React.FC<{ item: PendingConfirm }> = ({ item }) => {
   const titleId = useId();
   const bodyId = useId();
   const ref = useDialogA11y<HTMLDivElement>(true, () => settleConfirm(item.id, false));
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    confirmRef.current?.focus();
+  }, []);
   return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-ink/50 sm:items-center sm:p-4" onMouseDown={() => settleConfirm(item.id, false)}>
+    <div
+      role="presentation"
+      className="fixed inset-0 z-[200] flex items-end justify-center bg-ink/50 sm:items-center sm:p-4"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) settleConfirm(item.id, false);
+      }}
+    >
       <div
         ref={ref}
         role="alertdialog"
@@ -116,7 +126,6 @@ const ConfirmBox: React.FC<{ item: PendingConfirm }> = ({ item }) => {
         aria-labelledby={titleId}
         aria-describedby={bodyId}
         className="animate-in fade-in zoom-in-95 w-full rounded-t-xl bg-surface p-5 shadow-dialog sm:max-w-md sm:rounded-xl"
-        onMouseDown={(e) => e.stopPropagation()}
       >
         <h2 id={titleId} className="text-lg font-semibold text-ink">
           {item.title || 'Please confirm'}
@@ -126,7 +135,7 @@ const ConfirmBox: React.FC<{ item: PendingConfirm }> = ({ item }) => {
         </div>
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button onClick={() => settleConfirm(item.id, false)}>{item.cancelLabel || 'Cancel'}</Button>
-          <Button variant={item.danger ? 'danger' : 'primary'} autoFocus onClick={() => settleConfirm(item.id, true)}>
+          <Button ref={confirmRef} variant={item.danger ? 'danger' : 'primary'} onClick={() => settleConfirm(item.id, true)}>
             {item.confirmLabel || 'OK'}
           </Button>
         </div>

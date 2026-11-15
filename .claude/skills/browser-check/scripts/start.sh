@@ -6,7 +6,7 @@
 #   bash start.sh prod   production build at http://localhost:5180 (for timings: React's
 #                        development build is several times slower). Log: _preview/prod.log.
 set -euo pipefail
-ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null || cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 cd "$ROOT"
 MODE="${1:-dev}"
 PORT=5179

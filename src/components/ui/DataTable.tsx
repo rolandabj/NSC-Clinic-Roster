@@ -98,7 +98,8 @@ export function DataTable<T>({
 
   return (
     <div className={className}>
-      <div className="hidden overflow-auto sm:block" style={maxHeight ? { maxHeight } : undefined}>
+      {/* relative keeps hidden column headers inside the table's scroll box so they never widen the page. */}
+      <div className="relative hidden overflow-auto sm:block" style={maxHeight ? { maxHeight } : undefined}>
         <table className="w-full text-sm">
           <caption className="sr-only">{caption}</caption>
           <thead className={cx('bg-sunken text-left text-xs font-semibold text-ink-muted', maxHeight && 'sticky top-0 z-10')}>

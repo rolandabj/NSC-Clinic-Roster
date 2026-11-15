@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { Bell, Copy, Download, Eye, Mail, RefreshCw, Send } from 'lucide-react';
 import { ClinicContextState } from '../../types/navigation';
 import { escapeHtml } from '../../utils/escapeHtml';
@@ -80,7 +81,7 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
 
   const repo = getRepository();
 
-  const loadSends = async (from?: unknown) => {
+  const loadSends = useLatestCallback(async (from?: unknown) => {
     setIsLoadingSends(true);
     try {
       const page = await listPage(repo, 'emailLog', { orderBy: 'sentAt', direction: 'desc', limit: SENDS_PER_PAGE, cursor: from });
@@ -92,9 +93,9 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
     } finally {
       setIsLoadingSends(false);
     }
-  };
+  });
 
-  const loadData = async () => {
+  const loadData = useLatestCallback(async () => {
     try {
       const [schedList, nList, vList, ackList, linkList] = await Promise.all([
         repo.list('schedules'),
@@ -123,13 +124,13 @@ export const PublishView: React.FC<PublishViewProps> = ({ context }) => {
       console.error('Error loading Sent rosters:', err);
       setLoadState('failed');
     }
-  };
+  });
 
   useEffect(() => {
     loadData();
     // The email log is for planners (firestore.rules); only planners reach this screen today.
     if (canEdit) loadSends();
-  }, []);
+  }, [canEdit, loadData, loadSends]);
 
   const scheduleName = (id: string) => schedules.find((s) => s.id === id)?.name || 'A deleted roster';
   const versionNumber = (id: string) => versions.find((v) => v.id === id)?.number;

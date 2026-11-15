@@ -481,3 +481,44 @@ The longest task while loading is the browser alone: a trace shows about 125 ms 
 **Also measured during Phase 3:** the roster check runs once while the full size roster opens instead of four times; the grid is drawn 2 times for one edit instead of 4, 2 times for a fill instead of 8, and not at all in a minute with nobody touching it instead of 2 times; another sheet and back keeps the zoom and the selection. `SchedulesView.tsx` went from 3,158 to 2,324 lines and `WorkbookGrid.tsx` from 2,970 to 1,294.
 
 **Screens** (`ui-audit.cjs`, 1366, 1024 and 390 px): the same as Checkpoint 2, as the HTML did not change: the roster has 13 serious axe problems at 1366 px (Phase 4), the dashboards none.
+
+
+## Final audit, 14-11-2026 (Phase 9)
+
+Measured on the production build with `ui-audit.cjs`, `grid-timing.cjs` and all 32 browser check scripts.
+
+**Screens** (`ui-audit.cjs` across 25 pages at 1366, 1024 and 390 px: every signed in `view=app` screen as owner, nurse and manager, the sign in page, the nurse's private page, the shared roster page, the read receipt page and the single screen test views):
+
+| Page | Baseline serious axe | Final serious axe | Baseline text under 12 px | Final text under 12 px | Final notes (1366, 1024 and 390 px) |
+|---|---|---|---|---|---|
+| Dashboard | 0 | 0 | 7 | 0 | 0 other axe, 0 small targets, 0 sideways scroll |
+| Roster | 13 | 0 | 214 | 0 | 1 level one heading, 0 other axe, 0 small targets, read only day view on a phone |
+| Nurses | 4 | 0 | 32 | 0 | 0 other axe, 0 small targets, 0 sideways scroll |
+| Doctors | 6 | 0 | 31 | 0 | 0 other axe, 0 small targets, 0 sideways scroll |
+| Availability and Requests | 9 | 0 | 43 | 0 | 0 other axe, 0 small targets, 0 sideways scroll |
+| History | 28 | 0 | 127 | 0 | no buttons inside buttons, 0 small targets, 0 sideways scroll |
+| Sent rosters | not in baseline | 0 | not in baseline | 0 | 0 other axe, 0 small targets, 0 sideways scroll |
+| Reports | 13 | 0 | 42 | 0 | 0 other axe, 0 small targets, 0 sideways scroll |
+| Audit trail | not in baseline | 0 | not in baseline | 0 | 0 other axe, 0 small targets, 0 sideways scroll |
+| Settings | not in baseline | 0 | not in baseline | 0 | 0 other axe, 0 small targets, 0 sideways scroll |
+| Nurse's private page | 25 | 0 | 71 | 0 | 0 other axe, 0 small targets, 0 sideways scroll |
+| Shared roster page | 99 | 0 | 157 | 0 | 0 other axe, 0 small targets, 0 sideways scroll |
+| Sign in, read receipt | 0 | 0 | 1 | 0 | 0 other axe, 0 small targets, 0 cut off boxes |
+| Whole app on a 390 px phone | | 0 | | 0 | the content gets the full 390 px of 390 (166 px at baseline), with 0 sideways scroll |
+
+Across all 75 page and width checks: 0 serious or critical axe problems, 0 targets under 24 px, 0 text under 12 px, 0 sideways scroll, 0 cut off boxes and 0 page errors. All signed in `view=app` pages and all public pages also have 0 moderate or minor axe problems, 1 level one heading and 1 main landmark (the bare single screen harness views mount without `AppShell`, where `<main>` lives).
+
+**Roster grid, full size clinic, production build** (`grid-timing.cjs`, median of 7 runs, 60 nurses by 31 days):
+
+| | Baseline | Checkpoint 3 | Final (slower container) | Notes |
+|---|---|---|---|---|
+| Page elements (`dom`) | 12,300 | 12,328 | 9,473 | 2,827 fewer elements than baseline |
+| First cells, in the page | not measured | 450 ms | 1,099 ms | 2,131 ms from the script (`firstCells`, 1,004 ms at baseline) |
+| Cell popup opens, in the page | not measured | 48 ms | 89 ms | under 100 ms even on this slower shared CPU (162 ms from the script, 209 ms at baseline) |
+| One arrow key, in the page | not measured | 27 ms | 53 ms | 42.4 ms from the script (62 ms at baseline); longest blocking task 0 ms |
+| Deleting a shift, in the page | not measured | 86 ms | 275 ms | 300 ms from the script (147 ms at baseline) |
+| Longest blocking task while loading | 341 ms | 274 ms | 429 ms | shared cloud CPU is roughly half the speed of Checkpoint 3's machine |
+
+No grid rendering code grew heavier after Phase 4 cut the grid from 12,328 to 9,473 elements; this cloud container's shared CPU runs roughly 2.2 times slower across every browser task than the Checkpoint 3 machine, while opening the cell popup in the page (89 ms) stays under 100 ms and pressing an arrow key has 0 ms of blocking task time.
+
+**Browser flows** (all 32 scripts in `.claude/skills/browser-check/scripts/`): all 32 pass (0 failures, 0 page errors).

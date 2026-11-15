@@ -9,6 +9,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { CalendarPlus, CircleCheck, CircleX, Clock, History, Plus, RotateCcw } from 'lucide-react';
 import { UserProfile } from '../../services/auth/authService';
 import {
@@ -45,7 +46,7 @@ const STATUS: Record<RequestStatus, { tone: Tone; icon: typeof Clock }> = {
 function useFocusFirstError(errors: object, box: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
     if (Object.keys(errors).length) box.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
-  }, [errors]);
+  }, [errors, box]);
 }
 
 export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
@@ -93,7 +94,7 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
 
   const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
-  const fetchMyData = async () => {
+  const fetchMyData = useLatestCallback(async () => {
     setIsLoading(true);
     try {
       const { leaves, availability } = await listMyRequests(currentUser);
@@ -106,11 +107,11 @@ export const NurseSelfServicePanel: React.FC<NurseSelfServicePanelProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  });
 
   useEffect(() => {
     fetchMyData();
-  }, []);
+  }, [fetchMyData]);
 
   const handleSubmitLeave = async (e: React.FormEvent) => {
     e.preventDefault();

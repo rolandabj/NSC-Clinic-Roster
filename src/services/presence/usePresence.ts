@@ -8,7 +8,7 @@
  * this roster are listened to.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getRepository } from '../repository';
 import { authService } from '../auth/authService';
 import { PresenceRecord } from '../../types';
@@ -25,10 +25,12 @@ export function usePresence(scheduleId: string | null): PresenceRecord[] {
   const recordsRef = useRef<PresenceRecord[]>([]);
   const user = authService.getCurrentUser();
   const uid = user?.uid;
-  const refresh = () => {
+  const userName = user?.name;
+  const userEmail = user?.email;
+  const refresh = useCallback(() => {
     const next = othersOnRoster(recordsRef.current, uid, scheduleId, Date.now());
     setOthers((prev) => (samePeople(prev, next) ? prev : next));
-  };
+  }, [uid, scheduleId]);
 
   // My heartbeat, while this tab is visible.
   useEffect(() => {
@@ -41,8 +43,8 @@ export function usePresence(scheduleId: string | null): PresenceRecord[] {
       const record: PresenceRecord = {
         id,
         uid,
-        name: (user?.name || user?.email || 'A planner').slice(0, 100),
-        email: user?.email || '',
+        name: (userName || userEmail || 'A planner').slice(0, 100),
+        email: userEmail || '',
         scheduleId,
         at: Date.now(),
       };
@@ -63,7 +65,7 @@ export function usePresence(scheduleId: string | null): PresenceRecord[] {
       document.removeEventListener('visibilitychange', onVisibility);
       leave();
     };
-  }, [uid, scheduleId]);
+  }, [uid, scheduleId, userName, userEmail, refresh]);
 
   // Everyone else's records for this roster.
   useEffect(() => {
@@ -80,7 +82,7 @@ export function usePresence(scheduleId: string | null): PresenceRecord[] {
       operator: '==',
       value: scheduleId,
     });
-  }, [uid, scheduleId]);
+  }, [uid, scheduleId, refresh]);
 
   return others;
 }

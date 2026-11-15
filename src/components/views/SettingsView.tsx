@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import {
   Building2,
   Clock,
@@ -103,7 +104,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const repo = getRepository();
 
-  const loadData = async () => {
+  const loadData = useLatestCallback(async () => {
     try {
       const c = await repo.list('clinics');
       if (c.length > 0) {
@@ -145,11 +146,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     } catch (err) {
       console.error('Error loading settings data:', err);
     }
-  };
+  });
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const triggerSaveNotification = (msg: string) => notify(msg, 'success');
 
@@ -257,7 +258,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     if (!stale) return;
     setRules((prev) => prev.map((r) => (r.id === stale.id ? { ...r, name: MAX_CONSECUTIVE_SHIFTS_NAME } : r)));
     repo.update('rules', stale.id, { name: MAX_CONSECUTIVE_SHIFTS_NAME }).catch((err) => console.warn('Could not rename the rule:', err));
-  }, [rules]);
+  }, [rules, repo]);
 
   const saveRules = async () => {
     if (rulesSaving || !rulesChanged) return;
@@ -347,22 +348,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // A tab saved in this browser may not be available to the current user
   // (e.g. Access & Permissions after signing in as someone else).
-  useEffect(() => {
+  const checkTabAccess = useLatestCallback(() => {
     if (!tabs.some((t) => t.id === activeTab)) setActiveTab('clinic');
-  }, [activeTab, isMasterAdmin]);
+  });
+  useEffect(() => {
+    checkTabAccess();
+  }, [activeTab, isMasterAdmin, checkTabAccess]);
 
   // The address names the open tab. Back, Forward or a link to another tab opens it; an
   // address without a tab gets the open one, so the link can be copied.
-  useEffect(() => {
+  const applyAddressTab = useLatestCallback(() => {
     if (!tab) onAddressChange?.({ tab: activeTab }, 'replace');
     else if (tab !== activeTab) {
       setActiveTab(tab as SettingsTab);
     }
-  }, [tab]);
+  });
   useEffect(() => {
+    applyAddressTab();
+  }, [tab, applyAddressTab]);
+  const syncFallbackTab = useLatestCallback(() => {
     if (tab && tab !== activeTab) onAddressChange?.({ tab: activeTab }, 'replace');
     // Only when the tab changes here without a click (a tab this person may not open).
-  }, [activeTab]);
+  });
+  useEffect(() => {
+    syncFallbackTab();
+  }, [activeTab, syncFallbackTab]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-4 text-ink sm:p-6">

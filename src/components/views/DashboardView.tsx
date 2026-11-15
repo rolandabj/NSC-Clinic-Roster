@@ -371,7 +371,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ context, onNavigat
       cancelled = true;
     };
     // dataVersion: all clinic data was deleted, so the dashboard loads again.
-  }, [isPlanner, canApprove, user?.linkedNurseId, attempt, dataVersion]);
+  }, [isPlanner, canApprove, user?.linkedNurseId, attempt, dataVersion, reportProblems]);
 
   const openCreate = onOpenCreateSchedule || (() => onNavigate('schedules'));
   const today = planner?.today || viewer?.today || todayIso(context.timezone);

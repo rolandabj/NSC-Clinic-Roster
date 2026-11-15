@@ -33,6 +33,7 @@ import { escapeHtml, safeColor } from '../../utils/escapeHtml';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 import { isFloatShift } from '../engine/floatShift';
+import { assignmentDoctorIds } from '../engine/clinicModel';
 
 export interface GenerateEmailPayloadParams {
   clinicName: string;
@@ -136,9 +137,10 @@ export class RosterPublishService {
         const dObj = new Date(a.date);
         const weekday = WEEKDAY_NAMES[dObj.getUTCDay()];
 
+        const docIds = assignmentDoctorIds(a);
         let target = 'General Pool';
         if (isFloatShift(a)) target = 'Float';
-        else if (a.doctorId) target = docMap.get(a.doctorId)?.fullName || 'Doctor';
+        else if (docIds.length > 0) target = docIds.map((id) => docMap.get(id)?.fullName || 'Doctor').join(' + ');
         else if (a.clinicalRoleId) target = roleMap.get(a.clinicalRoleId)?.name || 'Clinical Role';
         else if (a.specialtyId) target = spMap.get(a.specialtyId)?.name || 'Specialty';
         target = h(target);
@@ -311,7 +313,7 @@ export class RosterPublishService {
           <!-- Footer -->
           <tr>
             <td style="background-color: #f8fafc; padding: 20px 30px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; line-height: 1.5; text-align: center;">
-              <p style="margin: 0 0 6px 0;">This is an automated operational broadcast from ClinicRoster for <strong>${h(nurse.fullName)}</strong> (${h(nurse.employeeCode)}).</p>
+              <p style="margin: 0 0 6px 0;">This is an automated operational broadcast from NSC Clinic Roster for <strong>${h(nurse.fullName)}</strong> (${h(nurse.employeeCode)}).</p>
               <p style="margin: 0;">Clinic Operations Office · ${h(clinicName)} · Published on ${new Date(version.timestamp).toLocaleString()}</p>
             </td>
           </tr>

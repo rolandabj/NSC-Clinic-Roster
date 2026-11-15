@@ -10,6 +10,7 @@ import { allowanceFor } from '../../services/hours/leaveAllowance';
 import { readableTextOn } from '../../utils/colorContrast';
 import { isWeekendDay } from '../../utils/weekend';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import {
   Lock,
   Plus,
@@ -136,7 +137,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
   const repo = getRepository();
 
-  const loadData = async () => {
+  const loadData = useLatestCallback(async () => {
     try {
       const [nList, ltList, leList, lkList, dwList, dList, spList, crList, hList] =
         await Promise.all([
@@ -171,11 +172,11 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     } catch (err) {
       console.error('Failed to load availability data:', err);
     }
-  };
+  });
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
@@ -473,6 +474,17 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     e.preventDefault();
     if (!editingLockEntry || !editingLockEntry.nurseId || !editingLockEntry.date) return;
 
+    const firstDoc =
+      editingLockEntry.assignmentKind === 'DOCTOR' ? doctors.find((d) => d.id === editingLockEntry.targetRefId) : undefined;
+    const secondDoc =
+      editingLockEntry.assignmentKind === 'DOCTOR' && editingLockEntry.secondTargetRefId
+        ? doctors.find((d) => d.id === editingLockEntry.secondTargetRefId)
+        : undefined;
+    const validSecondTargetRefId =
+      editingLockEntry.mode !== 'OFF' && firstDoc?.lowAcuity && secondDoc?.lowAcuity && secondDoc.id !== firstDoc.id
+        ? secondDoc.id
+        : undefined;
+
     try {
       if (editingLockEntry.id) {
         await repo.update('locks', editingLockEntry.id, {
@@ -480,6 +492,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           dutyWindowId: editingLockEntry.dutyWindowId,
           assignmentKind: editingLockEntry.assignmentKind,
           targetRefId: editingLockEntry.targetRefId,
+          secondTargetRefId: validSecondTargetRefId,
           note: editingLockEntry.note,
         });
         triggerToast('Pinned day updated.');
@@ -491,6 +504,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           dutyWindowId: editingLockEntry.dutyWindowId,
           assignmentKind: editingLockEntry.assignmentKind,
           targetRefId: editingLockEntry.targetRefId,
+          ...(validSecondTargetRefId ? { secondTargetRefId: validSecondTargetRefId } : {}),
           note: editingLockEntry.note || '',
           createdAt: new Date().toISOString(),
         });
@@ -550,8 +564,10 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   // so nobody gets leave hours for them. "Tidy" removes the public holiday leave the old
   // "Apply Public Holidays as PH" button gave everyone, and makes other leave count 0 h on
   // the month's holidays.
-  const monthHolidays = holidays.filter((h) => h.date.startsWith(`${currentYear}-${String(currentMonthIndex + 1).padStart(2, '0')}`));
-  const holidayTidy = useMemo(() => planHolidayLeaveTidy(leaveEntries, leaveTypes, monthHolidays), [leaveEntries, leaveTypes, holidays, currentYear, currentMonthIndex]);
+  const holidayTidy = useMemo(() => {
+    const monthHolidays = holidays.filter((h) => h.date.startsWith(`${currentYear}-${String(currentMonthIndex + 1).padStart(2, '0')}`));
+    return planHolidayLeaveTidy(leaveEntries, leaveTypes, monthHolidays);
+  }, [leaveEntries, leaveTypes, holidays, currentYear, currentMonthIndex]);
   const handleTidyHolidayLeave = async () => {
     const { remove, zero } = holidayTidy;
     if (remove.length + zero.length === 0) return;
@@ -727,6 +743,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                     dutyWindowId: dutyWindows[0]?.id || '',
                     assignmentKind: 'DOCTOR',
                     targetRefId: doctors[0]?.id || '',
+                    secondTargetRefId: '',
                     note: '',
                   });
                   setIsLockModalOpen(true);
@@ -1194,55 +1211,96 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               )}
             </Field>
             {editingLockEntry.mode !== 'OFF' && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Shift">
-                  {(f) => (
-                    <Select {...f} value={editingLockEntry.dutyWindowId} onChange={(e) => setEditingLockEntry({ ...editingLockEntry, dutyWindowId: e.target.value })}>
-                      {dutyWindows.map((dw) => (
-                        <option key={dw.id} value={dw.id}>
-                          {dw.name} ({dw.startTime} to {dw.endTime})
-                        </option>
-                      ))}
-                    </Select>
-                  )}
-                </Field>
-                <Field label="Works with">
-                  {(f) => (
-                    <Select
-                      {...f}
-                      value={editingLockEntry.targetRefId}
-                      onChange={(e) => {
-                        const targetId = e.target.value;
-                        const isDoc = doctors.some((d) => d.id === targetId);
-                        const isRole = clinicalRoles.some((r) => r.id === targetId);
-                        setEditingLockEntry({ ...editingLockEntry, targetRefId: targetId, assignmentKind: isDoc ? 'DOCTOR' : isRole ? 'CLINICAL_ROLE' : 'SPECIALTY' });
-                      }}
+              <>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Shift">
+                    {(f) => (
+                      <Select {...f} value={editingLockEntry.dutyWindowId} onChange={(e) => setEditingLockEntry({ ...editingLockEntry, dutyWindowId: e.target.value })}>
+                        {dutyWindows.map((dw) => (
+                          <option key={dw.id} value={dw.id}>
+                            {dw.name} ({dw.startTime} to {dw.endTime})
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </Field>
+                  <Field label="Works with">
+                    {(f) => (
+                      <Select
+                        {...f}
+                        value={editingLockEntry.targetRefId}
+                        onChange={(e) => {
+                          const targetId = e.target.value;
+                          const targetDoc = doctors.find((d) => d.id === targetId);
+                          const isDoc = !!targetDoc;
+                          const isRole = clinicalRoles.some((r) => r.id === targetId);
+                          const keepSecond =
+                            isDoc &&
+                            targetDoc?.lowAcuity &&
+                            editingLockEntry.secondTargetRefId &&
+                            editingLockEntry.secondTargetRefId !== targetId;
+                          setEditingLockEntry({
+                            ...editingLockEntry,
+                            targetRefId: targetId,
+                            secondTargetRefId: keepSecond ? editingLockEntry.secondTargetRefId : '',
+                            assignmentKind: isDoc ? 'DOCTOR' : isRole ? 'CLINICAL_ROLE' : 'SPECIALTY',
+                          });
+                        }}
+                      >
+                        <optgroup label="Doctors">
+                          {doctors.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.fullName}
+                              {d.lowAcuity ? ' · Low acuity' : ''}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Nurse roles">
+                          {clinicalRoles.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name} ({r.acronym})
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Specialties">
+                          {specialties.map((sp) => (
+                            <option key={sp.id} value={sp.id}>
+                              {sp.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </Select>
+                    )}
+                  </Field>
+                </div>
+                {editingLockEntry.assignmentKind === 'DOCTOR' &&
+                  doctors.find((d) => d.id === editingLockEntry.targetRefId)?.lowAcuity && (
+                    <Field
+                      label="Second low acuity doctor"
+                      optional
+                      hint="One nurse can cover up to two low acuity doctors on the same day."
                     >
-                      <optgroup label="Doctors">
-                        {doctors.map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.fullName}
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="Nurse roles">
-                        {clinicalRoles.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name} ({r.acronym})
-                          </option>
-                        ))}
-                      </optgroup>
-                      <optgroup label="Specialties">
-                        {specialties.map((sp) => (
-                          <option key={sp.id} value={sp.id}>
-                            {sp.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    </Select>
+                      {(f) => {
+                        const otherLowDocs = doctors.filter((d) => d.lowAcuity && d.id !== editingLockEntry.targetRefId);
+                        return (
+                          <Select
+                            {...f}
+                            value={editingLockEntry.secondTargetRefId || ''}
+                            onChange={(e) => setEditingLockEntry({ ...editingLockEntry, secondTargetRefId: e.target.value })}
+                            disabled={otherLowDocs.length === 0}
+                          >
+                            <option value="">None (one doctor only)</option>
+                            {otherLowDocs.map((d) => (
+                              <option key={d.id} value={d.id}>
+                                {d.fullName}
+                              </option>
+                            ))}
+                          </Select>
+                        );
+                      }}
+                    </Field>
                   )}
-                </Field>
-              </div>
+              </>
             )}
             <Field label="Note" optional hint="For example, asked for by the clinic manager.">
               {(f) => <Input {...f} value={editingLockEntry.note || ''} onChange={(e) => setEditingLockEntry({ ...editingLockEntry, note: e.target.value })} />}

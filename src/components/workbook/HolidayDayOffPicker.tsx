@@ -39,7 +39,7 @@ export const HolidayDayOffPicker: React.FC<HolidayDayOffPickerProps> = ({ nurseN
   };
 
   return (
-    <div className="space-y-1.5 text-[11px] text-slate-700">
+    <div className="space-y-1.5 text-xs text-slate-700">
       <label htmlFor={inputId} className="block">
         Day off {nurseName} chose for working {holidayName || 'the public holiday'} ({formatDate(holidayDate)}):
       </label>

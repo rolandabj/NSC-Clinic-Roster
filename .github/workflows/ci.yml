@@ -19,6 +19,7 @@ jobs:
       # --legacy-peer-deps: esbuild and vite declare overlapping peer ranges.
       - run: npm install --no-audit --no-fund --legacy-peer-deps
       - run: npx tsc --noEmit
+      - run: npx eslint . --max-warnings 0
       - run: npm test
       - run: npm run build
       - run: node --import tsx tests/integration/emailServer.test.ts

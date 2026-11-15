@@ -32,11 +32,49 @@ const fmt = (n: number) => String(Math.round(n * 10) / 10);
 const hoursText = (r: NurseDayExplanation) =>
   r.hours.goal > 0 ? `${fmt(r.hours.worked)} / ${fmt(r.hours.goal)} h` : `${fmt(r.hours.worked)} h`;
 
-export const WhoCanCover: React.FC<WhoCanCoverProps> = ({ date, hour, onPick, maxBlocked = 4, ...data }) => {
+export const WhoCanCover: React.FC<WhoCanCoverProps> = ({
+  date,
+  hour,
+  onPick,
+  maxBlocked = 4,
+  schedule,
+  assignments,
+  nurses,
+  dutyWindows,
+  leaveEntries,
+  locks,
+  roles,
+  rules,
+  seniorityLevels,
+  workingHoursPeriods,
+  hoursHistory,
+  leaveTypes,
+  priorAssignments,
+  availabilityRequests,
+  sessions,
+  doctors,
+}) => {
   const [showAllBlocked, setShowAllBlocked] = useState(false);
 
   const { free, off } = useMemo(() => {
-    const list = explainDay(date, data);
+    const list = explainDay(date, {
+      schedule,
+      assignments,
+      nurses,
+      dutyWindows,
+      leaveEntries,
+      locks,
+      roles,
+      rules,
+      seniorityLevels,
+      workingHoursPeriods,
+      hoursHistory,
+      leaveTypes,
+      priorAssignments,
+      availabilityRequests,
+      sessions,
+      doctors,
+    });
     const free: NurseDayExplanation[] = [];
     const off: { r: NurseDayExplanation; reason: string }[] = [];
     for (const r of list) {
@@ -52,28 +90,30 @@ export const WhoCanCover: React.FC<WhoCanCoverProps> = ({ date, hour, onPick, ma
   }, [
     date,
     hour,
-    data.schedule,
-    data.assignments,
-    data.nurses,
-    data.dutyWindows,
-    data.leaveEntries,
-    data.locks,
-    data.roles,
-    data.rules,
-    data.seniorityLevels,
-    data.workingHoursPeriods,
-    data.hoursHistory,
-    data.leaveTypes,
-    data.priorAssignments,
-    data.availabilityRequests,
+    schedule,
+    assignments,
+    nurses,
+    dutyWindows,
+    leaveEntries,
+    locks,
+    roles,
+    rules,
+    seniorityLevels,
+    workingHoursPeriods,
+    hoursHistory,
+    leaveTypes,
+    priorAssignments,
+    availabilityRequests,
+    sessions,
+    doctors,
   ]);
 
   const shownOff = showAllBlocked ? off : off.slice(0, maxBlocked);
 
   return (
-    <div className="text-[11px] font-sans space-y-1.5">
+    <div className="text-xs font-sans space-y-1.5">
       <div>
-        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
           {hour ? `Free to work at ${hour}` : 'Free to work'}
         </span>
         {free.length === 0 ? (
@@ -117,7 +157,7 @@ export const WhoCanCover: React.FC<WhoCanCoverProps> = ({ date, hour, onPick, ma
 
       {off.length > 0 && (
         <div>
-          <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">Can’t take it</span>
+          <span className="block text-xs font-semibold uppercase tracking-wide text-slate-500">Can’t take it</span>
           <ul className="space-y-0.5">
             {shownOff.map(({ r, reason }) => (
               <li key={r.nurseId} className="leading-snug text-slate-600">

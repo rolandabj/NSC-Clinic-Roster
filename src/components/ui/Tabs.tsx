@@ -66,7 +66,7 @@ export const Tabs: React.FC<{
   return (
     // relative: text kept for screen readers only (sr-only, placed absolutely) stays inside the
     // row's sideways scroll; otherwise a tab scrolled out of view widened the whole page.
-    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className={cx('relative flex gap-1 overflow-x-auto border-b border-line px-2', className)}>
+    <div role="tablist" aria-label={label} className={cx('relative flex gap-1 overflow-x-auto border-b border-line px-2', className)}>
       {tabs.map((tab, i) => {
         const selected = tab.id === value;
         return (
@@ -81,6 +81,7 @@ export const Tabs: React.FC<{
             aria-selected={selected}
             aria-controls={panelId ? (selected ? panelId : undefined) : `${idPrefix}-panel-${tab.id}`}
             tabIndex={selected ? 0 : -1}
+            onKeyDown={onKeyDown}
             onClick={() => onChange(tab.id)}
             className={cx(
               '-mb-px inline-flex h-11 shrink-0 items-center gap-2 border-b-2 px-3 text-sm whitespace-nowrap transition-colors duration-150',

@@ -20,7 +20,7 @@ const addDays = (date: string, days: number) => {
 /** Cells (nurse and day) whose shift differs between two lists; pinning counts as a change. */
 export function countChangedCells(before: Assignment[], now: Assignment[]): number {
   const sig = (a: Assignment) =>
-    `${a.dutyWindowId}|${a.kind}|${a.doctorId || ''}|${a.clinicalRoleId || ''}|${a.specialtyId || ''}|${a.locked ? 'pinned' : ''}`;
+    `${a.dutyWindowId}|${a.kind}|${a.doctorId || ''}|${a.secondDoctorId || ''}|${a.clinicalRoleId || ''}|${a.specialtyId || ''}|${a.locked ? 'pinned' : ''}`;
   const cells = (list: Assignment[]) => {
     const m = new Map<string, string>();
     for (const a of list) m.set(`${a.nurseId}|${a.date}`, sig(a));

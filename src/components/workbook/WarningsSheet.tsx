@@ -55,7 +55,7 @@ export const WarningsSheet: React.FC<WarningsSheetProps> = ({
         <div className="flex flex-wrap items-center gap-3">
           {/* Filters */}
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 text-[11px]">Type:</span>
+            <span className="text-slate-500 text-xs">Type:</span>
             <select aria-label="Type of problem"
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value as any)}
@@ -71,7 +71,7 @@ export const WarningsSheet: React.FC<WarningsSheetProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 text-[11px]">How serious:</span>
+            <span className="text-slate-500 text-xs">How serious:</span>
             <select aria-label="How serious"
               value={severityFilter}
               onChange={(e) => setSeverityFilter(e.target.value as any)}
@@ -87,7 +87,7 @@ export const WarningsSheet: React.FC<WarningsSheetProps> = ({
           <div className="h-4 w-px bg-slate-200" />
 
           {/* Counts */}
-          <div className="flex items-center gap-1.5 text-[11px]">
+          <div className="flex items-center gap-1.5 text-xs">
             <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 font-bold">
               {validationReport.errorCount} {SEVERITY_LABELS.ERROR}
             </span>
@@ -134,7 +134,7 @@ export const WarningsSheet: React.FC<WarningsSheetProps> = ({
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span
-                      className={`px-1.5 py-0.2 rounded font-bold text-[10px] ${
+                      className={`px-1.5 py-0.2 rounded font-bold text-xs ${
                         isError
                           ? 'bg-red-100 text-red-800'
                           : isWarn
@@ -149,7 +149,7 @@ export const WarningsSheet: React.FC<WarningsSheetProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
                     {finding.date && <span>Date: {formatDate(finding.date)}</span>}
                     {finding.hour && !finding.message.includes(finding.hour) && <span>Time: {finding.hour}</span>}
                     {finding.affectedNurseIds.length > 0 && (
@@ -180,7 +180,7 @@ export const WarningsSheet: React.FC<WarningsSheetProps> = ({
             {validationReport.findings.length === 0 ? (
               <>
                 <p className="font-medium text-slate-700">No problems found.</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 mt-0.5">
                   The roster follows the clinic's rules and has enough nurses on every shift.
                 </p>
               </>

@@ -38,6 +38,7 @@ import { notify } from '../common/dialogs';
 import { authService } from '../../services/auth/authService';
 import { formatDate } from '../../utils/dateUtils';
 import { swapShifts } from '../../services/schedule/shiftMoves';
+import { assignmentDoctorIds } from '../../services/engine/clinicModel';
 
 /** One empty list for absent props, so the checks below aren't redone on every render. */
 const NONE: never[] = [];
@@ -274,8 +275,9 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
   const summaryOf = (asgn?: Assignment) => {
     if (!asgn) return <p className="text-ink-muted">No shift chosen.</p>;
     const dw = dutyMap.get(asgn.dutyWindowId);
+    const docIds = assignmentDoctorIds(asgn);
     let target = 'Clinic';
-    if (asgn.doctorId) target = docMap.get(asgn.doctorId)?.fullName || 'Doctor';
+    if (docIds.length > 0) target = docIds.map((id) => docMap.get(id)?.fullName || 'Doctor').join(' + ');
     else if (asgn.clinicalRoleId) target = roleMap.get(asgn.clinicalRoleId)?.name || 'Clinic task';
     return (
       <div className="space-y-1 rounded-lg border border-line bg-sunken p-3">

@@ -97,7 +97,7 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
                       {nurseMap.get(lock.nurseId)?.fullName}
                     </td>
                     <td className="py-2 px-3">
-                      <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-bold text-[10px]">
+                      <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 font-bold text-xs">
                         {lock.mode === 'OFF' ? 'Day off' : 'Working'}
                       </span>
                     </td>
@@ -153,7 +153,7 @@ export const LeaveAndLocksSheet: React.FC<LeaveAndLocksSheetProps> = ({
                       </td>
                       <td className="py-2 px-3">
                         <span
-                          className="px-1.5 py-0.2 rounded text-white font-bold text-[10px]"
+                          className="px-1.5 py-0.2 rounded text-white font-bold text-xs"
                           style={{ backgroundColor: lt?.color || '#f59e0b' }}
                         >
                           {lt ? `${lt.acronym}: ${lt.name}` : 'Unknown type'}

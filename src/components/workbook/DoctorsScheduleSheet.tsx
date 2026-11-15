@@ -9,6 +9,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { Doctor, DoctorSession, Specialty, Schedule, Assignment, Nurse } from '../../types';
+import { assignmentCoversDoctor, assignmentDoctorIds } from '../../services/engine/clinicModel';
 import { formatDate } from '../../utils/dateUtils';
 import { getRepository } from '../../services/repository';
 import { EditDoctorShiftModal } from '../modals/EditDoctorShiftModal';
@@ -101,10 +102,12 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
   const filteredDoctors = useMemo(() => {
     return doctors.filter((doc) => {
       const matchesSpecialty = selectedSpecialty === 'ALL' || doc.specialtyIds.includes(selectedSpecialty);
+      const q = searchQuery.toLowerCase();
       const matchesSearch =
         !searchQuery ||
-        doc.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        doc.specialtyIds.some((sId) => specialtyMap.get(sId)?.name.toLowerCase().includes(searchQuery.toLowerCase()));
+        doc.fullName.toLowerCase().includes(q) ||
+        (doc.lowAcuity && 'low acuity'.includes(q)) ||
+        doc.specialtyIds.some((sId) => specialtyMap.get(sId)?.name.toLowerCase().includes(q));
       return matchesSpecialty && matchesSearch;
     });
   }, [doctors, selectedSpecialty, searchQuery, specialtyMap]);
@@ -242,11 +245,11 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
             <Stethoscope className="w-4 h-4 text-indigo-600" />
             <span>Doctors&apos; clinics</span>
           </div>
-          <span className="px-2 py-0.5 rounded font-mono text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+          <span className="px-2 py-0.5 rounded font-mono text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
             {totalSessionsInView} clinic{totalSessionsInView === 1 ? '' : 's'}
           </span>
           <span className="text-slate-400 hidden sm:inline">·</span>
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-mono hidden md:flex">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono hidden md:flex">
             <span>Click a day to change it</span>
             <span className="text-slate-300">|</span>
             <span className="text-indigo-600 font-bold">↻ Every week</span>
@@ -270,7 +273,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
 
           {/* Specialty Filter */}
           <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 text-[11px]">Specialty:</span>
+            <span className="text-slate-500 text-xs">Specialty:</span>
             <select aria-label="Specialty"
               value={selectedSpecialty}
               onChange={(e) => setSelectedSpecialty(e.target.value)}
@@ -328,7 +331,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
               <th className="sticky left-0 bg-slate-50 z-40 border-r border-slate-300 py-1.5 px-3 text-left font-semibold text-slate-800 w-52 shadow-xs">
                 <div className="flex items-center justify-between">
                   <span>Doctor / Department</span>
-                  <span className="text-[10px] text-slate-400 font-normal">
+                  <span className="text-xs text-slate-400 font-normal">
                     {filteredDoctors.length} doctor{filteredDoctors.length === 1 ? '' : 's'}
                   </span>
                 </div>
@@ -346,7 +349,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                       isWeekend ? 'bg-slate-200/70 text-slate-800' : 'bg-slate-50 text-slate-700'
                     }`}
                   >
-                    <div className="text-[10px] font-normal leading-tight">
+                    <div className="text-xs font-normal leading-tight">
                       {WEEKDAY_ABBR[weekday]}
                     </div>
                     <div className="text-xs font-bold">{day}</div>
@@ -373,12 +376,13 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                         <span className="font-semibold text-slate-900 block text-xs truncate">
                           {doc.fullName}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-mono truncate block">
+                        <span className="text-xs text-slate-400 font-mono truncate block">
                           {docSpecialty?.name || 'General Clinic'}
+                          {doc.lowAcuity ? ' · Low acuity' : ''}
                         </span>
                       </div>
                       <span
-                        className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 text-slate-600 shrink-0"
+                        className="px-1.5 py-0.5 rounded text-xs font-mono font-bold bg-slate-100 text-slate-600 shrink-0"
                         title={`${docSessionsInView} clinic${docSessionsInView === 1 ? '' : 's'} on these days`}
                       >
                         {docSessionsInView}
@@ -391,8 +395,12 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                       (s) => s.doctorId === doc.id && s.date === dateStr && !s.cancelled
                     );
                     const pairedAssignment = assignments?.find(
-                      (a) => a.kind === 'DOCTOR' && a.doctorId === doc.id && a.date === dateStr
+                      (a) => a.date === dateStr && assignmentCoversDoctor(a, doc.id)
                     );
+                    const otherDocId = pairedAssignment
+                      ? assignmentDoctorIds(pairedAssignment).find((id) => id !== doc.id)
+                      : undefined;
+                    const otherDoc = otherDocId ? doctors.find((d) => d.id === otherDocId) : undefined;
                     const pairedNurse = pairedAssignment ? nurses?.find((n) => n.id === pairedAssignment.nurseId) : null;
                     const nursePref = pairedNurse?.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === doc.id);
                     const nurseSpecPref = !nursePref && pairedNurse && doc.specialtyIds
@@ -444,12 +452,12 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                                 handleCellClick(doc, dateStr);
                               }
                             }}
-                            className={`w-full h-full rounded p-1 flex flex-col justify-center text-[10px] leading-tight cursor-pointer transition-all shadow-2xs group relative ${
+                            className={`w-full h-full rounded p-1 flex flex-col justify-center text-xs leading-tight cursor-pointer transition-all shadow-2xs group relative ${
                               isAllocationMismatch
                                 ? 'bg-rose-50 border border-rose-300 text-rose-950 hover:bg-rose-100'
                                 : 'bg-indigo-50 border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-100/90 text-indigo-900'
                             }`}
-                            title={`Click to change: ${sess.startTime}–${sess.endTime}${sess.room ? ` in ${sess.room}` : ''} (${sess.source === 'PATTERN' ? 'every week' : 'this day only'})${pairedNurse ? `\nNurse: ${pairedNurse.fullName} (${nurseRankDesc})` : '\nNo nurse with this doctor yet'}`}
+                            title={`Click to change: ${sess.startTime}–${sess.endTime}${sess.room ? ` in ${sess.room}` : ''} (${sess.source === 'PATTERN' ? 'every week' : 'this day only'})${pairedNurse ? `\nNurse: ${pairedNurse.fullName} (${nurseRankDesc}${otherDoc ? `, shared with ${otherDoc.fullName}` : ''})` : '\nNo nurse with this doctor yet'}`}
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-bold font-mono">
@@ -458,7 +466,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                               <div className="flex items-center gap-0.5">
                                 {priorityBadge && (
                                   <span
-                                    className={`text-[8px] font-bold px-1 py-0.2 rounded ${
+                                    className={`text-xs font-bold px-1 py-0.2 rounded ${
                                       priorityBadge === 'Mismatch'
                                         ? 'bg-rose-100 text-rose-800 border border-rose-300 font-extrabold'
                                         : priorityBadge === 'P1'
@@ -474,14 +482,14 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                                 )}
                                 {sess.source === 'PATTERN' ? (
                                   <span
-                                    className="text-[9px] text-indigo-600 font-bold"
+                                    className="text-xs text-indigo-600 font-bold"
                                     title="Every week"
                                   >
                                     ↻
                                   </span>
                                 ) : (
                                   <span
-                                    className="text-[9px] text-amber-600 font-bold"
+                                    className="text-xs text-amber-600 font-bold"
                                     title="This day only"
                                   >
                                     ★
@@ -489,7 +497,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center justify-between text-[9px] text-slate-500 mt-0.5">
+                            <div className="flex items-center justify-between text-xs text-slate-500 mt-0.5">
                               <span className="truncate max-w-[50px] font-medium text-slate-700">
                                 {pairedNurse ? pairedNurse.fullName.split(' ')[0] : (sess.room || 'Room')}
                               </span>

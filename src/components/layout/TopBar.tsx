@@ -124,6 +124,7 @@ const AccountMenu: React.FC<{ name: string; email: string; role: string; onOpenA
   return (
     <div
       ref={wrapRef}
+      role="presentation"
       className="relative"
       onKeyDown={(e) => {
         if (e.key === 'Escape' && open) {

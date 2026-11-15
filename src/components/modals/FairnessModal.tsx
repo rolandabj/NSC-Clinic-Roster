@@ -128,8 +128,8 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
   const [yearToDate, setYearToDate] = useState<YearToDate | null>(null);
   const [yearStatus, setYearStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   // Reload only when what the totals depend on changes (the role list may be a new array each time).
-  const yearInputs = useRef({ schedule, dutyWindows, holidays, roles });
-  yearInputs.current = { schedule, dutyWindows, holidays, roles };
+  const yearInputs = useRef({ schedule, dutyWindows, holidays, roles, lateThreshold });
+  yearInputs.current = { schedule, dutyWindows, holidays, roles, lateThreshold };
   const yearKey = [
     schedule.id,
     schedule.startDate,
@@ -142,7 +142,7 @@ export const FairnessModal: React.FC<FairnessModalProps> = ({
     if (!isOpen) return;
     let cancelled = false;
     setYearStatus('loading');
-    const { schedule, dutyWindows, holidays, roles } = yearInputs.current;
+    const { schedule, dutyWindows, holidays, roles, lateThreshold } = yearInputs.current;
     loadYearToDate(getRepository(), schedule, dutyWindows, holidays.map((h) => h.date), { lateThreshold, roles })
       .then((ytd) => {
         if (cancelled) return;

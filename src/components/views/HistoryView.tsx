@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { usePermissions } from '../common/usePermissions';
 import { notify } from '../common/dialogs';
 import { ChevronLeft, ChevronRight, Diff, Download, History, Lock, Maximize2, RotateCcw, Search, Trash2 } from 'lucide-react';
@@ -119,7 +120,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
 
   const repo = getRepository();
 
-  const loadData = async () => {
+  const loadData = useLatestCallback(async () => {
     try {
       const [schedList, asgnList, vList, nList, dwList, dList, sessList, crList, spList, leList, ltList, sList, rList] =
         await Promise.all([
@@ -155,11 +156,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ context }) => {
       console.error('Error loading History:', err);
       setLoadState('failed');
     }
-  };
+  });
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const shown = useMemo(() => filterVersions(versions, filters), [versions, filters]);
   const years = useMemo(() => versionYears(versions), [versions]);

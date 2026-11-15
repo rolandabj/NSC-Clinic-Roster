@@ -155,7 +155,7 @@ export const DateInput: React.FC<
   const calendar = useRef<HTMLInputElement>(null);
   useEffect(() => {
     // Only a new value from outside (the calendar, a reset) replaces what was typed.
-    if (value && parseDayMonthYear(text) !== value) setText(formatDate(value));
+    if (value) setText((prev) => (parseDayMonthYear(prev) !== value ? formatDate(value) : prev));
   }, [value]);
   return (
     <div className="relative">

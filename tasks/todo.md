@@ -64,7 +64,7 @@ Main moves only when the owner says "push to main".
 - [x] Checkpoint 6 (item 80)
 
 ## Phase 7: publishing, History and dialogs
-- [ ] Every dialog on the shared `Dialog` (slice 1, Leave and days off: item 83; slice 2, Requests and Doctors: item 84; slice 3a, roster screen smaller dialogs: item 85; slice 3b, editing dialogs: item 86; slice 3c, large forms: item 87; slice 4, Settings: item 88; slice 5, History: item 89; slice 6a, Publish: item 90; slice 6b, Sent rosters: item 91; the sign in dialog and the Audit trail inspector move in Phase 8)
+- [x] Every dialog on the shared `Dialog` (slice 1, Leave and days off: item 83; slice 2, Requests and Doctors: item 84; slice 3a, roster screen smaller dialogs: item 85; slice 3b, editing dialogs: item 86; slice 3c, large forms: item 87; slice 4, Settings: item 88; slice 5, History: item 89; slice 6a, Publish: item 90; slice 6b, Sent rosters: item 91; the sign in dialog and the Audit trail inspector move in Phase 8)
 - [x] One publish flow; Sent rosters screen with paging (items 90 and 91); remove the Invitations tab from Share links and point to Settings, Access and permissions (the owner chose option 1 on 17-10-2026)
 - [x] Resume a stopped publish (slice 7, item 92)
 - [x] History tidied (slice 5, item 89)
@@ -79,6 +79,6 @@ Main moves only when the owner says "push to main".
 
 ## Phase 9: tidy up and final audit
 - [x] Dead code and unused packages (item 105)
-- [ ] Package name and page description
-- [ ] ESLint in CI
-- [ ] Final audit and guide section 13
+- [x] Package name and page description (item 107)
+- [x] ESLint in CI (item 109)
+- [x] Final audit and guide section 13 (items 110 and 111)

@@ -10,6 +10,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { Download, History, Search } from 'lucide-react';
 import type { ClinicContextState } from '../../types/navigation';
 import type { AuditEvent } from '../../types';
@@ -38,7 +39,7 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = () => {
   const [filters, setFilters] = useState<AuditFilters>({ action: 'ALL', search: '' });
   const [open, setOpen] = useState<AuditEvent | null>(null);
 
-  const load = async (from?: unknown) => {
+  const load = useLatestCallback(async (from?: unknown) => {
     setLoading(true);
     setError('');
     try {
@@ -51,7 +52,7 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = () => {
     } finally {
       setLoading(false);
     }
-  };
+  });
 
   useEffect(() => {
     load();
@@ -59,7 +60,7 @@ export const AuditTrailView: React.FC<AuditTrailViewProps> = () => {
     countOf(repo, 'audit')
       .then(setTotal)
       .catch(() => setTotal(null));
-  }, []);
+  }, [load, repo]);
 
   const shown = useMemo(() => filterAudit(events, filters), [events, filters]);
   const filtering = filters.action !== 'ALL' || filters.search.trim() !== '';

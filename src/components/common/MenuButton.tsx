@@ -71,8 +71,7 @@ export const MenuButton: React.FC<MenuButtonProps> = ({ label, ariaLabel, items,
     };
     document.addEventListener('mousedown', onDown);
     // Focus the first item that can be used.
-    const first = items.findIndex((i) => !i.disabled);
-    if (first >= 0) itemRefs.current[first]?.focus();
+    itemRefs.current.find((el) => el && !el.disabled)?.focus();
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
@@ -116,6 +115,7 @@ export const MenuButton: React.FC<MenuButtonProps> = ({ label, ariaLabel, items,
         <div
           id={menuId}
           role="menu"
+          tabIndex={-1}
           onKeyDown={(e) => {
             const index = itemRefs.current.findIndex((el) => el === document.activeElement);
             if (e.key === 'Escape') {

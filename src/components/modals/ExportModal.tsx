@@ -11,7 +11,7 @@ import { loadClinicSetup } from '../../services/engine/clinicSetupService';
 import { getRepository } from '../../services/repository';
 
 import { resolveFullTimeTarget } from '../../services/hours/hoursPolicy';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Download,
   Printer,
@@ -49,6 +49,7 @@ import {
   NurseHoursAccounting,
 } from '../../services/reports/hoursAccounting';
 import { isFloatShift } from '../../services/engine/floatShift';
+import { assignmentDoctorIds } from '../../services/engine/clinicModel';
 
 interface ExportModalProps {
   clinicName: string;
@@ -117,13 +118,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [historyError, setHistoryError] = useState<string | null>(null);
   const clinicSetup = providedClinicSetup || loadedClinicSetup;
   const workingHoursPeriods = providedPeriods.length ? providedPeriods : loadedPeriods;
+  const scheduleRef = useRef(schedule);
+  scheduleRef.current = schedule;
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
     setLoadedClinicSetup(undefined);
     setHistoryError(null);
     const repo = getRepository();
-    Promise.all([loadClinicSetup(repo, schedule, { withYearToDate: false }), repo.list('workingHoursPeriods')])
+    Promise.all([loadClinicSetup(repo, scheduleRef.current, { withYearToDate: false }), repo.list('workingHoursPeriods')])
       .then(([setup, periods]) => { if (!cancelled) { setLoadedClinicSetup(setup); setLoadedPeriods(periods); } })
       .catch(() => { if (!cancelled) setHistoryError('The saved hours history could not be loaded. Close this dialog and try again.'); });
     return () => { cancelled = true; };
@@ -578,9 +581,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                           );
                         } else if (asgn) {
                           const duty = dutyMap.get(asgn.dutyWindowId);
+                          const docIds = assignmentDoctorIds(asgn);
                           let targetCode = '';
-                          if (asgn.doctorId) {
-                            targetCode = doctorMap.get(asgn.doctorId)?.fullName.split(' ')[1] || 'Dr';
+                          if (docIds.length > 0) {
+                            targetCode = docIds
+                              .map((id) => doctorMap.get(id)?.fullName.replace(/^Dr\.?\s+/i, '').trim().split(/\s+/)[0] || 'Dr')
+                              .join('+');
                           } else if (asgn.clinicalRoleId) {
                             targetCode = roleMap.get(asgn.clinicalRoleId)?.acronym || 'PHL';
                           }
@@ -715,6 +721,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                         <td className="border border-black p-1 font-sans">
                           {entry.assignment && isFloatShift(entry.assignment)
                             ? 'Float'
+                            : entry.assignment && assignmentDoctorIds(entry.assignment).length > 0
+                            ? assignmentDoctorIds(entry.assignment)
+                                .map((id) => doctorMap.get(id)?.fullName || 'Doctor')
+                                .join(' + ')
                             : entry.doctor
                             ? entry.doctor.fullName
                             : entry.clinicalRole

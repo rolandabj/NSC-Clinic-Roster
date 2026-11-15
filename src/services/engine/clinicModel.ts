@@ -146,10 +146,32 @@ export function canBeFreeNurse(nurse: Nurse | undefined, roles: ClinicalRole[]):
   return !phl || nurse.capabilityIds.includes(phl.id);
 }
 
+/** Distinct doctor ids covered by this shift (up to two when paired on low acuity clinics). */
+export function assignmentDoctorIds(
+  assignment: Pick<Assignment, 'kind' | 'doctorId' | 'secondDoctorId'> | undefined
+): string[] {
+  if (!assignment || assignment.kind !== 'DOCTOR') return [];
+  const ids: string[] = [];
+  if (assignment.doctorId) ids.push(assignment.doctorId);
+  if (assignment.secondDoctorId && assignment.secondDoctorId !== assignment.doctorId) {
+    ids.push(assignment.secondDoctorId);
+  }
+  return ids;
+}
+
+/** True when this shift covers the given doctor as either primary or second doctor. */
+export function assignmentCoversDoctor(
+  assignment: Pick<Assignment, 'kind' | 'doctorId' | 'secondDoctorId'> | undefined,
+  doctorId: string
+): boolean {
+  if (!assignment || assignment.kind !== 'DOCTOR' || !doctorId) return false;
+  return assignment.doctorId === doctorId || assignment.secondDoctorId === doctorId;
+}
+
 /**
  * Is this shift a free nurse during [start, end)? She must be on duty then, and
- * not with a doctor at that time: a doctor's nurse whose shift runs past the
- * doctor's session is free once the doctor has left.
+ * not with any of her assigned doctors at that time: a doctor's nurse whose shift
+ * runs past the clinic session is free once all of her doctors have left.
  */
 export function isFreeDuring(
   assignment: Assignment,
@@ -159,9 +181,12 @@ export function isFreeDuring(
   end: string
 ): boolean {
   if (!duty || !overlaps(duty.startTime, duty.endTime, start, end)) return false;
-  if (assignment.kind !== 'DOCTOR' || !assignment.doctorId) return true;
-  const session = daySessions.find((s) => s.doctorId === assignment.doctorId);
-  return !session || !overlaps(session.startTime, session.endTime, start, end);
+  const doctorIds = assignmentDoctorIds(assignment);
+  if (doctorIds.length === 0) return true;
+  return !doctorIds.some((docId) => {
+    const session = daySessions.find((s) => s.doctorId === docId);
+    return !!session && overlaps(session.startTime, session.endTime, start, end);
+  });
 }
 
 /** Minutes of [start, end) that a duty covers. */

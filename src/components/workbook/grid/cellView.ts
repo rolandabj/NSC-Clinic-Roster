@@ -11,7 +11,7 @@ import type {
   Specialty,
 } from '../../../types';
 import { leaveCreditOnDate } from '../../../services/hours/hoursPolicy';
-import { nurseClinicRoleOf } from '../../../services/engine/clinicModel';
+import { assignmentDoctorIds, nurseClinicRoleOf } from '../../../services/engine/clinicModel';
 import { isFloatShift } from '../../../services/engine/floatShift';
 import { describeRequest } from '../../../services/engine/explainCell';
 import { formatDayDate } from '../../../utils/dateUtils';
@@ -216,12 +216,24 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     !!asgn?.note?.toLowerCase().includes('float pool') ||
     !!asgn?.note?.toLowerCase().includes('general clinic');
 
+  const secondDocId =
+    asgn?.kind === 'DOCTOR' && asgn.doctorId && asgn.secondDoctorId && asgn.secondDoctorId !== asgn.doctorId && !isFloatShift(asgn)
+      ? asgn.secondDoctorId
+      : undefined;
+
   if (asgn && isFloatShift(asgn)) {
     // Not with a doctor: the roster says Float (not a department)
     doctorName = 'Float';
   } else if (asgn?.doctorId) {
     const d = doctorMap.get(asgn.doctorId);
-    doctorName = d ? withoutDr(d.fullName) : '';
+    const first = d ? withoutDr(d.fullName) : '';
+    if (secondDocId) {
+      const d2 = doctorMap.get(secondDocId);
+      const second = d2 ? withoutDr(d2.fullName) : '';
+      doctorName = [first, second].filter(Boolean).join(' + ');
+    } else {
+      doctorName = first;
+    }
   } else if (asgn?.clinicalRoleId) {
     const r = roleMap.get(asgn.clinicalRoleId);
     if (asgn.clinicalRoleId === 'role-float') {
@@ -238,22 +250,37 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     doctorName = 'Float';
   }
   // The cell shows the doctor's short name; the tooltip and the spoken name say who in full.
-  const shownName = asgn?.doctorId && !isFloatShift(asgn) ? lookups.doctorShort.get(asgn.doctorId) || doctorName : doctorName;
+  const shownName =
+    asgn?.doctorId && !isFloatShift(asgn)
+      ? secondDocId
+        ? [
+            lookups.doctorShort.get(asgn.doctorId) || (doctorMap.get(asgn.doctorId) ? withoutDr(doctorMap.get(asgn.doctorId)!.fullName) : ''),
+            lookups.doctorShort.get(secondDocId) || (doctorMap.get(secondDocId) ? withoutDr(doctorMap.get(secondDocId)!.fullName) : ''),
+          ]
+            .filter(Boolean)
+            .join(' + ')
+        : lookups.doctorShort.get(asgn.doctorId) || doctorName
+      : doctorName;
 
   const docObj = asgn?.doctorId ? doctorMap.get(asgn.doctorId) : undefined;
-  const docPref = asgn?.doctorId ? nurse.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === asgn.doctorId) : undefined;
-  const specPref =
-    !docPref && docObj && docObj.specialtyIds
+  const secondDocObj = secondDocId ? doctorMap.get(secondDocId) : undefined;
+  const docPrefOf = (docId?: string) => (docId ? nurse.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === docId) : undefined);
+  const specPrefOf = (doc?: Doctor, hasDirect?: boolean) =>
+    !hasDirect && doc && doc.specialtyIds
       ? nurse.preferences?.find(
           (p) =>
             p.kind === 'SPECIALTY' &&
-            (docObj.specialtyIds.includes(p.refId) ||
-              docObj.specialtyIds.some((sid) => {
+            (doc.specialtyIds.includes(p.refId) ||
+              doc.specialtyIds.some((sid) => {
                 const sCode = specialtyMap.get(sid)?.code?.toLowerCase();
                 return sCode && p.refId.toLowerCase().includes(sCode);
               }))
         )
       : undefined;
+  const docPref = docPrefOf(asgn?.doctorId);
+  const specPref = specPrefOf(docObj, !!docPref);
+  const secondDocPref = docPrefOf(secondDocId);
+  const secondSpecPref = specPrefOf(secondDocObj, !!secondDocPref);
 
   // The doctor or department against the nurse's list.
   const hasSpecificAllocations = nurse.preferences?.some((p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY');
@@ -261,19 +288,23 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
   let mismatchReason = '';
   if (asgn && hasSpecificAllocations) {
     if (asgn.kind === 'DOCTOR' && asgn.doctorId) {
-      const docSpecIds = docObj?.specialtyIds || [];
-      const matchesDoc = nurse.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === asgn.doctorId);
-      const matchesSpec = nurse.preferences?.some((p) => {
-        if (p.kind !== 'SPECIALTY') return false;
-        if (docSpecIds.includes(p.refId)) return true;
-        return docSpecIds.some((sid) => {
-          const sObj = specialtyMap.get(sid);
-          return !!sObj && specialtyMatches(p.refId, sObj);
+      for (const id of assignmentDoctorIds(asgn)) {
+        const dObj = doctorMap.get(id);
+        const docSpecIds = dObj?.specialtyIds || [];
+        const matchesDoc = nurse.preferences?.some((p) => p.kind === 'DOCTOR' && p.refId === id);
+        const matchesSpec = nurse.preferences?.some((p) => {
+          if (p.kind !== 'SPECIALTY') return false;
+          if (docSpecIds.includes(p.refId)) return true;
+          return docSpecIds.some((sid) => {
+            const sObj = specialtyMap.get(sid);
+            return !!sObj && specialtyMatches(p.refId, sObj);
+          });
         });
-      });
-      if (!matchesDoc && !matchesSpec) {
-        mismatch = true;
-        mismatchReason = `${docObj ? withDr(docObj.fullName) : 'This doctor'} is not one of ${nurse.fullName}'s usual doctors or departments.`;
+        if (!matchesDoc && !matchesSpec) {
+          mismatch = true;
+          mismatchReason = `${dObj ? withDr(dObj.fullName) : 'This doctor'} is not one of ${nurse.fullName}'s usual doctors or departments.`;
+          break;
+        }
       }
     } else if (asgn.kind === 'SPECIALTY' && asgn.specialtyId && !isFloatShift(asgn)) {
       const specObj = specialtyMap.get(asgn.specialtyId);
@@ -289,6 +320,9 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     }
   }
 
+  const firstRank = docPref?.rank ?? specPref?.rank;
+  const secondRank = secondDocPref?.rank ?? secondSpecPref?.rank;
+  const pairRank = firstRank !== undefined && secondRank !== undefined ? Math.max(firstRank, secondRank) : undefined;
 
   const pairingDesc = isNurseClinic
     ? 'Nurse Clinic (no doctor)'
@@ -296,6 +330,14 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     ? 'Float (not with a doctor)'
     : asgn?.clinicalRoleId
     ? `Clinic task: ${roleMap.get(asgn.clinicalRoleId)?.name || doctorName}`
+    : asgn?.doctorId && secondDocId
+    ? `With ${docObj ? withDr(docObj.fullName) : 'Doctor'} and ${secondDocObj ? withDr(secondDocObj.fullName) : 'Doctor'}${
+        mismatch
+          ? ' (not one of this nurse’s usual doctors)'
+          : pairRank !== undefined
+          ? ` (usual doctors, choice ${pairRank})`
+          : ' (any nurse)'
+      }`
     : asgn?.doctorId
     ? `With Dr ${doctorName}${
         docPref
@@ -330,7 +372,21 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
   }`;
   // Spoken: what the cell shows, the rest of it, whose day it is, then its marks.
   const content = leave ? 'leave' : lock?.mode === 'OFF' ? 'off' : asgn ? 'shift' : pendingLeave ? 'pendingLeave' : 'empty';
-  const rankBadge = mismatch ? '!' : docPref ? `#${docPref.rank}` : specPref ? `#${specPref.rank}` : isFloatPool ? null : asgn?.doctorId ? 'Pool' : null;
+  const rankBadge = mismatch
+    ? '!'
+    : secondDocId
+    ? pairRank !== undefined
+      ? `#${pairRank}`
+      : 'Pool'
+    : docPref
+    ? `#${docPref.rank}`
+    : specPref
+    ? `#${specPref.rank}`
+    : isFloatPool
+    ? null
+    : asgn?.doctorId
+    ? 'Pool'
+    : null;
   const leaveCredit = leave ? leaveCreditOnDate(leave, leaveType, dateStr) : 0;
   const leaveHours = leave
     ? `${fmtHours(leaveCredit)} ${leaveCredit === 1 ? 'hour' : 'hours'} counted on this day${leave.dayHours?.[dateStr] !== undefined ? ' (set for this day)' : ''}`

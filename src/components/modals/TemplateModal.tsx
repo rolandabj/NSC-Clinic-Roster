@@ -8,6 +8,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { Copy, Layers, Save, Sparkles, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -61,7 +62,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
 
   const repo = getRepository();
 
-  const loadTemplates = async () => {
+  const loadTemplates = useLatestCallback(async () => {
     try {
       const list = await repo.list('templates');
       setSavedTemplates(list);
@@ -71,18 +72,22 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
     } catch (e) {
       console.error('Error loading templates:', e);
     }
-  };
+  });
+
+  const openModal = useLatestCallback(() => {
+    loadTemplates();
+    setTemplateName(`${schedule.name} weekly pattern`);
+    const otherSchedules = allSchedules.filter((s) => s.id !== schedule.id);
+    if (otherSchedules.length > 0) {
+      setSelectedSourceScheduleId(otherSchedules[0].id);
+    }
+  });
 
   useEffect(() => {
     if (isOpen) {
-      loadTemplates();
-      setTemplateName(`${schedule.name} weekly pattern`);
-      const otherSchedules = allSchedules.filter((s) => s.id !== schedule.id);
-      if (otherSchedules.length > 0) {
-        setSelectedSourceScheduleId(otherSchedules[0].id);
-      }
+      openModal();
     }
-  }, [isOpen, schedule.id]);
+  }, [isOpen, schedule.id, openModal]);
 
 
   if (!isOpen) return null;
@@ -111,6 +116,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
             dutyWindowId: a.dutyWindowId,
             kind: a.kind,
             targetRefId: a.doctorId || a.clinicalRoleId || a.specialtyId,
+            ...(a.kind === 'DOCTOR' && a.secondDoctorId ? { secondTargetRefId: a.secondDoctorId } : {}),
           });
         }
       }
@@ -246,6 +252,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
         dutyWindowId: p.dutyWindowId,
         kind: p.kind,
         doctorId: p.kind === 'DOCTOR' ? p.targetRefId : undefined,
+        ...(p.kind === 'DOCTOR' && p.secondTargetRefId ? { secondDoctorId: p.secondTargetRefId } : {}),
         clinicalRoleId: p.kind === 'CLINICAL_ROLE' ? p.targetRefId : undefined,
         specialtyId: p.kind === 'SPECIALTY' ? p.targetRefId : undefined,
         note: `From template "${template.name}"`,
@@ -300,6 +307,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
           dutyWindowId: p.dutyWindowId,
           kind: p.kind,
           doctorId: p.doctorId,
+          ...(p.kind === 'DOCTOR' && p.secondDoctorId ? { secondDoctorId: p.secondDoctorId } : {}),
           clinicalRoleId: p.clinicalRoleId,
           specialtyId: p.specialtyId,
           note: `Copied from ${sourceSchedule?.name || 'an earlier roster'}`,

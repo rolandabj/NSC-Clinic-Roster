@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type RefObject } from 'react';
 import type { GridSelection } from './gridSelection';
 
 const cellKeyOf = (nurseId: string, date: string) => `${nurseId}|${date}`;
@@ -18,6 +18,19 @@ export function useGridSelection(o: {
   onRequest: () => void;
 }) {
   const { selection, tableRef, gridScrollRef, focusRequest, onRequest } = o;
+  const onRequestRef = useRef(onRequest);
+  onRequestRef.current = onRequest;
+
+  const findCellElement = useCallback(
+    (key: string): HTMLElement | null => {
+      const root = tableRef.current;
+      if (!root) return null;
+      const sel = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(key) : key.replace(/"/g, '\\"');
+      return root.querySelector<HTMLElement>(`[data-cell="${sel}"]`);
+    },
+    [tableRef]
+  );
+
   // Keyboard focus follows the selection while it is in the grid (arrow keys).
   // (The popup closes when the selection moves away from its cell: the store does that.)
   useEffect(() => {
@@ -37,23 +50,19 @@ export function useGridSelection(o: {
         cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       }
     });
-  }, [selection]);
+  }, [selection, tableRef, findCellElement]);
 
-  const findCellElement = (key: string): HTMLElement | null => {
-    const root = tableRef.current;
-    if (!root) return null;
-    const sel = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(key) : key.replace(/"/g, '\\"');
-    return root.querySelector<HTMLElement>(`[data-cell="${sel}"]`);
-  };
+  const reqNonce = focusRequest?.nonce;
+  const reqNurseId = focusRequest?.nurseId;
+  const reqDate = focusRequest?.date;
 
   // "Go to cell" from outside: select, scroll to the middle, focus and flash.
   useEffect(() => {
-    if (!focusRequest) return;
-    const { nurseId, date } = focusRequest;
-    const key = cellKeyOf(nurseId, date);
-    selection.select({ nurseId, date });
+    if (reqNonce === undefined || !reqNurseId || !reqDate) return;
+    const key = cellKeyOf(reqNurseId, reqDate);
+    selection.select({ nurseId: reqNurseId, date: reqDate });
     selection.closePopup();
-    onRequest();
+    onRequestRef.current();
 
     let tries = 0;
     let frame = 0;
@@ -93,7 +102,7 @@ export function useGridSelection(o: {
       if (selection.getState().flash === key) selection.flash(null);
     };
     // Only a new request (nonce) starts this.
-  }, [focusRequest?.nonce]);
+  }, [reqNonce, reqNurseId, reqDate, selection, gridScrollRef, tableRef, findCellElement]);
 
   return { findCellElement };
 }

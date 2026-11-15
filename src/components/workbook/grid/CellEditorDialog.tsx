@@ -16,6 +16,7 @@ export interface CellChoice {
   dutyId: string;
   kind: AssignmentKind;
   targetRefId: string;
+  secondTargetRefId?: string;
   note: string;
   leaveTypeId: string;
   /** false = kept (pinned) when the roster is filled again. */
@@ -73,17 +74,33 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
   const [editorDutyId, setEditorDutyId] = useState(defaults.dutyId);
   const [editorKind, setEditorKind] = useState<AssignmentKind>(defaults.kind);
   const [editorTargetRefId, setEditorTargetRefId] = useState(defaults.targetRefId);
+  const [editorSecondTargetRefId, setEditorSecondTargetRefId] = useState(defaults.secondTargetRefId || '');
   const [editorNote, setEditorNote] = useState(defaults.note);
   const [editorLeaveTypeId, setEditorLeaveTypeId] = useState(defaults.leaveTypeId);
   const [editorAllowOverwrite, setEditorAllowOverwrite] = useState(defaults.allowOverwrite);
   // Hours this leave day counts for this nurse ('' = the leave type's default from Settings).
   const [editorLeaveHours, setEditorLeaveHours] = useState(defaults.leaveHours);
+
+  const selectedFirstDoctor = editorKind === 'DOCTOR' ? doctorMap.get(editorTargetRefId) : undefined;
+  const secondLowAcuityDoctors = selectedFirstDoctor?.lowAcuity
+    ? doctors.filter((d) => d.lowAcuity && d.id !== editorTargetRefId)
+    : [];
+  const effectiveSecondTargetRefId =
+    editorKind === 'DOCTOR' &&
+    selectedFirstDoctor?.lowAcuity &&
+    editorSecondTargetRefId &&
+    editorSecondTargetRefId !== editorTargetRefId &&
+    doctorMap.get(editorSecondTargetRefId)?.lowAcuity
+      ? editorSecondTargetRefId
+      : undefined;
+
   const save = () =>
     onSave({
       category: editorCategory,
       dutyId: editorDutyId,
       kind: editorKind,
       targetRefId: editorTargetRefId,
+      secondTargetRefId: effectiveSecondTargetRefId,
       note: editorNote,
       leaveTypeId: editorLeaveTypeId,
       allowOverwrite: editorAllowOverwrite,
@@ -108,14 +125,17 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
       );
     };
     if (editorKind === 'DOCTOR') {
-      const selDoc = doctors.find((d) => d.id === editorTargetRefId);
-      const selDocSpecIds = selDoc?.specialtyIds || [];
-      const matchesDoc = nurseSpecificPrefs.some((p) => p.kind === 'DOCTOR' && p.refId === editorTargetRefId);
-      const matchesSpec = nurseSpecificPrefs.some(
-        (p) => p.kind === 'SPECIALTY' && (selDocSpecIds.includes(p.refId) || selDocSpecIds.some((sid) => matchesCode(p.refId, specialtyMap.get(sid))))
-      );
-      if (!matchesDoc && !matchesSpec)
-        return `${selDoc ? withDr(selDoc.fullName) : 'This doctor'} is not one of ${activeNurse?.fullName}'s usual doctors or departments. This will show as a problem.`;
+      const chosenIds = [editorTargetRefId, ...(effectiveSecondTargetRefId ? [effectiveSecondTargetRefId] : [])].filter(Boolean);
+      for (const docId of chosenIds) {
+        const selDoc = doctors.find((d) => d.id === docId);
+        const selDocSpecIds = selDoc?.specialtyIds || [];
+        const matchesDoc = nurseSpecificPrefs.some((p) => p.kind === 'DOCTOR' && p.refId === docId);
+        const matchesSpec = nurseSpecificPrefs.some(
+          (p) => p.kind === 'SPECIALTY' && (selDocSpecIds.includes(p.refId) || selDocSpecIds.some((sid) => matchesCode(p.refId, specialtyMap.get(sid))))
+        );
+        if (!matchesDoc && !matchesSpec)
+          return `${selDoc ? withDr(selDoc.fullName) : 'This doctor'} is not one of ${activeNurse?.fullName}'s usual doctors or departments. This will show as a problem.`;
+      }
     } else if (editorKind === 'SPECIALTY') {
       const selSpec = specialties.find((sp) => sp.id === editorTargetRefId);
       const matchesSpec = nurseSpecificPrefs.some((p) => p.kind === 'SPECIALTY' && (p.refId === editorTargetRefId || matchesCode(p.refId, selSpec)));
@@ -227,6 +247,7 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
                     aria-pressed={editorKind === k}
                     onClick={() => {
                       setEditorKind(k);
+                      setEditorSecondTargetRefId('');
                       if (k === 'DOCTOR') setEditorTargetRefId(doctors[0]?.id || '');
                       if (k === 'CLINICAL_ROLE') setEditorTargetRefId(roles[0]?.id || '');
                       if (k === 'SPECIALTY') setEditorTargetRefId(specialties[0]?.id || '');
@@ -239,11 +260,22 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
               </div>
               <Field label={editorKind === 'DOCTOR' ? 'Doctor' : editorKind === 'CLINICAL_ROLE' ? 'Clinic task' : 'Department'} hint={usual ? `Usually works with: ${usual}` : undefined}>
                 {(f) => (
-                  <Select {...f} value={editorTargetRefId} onChange={(e) => setEditorTargetRefId(e.target.value)}>
+                  <Select
+                    {...f}
+                    value={editorTargetRefId}
+                    onChange={(e) => {
+                      const nextId = e.target.value;
+                      setEditorTargetRefId(nextId);
+                      if (editorKind !== 'DOCTOR' || !doctorMap.get(nextId)?.lowAcuity || nextId === editorSecondTargetRefId) {
+                        setEditorSecondTargetRefId('');
+                      }
+                    }}
+                  >
                     {editorKind === 'DOCTOR' &&
                       doctors.map((d) => (
                         <option key={d.id} value={d.id}>
-                          {d.fullName} ({specialties.find((sp) => sp.id === d.specialtyIds[0])?.name || 'Clinic'})
+                          {d.fullName} ({specialties.find((sp) => sp.id === d.specialtyIds[0])?.name || 'Clinic'}
+                          {d.lowAcuity ? ' · Low acuity' : ''})
                         </option>
                       ))}
                     {editorKind === 'CLINICAL_ROLE' &&
@@ -261,6 +293,33 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
                   </Select>
                 )}
               </Field>
+              {editorKind === 'DOCTOR' && selectedFirstDoctor?.lowAcuity && (
+                <Field
+                  label="Second low acuity doctor"
+                  optional
+                  hint={
+                    secondLowAcuityDoctors.length > 0
+                      ? 'One nurse can cover up to two low acuity doctors on the same day.'
+                      : 'No other doctor is marked low acuity yet.'
+                  }
+                >
+                  {(f) => (
+                    <Select
+                      {...f}
+                      value={effectiveSecondTargetRefId || ''}
+                      onChange={(e) => setEditorSecondTargetRefId(e.target.value)}
+                      disabled={secondLowAcuityDoctors.length === 0}
+                    >
+                      <option value="">None (one doctor only)</option>
+                      {secondLowAcuityDoctors.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.fullName} ({specialties.find((sp) => sp.id === d.specialtyIds[0])?.name || 'Clinic'})
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+              )}
             </fieldset>
           </>
         )}

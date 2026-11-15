@@ -14,8 +14,10 @@ import {
   Specialty,
 } from '../../types';
 
-export type ChangeType = 'ADDED' | 'REMOVED' | 'MODIFIED';
 import { isFloatShift } from '../engine/floatShift';
+import { assignmentDoctorIds } from '../engine/clinicModel';
+
+export type ChangeType = 'ADDED' | 'REMOVED' | 'MODIFIED';
 
 export interface FormattedAssignmentState {
   dutyWindowId: string;
@@ -67,11 +69,11 @@ function formatAssignment(
   const duty = dutyMap.get(asgn.dutyWindowId);
   let targetName = 'Specialty Pool';
 
+  const docIds = assignmentDoctorIds(asgn);
   if (isFloatShift(asgn)) {
     targetName = 'Float';
-  } else if (asgn.doctorId) {
-    const doc = doctorMap.get(asgn.doctorId);
-    targetName = doc ? doc.fullName : 'Doctor';
+  } else if (docIds.length > 0) {
+    targetName = docIds.map((id) => doctorMap.get(id)?.fullName || 'Doctor').join(' + ');
   } else if (asgn.clinicalRoleId) {
     const role = roleMap.get(asgn.clinicalRoleId);
     targetName = role ? role.name : 'Clinical Role';
@@ -202,6 +204,7 @@ export function computeScheduleDiff(
       // (the same comparison as the dashboard's "changes not sent").
       const isTargetChanged =
         (baseAsgn.doctorId || '') !== (targetAsgn.doctorId || '') ||
+        (baseAsgn.secondDoctorId || '') !== (targetAsgn.secondDoctorId || '') ||
         (baseAsgn.clinicalRoleId || '') !== (targetAsgn.clinicalRoleId || '') ||
         (baseAsgn.specialtyId || '') !== (targetAsgn.specialtyId || '') ||
         baseAsgn.kind !== targetAsgn.kind;

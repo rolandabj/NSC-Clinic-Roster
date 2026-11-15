@@ -1,21 +1,16 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * 
- * Dedicated Clinical Login Portal
- * Provides an exclusive, distraction-free Google Workspace SSO authentication gate
- * for Al Shifa Outpatient Clinic.
+ *
+ * Sign in page shown before entering the clinic workspace.
  */
 
-import React, { useState } from 'react';
-import {
-  AlertCircle,
-  Loader2,
-  Lock,
-  Building2,
-  ExternalLink,
-} from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Building2, ExternalLink, Loader2 } from 'lucide-react';
 import { authService, UserProfile } from '../../services/auth/authService';
+import { PublicPageFrame } from '../common/PublicPageFrame';
+import { IconButton, Notice } from '../ui';
+import { X } from 'lucide-react';
 
 interface LoginPageProps {
   onLoginSuccess?: (user: UserProfile) => void;
@@ -26,19 +21,20 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, clinicName
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
-  const [displayName, setDisplayName] = useState<string>(
-    () => {
-      const stored = typeof window !== 'undefined' ? localStorage.getItem('clinic_roster_clinic_name') : null;
-      if (clinicName && clinicName !== 'Hope Valley Polyclinic' && clinicName !== 'Outpatient Clinic') return clinicName;
-      if (stored && stored !== 'Hope Valley Polyclinic' && stored !== 'Outpatient Clinic') return stored;
-      return 'American Hospital Nad Al Sheba OutPatient clinic';
-    }
-  );
+  const [displayName, setDisplayName] = useState<string>(() => {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('clinic_roster_clinic_name') : null;
+    if (clinicName && clinicName !== 'Hope Valley Polyclinic' && clinicName !== 'Outpatient Clinic') return clinicName;
+    if (stored && stored !== 'Hope Valley Polyclinic' && stored !== 'Outpatient Clinic') return stored;
+    return 'American Hospital Nad Al Sheba OutPatient clinic';
+  });
 
-  React.useEffect(() => {
+  useEffect(() => {
+    document.title = 'Sign in · NSC Clinic Roster';
+  }, []);
+
+  useEffect(() => {
     if (clinicName) {
       setDisplayName(clinicName);
-      return;
     }
   }, [clinicName]);
 
@@ -51,106 +47,81 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, clinicName
         onLoginSuccess(user);
       }
     } catch (err: any) {
-      setErrorMessage(
-        err.message || 'Google Workspace authentication failed. Please try again.'
-      );
+      setErrorMessage(err.message || 'Google sign in did not finish. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col justify-center items-center p-4 bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950 text-slate-100 select-none">
-      {/* Background Decorative Rings */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-indigo-500/10 blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-teal-500/10 blur-3xl" />
-      </div>
-
-      {/* Main Authentication Card */}
-      <div className="relative z-10 w-full max-w-md bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-2xl shadow-2xl overflow-hidden p-6 sm:p-8 space-y-6">
-        {/* Clinic Branding Header */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 mb-2 shadow-inner">
-            <Building2 className="w-7 h-7" />
-          </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-            {displayName}
-          </h1>
-          <p className="text-xs text-indigo-300/80 font-medium tracking-wide uppercase">
-            Clinical Roster &amp; Staff Scheduling System
-          </p>
-          <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed pt-1">
-            Sign in with your authorized Google Workspace account.
-          </p>
-        </div>
-
-        {/* Error Alert Banner */}
-        {errorMessage && (
-          <div className="p-3.5 rounded-xl bg-rose-950/70 border border-rose-800 text-rose-200 text-xs space-y-2.5 animate-in fade-in">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <div className="flex-1 leading-snug">
-                <span>{errorMessage}</span>
-              </div>
-              <button
-                onClick={() => setErrorMessage(null)}
-                className="text-rose-400 hover:text-rose-200 text-xs font-bold px-1 cursor-pointer"
-                aria-label="Dismiss alert"
-              >
-                <span aria-hidden="true">✕</span>
-              </button>
+    <PublicPageFrame clinicName={displayName}>
+      <div className="mx-auto max-w-md pt-6">
+        <section className="space-y-5 rounded-xl border border-line bg-surface p-6 shadow-card sm:p-8">
+          <div className="space-y-2 text-center">
+            <div className="mx-auto inline-flex size-12 items-center justify-center rounded-xl bg-brand-soft text-brand">
+              <Building2 className="size-6" aria-hidden="true" />
             </div>
-            {isInIframe && (
-              <div className="pt-2 border-t border-rose-800/60 flex items-center justify-between gap-2">
-                <span className="text-[11px] text-rose-300">Popups can be restricted in embedded frames:</span>
-                <a
-                  href={typeof window !== 'undefined' ? window.location.href : '#'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-rose-900 hover:bg-rose-800 text-rose-100 text-[11px] font-medium transition-colors shrink-0 cursor-pointer"
-                >
-                  <span>Open in New Tab</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
+            <h1 className="text-xl font-bold text-ink sm:text-2xl">{displayName}</h1>
+            <p className="text-sm text-ink-muted">
+              Sign in with your Google account to open the clinic roster.
+            </p>
+          </div>
+
+          {errorMessage && (
+            <div className="space-y-2">
+              <div className="flex items-start gap-2">
+                <Notice tone="danger" live title="Could not sign in" className="flex-1">
+                  {errorMessage}
+                </Notice>
+                <IconButton label="Close message" icon={X} onClick={() => setErrorMessage(null)} />
               </div>
-            )}
-          </div>
-        )}
+              {isInIframe && (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-sunken px-3 py-2 text-xs text-ink-muted">
+                  <span>Sign in popups can be blocked inside an embedded frame.</span>
+                  <a
+                    href={typeof window !== 'undefined' ? window.location.href : '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-control bg-surface px-2.5 py-1 text-xs font-semibold text-ink hover:bg-sunken"
+                  >
+                    <span>Open in a new tab</span>
+                    <ExternalLink className="size-3.5" aria-hidden="true" />
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* Embedded Preview Banner */}
-        {isInIframe && !errorMessage && (
-          <div className="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-900/60 text-indigo-200 text-xs flex items-center justify-between gap-2">
-            <span className="text-[11px] leading-tight text-indigo-300">
-              In preview mode? You can open the app in a dedicated tab.
-            </span>
-            <a
-              href={typeof window !== 'undefined' ? window.location.href : '#'}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-indigo-600/80 hover:bg-indigo-600 text-white text-[11px] font-medium shrink-0 transition-colors shadow-2xs cursor-pointer"
-            >
-              <span>Full Tab</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          </div>
-        )}
+          {isInIframe && !errorMessage && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-sunken px-3 py-2 text-xs text-ink-muted">
+              <span>Using the preview frame? You can also open the app in its own tab.</span>
+              <a
+                href={typeof window !== 'undefined' ? window.location.href : '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-md border border-control bg-surface px-2.5 py-1 text-xs font-semibold text-ink hover:bg-sunken"
+              >
+                <span>Open in a new tab</span>
+                <ExternalLink className="size-3.5" aria-hidden="true" />
+              </a>
+            </div>
+          )}
 
-        {/* Primary Action: Single Google Workspace SSO Button */}
-        <div className="space-y-3 pt-1">
           <button
+            type="button"
             onClick={handleGoogleSignIn}
             disabled={isLoading}
-            className="w-full py-3 px-4 bg-white hover:bg-slate-100 text-slate-800 font-semibold text-sm rounded-xl border border-slate-300 shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed group active:scale-[0.99]"
+            aria-busy={isLoading || undefined}
+            className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-3 rounded-lg border border-control bg-surface px-4 py-2.5 text-sm font-semibold text-ink shadow-card transition-colors hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isLoading ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin text-indigo-600" aria-hidden="true" />
-                <span className="text-slate-700">Connecting Google Workspace...</span>
+                <Loader2 className="size-5 animate-spin text-brand" aria-hidden="true" />
+                <span>Signing in with Google…</span>
               </>
             ) : (
               <>
-                <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                <svg className="size-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
                   <path
                     fill="#4285F4"
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -172,21 +143,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, clinicName
               </>
             )}
           </button>
-        </div>
-
-        {/* Security Note */}
-        <div className="text-center pt-2 border-t border-slate-800/60">
-          <p className="text-[10px] text-slate-500 flex items-center justify-center gap-1.5">
-            <Lock className="w-3 h-3 text-slate-600" />
-            <span>Encrypted HIPAA/GDPR-compliant token verification.</span>
-          </p>
-        </div>
+        </section>
       </div>
-
-      {/* Footer System Status */}
-      <div className="mt-6 text-center text-xs text-slate-500">
-        <span>{displayName} · Production Roster Portal</span>
-      </div>
-    </div>
+    </PublicPageFrame>
   );
 };

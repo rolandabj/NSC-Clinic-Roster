@@ -42,6 +42,8 @@
         "date": { "type": "string" },
         "dutyWindowId": { "type": "string" },
         "kind": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "secondDoctorId": { "type": "string" },
         "source": { "type": "string" },
         "locked": { "type": "boolean" }
       },
@@ -71,7 +73,8 @@
         "name": { "type": "string" },
         "code": { "type": "string" },
         "specialtyIds": { "type": "array" },
-        "active": { "type": "boolean" }
+        "active": { "type": "boolean" },
+        "lowAcuity": { "type": "boolean" }
       },
       "required": ["id", "name", "code"]
     },

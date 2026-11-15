@@ -84,7 +84,7 @@ emailRouter.post('/email/test', requirePlanner, async (req: Request, res: Respon
           <p style="margin: 4px 0;"><strong>Recipient:</strong> ${escapeHtml(to)}</p>
           <p style="margin: 4px 0;"><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
         </div>
-        <p style="color: #64748b; font-size: 12px;">ClinicRoster Operational Dispatch System</p>
+        <p style="color: #64748b; font-size: 12px;">NSC Clinic Roster Operational Dispatch System</p>
       </div>
     `;
 

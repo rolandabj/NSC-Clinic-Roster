@@ -16,7 +16,9 @@ interface IcsParams {
   clinicName: string;
   timezone: string;
   nurseId: string;
-  assignments: Pick<Assignment, 'id' | 'nurseId' | 'date' | 'dutyWindowId' | 'doctorId' | 'clinicalRoleId' | 'specialtyId'>[];
+  assignments: (Pick<Assignment, 'id' | 'nurseId' | 'date' | 'dutyWindowId' | 'doctorId' | 'clinicalRoleId' | 'specialtyId'> & {
+    secondDoctorId?: string;
+  })[];
   dutyWindows: Pick<DutyWindow, 'id' | 'name' | 'acronym' | 'startTime' | 'endTime'>[];
   doctors: Pick<Doctor, 'id' | 'fullName'>[];
   clinicalRoles: Pick<ClinicalRole, 'id' | 'name'>[];
@@ -124,7 +126,7 @@ export function buildNurseIcs(params: IcsParams): string {
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//ClinicRoster//Nurse Roster//EN',
+    'PRODID:-//NSC Clinic Roster//Nurse Roster//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     `X-WR-CALNAME:${escapeIcsText(params.calendarName)}`,
@@ -146,8 +148,10 @@ export function buildNurseIcs(params: IcsParams): string {
 
     let pairing = 'General Pool';
     if (isFloatShift(a)) pairing = 'Float';
-    else if (a.doctorId) pairing = doctorMap.get(a.doctorId)?.fullName || 'Doctor';
-    else if (a.clinicalRoleId) pairing = roleMap.get(a.clinicalRoleId)?.name || 'Clinical Role';
+    else if (a.doctorId) {
+      const ids = a.secondDoctorId && a.secondDoctorId !== a.doctorId ? [a.doctorId, a.secondDoctorId] : [a.doctorId];
+      pairing = ids.map((id) => doctorMap.get(id)?.fullName || 'Doctor').join(' + ');
+    } else if (a.clinicalRoleId) pairing = roleMap.get(a.clinicalRoleId)?.name || 'Clinical Role';
     else if (a.specialtyId) pairing = specialtyMap.get(a.specialtyId)?.name || 'Specialty';
 
     lines.push(
@@ -198,7 +202,7 @@ export function buildNurseRosterIcs(doc: NurseRosterIcsInput): string {
   const lines: string[] = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//ClinicRoster//Nurse Roster//EN',
+    'PRODID:-//NSC Clinic Roster//Nurse Roster//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     `X-WR-CALNAME:${escapeIcsText(`${doc.nurseName} shifts`)}`,

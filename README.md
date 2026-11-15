@@ -1,44 +1,44 @@
-# ClinicRoster
+# NSC Clinic Roster
 
-> Outpatient clinic nursing roster and shift scheduling web application with deterministic nurse-to-doctor pairing, leave & locked day enforcement, and an Excel-like workbook.
+> Nurse rostering web app for the American Hospital Nad Al Sheba outpatient clinic in Dubai. Build rosters, check clinic rules, manage leave and requests, and send shifts to nurses.
 
 ## Overview
 
-**ClinicRoster** is a web-based clinical workforce management system designed for outpatient clinics, specialty centers, and healthcare departments. It automates complex scheduling constraints, balances contract hours, preserves strict doctor-nurse pairing continuity, and supports real-time roster publishing, export, and verification.
+**NSC Clinic Roster** helps planners and nurses manage clinic shifts. Planners create rosters for a date range, fill them automatically or edit cells by hand in a spreadsheet grid, check the roster against the clinic rules, and publish shifts to nurses by email, private phone pages, and calendar feeds.
 
 ---
 
 ## Key Features
 
-1. **Deterministic Scheduling Engine**
-   - Automatically generates conflict-free duty schedules respecting physician assignments, working hour limits, contract targets, and fairness quotas.
-   - Prevents consecutive duty violations, enforces minimum rest periods, and manages float nurse allocations.
+1. **Automatic Roster Engine**
+   - Pairs nurses with their preferred doctors and specialties while keeping a free nurse for Nurse Clinic and blood collection at every opening hour.
+   - Enforces senior nurse cover, consecutive shift limits, minimum rest between shifts, weekly hour limits, and contract hour goals.
 
-2. **Excel-Like Roster Workbook**
-   - Interactive scheduling grid with live formula updates, shift badges, undo/redo history, and instant problem diagnostics.
-   - Supports keyboard navigation, inline cell editing, and status validation.
+2. **Interactive Roster Grid**
+   - Spreadsheet grid with keyboard navigation, quick cell popups, undo and redo, pinned days, automatic backups before every fill or clear, and live collaboration.
+   - Read only day view on phones, with full editing on laptops and tablets.
 
-3. **Multi-Staff & Availability Management**
-   - Nurse and doctor directory with seniority levels, clinical roles, specialty credentials, and custom shift preferences.
-   - Dedicated leave tracking (Annual, Sick, Maternity, Study, Compassionate) and locked day-off constraints.
+3. **Staff, Leave, and Requests**
+   - Nurse and doctor directories with levels, skills, specialties, usual weekly clinics, and annual leave allowances.
+   - Month leave grid for planners and self service request pages for nurses to ask for leave, a day off, or a preferred shift.
 
-4. **Dedicated Working Hours Periods**
-   - Period-based contract target tracking with automated daily-rate prorating for shorter schedule ranges.
-   - Year-to-date duty balancing across weekends, public holidays, and night rotations.
+4. **Working Hours Periods and Fairness**
+   - Dedicated time periods from the 19th to the 18th with cumulative hour targets and carry across published rosters.
+   - Year to date balancing across weekends, public holidays, late shifts, and Nurse Clinic shifts.
 
-5. **Role-Based Access & Publishing**
-   - Granular permissions with Google Authentication and Firestore persistence.
-   - Public read-only roster views, individualized nurse rosters, PDF/Excel export, and automated notification workflows.
+5. **Publishing, Links, and Exports**
+   - Google sign in and Firestore security rules for owners, planners, managers, and nurses.
+   - Personal roster emails with read receipts, resumable sends, private nurse pages, live calendar feeds, and PDF, Excel, and CSV downloads.
 
 ---
 
 ## Tech Stack
 
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS
-- **Icons & Typography**: Lucide React, Google Fonts (Plus Jakarta Sans, JetBrains Mono)
-- **Backend**: Node.js, Express (dual SPA & REST middleware mode)
-- **Database & Auth**: Google Cloud Firestore & Firebase Auth
-- **Reporting & Export**: jsPDF, jsPDF-AutoTable, XLSX
+- **Frontend**: React 19, TypeScript, Vite 8, Tailwind CSS 4
+- **Icons and Typography**: Lucide React, Google Fonts (Inter)
+- **Backend**: Node.js, Express (email dispatch, calendar feeds, and Gemini insights)
+- **Database and Sign In**: Google Cloud Firestore and Firebase Auth
+- **Exports**: jsPDF, jsPDF AutoTable, XLSX
 
 ---
 
@@ -49,7 +49,7 @@
 npm install --legacy-peer-deps
 npm run dev
 ```
-The application will be accessible at `http://localhost:3000`.
+The app runs at `http://localhost:3000`.
 
 ### Production Build
 ```bash
@@ -57,10 +57,11 @@ npm run build
 npm start
 ```
 
-### Running Tests
+### Running Checks
 ```bash
-npm run test
+npm run lint
+npm test
 ```
-Runs the full suite of unit tests validating the scheduling engine, cascade deletions, period calculations, and constraints.
+Runs the TypeScript type check and the unit test suite.
 
-See [PROJECT_GUIDE.md](PROJECT_GUIDE.md) for architecture, deployment, security, and the full testing workflow. Browser assets build into `dist/`; the backend builds separately into `build/server.js` and is loaded by `npm start`.
+See [PROJECT_GUIDE.md](PROJECT_GUIDE.md) for the complete architecture, business rules, deployment steps, and testing workflow. Browser assets build into `dist/`; the server builds into `build/server.js` and is loaded by `npm start`.

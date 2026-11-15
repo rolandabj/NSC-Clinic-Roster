@@ -28,6 +28,7 @@ import { isWeekendDate } from '../../utils/weekend';
 import { calculateDutyDurationHours, summarizeNurseHours } from '../reports/hoursAccounting';
 import { getScheduleDates } from './rosterExportService';
 import { isFloatShift } from '../engine/floatShift';
+import { assignmentCoversDoctor, assignmentDoctorIds } from '../engine/clinicModel';
 
 export interface RosterPdfOptions {
   clinicName: string;
@@ -236,8 +237,11 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
           } else if (a) {
             const duty = dutyMap.get(a.dutyWindowId);
             let target = '';
-            if (a.kind === 'DOCTOR' && a.doctorId) target = firstName(doctorMap.get(a.doctorId)?.fullName || 'Dr');
-            else if (isFloatShift(a) || a.note?.toLowerCase().includes('float')) target = 'Float';
+            if (a.kind === 'DOCTOR' && a.doctorId) {
+              target = assignmentDoctorIds(a)
+                .map((id) => firstName(doctorMap.get(id)?.fullName || 'Dr'))
+                .join(' + ');
+            } else if (isFloatShift(a) || a.note?.toLowerCase().includes('float')) target = 'Float';
             else if (a.clinicalRoleId) target = roleMap.get(a.clinicalRoleId)?.acronym || (a.clinicalRoleId === 'role-nurse-clinic' ? 'NC' : 'Role');
             else if (a.specialtyId) target = specialtyMap.get(a.specialtyId)?.code || 'Pool';
             row.push(`${duty?.acronym || 'Duty'}\n${target}`);
@@ -305,7 +309,7 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
           }
           count++;
           const paired = assignments
-            .filter((a) => a.kind === 'DOCTOR' && a.doctorId === dr.id && a.date === date)
+            .filter((a) => a.date === date && assignmentCoversDoctor(a, dr.id))
             .map((a) => firstName(nurseMap.get(a.nurseId)?.fullName || '?'));
           const time = `${shortTime(sess.startTime)}–${shortTime(sess.endTime)}`;
           if (paired.length === 0) {

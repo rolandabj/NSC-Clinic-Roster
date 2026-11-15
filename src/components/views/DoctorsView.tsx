@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import {
   Stethoscope,
@@ -73,6 +74,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
     weeklyPattern: WeeklyPatternSlot[];
     notes: string;
     active: boolean;
+    lowAcuity: boolean;
   }>({
     fullName: '',
     gmail: '',
@@ -80,6 +82,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
     weeklyPattern: [],
     notes: '',
     active: true,
+    lowAcuity: false,
   });
 
   // Doctor Form Modal States
@@ -122,7 +125,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
 
   const repo = getRepository();
 
-  const loadData = async () => {
+  const loadData = useLatestCallback(async () => {
     try {
       const [dList, spList, sessList, slList, crList, schedList, holList] = await Promise.all([
         repo.list('doctors'),
@@ -147,11 +150,11 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
     } catch (err) {
       console.error('Error loading doctors data:', err);
     }
-  };
+  });
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const triggerNotification = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
@@ -195,6 +198,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       ],
       notes: '',
       active: true,
+      lowAcuity: false,
     });
     setIsDoctorModalOpen(true);
   };
@@ -214,6 +218,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       weeklyPattern: doc.weeklyPattern || [],
       notes: doc.notes || '',
       active: doc.active,
+      lowAcuity: !!doc.lowAcuity,
     });
     setIsDoctorModalOpen(true);
   };
@@ -256,6 +261,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       weeklyPattern: formData.weeklyPattern,
       notes: formData.notes.trim() || '',
       active: formData.active,
+      lowAcuity: formData.lowAcuity,
     };
     await commitDoctor(before, after);
   };
@@ -284,6 +290,7 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       weeklyPattern: after.weeklyPattern,
       notes: after.notes || '',
       active: after.active,
+      lowAcuity: !!after.lowAcuity,
     };
     try {
       if (before) {
@@ -547,12 +554,15 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
       key: 'name',
       header: 'Doctor',
       sortValue: (d) => d.fullName,
-      cell: (d) => (
-        <span className="block">
-          <span className="block">{d.fullName}</span>
-          {d.notes && <span className="block max-w-56 truncate text-xs font-normal text-ink-muted">{d.notes}</span>}
-        </span>
-      ),
+      cell: (d) => {
+        const sub = [d.lowAcuity ? 'Low acuity' : '', d.notes].filter(Boolean).join(' · ');
+        return (
+          <span className="block">
+            <span className="block">{d.fullName}</span>
+            {sub && <span className="block max-w-56 truncate text-xs font-normal text-ink-muted">{sub}</span>}
+          </span>
+        );
+      },
     },
     {
       key: 'specialties',
@@ -707,7 +717,8 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
                     Clinics of {selectedDoctor.fullName}
                   </h2>
                   <p className="text-sm text-ink-muted">
-                    {selectedDoctorSessions.length} {selectedDoctorSessions.length === 1 ? 'clinic' : 'clinics'} on the calendar.
+                    {selectedDoctorSessions.length} {selectedDoctorSessions.length === 1 ? 'clinic' : 'clinics'} on the calendar
+                    {selectedDoctor.lowAcuity ? ' · Low acuity' : ''}.
                   </p>
                 </div>
                 <Button
@@ -994,6 +1005,12 @@ export const DoctorsView: React.FC<DoctorsViewProps> = ({ context }) => {
               hint="New rosters put nurses with the clinics of active doctors."
               checked={formData.active}
               onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
+            />
+            <Checkbox
+              label="Low acuity clinics"
+              hint="One nurse can cover up to two low acuity doctors on the same day."
+              checked={formData.lowAcuity}
+              onChange={(e) => setFormData({ ...formData, lowAcuity: e.target.checked })}
             />
           </section>
 

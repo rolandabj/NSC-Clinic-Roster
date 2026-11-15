@@ -7,6 +7,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLatestCallback } from '../../common/useLatestCallback';
 import { Trash2, Download, Upload, RefreshCw } from 'lucide-react';
 import { getRepository } from '../../../services/repository';
 import {
@@ -46,7 +47,7 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
   const [isBusyAction, setIsBusyAction] = useState(false);
 
   // --- 12. Database & Seed Data Management (Phase 15) ---
-  const loadStats = async () => {
+  const loadStats = useLatestCallback(async () => {
     setIsLoadingStats(true);
     setStatsError('');
     try {
@@ -58,12 +59,12 @@ export const DatabaseTab: React.FC<DatabaseTabProps> = ({ loadData, triggerSaveN
     } finally {
       setIsLoadingStats(false);
     }
-  };
+  });
 
   // Statistics are (re)loaded each time this tab is opened.
   useEffect(() => {
     loadStats();
-  }, []);
+  }, [loadStats]);
 
   const handleClearDatabase = async () => {
     if (clearConfirmInput.trim() !== 'CLEAR') {

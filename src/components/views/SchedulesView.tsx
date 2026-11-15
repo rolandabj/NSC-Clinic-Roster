@@ -155,16 +155,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const historySeqRef = useRef(0);
   const hoursHistoryRef = useRef<HoursHistory | undefined>(undefined);
   const startHistoryLoad = () => ++historySeqRef.current;
-  const applyHistory = (seq: number, history: HoursHistory | undefined) => {
+  const applyHistory = useLatestCallback((seq: number, history: HoursHistory | undefined) => {
     if (seq !== historySeqRef.current) return;
     hoursHistoryRef.current = history;
     setHoursHistory(history);
-  };
+  });
   /** Clinic details from a load: its hours history only if it is the newest load. */
-  const adoptSetup = (seq: number, setup: ClinicSetup | undefined) => {
+  const adoptSetup = useLatestCallback((seq: number, setup: ClinicSetup | undefined) => {
     applyHistory(seq, setup?.hoursHistory);
     clinicSetupRef.current = setup && { ...setup, hoursHistory: hoursHistoryRef.current };
-  };
+  });
   const clinicSetupRef = useRef<ClinicSetup | undefined>(undefined);
   const [quotas, setQuotas] = useState<NurseHoursQuota[]>([]);
   // Nurses' day off and shift wishes (shown on the grid; the checker notes when they aren't followed).
@@ -294,7 +294,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       toCheck: validationReport.warnCount,
       notes: validationReport.infoCount,
     });
-  }, [validationReport]);
+  }, [validationReport, reportProblems]);
 
   // Problems side panel, and a request for the grid to show one cell ("Show in grid").
   const [isProblemsOpen, setIsProblemsOpen] = useState(false);
@@ -306,7 +306,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (!activeSchedule && !isFirstLoad) {
       reportProblems?.({ scheduleId: '', name: '', startDate: '', endDate: '', mustFix: 0, toCheck: 0, notes: 0 });
     }
-  }, [activeSchedule, isFirstLoad]);
+  }, [activeSchedule, isFirstLoad, reportProblems]);
 
   // Expanded View & All Days Mode
   const [isExpandedView, setIsExpandedView] = useState(false);
@@ -564,31 +564,35 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     return trackSave(syncers.leaveEntries.save(next), 'Leave');
   };
 
-  useEffect(() => {
+  const initScreen = useLatestCallback(() => {
     // A save that failed before this screen opened is still waiting: say so.
     const kept = failedSaveMessage('Changes');
     if (kept) setSaveError(kept);
     const stopListening = syncers.listen(() => setSyncTick((t) => t + 1));
-    loadData();
+    void loadData();
     return stopListening;
-  }, []);
+  });
+
+  useEffect(() => initScreen(), [initScreen]);
 
   // Every edit is saved straight away. This timer only retries a save that
   // failed (for example while offline or when the daily quota is used up).
+  const retryFailedSaves = useLatestCallback(() => {
+    if (quotaTracker.isQuotaExceeded()) return;
+    for (const [what, syncer] of [
+      ['Shifts', syncers.assignments],
+      ['Pinned days', syncers.locks],
+      ['Leave', syncers.leaveEntries],
+    ] as const) {
+      const retry = syncer.retry();
+      if (retry) void trackSave(retry, what);
+    }
+  });
+
   useEffect(() => {
-    const retryTimer = setInterval(() => {
-      if (quotaTracker.isQuotaExceeded()) return;
-      for (const [what, syncer] of [
-        ['Shifts', syncers.assignments],
-        ['Pinned days', syncers.locks],
-        ['Leave', syncers.leaveEntries],
-      ] as const) {
-        const retry = syncer.retry();
-        if (retry) void trackSave(retry, what);
-      }
-    }, 30000);
+    const retryTimer = setInterval(retryFailedSaves, 30000);
     return () => clearInterval(retryTimer);
-  }, []);
+  }, [retryFailedSaves]);
 
   const triggerToast = (msg: string, tone: NoticeTone = 'success') => notify(msg, tone);
 
@@ -628,7 +632,16 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       onToggleExpandDays: onGridToggleExpandDays,
       onOpenLockOverrideModal: onGridOpenLockOverride,
     }),
-    []
+    [
+      onGridBlockChange,
+      onGridAssignmentsChange,
+      onGridLocksChange,
+      onGridLeaveEntriesChange,
+      onGridCellEdit,
+      onGridNavigateTab,
+      onGridToggleExpandDays,
+      onGridOpenLockOverride,
+    ]
   );
 
   const handleSessionsChange = (nextSessions: DoctorSession[]) => {
@@ -687,17 +700,17 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     }
   };
 
-  useEffect(() => {
-    if (!scheduleToDelete) {
+  const loadDeleteCounts = useLatestCallback((targetId: string | undefined) => {
+    if (!targetId) {
       setDeleteCounts(null);
       return;
     }
-    if (scheduleToDelete.id === activeSchedule?.id) {
+    if (targetId === activeSchedule?.id) {
       setDeleteCounts({ shifts: assignments.length, versions: versions.length });
       return;
     }
     let cancelled = false;
-    const by = { field: 'scheduleId', operator: '==' as const, value: scheduleToDelete.id };
+    const by = { field: 'scheduleId', operator: '==' as const, value: targetId };
     Promise.all([repo.list('assignments', by), repo.list('versions', by)])
       .then(([a, v]) => {
         if (!cancelled) setDeleteCounts({ shifts: a.length, versions: withoutBackups(v).length });
@@ -708,7 +721,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [scheduleToDelete?.id]);
+  });
+
+  useEffect(() => loadDeleteCounts(scheduleToDelete?.id), [scheduleToDelete?.id, loadDeleteCounts]);
 
   // --- DELETE SCHEDULE FLOW ---
   const handleConfirmDeleteSchedule = async (sched: Schedule) => {
@@ -783,7 +798,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // when a roster is published, added or removed, its shifts are saved (saving stamps a
   // published roster's record, see rosterSaveQueues), or leave changes.
   useEffect(() => {
-    if (!activeSchedule) return;
+    if (!activeSchedule?.id) return;
     let cancelled = false;
     let schedulesSeen: Schedule[] | undefined;
     const reload = () => {
@@ -801,23 +816,28 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setHoursHistory(hoursHistoryRef.current);
     });
     return () => { cancelled = true; stopSchedules(); stopLeaves(); };
-  }, [repo, activeSchedule?.id]);
+  }, [repo, activeSchedule?.id, applyHistory]);
 
-  useEffect(() => {
-    if (!hoursHistory || !clinicSetupRef.current || !activeSchedule) return;
-    clinicSetupRef.current = { ...clinicSetupRef.current, hoursHistory };
+  const recheckHoursHistory = useLatestCallback((nextHistory: HoursHistory | undefined) => {
+    if (!nextHistory || !clinicSetupRef.current || !activeSchedule) return;
+    clinicSetupRef.current = { ...clinicSetupRef.current, hoursHistory: nextHistory };
     // The history is loaded again several times while a roster opens, as a new copy that is
     // usually unchanged: check again only when it changed since the last check (or one waits).
-    if (!checks.waiting && sameHoursHistory(lastCheckedHistoryRef.current, hoursHistory)) return;
+    if (!checks.waiting && sameHoursHistory(lastCheckedHistoryRef.current, nextHistory)) return;
     runValidation(activeSchedule, assignments);
-  }, [hoursHistory]);
+  });
+
+  useEffect(() => {
+    recheckHoursHistory(hoursHistory);
+  }, [hoursHistory, recheckHoursHistory]);
 
   // Keep the clinic details current when another roster is opened or holidays change
   useEffect(() => {
-    if (!activeSchedule) return;
+    const current = activeScheduleRef.current;
+    if (!current) return;
     let cancelled = false;
     const seq = startHistoryLoad();
-    loadClinicSetup(repo, activeSchedule)
+    loadClinicSetup(repo, current)
       .then((setup) => {
         if (cancelled) return;
         adoptSetup(seq, setup);
@@ -830,7 +850,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [activeSchedule?.id, activeSchedule?.startDate, holidays]);
+  }, [repo, activeSchedule?.id, activeSchedule?.startDate, holidays, adoptSetup]);
 
   // --- OPEN GENERATION PRE-FLIGHT ---
   const handleOpenPreflight = async (mode: RegenerateMode, targetSchedule?: Schedule) => {
@@ -1328,9 +1348,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const othersHere = usePresence(activeSchedule?.id ?? null);
   const liveRef = useRef({ isGenerating, runValidation, triggerToast, assignments, locks, leaveEntries });
   liveRef.current = { isGenerating, runValidation, triggerToast, assignments, locks, leaveEntries };
-  useEffect(() => {
-    const sched = activeSchedule;
-    if (!sched) return;
+  const subscribeLiveAssignments = useLatestCallback((scheduleId: string | undefined) => {
+    const sched = activeScheduleRef.current;
+    if (!sched || sched.id !== scheduleId) return;
     setRemoteChange(false);
     const live = createLiveReconciler<Assignment>({
       syncer: syncers.assignments,
@@ -1362,9 +1382,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       live.stop();
       stop();
     };
-  }, [activeSchedule?.id]);
+  });
 
-  useEffect(() => {
+  useEffect(() => subscribeLiveAssignments(activeSchedule?.id), [activeSchedule?.id, subscribeLiveAssignments]);
+
+  const subscribeLiveLocksAndLeave = useLatestCallback(() => {
     const isBusy = () => loadingRef.current || liveRef.current.isGenerating;
     // Until the workspace has loaded there is nothing to compare with (loading reads fresh lists).
     const isCurrent = () => workspaceLoadedRef.current;
@@ -1408,7 +1430,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       stopLocks();
       stopLeave();
     };
-  }, []);
+  });
+
+  useEffect(() => subscribeLiveLocksAndLeave(), [subscribeLiveLocksAndLeave]);
 
   // Edits, Undo and Redo (`useRosterEdits`): every change goes through `applyEdit`.
   const { undoStack, redoStack, setUndoStack, setRedoStack, clearUndo, snapshotNow, applyEdit, handleUndo, handleRedo } = useRosterEdits({
@@ -1446,27 +1470,38 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   // The address follows the open roster and sheet (#schedules?roster=nov&sheet=problems). It is
   // replaced here; a click on a sheet's tab adds a step to Back instead (see the tabs below).
+  const syncAddressFromState = useLatestCallback((rosterId: string | undefined, sheet: Sheet) => {
+    if (!rosterId) return;
+    onAddressChange?.({ roster: rosterId, sheet: rosterSheetToAddress(sheet) }, 'replace');
+  });
+
   useEffect(() => {
-    if (!activeSchedule) return;
-    onAddressChange?.({ roster: activeSchedule.id, sheet: rosterSheetToAddress(activeTab) }, 'replace');
-  }, [activeSchedule?.id, activeTab]);
+    syncAddressFromState(activeSchedule?.id, activeTab);
+  }, [activeSchedule?.id, activeTab, syncAddressFromState]);
 
   // Back, Forward or a link to another sheet opens it.
-  useEffect(() => {
+  const syncSheetFromAddress = useLatestCallback((sheetAddress: string | undefined) => {
     if (!address) return;
-    const sheet = (rosterSheetFromAddress(address.sheet) as Sheet) || 'roster';
+    const sheet = (rosterSheetFromAddress(sheetAddress) as Sheet) || 'roster';
     if (sheet !== activeTab) setActiveTab(sheet);
-  }, [address?.sheet]);
+  });
+
+  useEffect(() => {
+    syncSheetFromAddress(address?.sheet);
+  }, [address?.sheet, syncSheetFromAddress]);
 
   // Back, Forward or a link to another roster opens it. Only a change of the address counts:
   // when the list reloads (after New roster) the address still names the roster that was open
   // before, and opening that one again made the address and the open roster swap back and forth.
-  useEffect(() => {
-    const wanted = address?.roster;
+  const syncRosterFromAddress = useLatestCallback((wanted: string | undefined) => {
     if (!wanted || wanted === openScheduleIdRef.current) return;
     const sched = schedulesRef.current.find((s) => s.id === wanted);
     if (sched) openSchedule(sched).catch((err) => notify(`Could not open "${sched.name}": ${err?.message || err}`, 'error'));
-  }, [address?.roster]);
+  });
+
+  useEffect(() => {
+    syncRosterFromAddress(address?.roster);
+  }, [address?.roster, syncRosterFromAddress]);
 
   // A link to a day (#schedules?roster=nov&nurse=mary&date=2026-11-20) shows that cell once its
   // roster is open: the nurse's, or the first nurse's when none is named.
@@ -1474,7 +1509,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   useEffect(() => {
     if (address?.date) pendingJumpRef.current = { nurse: address.nurse, date: address.date };
   }, [address?.date, address?.nurse]);
-  useEffect(() => {
+  const applyPendingJump = useLatestCallback(() => {
     const jump = pendingJumpRef.current;
     if (!jump || !activeSchedule || nurses.length === 0) return;
     if (address?.roster && address.roster !== activeSchedule.id) return; // its roster is still opening
@@ -1482,7 +1517,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     if (jump.date < activeSchedule.startDate || jump.date > activeSchedule.endDate) return;
     const nurseId = jump.nurse && nurses.some((n) => n.id === jump.nurse) ? jump.nurse : nurses[0].id;
     handleJumpToCell(nurseId, jump.date);
-  }, [activeSchedule?.id, nurses.length, address?.date, address?.nurse]);
+  });
+
+  useEffect(() => {
+    applyPendingJump();
+  }, [activeSchedule?.id, nurses.length, address?.date, address?.nurse, applyPendingJump]);
 
   /** "Add" in Who could cover: a Nurse Clinic shift for a nurse free that day (a hand change). */
   /**
@@ -1605,6 +1644,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           : 'h-full'
       }`}
     >
+      <h1 className="sr-only">Rosters</h1>
       {/* Toolbar: the roster, save status, and the few main actions (the rest under More) */}
       <RosterToolbar
         activeSchedule={activeSchedule}
