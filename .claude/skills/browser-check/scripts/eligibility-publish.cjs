@@ -41,9 +41,14 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
   await page.getByRole('button',{name:'Edit Mary',exact:true}).waitFor();
   await page.evaluate(async kind=>{
    const r=window.__repo; const date='2026-11-18';
-   await r.update('nurses','mary',{active:true,...(kind==='denied'?{doctorEligibility:{doctorIds:['lee'],specialtyIds:[],reviewedAt:'2026-11-15T10:00:00Z',reviewedBy:'lead'}}:{})});
-   await r.create('doctorSessions',{id:'review-ray',doctorId:'ray',specialtyId:'ent',date,startTime:'09:00',endTime:kind==='gap'?'21:00':'17:00',source:'MANUAL',cancelled:false});
-   await r.create('assignments',{id:'review-cell',scheduleId:'nov',nurseId:'mary',date,dutyWindowId:'d95',kind:'DOCTOR',doctorId:'ray',source:'GENERATED',locked:false,
+   const paired=kind.startsWith('paired-');
+   if(paired){
+    await r.update('doctors','lee',{lowAcuity:true});await r.update('doctors','ray',{lowAcuity:true});
+    await r.create('doctorSessions',{id:'review-lee',doctorId:'lee',specialtyId:'ortho',date,startTime:'09:00',endTime:'17:00',source:'MANUAL',cancelled:false});
+   }
+   await r.update('nurses','mary',{active:true,...(kind.endsWith('denied')?{doctorEligibility:{doctorIds:['lee'],specialtyIds:[],reviewedAt:'2026-11-15T10:00:00Z',reviewedBy:'lead'}}:{})});
+   await r.create('doctorSessions',{id:'review-ray',doctorId:'ray',specialtyId:'ent',date,startTime:'09:00',endTime:kind.endsWith('gap')?'21:00':'17:00',source:'MANUAL',cancelled:false});
+   await r.create('assignments',{id:'review-cell',scheduleId:'nov',nurseId:'mary',date,dutyWindowId:'d95',kind:'DOCTOR',doctorId:paired?'lee':'ray',...(paired?{secondDoctorId:'ray'}:{}),source:'GENERATED',locked:false,
     note:'Last resort: none of the nurses who list this doctor was free'});
    location.hash='schedules?roster=nov';
   },kind);
@@ -81,6 +86,23 @@ const base = args.includes('--base') ? args[args.indexOf('--base') + 1] : 'http:
  check(await denied.d.getByRole('button',{name:'Continue',exact:true}).isDisabled(),'clinical eligibility violations block publication');
  check(await denied.d.getByRole('checkbox',{name:/Approve this pairing exception/}).count()===0,'clinical ineligibility has no exception approval bypass');
  await denied.page.close();
+ const pairedDenied=await fixture('paired-denied');
+ check(await pairedDenied.d.getByRole('button',{name:'Continue',exact:true}).isDisabled(),'ineligible second doctor blocks publication');
+ check(await pairedDenied.d.getByRole('checkbox',{name:/Approve this pairing exception/}).count()===0,'second doctor eligibility cannot be overridden');
+ await pairedDenied.page.close();
+ const pairedLegacy=await fixture('paired-legacy');
+ check(await pairedLegacy.d.getByRole('group',{name:/Mary with Dr Lee and Dr Ray/}).count()===1,'exception review names both doctors');
+ await approve(pairedLegacy.page,pairedLegacy.d);
+ check(await pairedLegacy.d.getByRole('button',{name:'Continue',exact:true}).isEnabled(),'complete eligible pair can proceed after review');
+ await preview(pairedLegacy.page,pairedLegacy.d);
+ await pairedLegacy.d.getByRole('button',{name:/^Publish (and email|without emails)/}).click();
+ await pairedLegacy.d.getByRole('button',{name:'Done',exact:true}).waitFor({timeout:20000});
+ const savedPair=await pairedLegacy.page.evaluate(()=>window.__repo.col('assignments').get('review-cell'));
+ check(savedPair.doctorId==='lee'&&savedPair.secondDoctorId==='ray'&&JSON.parse(savedPair.allocationReview.signature).at(-1)==='ray','saved review binds both doctors');
+ await pairedLegacy.page.close();
+ const pairedGap=await fixture('paired-gap');await approve(pairedGap.page,pairedGap.d);
+ check(await pairedGap.d.getByRole('button',{name:'Continue',exact:true}).isDisabled(),'second doctor partial coverage still blocks publication');
+ await pairedGap.page.close();
  const gap=await fixture('gap');await approve(gap.page,gap.d);
  check(await gap.d.getByRole('button',{name:'Continue',exact:true}).isDisabled(),'reviewing an exception cannot bypass missing doctor coverage');
  await gap.page.close();

@@ -1,7 +1,7 @@
 /** Small, transactional repairs after generation and hours top up. */
 import type { Assignment, ClinicalRole, DoctorSession, DutyWindow, Nurse } from '../../types';
 import type { ValidationFinding } from '../validation/ScheduleValidator';
-import { canBeFreeNurse, coverageSlots, doctorSessionsOn, isFreeDuring, nurseClinicRoleOf, overlaps, toMinutes,
+import { assignmentCoversDoctor, canBeFreeNurse, coverageSlots, doctorSessionsOn, isFreeDuring, nurseClinicRoleOf, overlaps, toMinutes,
   uncoveredParts, type ResolvedClinicSetup } from './clinicModel';
 import { FLOAT_ROLE_ID } from './floatShift';
 
@@ -70,7 +70,7 @@ export async function repairCoverage(ctx: CoverageRepairContext) {
     const qualified = new Map<string, Gap[]>();
     let missing = 0, overlap = 0;
     for (const sess of sessions) {
-      const linked = day.filter(a => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId);
+      const linked = day.filter(a => assignmentCoversDoctor(a, sess.doctorId));
       const gaps = uncoveredParts(sess.startTime, sess.endTime,
         linked.map(a => duties.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d));
       qualified.set(sess.id, uncoveredParts(sess.startTime, sess.endTime,
@@ -114,18 +114,18 @@ export async function repairCoverage(ctx: CoverageRepairContext) {
   const duration = (list: Assignment[], id: string, through?: string) => list.filter(a => a.nurseId === id && (!through || a.date <= through)).reduce((sum, a) => sum + hours(a), 0);
   const fixedFinding = (f: ValidationFinding) => f.severity === 'ERROR' || f.category === 'RULE_VIOLATION' ||
     /^(role-quota-|holiday-|h7-|hours-over-|hours-part-short-)/.test(f.id);
-  const editable = (a: Assignment) => a.source === 'GENERATED' && !a.locked &&
+  const editable = (a: Assignment) => a.source === 'GENERATED' && !a.locked && !a.secondDoctorId &&
     duties.get(a.dutyWindowId)?.active === true && ctx.movable(a) && !ctx.clinic.holidays.has(a.date);
   const occupied = (id: string, date: string) => assignments.some(a => a.nurseId === id && a.date === date);
   const canFill = (id: string, target: RepairTarget) => target.session
     ? ctx.canPair(id, target.session)
     : ctx.clinic.holidays.has(target.date) || canBeFreeNurse(nurses.get(id), ctx.roles);
   const pair = (a: Assignment, target: RepairTarget): Assignment => {
-    if (target.session) return { ...a, date: target.date, kind: 'DOCTOR', doctorId: target.session.doctorId,
+    if (target.session) return { ...a, date: target.date, kind: 'DOCTOR', doctorId: target.session.doctorId, secondDoctorId: undefined,
       specialtyId: undefined, clinicalRoleId: undefined, note: 'Moved to cover the doctor session' };
     const nc = nurseClinicRoleOf(ctx.roles)?.id || 'role-nurse-clinic';
     const hasNc = assignments.some(a => a.date === target.date && a.kind === 'CLINICAL_ROLE' && a.clinicalRoleId === nc);
-    return { ...a, date: target.date, kind: 'CLINICAL_ROLE', doctorId: undefined, specialtyId: undefined,
+    return { ...a, date: target.date, kind: 'CLINICAL_ROLE', doctorId: undefined, secondDoctorId: undefined, specialtyId: undefined,
       clinicalRoleId: hasNc || ctx.clinic.holidays.has(target.date) ? FLOAT_ROLE_ID : nc,
       note: hasNc || ctx.clinic.holidays.has(target.date) ? 'Float' : 'Nurse Clinic cover' };
   };

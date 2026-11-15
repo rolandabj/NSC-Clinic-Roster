@@ -23,6 +23,7 @@ import { ValidationReport, ValidationFinding } from '../../services/validation/S
 import { summarizeNurseHours, NurseHoursSummary } from '../../services/reports/hoursAccounting';
 import { formatDate } from '../../utils/dateUtils';
 import { outsideNurseList } from '../../services/engine/nurseList';
+import { doctorPairingProblems } from '../../services/engine/doctorPairing';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import { applyPreferenceFocus } from '../../services/engine/preferenceOrder';
 import { confirmDialog, notify } from '../common/dialogs';
@@ -721,14 +722,6 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
 
     if (editorCategory === 'DUTY') {
       const isLocked = !editorAllowOverwrite;
-      const validSecondDoctorId =
-        editorKind === 'DOCTOR' &&
-        editorSecondTargetRefId &&
-        editorSecondTargetRefId !== editorTargetRefId &&
-        doctorMap.get(editorTargetRefId)?.lowAcuity &&
-        doctorMap.get(editorSecondTargetRefId)?.lowAcuity
-          ? editorSecondTargetRefId
-          : undefined;
 
       const newAssignment: Assignment = {
         id: `asgn-manual-${nurseId}-${date}-${Date.now()}`,
@@ -738,13 +731,15 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         dutyWindowId: editorDutyId,
         kind: editorKind,
         doctorId: editorKind === 'DOCTOR' ? editorTargetRefId : undefined,
-        ...(validSecondDoctorId ? { secondDoctorId: validSecondDoctorId } : {}),
+        ...(editorKind === 'DOCTOR' && editorSecondTargetRefId ? { secondDoctorId: editorSecondTargetRefId } : {}),
         clinicalRoleId: editorKind === 'CLINICAL_ROLE' ? editorTargetRefId : undefined,
         specialtyId: editorKind === 'SPECIALTY' ? editorTargetRefId : undefined,
         locked: isLocked,
         source: isLocked ? 'LOCK' : 'MANUAL',
         note: editorNote.trim() || (isLocked ? 'Pinned duty shift' : undefined),
       };
+      const pairingProblems = doctorPairingProblems(newAssignment, doctors);
+      if (pairingProblems.length) { notify(pairingProblems.join(' '), 'error'); return false; }
       const nurse = nurseMap.get(nurseId);
       if (nurse?.doctorEligibility != null && outsideNurseList(nurse, newAssignment, { doctors, specialties, sessions })) {
         notify('This nurse is not eligible for that doctor or specialty. Review clinical eligibility in the nurse profile.', 'error');
@@ -761,7 +756,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
           dutyWindowId: editorDutyId,
           assignmentKind: editorKind,
           targetRefId: editorTargetRefId,
-          ...(validSecondDoctorId ? { secondTargetRefId: validSecondDoctorId } : {}),
+          ...(newAssignment.secondDoctorId ? { secondTargetRefId: newAssignment.secondDoctorId } : {}),
           note: editorNote.trim() || 'Pinned duty assignment',
           createdAt: new Date().toISOString(),
         };
@@ -899,6 +894,8 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       locked: false,
       source: 'MANUAL',
     };
+    const pairingProblems = doctorPairingProblems(pasted, doctors);
+    if (pairingProblems.length) { notify(pairingProblems.join(' '), 'error'); return; }
     const nurse = nurseMap.get(nurseId);
     if (nurse?.doctorEligibility != null && outsideNurseList(nurse, pasted, { doctors, specialties, sessions })) {
       notify('This nurse is not eligible for the copied doctor or specialty. Review clinical eligibility in the nurse profile.', 'error');

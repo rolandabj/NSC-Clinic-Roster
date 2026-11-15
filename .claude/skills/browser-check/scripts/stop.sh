@@ -2,7 +2,7 @@
 # Stops the test page's Vite servers (development and production) and deletes _preview/
 # (never commit it). There is no ss or lsof here, so the servers are found through /proc.
 set -uo pipefail
-ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null || cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd))"
 for p in /proc/[0-9]*; do
   cmd=$(tr '\0' ' ' < "$p/cmdline" 2>/dev/null) || continue
   case "$cmd" in

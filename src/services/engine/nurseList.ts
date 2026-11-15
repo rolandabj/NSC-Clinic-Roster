@@ -48,9 +48,13 @@ export function hasReviewedDoctorEligibility(nurse: Pick<Nurse, 'doctorEligibili
 /** What makes this cell break the nurse's list (null when it fits, or the nurse has no list). */
 export function outsideNurseList(
   nurse: Pick<Nurse, 'preferences' | 'doctorEligibility'>,
-  cell: Pick<Assignment, 'kind' | 'doctorId' | 'specialtyId' | 'date'>,
+  cell: Pick<Assignment, 'kind' | 'doctorId' | 'secondDoctorId' | 'specialtyId' | 'date'>,
   refs: { doctors: Doctor[]; specialties: Specialty[]; sessions: DoctorSession[] }
 ): OutsideList | null {
+  if (cell.kind === 'DOCTOR' && cell.secondDoctorId) {
+    const primary = outsideNurseList(nurse, { ...cell, secondDoctorId: undefined }, refs);
+    return primary || outsideNurseList(nurse, { ...cell, doctorId: cell.secondDoctorId, secondDoctorId: undefined }, refs);
+  }
   const explicit = nurse.doctorEligibility != null;
   const eligibility = nurse.doctorEligibility;
   const reviewed = hasReviewedDoctorEligibility(nurse);

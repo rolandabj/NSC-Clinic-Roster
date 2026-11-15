@@ -45,6 +45,8 @@ import { generateDoctorSessionsForDateRange, missingPatternSessions } from '../s
 import { calculateDutyDurationHours } from '../reports/hoursAccounting';
 import {
   ClinicSetup,
+  assignmentCoversDoctor,
+  assignmentDoctorIds,
   bloodCollectionRole,
   canBeFreeNurse,
   coveredMinutes,
@@ -607,6 +609,7 @@ export class SchedulingEngine {
           dutyWindowId: lock.dutyWindowId,
           kind: lock.assignmentKind || 'SPECIALTY',
           doctorId: lock.assignmentKind === 'DOCTOR' ? lock.targetRefId : undefined,
+          ...(lock.secondTargetRefId ? { secondDoctorId: lock.secondTargetRefId } : {}),
           clinicalRoleId: lock.assignmentKind === 'CLINICAL_ROLE' ? lock.targetRefId : undefined,
           specialtyId: lock.assignmentKind === 'SPECIALTY' ? lock.targetRefId : undefined,
           locked: true,
@@ -1267,8 +1270,7 @@ export class SchedulingEngine {
     const poolSessions = new Map<string, { date: string; hours: number }[]>();
     const keptDoctorCover = new Set(
       Array.from(resultAssignmentsMap.values())
-        .filter((a) => a.kind === 'DOCTOR' && a.doctorId)
-        .map((a) => `${a.doctorId}|${a.date}`)
+        .flatMap(a => assignmentDoctorIds(a).map(id => `${id}|${a.date}`))
     );
     datesList.forEach((d) => {
       if (!inFill(d) || clinic.holidays.has(d)) return;
@@ -1339,7 +1341,7 @@ export class SchedulingEngine {
             fitsHardRules(n, date, d, 0, { hoursLater: true }))).map(n => n.id) });
       };
       for (const sess of daySessions) {
-        const covered = fixed.filter(a => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId)
+        const covered = fixed.filter(a => assignmentCoversDoctor(a, sess.doctorId))
           .map(a => dutyMapGlobal.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d);
         const gaps = uncoveredParts(sess.startTime, sess.endTime, covered);
         if (gaps.length) addFutureJob(sess.id, gaps[0].start, gaps[gaps.length - 1].end,
@@ -1463,7 +1465,7 @@ export class SchedulingEngine {
       }
 
       // 5.1 Today's jobs
-      const coveredDoctorIds = new Set(existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId).map((a) => a.doctorId!));
+      const coveredDoctorIds = new Set(existingToday().flatMap(assignmentDoctorIds));
       // One session per doctor, chosen the same way as the checker does.
       const allDaySessions: DoctorSession[] = doctorSessionsOn(sessions, date);
       const daySessions = allDaySessions
@@ -1565,8 +1567,48 @@ export class SchedulingEngine {
         ? (scarcity.get(a.targetId)! - scarcity.get(b.targetId)!) || b.priority - a.priority || a.targetId.localeCompare(b.targetId)
         : b.priority - a.priority);
 
+      // Add a second low acuity clinic to a new generated duty before using another nurse.
+      // Kept shifts and exception pairings are never changed here. Widening keeps both clinics,
+      // free nurse cover, hours budgets, period limits, rest and future capacity intact.
+      const tryPairDoctor = (session: DoctorSession): boolean => {
+        if (!doctorById.get(session.doctorId)?.lowAcuity) return false;
+        for (const own of existingToday()) {
+          if (own.kind !== 'DOCTOR' || !own.doctorId || own.secondDoctorId || own.locked ||
+            own.source !== 'GENERATED' || keptFromBefore.has(own.id) || own.doctorId === session.doctorId ||
+            !doctorById.get(own.doctorId)?.lowAcuity) continue;
+          const nurse = nurseMap.get(own.nurseId);
+          const oldDuty = dutyMapGlobal.get(own.dutyWindowId);
+          const primary = allDaySessions.find(s => s.doctorId === own.doctorId);
+          if (!nurse || !oldDuty || !primary || !canWorkWithDoctor(nurse, primary.doctorId, primary) ||
+            !canWorkWithDoctor(nurse, session.doctorId, session)) continue;
+          const candidates = activeDuties.filter(d => d.startTime <= oldDuty.startTime && d.endTime >= oldDuty.endTime &&
+            d.startTime <= primary.startTime && d.endTime >= primary.endTime &&
+            d.startTime <= session.startTime && d.endTime >= session.endTime)
+            .sort((a, b) => calculateDutyDurationHours(a) - calculateDutyDurationHours(b) || a.id.localeCompare(b.id));
+          for (const duty of candidates) {
+            const extra = calculateDutyDurationHours(duty) - calculateDutyDurationHours(oldDuty);
+            const room = (nurseTargetMap.get(nurse.id)?.dutyTarget ?? 0) - (nurseStates.get(nurse.id)?.totalDutyHoursEarned ?? 0);
+            if (extra > Math.max(0, room) + 1e-8 || (extra > 0 && extra > optionalHoursFree(nurse.id, date) + 1e-8) ||
+              !fitsHardRules(nurse, date, duty, extra, { replacingOwnShift: true })) continue;
+            const paired = { ...own, dutyWindowId: duty.id, secondDoctorId: session.doctorId };
+            if (!keepsFreeNursesToday(existingToday().map(a => a.id === own.id ? paired : a))) continue;
+            resultAssignmentsMap.set(`${own.nurseId}_${date}`, paired);
+            const state = nurseStates.get(nurse.id)!;
+            state.totalDutyHoursEarned += extra;
+            state.lateShiftsWorked += (isLate(duty) ? 1 : 0) - (isLate(oldDuty) ? 1 : 0);
+            return true;
+          }
+        }
+        return false;
+      };
+
       // 5.2 Fill each job
       for (const slot of daySlots) {
+        if (slot.kind === 'DOCTOR') {
+          if (existingToday().some(a => assignmentCoversDoctor(a, slot.targetId))) continue;
+          const session = allDaySessions.find(s => s.doctorId === slot.targetId);
+          if (session && tryPairDoctor(session)) { doctorSessionsTotal++; continue; }
+        }
         const isNurseClinicSlot = slot.kind === 'CLINICAL_ROLE' && ncRoleIds.has(slot.targetId);
         const slotSession = slot.kind === 'DOCTOR' ? daySessions.find((s) => s.doctorId === slot.targetId) : undefined;
         const { priorityTier, fallbackTier } = SchedulingEngine.partitionCandidateDuties(slot, dutyWindows);
@@ -1667,7 +1709,7 @@ export class SchedulingEngine {
                   // Leave her for another doctor today she ranks higher (by name or by specialty,
                   // in her list order) who still needs a nurse
                   const myRank = pairingRank(nurse, slot.targetId, slotSession);
-                  const filledToday = new Set(existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId).map((a) => a.doctorId!));
+                  const filledToday = new Set(existingToday().flatMap(assignmentDoctorIds));
                   const wantedElsewhere = daySessions.some(
                     (x) =>
                       x.doctorId !== slot.targetId &&
@@ -1835,7 +1877,7 @@ export class SchedulingEngine {
           // choice of a doctor working today (and not yet paired) is kept for that doctor while
           // someone else can run Nurse Clinic.
           const filledDoctorsToday = () =>
-            new Set(existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId).map((a) => a.doctorId!));
+            new Set(existingToday().flatMap(assignmentDoctorIds));
           const firstChoiceOfOpenDoctor = (n: Nurse) => {
             const filled = filledDoctorsToday();
             // Her first choice by name or by specialty
@@ -2084,8 +2126,8 @@ export class SchedulingEngine {
               const duty = dutyMapGlobal.get(asgn.dutyWindowId);
               if (!duty) continue;
               if (asgn.kind === 'DOCTOR' && asgn.doctorId) {
-                if (!canWorkWithDoctor(senior, asgn.doctorId, allDaySessions.find((s) => s.doctorId === asgn.doctorId))) continue;
-                if (rankFor(senior, asgn.doctorId) > rankFor(nurseMap.get(asgn.nurseId), asgn.doctorId)) continue;
+                if (assignmentDoctorIds(asgn).some(id => !canWorkWithDoctor(senior, id, allDaySessions.find(s => s.doctorId === id)) ||
+                  rankFor(senior, id) > rankFor(nurseMap.get(asgn.nurseId), id))) continue;
               }
               if (asgn.kind === 'SPECIALTY') {
                 if (!senior.isClinicNurse || isExclusiveNurseClinic(senior, roles)) continue;
@@ -2158,7 +2200,7 @@ export class SchedulingEngine {
       // her goal (keeping her first choice hours) and the hard rules. Only then does a second
       // nurse come (5.5a).
       for (const sess of allDaySessions) {
-        const linked = existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId);
+        const linked = existingToday().filter((a) => assignmentCoversDoctor(a, sess.doctorId));
         const linkedDuties = () => linked.map((a) => dutyMapGlobal.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d);
         if (linked.length === 0 || uncoveredParts(sess.startTime, sess.endTime, linkedDuties()).length === 0) continue;
         for (const asgn of linked.filter((a) => a.source === 'GENERATED' && !a.locked)) {
@@ -2202,7 +2244,7 @@ export class SchedulingEngine {
       // and the senior nurse, and works like a float: from today's spare hours only, within
       // the nurse's goal, keeping the blood collection and senior reserves.
       for (const sess of allDaySessions) {
-        const linked = existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId);
+        const linked = existingToday().filter((a) => assignmentCoversDoctor(a, sess.doctorId));
         if (linked.length === 0) continue; // no nurse at all: nothing to extend
         const gaps = uncoveredParts(
           sess.startTime,
@@ -2381,7 +2423,7 @@ export class SchedulingEngine {
       // else one who is off and still under her goal. Exclusive Nurse Clinic nurses never
       // go to a doctor, and the free nurse at every opening hour is kept.
       for (const sess of allDaySessions) {
-        if (existingToday().some((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId)) continue;
+        if (existingToday().some((a) => assignmentCoversDoctor(a, sess.doctorId))) continue;
         const sessMinutes = Math.max(1, toMinutes(sess.endTime) - toMinutes(sess.startTime));
         const freeBefore = plusOneEnabled ? freeCountsWith(existingToday()) : [];
         let best: { nurse: Nurse; duty: DutyWindow; score: number; replacing?: Assignment } | null = null;
@@ -2451,7 +2493,7 @@ export class SchedulingEngine {
       // of his was free): a nurse already floating today whose shift covers the missing hours
       // joins him as a last resort. No extra hours; every opening hour keeps its free nurse.
       for (const sess of allDaySessions) {
-        const linked = existingToday().filter((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId);
+        const linked = existingToday().filter((a) => assignmentCoversDoctor(a, sess.doctorId));
         if (linked.length === 0) continue;
         const gaps = uncoveredParts(
           sess.startTime,
@@ -2587,7 +2629,7 @@ export class SchedulingEngine {
     };
     for (const date of datesList.filter((d) => inFill(d) && !clinic.holidays.has(d))) {
       for (const sess of doctorSessionsOn(sessions, date)) {
-        const linked = Array.from(resultAssignmentsMap.values()).filter((a) => a.date === date && a.kind === 'DOCTOR' && a.doctorId === sess.doctorId);
+        const linked = Array.from(resultAssignmentsMap.values()).filter((a) => a.date === date && assignmentCoversDoctor(a, sess.doctorId));
         if (linked.length !== 1) continue;
         const asgn = linked[0];
         const nurse = nurseMap.get(asgn.nurseId);
@@ -2625,10 +2667,10 @@ export class SchedulingEngine {
             continue;
           }
           if (other.kind !== 'DOCTOR' || !other.doctorId) continue;
-          const otherSess = doctorSessionsOn(sessions, other.date).find((x) => x.doctorId === other.doctorId);
-          if (!otherSess) continue;
+          const otherSessions = doctorSessionsOn(sessions, other.date).filter(x => assignmentCoversDoctor(other, x.doctorId));
+          if (!otherSessions.length) continue;
           const shorter = activeDuties
-            .filter((d) => d.startTime <= otherSess.startTime && d.endTime >= otherSess.endTime && calculateDutyDurationHours(d) < calculateDutyDurationHours(duty))
+            .filter((d) => otherSessions.every(sess => d.startTime <= sess.startTime && d.endTime >= sess.endTime) && calculateDutyDurationHours(d) < calculateDutyDurationHours(duty))
             // a shorter shift can still start or end at other times: rest and late runs again
             .filter((d) => fitsHardRules(nurse, other.date, d, calculateDutyDurationHours(d) - calculateDutyDurationHours(duty), { replacingOwnShift: true }))
             .sort((a, b) => calculateDutyDurationHours(b) - calculateDutyDurationHours(a))[0];
@@ -2671,7 +2713,7 @@ export class SchedulingEngine {
       return doctorSessionsOn(sessions, date).find((sess) => {
         if (!canFallbackWithDoctor(nurse, sess)) return false;
         const linked = onDay
-          .filter((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId)
+          .filter((a) => assignmentCoversDoctor(a, sess.doctorId))
           .map((a) => dutyMapGlobal.get(a.dutyWindowId))
           .filter((d): d is DutyWindow => !!d);
         return uncoveredParts(sess.startTime, sess.endTime, linked).some((g) => coveredMinutes(duty, g.start, g.end) > 0);
@@ -2784,7 +2826,7 @@ export class SchedulingEngine {
       assignments: beforeRepair, dates: datesList, sessions, nurses: sortedNurses,
       duties: dutyWindows, roles, clinic, minFreeNurses: plusOneEnabled ? minAdditionalNurses : 0,
       hoursCheckpoints: checkpoints.filter(end => end < schedule.endDate),
-      movable: a => inFill(a.date) && !keptFromBefore.has(a.id),
+      movable: a => inFill(a.date) && !keptFromBefore.has(a.id) && !a.secondDoctorId,
       canWorkOnDate: (id, date) => inFill(date) && !isOnApprovedLeave(id, date) && !hasDayOffLock(id, date) &&
         (!hasPendingTimeOff(id, date) || resultAssignmentsMap.has(`${id}_${date}`)),
       canPair: (id, sess) => {
@@ -2796,8 +2838,8 @@ export class SchedulingEngine {
         doctors, leaveTypes, clinicSetup, requests).findings,
     });
     if (repaired.repairedCount > 0) {
-      const beforeDoctors = new Set(beforeRepair.filter(a => a.kind === 'DOCTOR').map(a => `${a.doctorId}|${a.date}`));
-      const afterDoctors = new Set(repaired.assignments.filter(a => a.kind === 'DOCTOR').map(a => `${a.doctorId}|${a.date}`));
+      const beforeDoctors = new Set(beforeRepair.flatMap(a => assignmentDoctorIds(a).map(id => `${id}|${a.date}`)));
+      const afterDoctors = new Set(repaired.assignments.flatMap(a => assignmentDoctorIds(a).map(id => `${id}|${a.date}`)));
       const newlyCovered = [...afterDoctors].filter(key => !beforeDoctors.has(key)).length;
       unmetSlotsCount = Math.max(0, unmetSlotsCount - newlyCovered);
       resultAssignmentsMap.clear();

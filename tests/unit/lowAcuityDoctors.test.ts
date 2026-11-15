@@ -406,7 +406,7 @@ test('strict nurse list, checkAssignment and ScheduleValidator enforce low acuit
   // Normal doctor paired with low acuity doctor is rejected by checkAssignment and ScheduleValidator.
   const nonLowCell: Assignment = { ...validPairCell, secondDoctorId: DR_RAY_NORMAL.id };
   const nonLowReasons = checkAssignment({ ...baseCtx, assignments: [nonLowCell] }, nonLowCell);
-  assert.ok(nonLowReasons.some((r) => r.includes('is not low acuity')));
+  assert.ok(nonLowReasons.some((r) => r.includes('is not marked as low acuity')));
 
   const sessions = [
     makeSession('s1', DR_LEE.id, '2026-10-05'),

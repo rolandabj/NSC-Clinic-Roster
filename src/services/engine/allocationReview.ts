@@ -2,8 +2,11 @@ import type { Assignment, AllocationReview } from '../../types';
 
 /** A review belongs to one saved shift and pairing, not to a reusable note prefix. */
 export function allocationSignature(a: Assignment): string {
-  return JSON.stringify([a.id, a.scheduleId, a.nurseId, a.date, a.dutyWindowId, a.kind,
-    a.doctorId || null, a.specialtyId || null]);
+  const identity = [a.id, a.scheduleId, a.nurseId, a.date, a.dutyWindowId, a.kind,
+    a.doctorId || null, a.specialtyId || null];
+  // Preserve existing reviews of single doctor shifts; paired shifts include both doctors.
+  if (a.secondDoctorId) identity.push(a.secondDoctorId);
+  return JSON.stringify(identity);
 }
 
 export function hasAllocationReview(a: Assignment): boolean {

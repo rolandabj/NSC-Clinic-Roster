@@ -21,6 +21,7 @@ import { countHoursInRange, hoursCheckpoints, hoursHistoryOverlaps, resolveNurse
 import { hasAllocationReview } from '../engine/allocationReview';
 import { isAgreedException, isLastResortShift } from '../engine/lastResort';
 import { outsideNurseList } from '../engine/nurseList';
+import { doctorPairingProblems } from '../engine/doctorPairing';
 import { summarizeNurseHours } from '../reports/hoursAccounting';
 import {
   Schedule,
@@ -49,6 +50,8 @@ import { leaveCountingOnHoliday } from '../hours/holidayLeave';
 import { pendingLeaveOn, requestOn } from '../engine/explainCell';
 import {
   ClinicSetup,
+  assignmentCoversDoctor,
+  assignmentDoctorIds,
   bloodCollectionRole,
   canBeFreeNurse,
   isFreeDuring,
@@ -211,6 +214,14 @@ export class ScheduleValidator {
       hourlyCoverageMap[date] = {};
       const isHoliday = clinic.holidays.has(date);
       const dayAssignments = assignments.filter((a) => a.date === date);
+      for (const a of dayAssignments) {
+        const problems = doctorPairingProblems(a, doctors);
+        if (problems.length) findings.push({
+          id: `low-acuity-pair-${a.nurseId}-${date}`, category: 'RULE_VIOLATION', severity: 'ERROR',
+          message: `${nurseMap.get(a.nurseId)?.fullName || 'A nurse'} on ${formatDate(date)}: ${problems.join(' ')}`,
+          affectedNurseIds: [a.nurseId], cellRefs: [{ nurseId: a.nurseId, date }], date,
+        });
+      }
       const daySessions = clinic.holidays.has(date) ? [] : doctorSessionsOn(sessions, date);
       const openHours = coverageSlots(clinic,
         dayAssignments.map(a => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d), daySessions);
@@ -306,18 +317,20 @@ export class ScheduleValidator {
       // A nurse still with a doctor who has no clinic that day (the doctor's week changed, or the
       // day was cancelled): the nurse counts as a free nurse, but the cell names the doctor.
       for (const a of dayAssignments) {
-        if (a.kind !== 'DOCTOR' || !a.doctorId || daySessions.some((x) => x.doctorId === a.doctorId)) continue;
-        const nurse = nurseMap.get(a.nurseId);
-        const doctorName = doctors.find((d) => d.id === a.doctorId)?.fullName || 'the doctor';
-        findings.push({
-          id: `doctor-not-in-clinic-${a.nurseId}-${date}`,
-          category: 'DATA_ISSUE',
-          severity: 'WARN',
-          message: `${nurse?.fullName || 'A nurse'} is with ${doctorName} on ${dayName} ${formatDate(date)}, but ${doctorName} has no clinic that day. Give the shift another job, or fill the roster again.`,
-          affectedNurseIds: [a.nurseId],
-          cellRefs: [{ nurseId: a.nurseId, date }],
-          date,
-        });
+        for (const doctorId of assignmentDoctorIds(a)) {
+          if (daySessions.some((x) => x.doctorId === doctorId)) continue;
+          const nurse = nurseMap.get(a.nurseId);
+          const doctorName = doctors.find((d) => d.id === doctorId)?.fullName || 'the doctor';
+          findings.push({
+            id: `doctor-not-in-clinic-${a.nurseId}-${date}${doctorId === a.doctorId ? '' : `-${doctorId}`}`,
+            category: 'DATA_ISSUE',
+            severity: 'WARN',
+            message: `${nurse?.fullName || 'A nurse'} is with ${doctorName} on ${dayName} ${formatDate(date)}, but ${doctorName} has no clinic that day. Give the shift another job, or fill the roster again.`,
+            affectedNurseIds: [a.nurseId],
+            cellRefs: [{ nurseId: a.nurseId, date }],
+            date,
+          });
+        }
       }
 
       // Rule: At least +1 Additional Nurse Above Doctors During Operating Hours
@@ -347,7 +360,7 @@ export class ScheduleValidator {
             isFreeDuring(a, dutyMap.get(a.dutyWindowId), daySessions, h.start, h.end))
         ).length;
         const coveredDoctors = activeSessions.filter(sess => activeAssignments.some(a =>
-          a.kind === 'DOCTOR' && a.doctorId === sess.doctorId)).length;
+          assignmentCoversDoctor(a, sess.doctorId))).length;
         const deficit = Math.max(0, minAdditional - freeNurses);
 
         hourlyCoverageMap[date][h.start] = { end: h.end, nurses: activeNurseIds.size, doctors: activeSessions.length,
@@ -549,10 +562,10 @@ export class ScheduleValidator {
       // CATEGORY 5: DATA ISSUE — Doctor sessions with no nurse assigned
       daySessions.forEach((sess) => {
         const pairedNurse = dayAssignments.find(
-          (a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId
+          (a) => assignmentCoversDoctor(a, sess.doctorId)
         );
         // Hours of the session no linked nurse covers (partial cover is allowed, but shown)
-        const linkedAssignments = dayAssignments.filter(a => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId && nurseMap.has(a.nurseId));
+        const linkedAssignments = dayAssignments.filter(a => assignmentCoversDoctor(a, sess.doctorId) && nurseMap.has(a.nurseId));
         const linkedDuties = linkedAssignments
           .map((a) => dutyMap.get(a.dutyWindowId))
           .filter((d): d is DutyWindow => !!d);

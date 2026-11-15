@@ -39,7 +39,7 @@ export const CoverageSheet: React.FC<CoverageSheetProps> = ({
   // Follow the page of days when it changes.
   useEffect(() => {
     if (!blockDates.includes(selectedDate)) setSelectedDate(blockDates[0] || '');
-  }, [blockDates.join(',')]);
+  }, [blockDates, selectedDate]);
 
   const dutyMap = new Map(dutyWindows.map((d) => [d.id, d]));
   const nurseMap = new Map(nurses.map((n) => [n.id, n]));

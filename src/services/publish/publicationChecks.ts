@@ -3,6 +3,7 @@ import type { ValidationFinding, ValidationReport } from '../validation/Schedule
 import { allocationSignature, approveAllocation, hasAllocationReview } from '../engine/allocationReview';
 import { outsideNurseList } from '../engine/nurseList';
 import { formatDate } from '../../utils/dateUtils';
+import { assignmentDoctorIds } from '../engine/clinicModel';
 
 export interface AllocationDraft { signature: string; reason: string; confirmed: boolean }
 export type AllocationDrafts = Record<string, AllocationDraft>;
@@ -13,7 +14,10 @@ export function pendingAllocationReviews(assignments: Assignment[], nurses: Nurs
     const nurse = nurses.find(n => n.id === assignment.nurseId);
     if (!nurse || nurse.doctorEligibility != null || hasAllocationReview(assignment)) return [];
     const outside = outsideNurseList(nurse, assignment, refs);
-    return outside ? [{ assignment, nurse, outside }] : [];
+    const pairingName = assignment.secondDoctorId
+      ? assignmentDoctorIds(assignment).map(id => refs.doctors.find(d => d.id === id)?.fullName || 'Doctor').join(' and ')
+      : outside?.name;
+    return outside ? [{ assignment, nurse, outside, pairingName: pairingName! }] : [];
   });
 }
 
@@ -37,9 +41,9 @@ export function publicationReport(report: ValidationReport, assignments: Assignm
     }
     return f;
   });
-  for (const { assignment: a, nurse, outside } of pendingAllocationReviews(assignments, nurses, refs)) {
+  for (const { assignment: a, nurse, pairingName } of pendingAllocationReviews(assignments, nurses, refs)) {
     findings.push({ id: `allocation-review-${a.id}`, category: 'RULE_VIOLATION', severity: 'ERROR',
-      message: `${nurse.fullName} with ${outside.name} on ${formatDate(a.date)} needs an explicit pairing review before publishing.`,
+      message: `${nurse.fullName} with ${pairingName} on ${formatDate(a.date)} needs an explicit pairing review before publishing.`,
       affectedNurseIds: [nurse.id], cellRefs: [{ nurseId: nurse.id, date: a.date }], date: a.date });
   }
   return { ...report, findings, errorCount: findings.filter(f => f.severity === 'ERROR').length,

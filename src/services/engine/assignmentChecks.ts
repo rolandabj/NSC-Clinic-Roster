@@ -22,6 +22,7 @@ import { bloodCollectionRole, canBeFreeNurse, nurseClinicRoleOf } from './clinic
 import { outsideNurseList } from './nurseList';
 import { heaviestWeekAround, WEEK_HOURS_RULE, weekHoursSetting } from './weekHours';
 import { dutyDurationHours } from '../hours/hoursBalance';
+import { doctorPairingProblems } from './doctorPairing';
 
 export interface AssignmentCheckContext {
   /** The whole roster as it would be after the change. */
@@ -131,6 +132,7 @@ export function checkAssignment(ctx: AssignmentCheckContext, cell: Assignment): 
     }
   }
 
+  reasons.push(...doctorPairingProblems(cell, ctx.doctors || []));
   if (nurse?.doctorEligibility != null) {
     const outside = outsideNurseList(nurse, cell, { doctors: ctx.doctors || [], specialties: ctx.specialties || [], sessions: ctx.sessions || [] });
     if (outside) reasons.push(`${name} is not eligible for ${outside.name}. Review clinical eligibility in the nurse profile.`);

@@ -10,6 +10,7 @@
 import type { HoursHistory } from '../../services/hours/hoursBalance';
 
 import React, { useState, useEffect, useId, useRef } from 'react';
+import { useLatestCallback } from '../common/useLatestCallback';
 import { authService } from '../../services/auth/authService';
 import { assertPublicationCurrent } from '../../services/publish/publicationInputs';
 import { AllocationReviews } from '../publish/AllocationReviews';
@@ -208,7 +209,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
     );
   };
 
-  useEffect(() => {
+  const initializePublish = useLatestCallback(() => {
     if (isOpen) {
       setCurrentStep('VALIDATION');
       setAcknowledgeWarnings(false);
@@ -327,7 +328,8 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       setSelectedNurseIds(new Set(recipients.map((n) => n.id)));
       setPreviewNurseId((recipients[0] || activeNursesWithGmail[0])?.id || '');
     }
-  }, [isOpen, schedule.id, initialMode]);
+  });
+  useEffect(() => { initializePublish(); }, [isOpen, schedule.id, initialMode, initializePublish]);
 
   const noEmailId = useId();
 
