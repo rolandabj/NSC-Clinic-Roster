@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 15-11-2026, reporting and final validation stage 5 (section 16, item 112), pushed to main.
+Last updated: 15-11-2026, GitHub branch cleanup (section 16, item 113), pushed to main.
 
 ---
 
@@ -10,7 +10,7 @@ Last updated: 15-11-2026, reporting and final validation stage 5 (section 16, it
 
 **What it is.** A nurse rostering web app for one outpatient clinic (American Hospital Nad Al Sheba OutPatient clinic, Dubai, timezone Asia/Dubai). Planners build a roster (a grid of nurses × days), the engine fills it automatically, the app checks it against the clinic rules, and the roster is published to nurses by email, private links and a calendar feed.
 
-**Repository.** GitHub `rolandabj/nsc-clinic-roster`. Default branch `main`. Working branch used by Claude sessions: the branch named by the session (recently `ccr-6dd5843f-1r1r0c`).
+**Repository.** GitHub `rolandabj/nsc-clinic-roster`. Default branch `main`. Active working branch `work`. The old session and experiment branches were removed on 15-11-2026 after the review in section 16, item 113. Unmerged drafts are kept as archive tags.
 
 **Stack.** React 19 + Vite 8 + Tailwind 4 + TypeScript (browser). Cloud Firestore accessed directly from the browser, protected by `firestore.rules`. A small Express server only sends email and serves the `.ics` calendar feed. Hosted by Google AI Studio (Cloud Run), which syncs from GitHub `main`.
 
@@ -48,6 +48,20 @@ Last updated: 15-11-2026, reporting and final validation stage 5 (section 16, it
 5. No model identifiers in commits. Commit messages end with the Co-Authored-By and Claude-Session trailers given by the session.
 6. After changing `firestore.rules`, remind the owner to **publish the rules by hand** in the Firebase console (Firestore → the named database `ai-studio-clinicroster-…` → Rules). AI Studio does not deploy rules.
 7. Verify every change with: type check, unit tests, build, and (for rules) the emulator tests. For UI changes, check in a browser (the `browser-check` skill, section 15). The `finish-change` skill holds the whole routine.
+
+---
+
+**GitHub branches after the cleanup of 15-11-2026.** Only `main` and `work` remain. CI and the app deployment use `main`; `work` is the active development branch. Six removed branches were already fully merged into main: `ccr-6dd5843f-1r1r0c`, `ccr-7e9cfdbe-x4izxn`, `ccr-9a491839-w8iyoq`, `ccr-df2cd889-w2frx2`, `claude/more-agent-skills` and `claude/ui-overhaul`. Their commits remain in main history.
+
+Three older unmerged drafts were preserved as annotated tags on GitHub before deleting their branch names:
+
+| Removed branch | Archive tag | Preserved tip |
+|---|---|---|
+| `ccr-9ca5d55c-aug266` | `archive/2026-11-15/ccr-9ca5d55c-aug266` | `a6a6388998e3244e0b88fc8737da55ebac370ce9` |
+| `remove-weekly-hours-fallback` | `archive/2026-11-15/remove-weekly-hours-fallback` | `58b1477b2decac9031fd0e427a5cd024197d2dfc` |
+| `restore-roster-target-fallback` | `archive/2026-11-15/restore-roster-target-fallback` | `6cf65b8af7133fff2bb2cc54ecefa7935bc5172d` |
+
+These are recovery copies of old branding and hours policy drafts. They were not merged during cleanup. To recover one, fetch tags with `git fetch origin --tags`, then create a new branch from its tag, for example `git switch -c recovered-hours archive/2026-11-15/restore-roster-target-fallback`. No open pull requests existed at review time. Deletions checked the exact reviewed branch tips and ran atomically, so a concurrent branch update would have stopped the cleanup. Main stayed at `0863e6cb25709921263a6bdaafec0d019410edde` throughout deletion; the later audit commit changes documentation only.
 
 ---
 
@@ -789,6 +803,9 @@ Earlier entries are on `main`. The latest entry states whether it has been publi
 
 
 112. Reporting and final validation stage 5 (15-11-2026, approved by the owner): confirmed the integration repair was already on main, then added a review section to the analysis report. Draft findings and publication blockers are now separate, using the existing publication policy rather than a second decision engine. The report lists exact missing doctor and Nurse Clinic time, pending and stale pairing reviews, and active clinic nurse profiles needing verified eligibility. Both doctors of a paired shift are assessed. Corrected the old outside list total, which treated a permitted nurse with no matching ranked preference as an allocation error. The separate preference total preserves that useful count. The Full report tab now puts the review summary first and offers a readable action list alongside JSON. These downloads remain available when the roster has blocking findings, so the planner can review them. Reasons and account ids from pairing reviews are not exported. The report distinguishes legacy profiles from verified clinical eligibility and does not approve or change them. Added ten regression tests, bringing the total to 626; eight new cases were shown failing before their fixes. Coverage includes permitted nonpreferred work, preferred but ineligible work, publication blockers hidden by a draft warning, second doctor gaps, exact minutes and a quota of two free nurses, stale and valid reviews, one action per exception, profile scope, holidays, privacy, repeatability and unchanged inputs. Checks passed: strict ESLint with zero warnings, type check, all 626 unit tests, build, all four email server modes, 19 new report browser checks, 21 pairing and publication checks and 22 workbook checks, 62 in all. Report browser checks cover real JSON and text downloads, matching screen and file counts, privacy, no assignment writes, expandable gaps, both doctors and a phone layout. The test harness was restarted after a Vite dependency cache became stale; its external font stylesheet and absent favicon are stubbed only in browser tests. Final reconstruction of the uploaded report with current generation confirms every nurse remains at 210 hours, total hours 2730, missing doctor time 12 hours in Pediatrics, and Nurse Clinic gaps zero. The new publication section correctly lists three blocking findings: the missing Pediatric session on 18 December and two unreviewed Mary Grace pairings on 1 and 10 December. Ten active clinic nurse profiles need clinical eligibility confirmation. Review also caught a holiday instruction that wrongly asked for Nurse Clinic qualifications; a failing regression now keeps holiday cover separate. These are test generation findings, not changes to the uploaded or live roster. Stage 5 changes reporting, not scheduling decisions or publication rules. No live roster, clinical eligibility data or Firestore rules changed. The guide and code graph were refreshed. The owner approved stage 5 and the instruction to push changes to main on 15-11-2026. Stage 5 is pushed to main.
+
+
+113. GitHub branch cleanup (15-11-2026, requested and approved by the owner): confirmed all recent code, including stage 5, was already saved on main at `0863e6c`, with no local changes. Reviewed all 11 remote branches, commit ancestry, unique patches, the open pull request list and repository branch references. There were no open pull requests. Kept `main` and the active `work` branch. Removed six fully merged session branches and three older unmerged drafts, nine obsolete branches in all. The three unmerged tips were first saved as annotated `archive/2026-11-15/` tags on GitHub and their exact commit ids verified; recovery instructions are recorded in section 0. The older hours alternatives and branding assets were preserved without changing current app behavior. All nine branch deletions used exact expected commit ids and one atomic push. Verified afterward that only main and work remained and that main's commit and complete source tree were identical to the values before deletion. Removed stale local remote references. This audit changes only the guide and any required graph metadata; application code, assets, package files, deployment configuration, Firestore rules and live data are unchanged. Stage 1 to stage 5 commits remain in main history. The owner approved pushing recent changes and this cleanup to main. The unit test count remains 626. Verification includes strict ESLint, type check, all unit tests, build, all four email server modes and the GitHub checks after the documentation push. No UI or database behavior changed, so no new browser or emulator run is needed. The code graph was refreshed. The cleanup audit is pushed to main.
 
 
 ## 17. Known quirks and ideas for later

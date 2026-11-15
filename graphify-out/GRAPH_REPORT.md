@@ -1,7 +1,7 @@
 # Graph Report - NSC-Clinic-Roster  (2026-11-15)
 
 ## Corpus Check
-- 452 files · ~460,240 words
+- 452 files · ~460,690 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 12 file(s) not represented in the graph (top: (none) 5, .css 4, .example 1)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b29e31bd`
+- Built from commit: `0863e6cb`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -811,7 +811,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `lucide-react` connect `react` to `analysisExportService.ts`, `staffRequestService.ts`, `MyRosterView.tsx`, `RulesTab.tsx`, `PublishedRosterView.tsx`, `getRepository`, `RosterSteps.tsx`, `package.json`, `WorkbookGrid.tsx`, `PublishView.tsx`, `DashboardView.tsx`, `FairnessModal.tsx`, `GridTable.tsx`, `NurseSample.tsx`, `ReportsView.tsx`, `App.tsx`, `access.ts`, `EmailTab.tsx`, `PlannerSample.tsx`, `ui.tsx`, `Phase 3: roster grid speed and structure`, `GridRow.tsx`, `RosterSheetTabs.tsx`, `formatDate`, `SchedulesView.tsx`, `resumePublish.ts`, `lowAcuityDoctors.test.ts`, `AppShell.tsx`, `Sidebar.tsx`, `RosterToolbar.tsx`, `harness/main.tsx`, `16. History of work (for context)`, `HistoryView.tsx`, `authService.ts`?**
   _High betweenness centrality (0.046) - this node is a cross-community bridge._
 - **Why does `16. History of work (for context)` connect `16. History of work (for context)` to `staffRequestService.ts`, `SchedulingEngine.ts`, `MyRosterView.tsx`, `react`, `PublishedRosterView.tsx`, `getRepository`, `RosterSteps.tsx`, `gridSelection.ts`, `WorkbookGrid.tsx`, `PublishView.tsx`, `FirestoreRepository.ts`, `GridTable.tsx`, `GridStatusBar.tsx`, `usePhoneLayout.ts`, `useRowsInSteps`, `ReportsView.tsx`, `access.ts`, `Phase 3: roster grid speed and structure`, `dayView.test.ts`, `GridRow.tsx`, `address.ts`, `RosterSheetTabs.tsx`, `leaveAllowance.test.ts`, `formatDate`, `emailLogSize.ts`, `SchedulesView.tsx`, `EntityForCollection`, `resumePublish.ts`, `AppShell.tsx`, `NSC Clinic Roster: complete project guide`, `ClinicContextState`, `Sidebar.tsx`, `RosterToolbar.tsx`, `types/index.ts`, `apiApp.ts`, `FirestoreRepository`, `nurseRoster.test.ts`, `GridSelection`, `yearToDate.ts`, `HistoryView.tsx`, `peopleImport.ts`, `authService.ts`, `seedRunner.ts`?**
-  _High betweenness centrality (0.031) - this node is a cross-community bridge._
+  _High betweenness centrality (0.032) - this node is a cross-community bridge._
 - **Are the 127 inferred relationships involving `16. History of work (for context)` (e.g. with `preview()` and `getDocumentAs()`) actually correct?**
   _`16. History of work (for context)` has 127 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `{ tool_input: toolInput = {}, cwd = process.cwd() }`, `command`, `{ tool_input: toolInput = {}, cwd = process.cwd() }` to the rest of the system?**
