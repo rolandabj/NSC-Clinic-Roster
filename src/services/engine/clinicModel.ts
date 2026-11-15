@@ -102,6 +102,22 @@ export function openingHourSlots(setup: ResolvedClinicSetup): { start: string; e
   return slots;
 }
 
+/** Coverage checks split at every shift, session and opening hour boundary. */
+export function coverageSlots(
+  setup: ResolvedClinicSetup,
+  duties: DutyWindow[],
+  sessions: DoctorSession[] = []
+): { start: string; end: string }[] {
+  const boundaries = new Set([setup.openTime, setup.closeTime, ...openingHourSlots(setup).map(h => h.start)]);
+  for (const range of [...duties, ...sessions]) {
+    for (const time of [range.startTime, range.endTime]) {
+      if (time > setup.openTime && time < setup.closeTime) boundaries.add(time);
+    }
+  }
+  const times = [...boundaries].sort();
+  return times.slice(0, -1).map((start, i) => ({ start, end: times[i + 1] }));
+}
+
 /** True when the time ranges overlap (touching ends don't count). */
 export function overlaps(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
   return aStart < bEnd && aEnd > bStart;

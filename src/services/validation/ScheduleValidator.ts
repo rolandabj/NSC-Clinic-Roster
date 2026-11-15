@@ -51,7 +51,8 @@ import {
   bloodCollectionRole,
   canBeFreeNurse,
   isFreeDuring,
-  openingHourSlots,
+  coverageSlots,
+  toMinutes,
   overlaps,
   resolveClinicSetup,
   uncoveredParts,
@@ -85,6 +86,12 @@ export interface ValidationFinding {
 }
 
 export interface HourCoverage {
+  /** End of this interval. Older reports without this field used one hour intervals. */
+  end?: string;
+  /** Doctors whose session has at least one linked nurse on duty in this interval. */
+  coveredDoctors?: number;
+  /** Doctors whose session has no linked nurse on duty in this interval. */
+  uncoveredDoctors?: number;
   nurses: number;
   doctors: number;
   /** Nurses free of a doctor at that hour who can run Nurse Clinic. */
@@ -102,7 +109,7 @@ export interface ValidationReport {
   warnCount: number;
   infoCount: number;
   findings: ValidationFinding[];
-  /** Per date and opening hour: nurses on duty, doctors in session, free nurses, and how many free nurses are missing. */
+  /** Per date and exact coverage interval: staffing, doctor coverage and free nurse shortages. */
   hourlyCoverageMap: Record<string, Record<string, HourCoverage>>;
 }
 
@@ -134,7 +141,6 @@ export class ScheduleValidator {
       affectedNurseIds: [], cellRefs: [],
     });
     const clinic = resolveClinicSetup(clinicSetup);
-    const openHours = openingHourSlots(clinic);
     const phlRole = bloodCollectionRole(roles);
     /** "Dr name (Specialty)" for messages about a session. */
     const doctorLabel = (sess: DoctorSession): string => {
@@ -204,6 +210,9 @@ export class ScheduleValidator {
       hourlyCoverageMap[date] = {};
       const isHoliday = clinic.holidays.has(date);
       const dayAssignments = assignments.filter((a) => a.date === date);
+      const daySessions = clinic.holidays.has(date) ? [] : doctorSessionsOn(sessions, date);
+      const openHours = coverageSlots(clinic,
+        dayAssignments.map(a => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d), daySessions);
       const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
       const hasSeniorToday = dayAssignments.some((a) => {
         const n = nurseMap.get(a.nurseId);
@@ -216,8 +225,10 @@ export class ScheduleValidator {
           const onDuty = dayAssignments.filter((a) => {
             const duty = dutyMap.get(a.dutyWindowId);
             return !!duty && overlaps(duty.startTime, duty.endTime, h.start, h.end);
-          }).length;
-          hourlyCoverageMap[date][h.start] = { nurses: onDuty, doctors: 0, freeNurses: onDuty, deficit: onDuty > 0 ? 0 : 1, holiday: true };
+          }).map(a => a.nurseId);
+          const count = new Set(onDuty).size;
+          hourlyCoverageMap[date][h.start] = { end: h.end, nurses: count, doctors: 0, coveredDoctors: 0, uncoveredDoctors: 0,
+            freeNurses: count, deficit: count > 0 ? 0 : 1, holiday: true };
         });
         const holidayDuties = dayAssignments.map((a) => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d);
         const holidayGaps = uncoveredParts(clinic.openTime, clinic.closeTime, holidayDuties);
@@ -291,9 +302,6 @@ export class ScheduleValidator {
         return;
       }
 
-      // Each doctor works one session a day (a duplicate entry is ignored)
-      const daySessions = doctorSessionsOn(sessions, date);
-
       // A nurse still with a doctor who has no clinic that day (the doctor's week changed, or the
       // day was cancelled): the nurse counts as a free nurse, but the cell names the doctor.
       for (const a of dayAssignments) {
@@ -327,17 +335,22 @@ export class ScheduleValidator {
       // Hours in a row without one are reported together, as one problem.
       const gapRuns: { start: string; end: string }[] = [];
       openHours.forEach((h) => {
-        const activeDocs = daySessions.filter((s) => overlaps(s.startTime, s.endTime, h.start, h.end)).length;
-        const activeNurses = dayAssignments.filter((a) => {
+        const activeSessions = daySessions.filter(s => overlaps(s.startTime, s.endTime, h.start, h.end));
+        const activeAssignments = dayAssignments.filter(a => {
           const duty = dutyMap.get(a.dutyWindowId);
-          return !!duty && overlaps(duty.startTime, duty.endTime, h.start, h.end);
-        }).length;
-        const freeNurses = dayAssignments.filter(
-          (a) => canBeFreeNurse(nurseMap.get(a.nurseId), roles) && isFreeDuring(a, dutyMap.get(a.dutyWindowId), daySessions, h.start, h.end)
+          return nurseMap.has(a.nurseId) && !!duty && overlaps(duty.startTime, duty.endTime, h.start, h.end);
+        });
+        const activeNurseIds = new Set(activeAssignments.map(a => a.nurseId));
+        const freeNurses = [...activeNurseIds].filter(id =>
+          canBeFreeNurse(nurseMap.get(id), roles) && activeAssignments.filter(a => a.nurseId === id).every(a =>
+            isFreeDuring(a, dutyMap.get(a.dutyWindowId), daySessions, h.start, h.end))
         ).length;
+        const coveredDoctors = activeSessions.filter(sess => activeAssignments.some(a =>
+          a.kind === 'DOCTOR' && a.doctorId === sess.doctorId)).length;
         const deficit = Math.max(0, minAdditional - freeNurses);
 
-        hourlyCoverageMap[date][h.start] = { nurses: activeNurses, doctors: activeDocs, freeNurses, deficit };
+        hourlyCoverageMap[date][h.start] = { end: h.end, nurses: activeNurseIds.size, doctors: activeSessions.length,
+          coveredDoctors, uncoveredDoctors: activeSessions.length - coveredDoctors, freeNurses, deficit };
 
         if (deficit > 0) {
           const last = gapRuns[gapRuns.length - 1];
@@ -538,8 +551,8 @@ export class ScheduleValidator {
           (a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId
         );
         // Hours of the session no linked nurse covers (partial cover is allowed, but shown)
-        const linkedDuties = dayAssignments
-          .filter((a) => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId)
+        const linkedAssignments = dayAssignments.filter(a => a.kind === 'DOCTOR' && a.doctorId === sess.doctorId && nurseMap.has(a.nurseId));
+        const linkedDuties = linkedAssignments
           .map((a) => dutyMap.get(a.dutyWindowId))
           .filter((d): d is DutyWindow => !!d);
         if (linkedDuties.length > 0) {
@@ -549,13 +562,42 @@ export class ScheduleValidator {
               id: `session-partial-${sess.id}`,
               category: 'COVERAGE_GAP',
               severity: 'WARN',
-              message: `${doctorLabel(sess)} on ${formatDate(date)} has no nurse for ${missing.map((m) => `${m.start}–${m.end}`).join(' and ')}.`,
-              affectedNurseIds: [],
-              cellRefs: [],
+              message: `${doctorLabel(sess)} on ${formatDate(date)} has no nurse for ${missing.map((m) => `${m.start} to ${m.end}`).join(' and ')}.`,
+              affectedNurseIds: [...new Set(linkedAssignments.map(a => a.nurseId))],
+              cellRefs: [...new Set(linkedAssignments.map(a => a.nurseId))].map(nurseId => ({ nurseId, date })),
               date,
+              hour: missing[0].start,
+              amount: missing.reduce((sum, m) => sum + toMinutes(m.end) - toMinutes(m.start), 0) / 60,
             });
           }
         }
+        // More than one distinct nurse on the same session may be intentional, so ask for review.
+        const boundaries = [...new Set([sess.startTime, sess.endTime,
+          ...linkedDuties.flatMap(d => [d.startTime, d.endTime])])]
+          .filter(t => t >= sess.startTime && t <= sess.endTime).sort();
+        const overlapRuns: { start: string; end: string; ids: Set<string>; amount: number }[] = [];
+        for (let i = 0; i < boundaries.length - 1; i++) {
+          const start = boundaries[i], end = boundaries[i + 1];
+          const ids = new Set(linkedAssignments.filter(a => {
+            const d = dutyMap.get(a.dutyWindowId);
+            return d && overlaps(d.startTime, d.endTime, start, end);
+          }).map(a => a.nurseId));
+          if (ids.size < 2) continue;
+          const amount = (toMinutes(end) - toMinutes(start)) * (ids.size - 1) / 60;
+          const last = overlapRuns[overlapRuns.length - 1];
+          if (last?.end === start) {
+            last.end = end;
+            ids.forEach(id => last.ids.add(id));
+            last.amount += amount;
+          } else overlapRuns.push({ start, end, ids, amount });
+        }
+        for (const run of overlapRuns) findings.push({
+          id: `session-overlap-${sess.id}-${run.start}`,
+          category: 'DATA_ISSUE', severity: 'WARN',
+          message: `${doctorLabel(sess)} on ${formatDate(date)} has more than one nurse from ${run.start} to ${run.end}. Check whether this shared cover is needed.`,
+          affectedNurseIds: [...run.ids], cellRefs: [...run.ids].map(nurseId => ({ nurseId, date })),
+          date, hour: run.start, amount: run.amount,
+        });
         const pairedDuty = pairedNurse ? dutyMap.get(pairedNurse.dutyWindowId) : undefined;
         if (pairedNurse && pairedDuty && !overlaps(pairedDuty.startTime, pairedDuty.endTime, sess.startTime, sess.endTime)) {
           findings.push({
@@ -568,12 +610,14 @@ export class ScheduleValidator {
             date,
           });
         }
-        if (!pairedNurse) {
+        if (linkedDuties.length === 0) {
           findings.push({
             id: `unassigned-session-${sess.id}`,
+            hour: sess.startTime,
+            amount: (toMinutes(sess.endTime) - toMinutes(sess.startTime)) / 60,
             category: 'COVERAGE_GAP',
             severity: 'WARN',
-            message: `${doctorLabel(sess)} on ${formatDate(date)} (${sess.startTime}–${sess.endTime}) has no nurse assigned.`,
+            message: `${doctorLabel(sess)} on ${formatDate(date)} (${sess.startTime} to ${sess.endTime}) has no nurse assigned.`,
             affectedNurseIds: [],
             cellRefs: [],
             date,

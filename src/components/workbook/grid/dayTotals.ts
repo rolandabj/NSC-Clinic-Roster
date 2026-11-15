@@ -1,6 +1,6 @@
 import type { Assignment, DoctorSession, Nurse, SeniorityLevel } from '../../../types';
 import type { ValidationReport } from '../../../services/validation/ScheduleValidator';
-import { doctorSessionsOn } from '../../../services/engine/clinicModel';
+import { doctorSessionsOn, toMinutes } from '../../../services/engine/clinicModel';
 import { formatDayDate } from '../../../utils/dateUtils';
 
 /** One day's totals under the grid. */
@@ -43,7 +43,7 @@ export function dayTotalsOf(
         {
           doctors: doctorSessionsOn(sessions, date).length,
           nurses: onDuty.size,
-          gapHours: hours ? Object.values(hours).filter((h) => h.deficit > 0).length : undefined,
+          gapHours: hours ? Object.entries(hours).reduce((sum, [start, h]) => sum + (h.deficit > 0 ? (h.end ? (toMinutes(h.end) - toMinutes(start)) / 60 : 1) : 0), 0) : undefined,
           hasSenior: seniorIds.size === 0 ? undefined : [...onDuty].some((id) => seniorIds.has(levelById.get(id) || '')),
         },
       ] as const;

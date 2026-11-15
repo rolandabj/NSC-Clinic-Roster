@@ -66,7 +66,7 @@ export const CoverageSheet: React.FC<CoverageSheetProps> = ({
     const map = validationReport.hourlyCoverageMap[date] || {};
     return Object.keys(map)
       .sort()
-      .filter((hour) => map[hour].deficit > 0)
+      .filter((hour) => map[hour].deficit > 0 || (map[hour].uncoveredDoctors ?? 0) > 0)
       .map((hour) => ({ date, hour, ...map[hour] }));
   });
 
@@ -77,7 +77,7 @@ export const CoverageSheet: React.FC<CoverageSheetProps> = ({
       <div className="bg-white border-b border-slate-200 px-4 py-2 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-indigo-600" aria-hidden="true" />
-          <span className="font-bold text-slate-800">Coverage by hour</span>
+          <span className="font-bold text-slate-800">Coverage by time</span>
         </div>
         <label className="flex items-center gap-1.5">
           <span className="text-slate-600 font-medium">Day:</span>
@@ -108,7 +108,7 @@ export const CoverageSheet: React.FC<CoverageSheetProps> = ({
                 <p className="text-[11px] text-slate-600 mt-0.5">
                   {isHoliday
                     ? 'Public holiday: one nurse needs to be on duty for every opening hour.'
-                    : 'Each opening hour needs a free nurse: one not with a doctor at that hour, who can run Nurse Clinic.'}
+                    : 'Each doctor needs a nurse throughout their session. Nurse Clinic also needs a qualified nurse who is free of doctor duties throughout opening hours.'}
                 </p>
               </div>
 
@@ -118,27 +118,30 @@ export const CoverageSheet: React.FC<CoverageSheetProps> = ({
                 <div className="flex gap-1 overflow-x-auto pb-1">
                   {hourKeys.map((hour) => {
                     const c = dayHours[hour];
-                    const short = c.deficit > 0;
+                    const short = c.deficit > 0 || (c.uncoveredDoctors ?? 0) > 0;
                     return (
                       <div
                         key={hour}
-                        className={`min-w-[64px] rounded border p-1.5 text-center ${
+                        className={`min-w-[100px] rounded border p-1.5 text-center ${
                           short ? 'bg-rose-50 border-rose-300' : 'bg-white border-slate-200'
                         }`}
-                        aria-label={`${hour}: ${c.nurses} nurses, ${c.doctors} doctors, ${c.freeNurses ?? 0} free nurse${(c.freeNurses ?? 0) === 1 ? '' : 's'}${short ? ', missing a free nurse' : ''}`}
+                        aria-label={`${hour}${c.end ? ` to ${c.end}` : ''}: ${c.nurses} nurses, ${c.doctors} doctors, ${c.uncoveredDoctors ?? 0} doctors without a nurse, ${c.freeNurses ?? 0} free nurses${c.deficit > 0 ? ', too few free nurses' : ''}`}
                       >
-                        <span className="block font-mono text-[10px] text-slate-600">{hour}</span>
+                        <span className="block font-mono text-[10px] text-slate-600">{hour}{c.end ? ` to ${c.end}` : ''}</span>
                         <span className="block text-[11px] text-slate-800">
                           <strong>{c.nurses}</strong> nurses
                         </span>
-                        {!c.holiday && <span className="block text-[11px] text-slate-600">{c.doctors} doctors</span>}
+                        {!c.holiday && <span className="block text-[11px] text-slate-600">{c.doctors} doctor{c.doctors === 1 ? '' : 's'}</span>}
                         <span
                           className={`mt-1 block rounded px-1 text-[10px] font-semibold ${
                             short ? 'bg-rose-100 text-rose-800' : 'bg-emerald-50 text-emerald-800'
                           }`}
                         >
-                          {short ? (c.holiday ? 'Nobody' : 'No free nurse') : c.holiday ? 'Covered' : `${c.freeNurses ?? 0} free`}
+                          {c.deficit > 0 ? (c.holiday ? 'Nobody' : `${c.deficit} free nurse${c.deficit === 1 ? '' : 's'} missing`) : c.holiday ? 'Covered' : `${c.freeNurses ?? 0} free`}
                         </span>
+                        {(c.uncoveredDoctors ?? 0) > 0 && <span className="block text-[11px] font-semibold text-rose-800">
+                          {c.uncoveredDoctors} doctor{c.uncoveredDoctors === 1 ? '' : 's'} without a nurse
+                        </span>}
                       </div>
                     );
                   })}
@@ -179,14 +182,14 @@ export const CoverageSheet: React.FC<CoverageSheetProps> = ({
             <div className="bg-white border border-slate-200 rounded shadow-xs overflow-hidden">
               <div className="p-3 border-b border-slate-200 flex items-center gap-2 bg-slate-50">
                 <AlertCircle className="w-4 h-4 text-amber-600" aria-hidden="true" />
-                <h3 className="font-bold text-slate-800 text-xs">Hours with too few nurses on these days ({gaps.length})</h3>
+                <h3 className="font-bold text-slate-800 text-xs">Times with missing cover on these days ({gaps.length})</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 text-slate-600 text-[11px] border-b border-slate-200">
                     <tr>
                       <th className="py-2 px-3">Day</th>
-                      <th className="py-2 px-3">Hour</th>
+                      <th className="py-2 px-3">Time</th>
                       <th className="py-2 px-3">Doctors</th>
                       <th className="py-2 px-3">Nurses on duty</th>
                       <th className="py-2 px-3">What's missing</th>
@@ -200,15 +203,14 @@ export const CoverageSheet: React.FC<CoverageSheetProps> = ({
                         onClick={() => setSelectedDate(g.date)}
                       >
                         <td className="py-2 px-3 font-semibold text-slate-800">{formatDate(g.date)}</td>
-                        <td className="py-2 px-3 font-mono text-slate-700">{g.hour}</td>
+                        <td className="py-2 px-3 font-mono text-slate-700">{g.hour}{g.end ? ` to ${g.end}` : ''}</td>
                         <td className="py-2 px-3 text-slate-800">{g.holiday ? 'Holiday' : g.doctors}</td>
                         <td className="py-2 px-3 text-slate-800">{g.nurses}</td>
                         <td className="py-2 px-3 text-rose-700">
-                          {g.holiday
-                            ? 'No nurse on duty'
-                            : g.nurses > g.doctors
-                            ? 'A free nurse who can run Nurse Clinic (the nurses on duty are with doctors or lack the skill)'
-                            : 'A free nurse for Nurse Clinic'}
+                          {g.holiday ? 'No nurse on duty' : [
+                            g.deficit > 0 ? `${g.deficit} free nurse${g.deficit === 1 ? '' : 's'} missing` : '',
+                            (g.uncoveredDoctors ?? 0) > 0 ? `${g.uncoveredDoctors} doctor${g.uncoveredDoctors === 1 ? '' : 's'} without a nurse` : '',
+                          ].filter(Boolean).join('; ')}
                         </td>
                       </tr>
                     ))}

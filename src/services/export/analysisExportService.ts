@@ -98,7 +98,7 @@ const FIELD_GUIDE: string[] = [
   'source: GENERATED = filled by the engine, MANUAL = changed by hand, LOCK = from a pinned day.',
   'problems: every finding from the checker at export time. severity ERROR = must fix, WARN = check, INFO = note.',
   'requests[].honoured: a day off request is honoured when she has no shift that day; a shift request when she has a shift (of the asked shift type, if one was given).',
-  'hourlyCoverage[date][HH:mm]: nurses on duty, doctors in session, free nurses, and free nurses still missing at that opening hour.',
+  'hourlyCoverage[date][HH:mm]: exact interval start; end is its end time. Nurses on duty, doctors, coveredDoctors, uncoveredDoctors, freeNurses and deficit (free nurses still missing) are separate counts.',
   'previousRosterTail: shifts from the last days of the roster before this one; the engine uses them for days in a row, rest and late runs.',
 ];
 
@@ -661,7 +661,7 @@ const PROBLEM_RULES = [
   'holiday-no-nurse', 'holiday-senior', 'hours-deferred', 'hours-history-unavailable', 'hours-low', 'hours-over',
   'hours-part-short', 'hours-written-off', 'leave-overlap', 'missing-gmail', 'nc-coverage',
   'nc-doctor-conflict', 'nc-not-qualified', 'pending-leave-shift', 'period-gap', 'request-dayoff-shift', 'request-shift',
-  'role-quota', 's1-late', 'scale-ratio-warning', 'schedule-overlap', 'session-no-overlap', 'session-partial', 'unassigned-session',
+  'role-quota', 's1-late', 'scale-ratio-warning', 'schedule-overlap', 'session-no-overlap', 'session-overlap', 'session-partial', 'unassigned-session',
 ].sort((a, b) => b.length - a.length);
 
 /** Which check a finding came from, e.g. 'cov-gap-2026-10-05-09:00' gives 'cov-gap'. */

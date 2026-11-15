@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Nurse } from '../../../types';
 import type { ValidationReport } from '../../../services/validation/ScheduleValidator';
+import { toMinutes } from '../../../services/engine/clinicModel';
 import { formatDate, formatDayDate } from '../../../utils/dateUtils';
 import { HOURS_COLUMN, TOTALS_ROW, type GridSelection } from './gridSelection';
 import { SelectionView } from './SelectionView';
@@ -61,20 +62,22 @@ export const GridStatusBar: React.FC<{
             return <span className="text-slate-500">Coverage: not checked yet</span>;
           }
           const shortHours = Object.keys(dayMap).filter((h) => dayMap[h].deficit > 0).sort();
+          const missingDoctor = Object.values(dayMap).some(h => (h.uncoveredDoctors ?? 0) > 0);
+          const gapHours = shortHours.reduce((sum, start) => sum + (dayMap[start].end
+            ? (toMinutes(dayMap[start].end!) - toMinutes(start)) / 60 : 1), 0);
+          const gapWords = shortHours.length === 0 ? '' : `${Number(gapHours.toFixed(2))} ${gapHours === 1 ? 'hour' : 'hours'} without a free nurse (from ${shortHours[0]})`;
           return (
             <button
               type="button"
               onClick={onOpenCoverage}
               className={`flex min-h-6 shrink-0 items-center gap-1 whitespace-nowrap cursor-pointer px-1.5 py-0.5 rounded ${
-                shortHours.length > 0 ? 'bg-rose-50 text-rose-700 font-bold border border-rose-200' : 'text-slate-600 hover:bg-slate-100'
+                shortHours.length > 0 || missingDoctor ? 'bg-rose-50 text-rose-700 font-bold border border-rose-200' : 'text-slate-600 hover:bg-slate-100'
               }`}
               title="Open the Coverage tab"
             >
               <span>Coverage {formatDate(checkDate)}:</span>
               <span>
-                {shortHours.length === 0
-                  ? 'every hour covered'
-                  : `${shortHours.length} hour${shortHours.length === 1 ? '' : 's'} without a free nurse (from ${shortHours[0]})`}
+                {[gapWords, missingDoctor ? 'doctor cover missing' : ''].filter(Boolean).join('; ') || 'all opening hours covered'}
               </span>
             </button>
           );

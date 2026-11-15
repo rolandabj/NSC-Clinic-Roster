@@ -170,3 +170,17 @@ test('problemRule picks the longest matching check name', () => {
 test('file name', () => {
   assert.equal(analysisFileName('NSC Clinic', SCHEDULE, 3), 'nsc_clinic_analysis_2026-10-05_2026-10-07_v3.json');
 });
+
+
+test('analysis exports exact coverage intervals and groups shared doctor coverage warnings', () => {
+  const a = buildRosterAnalysis(input({
+    assignments: [shift('a1', 'amy', '2026-10-05'),
+      shift('b1', 'ben', '2026-10-05', { dutyWindowId: LATE.id })],
+  }));
+  assert.equal(a.hourlyCoverage['2026-10-05']['13:00'].coveredDoctors, 1);
+  assert.equal(a.hourlyCoverage['2026-10-05']['17:00'].uncoveredDoctors, 0);
+  assert.equal(a.hourlyCoverage['2026-10-06']['09:00'].uncoveredDoctors, 1);
+  assert.equal(a.hourlyCoverage['2026-10-06']['09:00'].end, '10:00');
+  assert.equal(a.problems.filter(p => p.rule === 'session-overlap').length, 1);
+  assert.equal(a.summary.problems.byRule['session-overlap'].WARN, 1);
+});
