@@ -70,6 +70,7 @@ export type FindingCategory =
   | 'STAFFING_SCALE'
   | 'RULE_VIOLATION'
   | 'HOURS_IMBALANCE'
+  | 'DOCTOR_COVER'
   | 'DATA_ISSUE';
 
 export interface ValidationFinding {
@@ -221,6 +222,19 @@ export class ScheduleValidator {
           message: `${nurseMap.get(a.nurseId)?.fullName || 'A nurse'} on ${formatDate(date)}: ${problems.join(' ')}`,
           affectedNurseIds: [a.nurseId], cellRefs: [{ nurseId: a.nurseId, date }], date,
         });
+        if (!isHoliday && a.secondDoctorId && problems.length === 0) {
+          const nurse = nurseMap.get(a.nurseId);
+          const ids = assignmentDoctorIds(a);
+          const duty = dutyMap.get(a.dutyWindowId);
+          if (nurse?.isClinicNurse && !outsideNurseList(nurse, a, { doctors, specialties, sessions }) &&
+            !leaveEntries.some(le => le.nurseId === a.nurseId && le.approved && le.startDate <= date && le.endDate >= date) &&
+            ids.every(id => doctorSessionsOn(sessions, date).some(s => s.doctorId === id && duty &&
+              overlaps(duty.startTime, duty.endTime, s.startTime, s.endTime)))) findings.push({
+            id: `low-acuity-cover-${a.id}`, category: 'DOCTOR_COVER', severity: 'INFO',
+            message: `${nurse.fullName} is assigned to ${ids.map(id => doctors.find(d => d.id === id)?.fullName || 'Doctor').join(' and ')} on ${formatDate(date)}. One nurse covers two low acuity doctors; the duty hours count once.`,
+            affectedNurseIds: [a.nurseId], cellRefs: [{ nurseId: a.nurseId, date }], date,
+          });
+        }
       }
       const daySessions = clinic.holidays.has(date) ? [] : doctorSessionsOn(sessions, date);
       const openHours = coverageSlots(clinic,
@@ -585,7 +599,7 @@ export class ScheduleValidator {
             });
           }
         }
-        // More than one distinct nurse on the same session may be intentional, so ask for review.
+        // A complete handover is a note; extra overlapping cover still asks for review.
         const boundaries = [...new Set([sess.startTime, sess.endTime,
           ...linkedDuties.flatMap(d => [d.startTime, d.endTime])])]
           .filter(t => t >= sess.startTime && t <= sess.endTime).sort();
@@ -605,9 +619,32 @@ export class ScheduleValidator {
             last.amount += amount;
           } else overlapRuns.push({ start, end, ids, amount });
         }
-        for (const run of overlapRuns) findings.push({
+        const coveringAssignments = linkedAssignments.filter(a => {
+          const d = dutyMap.get(a.dutyWindowId);
+          return d && overlaps(d.startTime, d.endTime, sess.startTime, sess.endTime);
+        });
+        const needsHandover = new Set(coveringAssignments.map(a => a.nurseId)).size > 1 &&
+          uncoveredParts(sess.startTime, sess.endTime, linkedDuties).length === 0 &&
+          !linkedDuties.some(d => d.startTime <= sess.startTime && d.endTime >= sess.endTime) &&
+          [...new Set(coveringAssignments.map(a => a.nurseId))].every(id =>
+            uncoveredParts(sess.startTime, sess.endTime, coveringAssignments.filter(a => a.nurseId !== id)
+              .map(a => dutyMap.get(a.dutyWindowId)!)).length > 0);
+        if (needsHandover) {
+          const cover = [...coveringAssignments].sort((a, b) => dutyMap.get(a.dutyWindowId)!.startTime.localeCompare(dutyMap.get(b.dutyWindowId)!.startTime))
+            .map(a => {
+              const d = dutyMap.get(a.dutyWindowId)!;
+              return `${nurseMap.get(a.nurseId)?.fullName || 'A nurse'} (${d.startTime < sess.startTime ? sess.startTime : d.startTime} to ${d.endTime > sess.endTime ? sess.endTime : d.endTime})`;
+            }).join(', ');
+          findings.push({ id: `session-handover-${sess.id}`, category: 'DOCTOR_COVER', severity: 'INFO',
+            message: `${doctorLabel(sess)} on ${formatDate(date)} has handover cover: ${cover}.${overlapRuns.length ? ` Overlap: ${overlapRuns.map(r => `${r.start} to ${r.end}`).join(' and ')}.` : ' The duties meet without overlap.'}`,
+            affectedNurseIds: [...new Set(coveringAssignments.map(a => a.nurseId))],
+            cellRefs: [...new Set(coveringAssignments.map(a => a.nurseId))].map(nurseId => ({ nurseId, date })), date,
+            amount: overlapRuns.reduce((sum, r) => sum + r.amount, 0),
+          });
+        }
+        for (const run of needsHandover ? [] : overlapRuns) findings.push({
           id: `session-overlap-${sess.id}-${run.start}`,
-          category: 'DATA_ISSUE', severity: 'WARN',
+          category: 'DOCTOR_COVER', severity: 'WARN',
           message: `${doctorLabel(sess)} on ${formatDate(date)} has more than one nurse from ${run.start} to ${run.end}. Check whether this shared cover is needed.`,
           affectedNurseIds: [...run.ids], cellRefs: [...run.ids].map(nurseId => ({ nurseId, date })),
           date, hour: run.start, amount: run.amount,

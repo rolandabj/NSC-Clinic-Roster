@@ -55,12 +55,12 @@ test('partial doctor cover records the exact missing duration and affected nurse
   assert.deepEqual(f.cellRefs, [{ nurseId: 'n1', date }]);
 });
 
-test('overlapping nurses on one doctor are flagged for only their shared session time', () => {
+test('a necessary overlapping handover is noted with only its shared session time', () => {
   const report = check([shift('n1', 'early', 'doctor'), shift('n2', 'late', 'doctor')],
     [duty('early', '09:00', '19:00'), duty('late', '11:00', '21:00')], [session()]);
-  const f = report.findings.find(f => f.id.startsWith('session-overlap-'))!;
+  const f = report.findings.find(f => f.id.startsWith('session-handover-'))!;
   assert.ok(f);
-  assert.equal(f.severity, 'WARN');
+  assert.equal(f.severity, 'INFO');
   assert.equal(f.amount, 8);
   assert.match(f.message, /11:00 to 19:00/);
   assert.deepEqual(f.affectedNurseIds.sort(), ['n1', 'n2']);

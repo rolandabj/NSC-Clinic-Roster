@@ -220,8 +220,8 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
 
   // Lookup maps
   const cellLookups = useMemo(
-    () => cellLookupsOf({ dutyWindows, doctors, roles, specialties, leaveTypes }),
-    [dutyWindows, doctors, roles, specialties, leaveTypes]
+    () => cellLookupsOf({ dutyWindows, doctors, roles, specialties, leaveTypes, sessions }),
+    [dutyWindows, doctors, roles, specialties, leaveTypes, sessions]
   );
   const { dutyMap, doctorMap, specialtyMap, roleMap } = cellLookups;
   const nurseMap = useMemo(() => new Map(nurses.map((n) => [n.id, n])), [nurses]);

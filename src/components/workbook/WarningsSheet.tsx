@@ -15,6 +15,7 @@ const CATEGORY_LABELS: Record<FindingCategory, string> = {
   RULE_VIOLATION: 'Rules',
   HOURS_IMBALANCE: 'Hours',
   DATA_ISSUE: 'Missing information',
+  DOCTOR_COVER: 'Doctor cover',
 };
 
 const SEVERITY_LABELS: Record<FindingSeverity, string> = {

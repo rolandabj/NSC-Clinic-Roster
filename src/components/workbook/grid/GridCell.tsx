@@ -107,7 +107,7 @@ export const GridCell = memo(function GridCell({
         // The doctor's first name or the role (or the leave) on the first line; the start time and the marks on the second; the end time on the third.
         <div
           // A small grid: the name (cut short when long) and the rank side by side, so the rank always shows; the second line under both.
-          className={`${heightClass} grid grid-cols-[minmax(0,1fr)_auto] content-center items-baseline gap-x-0.5 rounded-sm px-1 leading-tight ${
+          className={`${heightClass} ${view.pairedDoctors ? 'min-h-[8em]' : ''} grid grid-cols-[minmax(0,1fr)_auto] content-center items-baseline gap-x-0.5 rounded-sm px-1 leading-tight ${
             view.content === 'off'
               ? 'bg-sunken text-ink-muted'
               : view.content === 'pendingLeave'
@@ -122,15 +122,19 @@ export const GridCell = memo(function GridCell({
               : undefined
           }
         >
+          {view.pairedDoctors && <span aria-hidden="true" className="col-span-2 w-fit max-w-full rounded bg-brand-soft px-0.5 text-center font-semibold text-brand-strong">
+            2 doctors
+          </span>}
           {/* No wrapper round the first line (fewer elements: a full size roster has over 1,000 shifts). */}
-          <span className={`truncate font-semibold ${view.rankBadge ? '' : 'col-span-2'}`}>
-            {view.content === 'leave' ? view.leaveAcronym : view.content === 'off' ? 'Day off' : view.content === 'pendingLeave' ? view.pendingLeaveAcronym : view.label}
+          <span className={`truncate font-semibold ${view.rankBadge && !view.pairedDoctors ? '' : 'col-span-2'}`}>
+            {view.content === 'leave' ? view.leaveAcronym : view.content === 'off' ? 'Day off' : view.content === 'pendingLeave' ? view.pendingLeaveAcronym : view.pairedDoctors ? view.primaryDoctorLabel : view.label}
           </span>
           {/* Spaces between the parts, so the text reads as the spoken name does ("Lee #1 09:00"); the grid does not show them. */}
-          {view.rankBadge && ' '}
-          {view.rankBadge && (
+          {view.rankBadge && !view.pairedDoctors && ' '}
+          {view.rankBadge && !view.pairedDoctors && (
             <span className={`rounded-sm text-xs font-bold ${view.rankBadge === '!' ? 'px-0.5 bg-danger-soft text-danger' : 'text-ink-muted'}`}>{view.rankBadge}</span>
           )}{' '}
+          {view.pairedDoctors && <span className="col-span-2 truncate font-semibold">{view.secondaryDoctorLabel}</span>}
           {(view.startTime || view.pinned || view.handChange || view.pendingMark || ProblemIcon) && (
             // The problem's icon first, so a narrow cell (75 % zoom) cuts off the time, not the problem.
             <span className="col-span-2 flex items-center gap-0.5 overflow-hidden whitespace-nowrap text-ink-muted tabular-nums" aria-hidden="true">
@@ -144,8 +148,9 @@ export const GridCell = memo(function GridCell({
           {/* The end time on a third line (the owner's choice of 13-10-2026); a space before it, as in the spoken name ("09:00 17:00"). */}
           {view.endTime && ' '}
           {view.endTime && (
-            <span className="col-span-2 text-ink-muted tabular-nums" aria-hidden="true">
+            <span className={`col-span-2 text-ink-muted tabular-nums ${view.pairedDoctors ? 'flex items-center justify-between gap-0.5' : ''}`} aria-hidden="true">
               {view.endTime}
+              {view.pairedDoctors && view.rankBadge && <span className={`rounded-sm font-bold ${view.rankBadge === '!' ? 'bg-danger-soft px-0.5 text-danger' : ''}`}>{view.rankBadge}</span>}
             </span>
           )}
         </div>

@@ -3,6 +3,7 @@ import type {
   AvailabilityRequest,
   ClinicalRole,
   Doctor,
+  DoctorSession,
   DutyWindow,
   LeaveEntry,
   LeaveType,
@@ -12,6 +13,7 @@ import type {
 } from '../../../types';
 import { leaveCreditOnDate } from '../../../services/hours/hoursPolicy';
 import { assignmentDoctorIds, nurseClinicRoleOf } from '../../../services/engine/clinicModel';
+import { outsideNurseList } from '../../../services/engine/nurseList';
 import { isFloatShift } from '../../../services/engine/floatShift';
 import { describeRequest } from '../../../services/engine/explainCell';
 import { formatDayDate } from '../../../utils/dateUtils';
@@ -49,6 +51,9 @@ export interface CellView {
   mismatch: boolean;
   /** The doctor, department or task in short ("Lee", "NC", "Float"), on the cell's first line. */
   label: string;
+  pairedDoctors: boolean;
+  primaryDoctorLabel: string;
+  secondaryDoctorLabel: string;
   /** "#1", "#2"..., "Pool", "!" (not on the nurse's list), or none. */
   rankBadge: string | null;
   /** Leave waiting for approval: its colour and letters ('' when there is none). */
@@ -89,6 +94,7 @@ export interface CellLookups {
   nurseClinicRoleId?: string;
   /** Each doctor's short name for the cells (`shortDoctorNames`). */
   doctorShort: Map<string, string>;
+  allocationRefs: { doctors: Doctor[]; specialties: Specialty[]; sessions: DoctorSession[] };
 }
 
 /** A doctor's name without "Dr" in front. */
@@ -125,6 +131,7 @@ export function cellLookupsOf(lists: {
   roles: ClinicalRole[];
   specialties: Specialty[];
   leaveTypes: LeaveType[];
+  sessions?: DoctorSession[];
 }): CellLookups {
   return {
     dutyMap: new Map(lists.dutyWindows.map((d) => [d.id, d])),
@@ -135,6 +142,7 @@ export function cellLookupsOf(lists: {
     leaveTypeMap: new Map(lists.leaveTypes.map((l) => [l.id, l])),
     nurseClinicRoleId: nurseClinicRoleOf(lists.roles)?.id,
     doctorShort: shortDoctorNames(lists.doctors),
+    allocationRefs: { doctors: lists.doctors, specialties: lists.specialties, sessions: lists.sessions || [] },
   };
 }
 
@@ -264,6 +272,7 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
 
   const docObj = asgn?.doctorId ? doctorMap.get(asgn.doctorId) : undefined;
   const secondDocObj = secondDocId ? doctorMap.get(secondDocId) : undefined;
+  const pairedDoctors = !!secondDocId && !leave && lock?.mode !== 'OFF';
   const docPrefOf = (docId?: string) => (docId ? nurse.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === docId) : undefined);
   const specPrefOf = (doc?: Doctor, hasDirect?: boolean) =>
     !hasDirect && doc && doc.specialtyIds
@@ -320,6 +329,13 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     }
   }
 
+  if (asgn && nurse.doctorEligibility != null) {
+    const outside = outsideNurseList(nurse, asgn, lookups.allocationRefs);
+    mismatch = !!outside;
+    mismatchReason = outside ? `${nurse.fullName} is not eligible for ${outside.name}. Review clinical eligibility in the nurse profile.` : '';
+  }
+  const pairNote = pairedDoctors && docObj?.lowAcuity && secondDocObj?.lowAcuity && !mismatch
+    ? 'One nurse covers 2 low acuity doctors. Duty hours count once.' : '';
   const firstRank = docPref?.rank ?? specPref?.rank;
   const secondRank = secondDocPref?.rank ?? secondSpecPref?.rank;
   const pairRank = firstRank !== undefined && secondRank !== undefined ? Math.max(firstRank, secondRank) : undefined;
@@ -333,10 +349,10 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     : asgn?.doctorId && secondDocId
     ? `With ${docObj ? withDr(docObj.fullName) : 'Doctor'} and ${secondDocObj ? withDr(secondDocObj.fullName) : 'Doctor'}${
         mismatch
-          ? ' (not one of this nurse’s usual doctors)'
+          ? nurse.doctorEligibility != null ? ' (not eligible for one or both doctors)' : ' (not one of this nurse’s usual doctors)'
           : pairRank !== undefined
           ? ` (usual doctors, choice ${pairRank})`
-          : ' (any nurse)'
+          : nurse.doctorEligibility != null ? ' (eligible for both doctors)' : ' (any nurse)'
       }`
     : asgn?.doctorId
     ? `With Dr ${doctorName}${
@@ -367,13 +383,15 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     : 'Nothing yet';
   const wishWords = [pendingLeaveText, requestWords?.text].filter(Boolean).join('\n');
   const dayWords = `${holiday ? ` (public holiday: ${holiday.name})` : isWeekend ? ' (weekend)' : ''}${isToday ? ' (today)' : ''}`;
-  const title = `${contentWords}${wishWords ? `\n${wishWords}` : ''}${
+  const title = `${contentWords}${pairNote ? `\n${pairNote}` : ''}${wishWords ? `\n${wishWords}` : ''}${
     problems.length > 0 ? `\nProblems:\n${problems.map((m) => `• ${m}`).join('\n')}` : ''
   }`;
   // Spoken: what the cell shows, the rest of it, whose day it is, then its marks.
   const content = leave ? 'leave' : lock?.mode === 'OFF' ? 'off' : asgn ? 'shift' : pendingLeave ? 'pendingLeave' : 'empty';
   const rankBadge = mismatch
     ? '!'
+    : nurse.doctorEligibility != null && (secondDocId ? pairRank === undefined : firstRank === undefined)
+    ? null
     : secondDocId
     ? pairRank !== undefined
       ? `#${pairRank}`
@@ -397,7 +415,7 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
       : content === 'off'
       ? 'Day off'
       : content === 'shift'
-      ? `${[shownName, rankBadge, duty?.startTime, duty?.endTime].filter(Boolean).join(' ')}, ${duty ? `${duty.name} shift` : 'shift'}${duty?.isPriority ? ', used first' : ''}`
+      ? `${pairedDoctors ? '2 doctors, ' : ''}${[shownName, rankBadge, duty?.startTime, duty?.endTime].filter(Boolean).join(' ')}, ${duty ? `${duty.name} shift` : 'shift'}${duty?.isPriority ? ', used first' : ''}`
       : content === 'pendingLeave'
       ? `${pendingLeaveType?.acronym || 'L'}, leave asked for, waiting for approval`
       : 'No shift';
@@ -429,6 +447,9 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     isFloatPool,
     mismatch,
     label: shownName,
+    pairedDoctors,
+    primaryDoctorLabel: pairedDoctors && asgn?.doctorId ? lookups.doctorShort.get(asgn.doctorId) || withoutDr(docObj?.fullName || 'Doctor') : '',
+    secondaryDoctorLabel: pairedDoctors && secondDocId ? lookups.doctorShort.get(secondDocId) || withoutDr(secondDocObj?.fullName || 'Doctor') : '',
     rankBadge,
     pendingLeaveColor: pendingLeave ? pendingLeaveType?.color || '#f59e0b' : '',
     pendingLeaveAcronym: pendingLeave ? pendingLeaveType?.acronym || 'L' : '',
