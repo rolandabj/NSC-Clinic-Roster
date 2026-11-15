@@ -444,9 +444,9 @@
     "semantic_hash": ""
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1794747961.371668,
-    "seen": 1794748483.7473655,
-    "ast_hash": "67f4c18b4a93ad1ab611e67f86b620e5",
+    "mtime": 1794757292.2506993,
+    "seen": 1794757597.5639832,
+    "ast_hash": "2dc3e835c8cbe51f9d725eaeface1e82",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
@@ -630,9 +630,9 @@
     "semantic_hash": ""
   },
   "src/services/validation/ScheduleValidator.ts": {
-    "mtime": 1794755093.9272025,
-    "seen": 1794755103.0788317,
-    "ast_hash": "f9b0ffdc7d9b77d3235d8fcd34d428f3",
+    "mtime": 1794757184.6029458,
+    "seen": 1794757597.5640762,
+    "ast_hash": "21d52be7250a7824e0fd92337842764f",
     "semantic_hash": ""
   },
   "src/types/index.ts": {
@@ -960,9 +960,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1794755613.1579645,
-    "seen": 1794755620.0301201,
-    "ast_hash": "8cab9413c4edcb2c33be9d955119f1e4",
+    "mtime": 1794757651.5623136,
+    "seen": 1794757711.7402453,
+    "ast_hash": "b6116e4e780e8488098b1ab0366e01d3",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1980,9 +1980,9 @@
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridLegend.tsx": {
-    "mtime": 1794752786.0093076,
-    "seen": 1794755103.078567,
-    "ast_hash": "83739baa409880ce794292910cbc4bf1",
+    "mtime": 1794757184.602573,
+    "seen": 1794757597.5639567,
+    "ast_hash": "3e859edd0cc0b5edd7b65677cd8e4515",
     "semantic_hash": ""
   },
   "src/components/workbook/grid/GridStatusBar.tsx": {
@@ -2700,9 +2700,9 @@
     "semantic_hash": ""
   },
   "tests/unit/lowAcuityDoctors.test.ts": {
-    "mtime": 1794748474.7217772,
-    "seen": 1794748483.7475362,
-    "ast_hash": "b380db2a41643cf115c013524a2ea8d4",
+    "mtime": 1794756720.5630023,
+    "seen": 1794757597.5641484,
+    "ast_hash": "32df18a3deb4474f0a47a141ecbfc279",
     "semantic_hash": ""
   },
   "tests/unit/pairedDoctorSafety.test.ts": {
@@ -2730,27 +2730,39 @@
     "semantic_hash": ""
   },
   "src/services/reports/rosterReview.ts": {
-    "mtime": 1794750061.0809264,
-    "seen": 1794750403.5713527,
-    "ast_hash": "d95ffd7c6e23e873f30f70d202d98d89",
+    "mtime": 1794757001.402307,
+    "seen": 1794757597.5640483,
+    "ast_hash": "22d0339c8720aec392a8f96ecd43f9c4",
     "semantic_hash": ""
   },
   "src/services/validation/findingRule.ts": {
-    "mtime": 1794752780.4772053,
-    "seen": 1794755103.0788338,
-    "ast_hash": "bf36008e076498941629eed35737b67f",
+    "mtime": 1794756637.0152497,
+    "seen": 1794757597.5640783,
+    "ast_hash": "4e8577ea8c12dccb4d5713a79606a61e",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/doctor-cover.cjs": {
-    "mtime": 1794754858.0673523,
-    "seen": 1794755103.0783818,
-    "ast_hash": "dd9ef7faeba9150c6154765907e62788",
+    "mtime": 1794757535.7246072,
+    "seen": 1794757597.5637693,
+    "ast_hash": "f66a1ba286990462a5080d670a58513c",
     "semantic_hash": ""
   },
   "tests/unit/doctorCoverNotes.test.ts": {
     "mtime": 1794754123.5178185,
     "seen": 1794755103.0788703,
     "ast_hash": "e68c1bce51e99e9181500794cd6c3b7b",
+    "semantic_hash": ""
+  },
+  "src/services/engine/lowAcuityLastResort.ts": {
+    "mtime": 1794757651.55913,
+    "seen": 1794757711.7400234,
+    "ast_hash": "e667986365c7dd47becfdb177a68b5fb",
+    "semantic_hash": ""
+  },
+  "tests/unit/lowAcuityLastResort.test.ts": {
+    "mtime": 1794757634.5882962,
+    "seen": 1794757711.7401714,
+    "ast_hash": "414cbbc3381abfbb629b10ee87d389c1",
     "semantic_hash": ""
   }
 }

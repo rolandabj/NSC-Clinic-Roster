@@ -181,14 +181,10 @@ test('engine automatically pairs two low acuity doctors on the same day onto one
   assert.equal(report.errorCount, 0, report.findings.map((f) => `${f.id}: ${f.message}`).join('; '));
 });
 
-test('engine widens a shift to cover two staggered low acuity clinics on the same day', async () => {
+test('engine widens a shift as a last resort for two staggered low acuity clinics with only one nurse', async () => {
   const schedule = makeSchedule({ startDate: '2026-10-05', endDate: '2026-10-05', hoursTargetFullTime: 8 });
   const amy = makeNurse('amy', {
     fullName: 'Amy',
-    preferences: [{ kind: 'SPECIALTY', refId: CARD.id, rank: 1 }],
-  });
-  const ben = makeNurse('ben', {
-    fullName: 'Ben',
     preferences: [{ kind: 'SPECIALTY', refId: CARD.id, rank: 1 }],
   });
   const sessions = [
@@ -203,7 +199,7 @@ test('engine widens a shift to cover two staggered low acuity clinics on the sam
     schedule,
     'GENERATE_ALL',
     [],
-    [amy, ben],
+    [amy],
     [SENIOR],
     duties,
     [],
@@ -228,10 +224,9 @@ test('engine caps low acuity pairing at two doctors per nurse and never pairs a 
   const schedule = makeSchedule({ startDate: '2026-10-05', endDate: '2026-10-05', hoursTargetFullTime: 8 });
   const amy = makeNurse('amy', { fullName: 'Amy' });
   const ben = makeNurse('ben', { fullName: 'Ben' });
-  const cara = makeNurse('cara', { fullName: 'Cara' });
   const rules = hoursOnlyRules();
 
-  // Three low acuity doctors: at most two share one nurse, the third gets another nurse.
+  // Three low acuity doctors and two nurses: a last resort pair covers two, and the other nurse covers one.
   const threeLowSessions = [
     makeSession('s1', DR_LEE.id, '2026-10-05'),
     makeSession('s2', DR_PATEL.id, '2026-10-05'),
@@ -241,7 +236,7 @@ test('engine caps low acuity pairing at two doctors per nurse and never pairs a 
     schedule,
     'GENERATE_ALL',
     [],
-    [amy, ben, cara],
+    [amy, ben],
     [SENIOR],
     [DAY_DUTY],
     [],

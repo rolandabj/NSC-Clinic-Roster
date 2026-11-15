@@ -61,6 +61,7 @@ import {
   doctorSessionsOn,
 } from './clinicModel';
 import { repairCoverage } from './coverageRepair';
+import { separateLowAcuityCover, applySeparateFloatCover } from './lowAcuityLastResort';
 import { futureCapacity, type CapacityJob } from './futureCapacity';
 import { yearToDateSeeds } from '../fairness/yearSeed';
 import { isPendingLeave } from './leaveStatus';
@@ -1567,7 +1568,7 @@ export class SchedulingEngine {
         ? (scarcity.get(a.targetId)! - scarcity.get(b.targetId)!) || b.priority - a.priority || a.targetId.localeCompare(b.targetId)
         : b.priority - a.priority);
 
-      // Add a second low acuity clinic to a new generated duty before using another nurse.
+      // Share two low acuity clinics only after separate nurse options have been exhausted.
       // Kept shifts and exception pairings are never changed here. Widening keeps both clinics,
       // free nurse cover, hours budgets, period limits, rest and future capacity intact.
       const tryPairDoctor = (session: DoctorSession): boolean => {
@@ -1592,7 +1593,15 @@ export class SchedulingEngine {
               !fitsHardRules(nurse, date, duty, extra, { replacingOwnShift: true })) continue;
             const paired = { ...own, dutyWindowId: duty.id, secondDoctorId: session.doctorId };
             if (!keepsFreeNursesToday(existingToday().map(a => a.id === own.id ? paired : a))) continue;
-            resultAssignmentsMap.set(`${own.nurseId}_${date}`, paired);
+            const coverContext = { assignments: existingToday().map(a => a.id === own.id ? paired : a),
+              nurses: sortedNurses, duties: dutyWindows, doctors, specialties, sessions, roles,
+              leave: leaveEntries, locks, requests, clinic, minFreeNurses: minAdditionalNurses };
+            const cover = separateLowAcuityCover(coverContext, paired);
+            if (cover.searchLimited) continue;
+            if (cover.replacement) {
+              if (cover.replacement.floats.some(a => a.source !== 'GENERATED' || keptFromBefore.has(a.id))) continue;
+              cover.replacement.changes.forEach(a => resultAssignmentsMap.set(`${a.nurseId}_${date}`, a));
+            } else resultAssignmentsMap.set(`${own.nurseId}_${date}`, paired);
             const state = nurseStates.get(nurse.id)!;
             state.totalDutyHoursEarned += extra;
             state.lateShiftsWorked += (isLate(duty) ? 1 : 0) - (isLate(oldDuty) ? 1 : 0);
@@ -1606,8 +1615,6 @@ export class SchedulingEngine {
       for (const slot of daySlots) {
         if (slot.kind === 'DOCTOR') {
           if (existingToday().some(a => assignmentCoversDoctor(a, slot.targetId))) continue;
-          const session = allDaySessions.find(s => s.doctorId === slot.targetId);
-          if (session && tryPairDoctor(session)) { doctorSessionsTotal++; continue; }
         }
         const isNurseClinicSlot = slot.kind === 'CLINICAL_ROLE' && ncRoleIds.has(slot.targetId);
         const slotSession = slot.kind === 'DOCTOR' ? daySessions.find((s) => s.doctorId === slot.targetId) : undefined;
@@ -1914,6 +1921,8 @@ export class SchedulingEngine {
 
         if (slot.kind === 'DOCTOR') doctorSessionsTotal++;
         if (!bestNurse) {
+          const session = slot.kind === 'DOCTOR' ? allDaySessions.find(s => s.doctorId === slot.targetId) : undefined;
+          if (session && tryPairDoctor(session)) continue;
           unmetSlotsCount++;
           continue;
         }
@@ -2846,6 +2855,15 @@ export class SchedulingEngine {
       repaired.assignments.forEach(a => resultAssignmentsMap.set(`${a.nurseId}_${a.date}`, a));
       createdCount = repaired.assignments.filter(a => !keptFromBefore.has(a.id)).length;
     }
+
+    // Top up and repair can create new Float duties. Remove avoidable generated pairs
+    // after those steps without changing hours, dates, retained shifts or pinned duties.
+    const separateCover = applySeparateFloatCover({ assignments: [...resultAssignmentsMap.values()], nurses: sortedNurses,
+      duties: dutyWindows, doctors, specialties, sessions, roles, leave: leaveEntries, locks, requests, clinic,
+      minFreeNurses: minAdditionalNurses,
+      movable: a => a.source === 'GENERATED' && !keptFromBefore.has(a.id) && inFill(a.date) },
+      a => inFill(a.date) && !a.locked && a.source === 'GENERATED' && !keptFromBefore.has(a.id));
+    separateCover.forEach(a => resultAssignmentsMap.set(`${a.nurseId}_${a.date}`, a));
 
     // How many of the nurses' requests this roster meets: the shift asked for, or no shift
     // on a day (or leave) asked off that is not decided yet.

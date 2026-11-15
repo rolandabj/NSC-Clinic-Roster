@@ -30,6 +30,9 @@ function actionFor(f: ValidationFinding, nurses: Nurse[]): { type: ActionType; i
   if (/^(unassigned-session-|session-partial-|session-no-overlap-)/.test(f.id)) return {
     type: 'ARRANGE_COVER', instruction: 'Assign an eligible nurse for the missing session time, or correct the doctor clinic hours.',
   };
+  if (/^low-acuity-float-/.test(f.id)) return {
+    type: 'ARRANGE_COVER', instruction: 'Use eligible Float nurses for separate doctor cover while preserving required Nurse Clinic cover. Shared cover is a last resort.',
+  };
   if (/^(holiday-gap-|holiday-no-nurse-)/.test(f.id)) return {
     type: 'ARRANGE_COVER', instruction: 'Arrange nurse cover for the missing holiday opening hours.',
   };

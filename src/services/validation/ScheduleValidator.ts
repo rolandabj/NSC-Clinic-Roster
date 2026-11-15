@@ -22,6 +22,7 @@ import { hasAllocationReview } from '../engine/allocationReview';
 import { isAgreedException, isLastResortShift } from '../engine/lastResort';
 import { outsideNurseList } from '../engine/nurseList';
 import { doctorPairingProblems } from '../engine/doctorPairing';
+import { separateLowAcuityCover } from '../engine/lowAcuityLastResort';
 import { summarizeNurseHours } from '../reports/hoursAccounting';
 import {
   Schedule,
@@ -229,11 +230,26 @@ export class ScheduleValidator {
           if (nurse?.isClinicNurse && !outsideNurseList(nurse, a, { doctors, specialties, sessions }) &&
             !leaveEntries.some(le => le.nurseId === a.nurseId && le.approved && le.startDate <= date && le.endDate >= date) &&
             ids.every(id => doctorSessionsOn(sessions, date).some(s => s.doctorId === id && duty &&
-              overlaps(duty.startTime, duty.endTime, s.startTime, s.endTime)))) findings.push({
-            id: `low-acuity-cover-${a.id}`, category: 'DOCTOR_COVER', severity: 'INFO',
-            message: `${nurse.fullName} is assigned to ${ids.map(id => doctors.find(d => d.id === id)?.fullName || 'Doctor').join(' and ')} on ${formatDate(date)}. One nurse covers two low acuity doctors; the duty hours count once.`,
-            affectedNurseIds: [a.nurseId], cellRefs: [{ nurseId: a.nurseId, date }], date,
-          });
+              overlaps(duty.startTime, duty.endTime, s.startTime, s.endTime)))) {
+            const plus = resolveRule(rules, 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS', 'rule-nurse-plus-one', ['additional nurse', 'above doctors', 'plus one']);
+            const cover = separateLowAcuityCover({ assignments: dayAssignments, nurses, duties: dutyWindows, doctors,
+              specialties, sessions, roles, leave: leaveEntries, locks, requests: availabilityRequests, clinic,
+              minFreeNurses: plus?.enabled === false ? 0 : plus?.value ?? 1 }, a);
+            if (cover.replacement || cover.searchLimited) {
+              const floats = cover.replacement?.floats || [];
+              const affectedNurseIds = [a.nurseId, ...floats.map(f => f.nurseId)];
+              findings.push({ id: `low-acuity-float-${a.id}`, category: 'DOCTOR_COVER', severity: 'ERROR',
+                message: cover.replacement
+                  ? `${nurse.fullName} covers two low acuity doctors on ${formatDate(date)}, but ${floats.map(f => nurseMap.get(f.nurseId)?.fullName || 'a Float nurse').join(' and ')} can provide separate cover for ${doctors.find(d => d.id === cover.replacement!.doctorId)?.fullName || 'one doctor'} during the required clinic hours without reducing required Nurse Clinic cover. Assign separate nurses before publishing.`
+                  : `${nurse.fullName} covers two low acuity doctors on ${formatDate(date)}. The Float availability check could not finish. Review the roster and arrange separate cover where eligible nurses are available before publishing.`,
+                affectedNurseIds, cellRefs: affectedNurseIds.map(nurseId => ({ nurseId, date })), date,
+              });
+            } else findings.push({
+              id: `low-acuity-cover-${a.id}`, category: 'DOCTOR_COVER', severity: 'INFO',
+              message: `${nurse.fullName} is assigned to ${ids.map(id => doctors.find(d => d.id === id)?.fullName || 'Doctor').join(' and ')} on ${formatDate(date)}. One nurse covers two low acuity doctors as a last resort. No complete eligible Float replacement is available for the required clinic hours without reducing required Nurse Clinic cover. The duty hours count once.`,
+              affectedNurseIds: [a.nurseId], cellRefs: [{ nurseId: a.nurseId, date }], date,
+            });
+          }
         }
       }
       const daySessions = clinic.holidays.has(date) ? [] : doctorSessionsOn(sessions, date);

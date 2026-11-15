@@ -89,7 +89,7 @@ export const GridLegend: React.FC<{ dutyWindows: DutyWindow[]; leaveTypes: Leave
           <div className="space-y-1.5 text-xs text-slate-600">
             <div className="flex items-center gap-2">
               <span className="inline-flex shrink-0 items-center gap-1 rounded bg-brand-soft px-1 text-xs font-semibold text-brand-strong"><Users className="size-3" aria-hidden="true" />2 doctors</span>
-              <span>One nurse covers two low acuity doctors. Both names are shown; the duty hours count once.</span>
+              <span>One nurse covers two low acuity doctors. Sharing is a last resort; use eligible Float cover when available. Duty hours count once.</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-12 h-14 rounded-sm border-l-3 px-1 flex flex-col justify-center leading-tight text-ink shrink-0" style={{ backgroundColor: '#eef2ff', borderLeftColor: '#4f46e5' }} aria-hidden="true">
