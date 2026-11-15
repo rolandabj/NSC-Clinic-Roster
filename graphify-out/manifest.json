@@ -444,9 +444,9 @@
     "semantic_hash": ""
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1794734919.8093984,
-    "seen": 1794735103.5493395,
-    "ast_hash": "8e153d3f0a3f571e3f37c9aac22ba284",
+    "mtime": 1794739194.146419,
+    "seen": 1794739387.1723127,
+    "ast_hash": "ea477c219cc0b6921f20457dc6784f8b",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
@@ -960,9 +960,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1794735049.8981578,
-    "seen": 1794735103.5495636,
-    "ast_hash": "7d4e564dbf509c848d73d6a7108e2167",
+    "mtime": 1794739332.4200783,
+    "seen": 1794739387.1725261,
+    "ast_hash": "0bdf0bf5f562dbaf4238c68395457eed",
     "semantic_hash": ""
   },
   "index.html": {
@@ -2613,6 +2613,18 @@
     "mtime": 1794735000.9628997,
     "seen": 1794735103.5494714,
     "ast_hash": "c074456d4080ac8231e9a3962a0f9fd9",
+    "semantic_hash": ""
+  },
+  "src/services/engine/coverageRepair.ts": {
+    "mtime": 1794739332.415128,
+    "seen": 1794739387.1723187,
+    "ast_hash": "e9ca1a6f4820844959937e4288f0b01b",
+    "semantic_hash": ""
+  },
+  "tests/unit/coverageRepair.test.ts": {
+    "mtime": 1794739194.146419,
+    "seen": 1794739387.1724222,
+    "ast_hash": "3218723964eb620e0c4aaad4ca2e790a",
     "semantic_hash": ""
   }
 }

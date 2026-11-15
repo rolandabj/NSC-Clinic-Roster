@@ -57,6 +57,7 @@ import {
   hoursToCover,
   doctorSessionsOn,
 } from './clinicModel';
+import { repairCoverage } from './coverageRepair';
 import { futureCapacity, type CapacityJob } from './futureCapacity';
 import { yearToDateSeeds } from '../fairness/yearSeed';
 import { isPendingLeave } from './leaveStatus';
@@ -2757,6 +2758,40 @@ export class SchedulingEngine {
         changed = true;
       }
       if (!changed) break;
+    }
+
+    // 7. Repair complete transactions after top up, when every nurse's final hours are
+    // known. Load the checker at runtime to avoid a static engine/checker import cycle.
+    if (onProgress) {
+      onProgress({ currentDay: totalDays, totalDays, currentDate: schedule.endDate,
+        statusText: 'Checking exchanges to improve cover…', percent: 98 });
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    const beforeRepair = [...resultAssignmentsMap.values()];
+    const { ScheduleValidator } = await import('../validation/ScheduleValidator');
+    const repaired = await repairCoverage({
+      assignments: beforeRepair, dates: datesList, sessions, nurses: sortedNurses,
+      duties: dutyWindows, roles, clinic, minFreeNurses: plusOneEnabled ? minAdditionalNurses : 0,
+      hoursCheckpoints: checkpoints.filter(end => end < schedule.endDate),
+      movable: a => inFill(a.date) && !keptFromBefore.has(a.id),
+      canWorkOnDate: (id, date) => inFill(date) && !isOnApprovedLeave(id, date) && !hasDayOffLock(id, date) &&
+        (!hasPendingTimeOff(id, date) || resultAssignmentsMap.has(`${id}_${date}`)),
+      canPair: (id, sess) => {
+        const nurse = nurseMap.get(id);
+        return !!nurse && canWorkWithDoctor(nurse, sess.doctorId, sess);
+      },
+      validate: list => ScheduleValidator.validate(schedule, list, sortedNurses, seniorityLevels,
+        dutyWindows, sessions, leaveEntries, locks, roles, rules, workingHoursPeriods, specialties,
+        doctors, leaveTypes, clinicSetup, requests).findings,
+    });
+    if (repaired.repairedCount > 0) {
+      const beforeDoctors = new Set(beforeRepair.filter(a => a.kind === 'DOCTOR').map(a => `${a.doctorId}|${a.date}`));
+      const afterDoctors = new Set(repaired.assignments.filter(a => a.kind === 'DOCTOR').map(a => `${a.doctorId}|${a.date}`));
+      const newlyCovered = [...afterDoctors].filter(key => !beforeDoctors.has(key)).length;
+      unmetSlotsCount = Math.max(0, unmetSlotsCount - newlyCovered);
+      resultAssignmentsMap.clear();
+      repaired.assignments.forEach(a => resultAssignmentsMap.set(`${a.nurseId}_${a.date}`, a));
+      createdCount = repaired.assignments.filter(a => !keptFromBefore.has(a.id)).length;
     }
 
     // How many of the nurses' requests this roster meets: the shift asked for, or no shift
