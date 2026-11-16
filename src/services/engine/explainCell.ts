@@ -50,7 +50,7 @@ export interface ExplainDayInput {
   /** Not needed for the checks today; accepted so callers can pass the whole roster. */
   sessions?: DoctorSession[];
   doctors?: Doctor[];
-  /** Shifts from the roster just before this one, for rest and days in a row at its start. */
+  /** Fixed duties from surrounding rosters, for rest, duty runs and rolling hours. */
   priorAssignments?: Assignment[];
   /**
    * The nurses' requests for this roster (a day off or a shift). An approved day off

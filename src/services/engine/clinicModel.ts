@@ -53,6 +53,8 @@ export interface ClinicSetup {
   holidayNames?: Record<string, string>;
   /** Shifts from the roster just before this one (read only, for the rules that look back). */
   priorAssignments?: Assignment[];
+  /** Fixed shifts after this roster, read only for rest, runs and rolling hours limits. */
+  followingAssignments?: Assignment[];
   /** Weekends, holidays, late shifts and Nurse Clinic so far this year (earlier rosters only). */
   yearToDate?: YearToDate;
   /** Nurses' availability requests for this roster's dates (any status), and days off taken for its public holidays. */
@@ -64,6 +66,7 @@ export interface ResolvedClinicSetup {
   closeTime: string;
   holidays: Set<string>;
   priorAssignments: Assignment[];
+  followingAssignments: Assignment[];
 }
 
 export const DEFAULT_OPEN_TIME = '09:00';
@@ -80,6 +83,7 @@ export function resolveClinicSetup(setup?: ClinicSetup): ResolvedClinicSetup {
     closeTime,
     holidays: new Set(setup?.holidayDates || []),
     priorAssignments: setup?.priorAssignments || [],
+    followingAssignments: setup?.followingAssignments || [],
   };
 }
 

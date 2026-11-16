@@ -4,7 +4,7 @@
  *
  * Loads what the engine and the validator need to know about the clinic for
  * one schedule: opening hours (clinic profile), public holidays, the shifts at
- * the end of the previous roster (rosters run back to back), the year to date
+ * both sides of this roster, the year to date
  * fairness totals and the nurses' availability requests for these dates.
  */
 
@@ -48,23 +48,25 @@ export async function loadClinicSetup(
   ]);
   const profile = clinics[0];
 
-  // The look back rules see the last weeks before this roster, from every earlier roster
-  // (not archived) that covers them, as saved now.
+  // Surrounding duties are fixed context for rest, duty runs and rolling hours.
+  // Read both sides so refilling an earlier roster cannot ignore a later saved duty.
   const from = daysBefore(schedule.startDate, PRIOR_DAYS);
-  const lookBack = schedules.filter(
-    (s) => s.id !== schedule.id && s.status !== 'ARCHIVED' && s.startDate < schedule.startDate && s.endDate >= from
-  );
-  const [lookBackShifts, hoursHistory] = await Promise.all([
-    Promise.all(lookBack.map((s) => repo.list('assignments', { field: 'scheduleId', operator: '==', value: s.id })
-      .then((list) => list.filter((a) => a.date >= s.startDate && a.date <= s.endDate)))),
+  const through = daysBefore(schedule.endDate, -PRIOR_DAYS);
+  const surrounding = schedules.filter(s => s.id !== schedule.id && s.status !== 'ARCHIVED' &&
+    s.startDate <= through && s.endDate >= from &&
+    (s.startDate < schedule.startDate || s.endDate > schedule.endDate));
+  const [surroundingShifts, hoursHistory] = await Promise.all([
+    Promise.all(surrounding.map(s => repo.list('assignments', { field: 'scheduleId', operator: '==', value: s.id })
+      .then(list => list.filter(a => a.date >= s.startDate && a.date <= s.endDate)))),
     loadHoursHistory(repo, schedule, { schedules }),
   ]);
-  const priorAssignments: Assignment[] = lookBackShifts.flat().filter((a) => a.date >= from && a.date < schedule.startDate);
+  const priorAssignments: Assignment[] = surroundingShifts.flat().filter(a => a.date >= from && a.date < schedule.startDate);
+  const followingAssignments: Assignment[] = surroundingShifts.flat().filter(a => a.date > schedule.endDate && a.date <= through);
 
   const holidayDates = holidays.map((h) => h.date);
   const holidayNames = Object.fromEntries(holidays.map((h) => [h.date, h.name]));
   const inRoster = (date?: string) => !!date && date >= schedule.startDate && date <= schedule.endDate;
-  // Extras that only fine tune the generator: if they can't be loaded the roster still loads.
+  // Fairness totals may be unavailable; approved availability restrictions are required.
   const [yearToDate, availabilityRequests] = await Promise.all([
     (async (): Promise<YearToDate | undefined> => {
       if (options.withYearToDate === false) return undefined;
@@ -82,9 +84,8 @@ export async function loadClinicSetup(
       .list('availabilityRequests')
       // A day off for one of this roster's public holidays counts here wherever it falls.
       .then((list: AvailabilityRequest[]) => list.filter((r) => inRoster(r.date) || inRoster(r.holidayDate)))
-      .catch((err) => {
-        console.warn('Could not load the availability requests:', err);
-        return undefined;
+      .catch(() => {
+        throw new Error('Availability requests could not be loaded. Reload before filling or publishing.');
       }),
   ]);
 
@@ -95,6 +96,7 @@ export async function loadClinicSetup(
     holidayDates,
     holidayNames,
     priorAssignments,
+    followingAssignments,
     yearToDate,
     availabilityRequests,
   };

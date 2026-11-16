@@ -160,10 +160,18 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     hoursHistoryRef.current = history;
     setHoursHistory(history);
   });
+  const [surroundingAssignments, setSurroundingAssignments] = useState<Assignment[]>([]);
+  const adoptSurrounding = (setup: ClinicSetup | undefined) => {
+    const next = [...(setup?.priorAssignments || []), ...(setup?.followingAssignments || [])];
+    setSurroundingAssignments(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+  };
   /** Clinic details from a load: its hours history only if it is the newest load. */
   const adoptSetup = useLatestCallback((seq: number, setup: ClinicSetup | undefined) => {
+    if (seq !== historySeqRef.current) return;
     applyHistory(seq, setup?.hoursHistory);
     clinicSetupRef.current = setup && { ...setup, hoursHistory: hoursHistoryRef.current };
+    adoptSurrounding(setup);
+    adoptAvailability(setup);
   });
   const clinicSetupRef = useRef<ClinicSetup | undefined>(undefined);
   const [quotas, setQuotas] = useState<NurseHoursQuota[]>([]);
@@ -171,6 +179,12 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [availabilityRequests, setAvailabilityRequests] = useState<AvailabilityRequest[]>([]);
   const availabilityRequestsRef = useRef<AvailabilityRequest[]>([]);
   availabilityRequestsRef.current = availabilityRequests;
+  const adoptAvailability = (setup: ClinicSetup | undefined) => {
+    if (!setup?.availabilityRequests) return;
+    const next = setup.availabilityRequests;
+    availabilityRequestsRef.current = next;
+    setAvailabilityRequests(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+  };
 
   const [workingHoursPeriods, setWorkingHoursPeriods] = useState<WorkingHoursPeriod[]>([]);
 
@@ -383,10 +397,9 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
         repo.list('holidays'),
         repo.list('quotas'),
         repo.list('workingHoursPeriods'),
-        // Requests are extra information: the roster still opens without them.
-        repo.list('availabilityRequests').catch((err) => {
-          console.warn('Could not load the nurses\' requests:', err);
-          return [] as AvailabilityRequest[];
+        // Approved days off are required availability data, even when their pin is missing.
+        repo.list('availabilityRequests').catch(() => {
+          throw new Error('Availability requests could not be loaded. Reload before filling or publishing.');
         }),
       ]);
       setAvailabilityRequests(reqList);
@@ -483,10 +496,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       [list, vList, setup] = await Promise.all([
         repo.list('assignments', { field: 'scheduleId', operator: '==', value: sched.id }),
         repo.list('versions', { field: 'scheduleId', operator: '==', value: sched.id }),
-        loadClinicSetup(repo, sched).catch((err) => {
-          console.error('Could not load the clinic details for this roster:', err);
-          return undefined;
-        }),
+        loadClinicSetup(repo, sched),
       ]);
     } catch (err) {
       if (request === openRequestRef.current) {
@@ -503,7 +513,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     loadingRef.current = false;
     adoptSetup(historySeq, setup);
     setClinicSetupError(
-      setup ? null : 'Public holidays, opening hours and the previous roster could not be loaded. Reload the page before generating.'
+      setup ? null : 'Opening hours, holidays, availability and surrounding rosters could not be loaded. Reload before filling or publishing.'
     );
     setAssignments(shown);
     setVersions(withoutBackups(vList).sort((a, b) => b.number - a.number));
@@ -845,7 +855,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       })
       .catch((err) => {
         console.error('Could not load the clinic details:', err);
-        if (!cancelled) setClinicSetupError('Public holidays, opening hours and the previous roster could not be loaded. Reload the page before generating.');
+        if (!cancelled) setClinicSetupError('Opening hours, holidays, availability and surrounding rosters could not be loaded. Reload before filling or publishing.');
       });
     return () => {
       cancelled = true;
@@ -960,7 +970,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       try {
         generationClinicSetup = await loadClinicSetup(repo, activeSchedule);
       } catch (err: any) {
-        setClinicSetupError('Public holidays, opening hours and the previous roster could not be loaded.');
+        setClinicSetupError('Opening hours, holidays, availability and surrounding rosters could not be loaded.');
         triggerToast(`Not filled: the clinic details could not be loaded (${err?.message || 'database unavailable'}). Try again.`, 'error');
         setIsGenerating(false);
         return;
@@ -968,6 +978,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       // The fill itself uses exactly what it just loaded.
       applyHistory(historySeqForFill, generationClinicSetup.hoursHistory);
       clinicSetupRef.current = generationClinicSetup;
+      adoptSurrounding(generationClinicSetup);
+      adoptAvailability(generationClinicSetup);
       setClinicSetupError(null);
 
       // A backup copy of the roster as it is now, so a fill or clear can be undone
@@ -1850,7 +1862,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 onLeaveEntriesChange={gridHandlers.onLeaveEntriesChange}
                 onCellEdit={gridHandlers.onCellEdit}
                 rules={rules}
-                priorAssignments={clinicSetupRef.current?.priorAssignments}
+                priorAssignments={surroundingAssignments}
                 availabilityRequests={availabilityRequests}
                 focusRequest={focusRequest}
                 onNavigateTab={gridHandlers.onNavigateTab}
@@ -1971,7 +1983,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                   leaveTypes={leaveTypes}
                   sessions={sessions}
                   doctors={doctors}
-                  priorAssignments={clinicSetupRef.current?.priorAssignments}
+                  priorAssignments={surroundingAssignments}
                   availabilityRequests={availabilityRequests}
                   onPick={(nurseId, dutyWindowId) => handleAddNurseClinicShift(nurseId, f.date!, dutyWindowId)}
                 />
@@ -2222,7 +2234,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           specialties={specialties}
           sessions={sessions}
           availabilityRequests={availabilityRequests}
-          priorAssignments={clinicSetupRef.current?.priorAssignments}
+          priorAssignments={surroundingAssignments}
           checkRoster={checkRoster}
           isOpen={isFairnessModalOpen}
           onClose={() => setIsFairnessModalOpen(false)}
@@ -2269,7 +2281,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           rules={rules}
           sessions={sessions}
           availabilityRequests={availabilityRequests}
-          priorAssignments={clinicSetupRef.current?.priorAssignments}
+          priorAssignments={surroundingAssignments}
           checkRoster={checkRoster}
           isOpen={isSwapModalOpen}
           onClose={() => setIsSwapModalOpen(false)}

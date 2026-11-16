@@ -4,6 +4,7 @@ import type { ValidationFinding } from '../validation/ScheduleValidator';
 import { assignmentCoversDoctor, canBeFreeNurse, coverageSlots, doctorSessionsOn, isFreeDuring, nurseClinicRoleOf, overlaps, toMinutes,
   uncoveredParts, type ResolvedClinicSetup } from './clinicModel';
 import { FLOAT_ROLE_ID } from './floatShift';
+import { nurseIsAvailable, type AvailabilityContext } from './assignmentPresence';
 
 export interface CoverageRepairContext {
   assignments: Assignment[];
@@ -14,11 +15,14 @@ export interface CoverageRepairContext {
   roles: ClinicalRole[];
   clinic: ResolvedClinicSetup;
   minFreeNurses: number;
+  availability?: AvailabilityContext;
   /** Keep nurse hours unchanged at each working period boundary as well as overall. */
   hoursCheckpoints?: readonly string[];
   movable: (assignment: Assignment) => boolean;
   canWorkOnDate: (nurseId: string, date: string) => boolean;
   canPair: (nurseId: string, session: DoctorSession) => boolean;
+  /** Existing legacy exception cover may remain provisional without granting new allocation permission. */
+  canCover?: (assignment: Assignment, session: DoctorSession) => boolean;
   /** Full roster check on the complete proposed transaction, with prior roster history. */
   validate: (assignments: Assignment[]) => ValidationFinding[];
 }
@@ -64,13 +68,14 @@ export async function repairCoverage(ctx: CoverageRepairContext) {
   const dailySessions = new Map(ctx.dates.map(date => [date,
     ctx.clinic.holidays.has(date) ? [] : doctorSessionsOn(ctx.sessions, date)]));
   const coverage = (date: string, list: Assignment[]): DayCoverage => {
-    const day = list.filter(a => a.date === date);
+    const day = list.filter(a => a.date === date && nurseIsAvailable(nurses.get(a.nurseId), date, ctx.availability || { leaveEntries: [] }));
     const sessions = dailySessions.get(date) || [];
     const doctorGaps = new Map<string, Gap[]>();
     const qualified = new Map<string, Gap[]>();
     let missing = 0, overlap = 0;
     for (const sess of sessions) {
-      const linked = day.filter(a => assignmentCoversDoctor(a, sess.doctorId));
+      const linked = day.filter(a => assignmentCoversDoctor(a, sess.doctorId) &&
+        (ctx.canCover ? ctx.canCover(a, sess) : ctx.canPair(a.nurseId, sess)));
       const gaps = uncoveredParts(sess.startTime, sess.endTime,
         linked.map(a => duties.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d));
       qualified.set(sess.id, uncoveredParts(sess.startTime, sess.endTime,

@@ -130,11 +130,10 @@ test('days: hours needed, hours rostered and doctor session cover', () => {
   const day2 = a.days.find((d) => d.date === '2026-10-06')!;
   // 10 h doctor session + 12 h of free nurse (09:00 to 21:00 by default)
   assert.deepEqual(day2.hoursNeeded, { doctorSessions: 10, freeNurse: 12, total: 22 });
-  assert.equal(day2.hoursRostered, 8);
+  assert.equal(day2.hoursRostered, 0);
   const session = day2.doctorSessions[0];
-  assert.equal(session.nurses[0].nurse, 'Ben');
-  assert.equal(session.nurses[0].coveredMinutes, 480);
-  assert.deepEqual(session.uncovered, [{ start: '17:00', end: '19:00' }]);
+  assert.equal(session.nurses.length, 0);
+  assert.deepEqual(session.uncovered, [{ start: '09:00', end: '19:00' }]);
   assert.deepEqual(day2.dayOffRequests, ['Ben']);
 });
 
@@ -154,7 +153,7 @@ test('requests say whether they were followed; pinned days and leave are listed'
 });
 
 test('problems come from the checker, grouped by rule', () => {
-  const a = buildRosterAnalysis(input());
+  const a = buildRosterAnalysis(input({ availabilityRequests: [] }));
   assert.equal(a.problems.length, a.summary.problems.ERROR + a.summary.problems.WARN + a.summary.problems.INFO);
   const partial = a.problems.find((p) => p.rule === 'session-partial');
   assert.ok(partial, 'the 17:00 to 19:00 gap in Dr Khan\'s session is reported');
@@ -292,9 +291,9 @@ test('public holiday doctor clinics do not create false uncovered doctor totals'
   assert.ok(a.review.userActions.some(x => x.instruction.includes('holiday opening hours')));
 });
 
-test('one manual legacy exception produces one user action even with two blocking findings', () => {
+test('one manual legacy exception produces one user action alongside a separate coverage gap', () => {
   const a = buildRosterAnalysis(reviewInput({ nurses: [makeNurse('amy', { preferences: [{ kind: 'DOCTOR', refId: 'other', rank: 1 }] })] }));
-  assert.equal(a.review.publication.blockerCount, 2);
+  assert.equal(a.review.publication.blockerCount, 3);
   assert.equal(a.review.userActions.filter(x => x.type === 'REVIEW_PAIRING').length, 1);
   assert.equal(a.review.pairingExceptions.pending, 1);
 });
@@ -310,4 +309,37 @@ test('the readable action list keeps exact gap times and leaves out private revi
   assert.ok(!text.includes('private-clinical-reviewer'));
   assert.equal(JSON.stringify(data), before, 'reporting does not change saved roster inputs');
   assert.deepEqual(buildRosterAnalysis(data), a);
+});
+
+test('analysis doctor gaps and hourly coverage agree on an approved day off without a pin', () => {
+  const a = buildRosterAnalysis(input());
+  const day = a.days.find(d => d.date === '2026-10-06')!;
+  assert.deepEqual(day.doctorSessions[0].uncovered, [{ start: '09:00', end: '19:00' }]);
+  assert.equal(day.doctorSessions[0].nurses.length, 0);
+  assert.equal(a.hourlyCoverage['2026-10-06']['09:00'].uncoveredDoctors, 1);
+  assert.ok(a.review.publication.blockers.some(b => b.rule === 'request-dayoff-shift'));
+});
+test('analysis never treats an explicitly ineligible nurse as doctor coverage', () => {
+  const a = buildRosterAnalysis(input({ availabilityRequests: [], nurses: [makeNurse('amy', {
+    doctorEligibility: { doctorIds: [], specialtyIds: [], reviewedAt: '2026-11-15T10:00:00Z', reviewedBy: 'lead' },
+  })], assignments: [shift('denied', 'amy', SCHEDULE.startDate)] }));
+  const day = a.days.find(d => d.date === SCHEDULE.startDate)!;
+  assert.equal(day.doctorSessions[0].nurses.length, 0);
+  assert.deepEqual(day.doctorSessions[0].uncovered, [{ start: '09:00', end: '17:00' }]);
+});
+test('analysis does not count inactive or missing nurses as working coverage', () => {
+  const a = buildRosterAnalysis(input({ nurses: [makeNurse('amy', { active: false })], availabilityRequests: [],
+    assignments: [shift('inactive', 'amy', SCHEDULE.startDate), shift('orphan', 'missing', SCHEDULE.startDate)] }));
+  const day = a.days.find(d => d.date === SCHEDULE.startDate)!;
+  assert.equal(day.nursesWorking, 0);
+  assert.equal(day.doctorSessions[0].nurses.length, 0);
+  assert.ok(a.review.publication.blockers.some(b => b.rule === 'assignment-nurse'));
+});
+test('analysis uses the same latest explicit request status as the validator', () => {
+  const off = input().availabilityRequests[0];
+  const data = input({ availabilityRequests: [{ ...off, status: 'REJECTED' }], clinicSetup: { availabilityRequests: [off] } });
+  const a = buildRosterAnalysis(data);
+  const day = a.days.find(d => d.date === '2026-10-06')!;
+  assert.deepEqual(day.doctorSessions[0].uncovered, [{ start: '17:00', end: '19:00' }]);
+  assert.equal(a.hourlyCoverage['2026-10-06']['09:00'].uncoveredDoctors, 0);
 });

@@ -27,6 +27,8 @@ import { doctorPairingProblems } from './doctorPairing';
 export interface AssignmentCheckContext {
   /** The whole roster as it would be after the change. */
   assignments: Assignment[];
+  /** Read only duties outside the edited roster, used by rest, runs and rolling hours checks. */
+  surroundingAssignments?: Assignment[];
   nurses: Nurse[];
   dutyWindows: DutyWindow[];
   leaveEntries: LeaveEntry[];
@@ -76,7 +78,8 @@ export function checkAssignment(ctx: AssignmentCheckContext, cell: Assignment): 
   const duty = dutyMap.get(cell.dutyWindowId);
 
   const byNurseDate = new Map<string, Assignment[]>();
-  for (const a of ctx.assignments) {
+  const contextShifts = new Map([...(ctx.surroundingAssignments || []), ...ctx.assignments].map(a => [`${a.nurseId}|${a.date}|${a.id}`, a]));
+  for (const a of contextShifts.values()) {
     if (a.nurseId !== cell.nurseId) continue;
     const list = byNurseDate.get(a.date) || [];
     list.push(a);

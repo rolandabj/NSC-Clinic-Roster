@@ -16,6 +16,7 @@
  * nurse profiles (not needed to study the roster).
  */
 
+import { assignmentCanCoverDoctor, nurseIsAvailable } from '../engine/assignmentPresence';
 import { rosterReviewText } from './rosterReviewText';
 import { hasReviewedDoctorEligibility } from '../engine/nurseList';
 import { allocationAssessment, buildRosterReview } from '../reports/rosterReview';
@@ -134,10 +135,13 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
     rules,
     workingHoursPeriods = [],
     locks,
-    availabilityRequests,
+    availabilityRequests: inputRequests,
     clinicSetup,
   } = input;
 
+  const availabilityRequests = [...new Map([...(clinicSetup?.availabilityRequests || []), ...inputRequests]
+    .map(request => [request.id, request])).values()];
+  const coverageContext = { nurses, dutyWindows, leaveEntries, locks, roles, doctors, specialties, sessions, availabilityRequests };
   const dates = getScheduleDates(schedule.startDate, schedule.endDate);
   const inRange = (date: string) => date >= schedule.startDate && date <= schedule.endDate;
   const assignments = allAssignments.filter((a) => a.scheduleId === schedule.id && inRange(a.date));
@@ -377,11 +381,11 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
   const days = dates.map((date) => {
     const isHoliday = holidays.has(date);
     const daySessions = doctorSessionsOn(sessions, date);
-    const dayShifts = assignments.filter((a) => a.date === date && !approvedLeaveOn(a.nurseId, date));
+    const dayShifts = assignments.filter(a => a.date === date && nurseIsAvailable(nurseMap.get(a.nurseId), date, coverageContext));
     const workingNurseIds = Array.from(new Set(dayShifts.map((a) => a.nurseId)));
 
     const doctorSessions = daySessions.map((s) => {
-      const withDoctor = dayShifts.filter((a) => assignmentCoversDoctor(a, s.doctorId));
+      const withDoctor = dayShifts.filter(a => assignmentCoversDoctor(a, s.doctorId) && assignmentCanCoverDoctor(a, coverageContext, s.doctorId));
       const coverDuties = withDoctor.map((a) => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d);
       return {
         sessionId: s.id,
@@ -694,6 +698,10 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
     pinnedDays,
     problems,
     hourlyCoverage: report.hourlyCoverageMap,
+    followingRosterHead: (clinicSetup?.followingAssignments || []).slice().sort((a, b) => a.date.localeCompare(b.date))
+      .map(a => ({ date: a.date, nurseId: a.nurseId, nurse: nurseName(a.nurseId),
+        shift: dutyMap.get(a.dutyWindowId)?.acronym || a.dutyWindowId,
+        start: dutyMap.get(a.dutyWindowId)?.startTime || null, end: dutyMap.get(a.dutyWindowId)?.endTime || null })),
     previousRosterTail: (clinicSetup?.priorAssignments || [])
       .slice()
       .sort((a, b) => a.date.localeCompare(b.date))

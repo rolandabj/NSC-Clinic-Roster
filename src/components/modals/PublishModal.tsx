@@ -40,6 +40,7 @@ import {
 } from '../../types';
 import { ClinicContextState } from '../../types/navigation';
 import { loadClinicSetup } from '../../services/engine/clinicSetupService';
+import type { ClinicSetup } from '../../services/engine/clinicModel';
 import { ScheduleValidator, ValidationReport } from '../../services/validation/ScheduleValidator';
 import { computeScheduleDiff, ScheduleVersionDiff } from '../../services/history/diffEngine';
 import { RosterPublishService } from '../../services/publish/rosterPublishService';
@@ -110,6 +111,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
 }) => {
   const [hoursHistory, setHoursHistory] = useState<HoursHistory>();
   const hoursHistoryRef = useRef<HoursHistory | undefined>(undefined);
+  const checkedClinicSetupRef = useRef<ClinicSetup | undefined>(undefined);
   const [currentStep, setCurrentStep] = useState<Step>('VALIDATION');
   // Closing or reloading the tab while emails go out would leave the rest of the nurses
   // without their email, so the browser asks first.
@@ -212,6 +214,7 @@ export const PublishModal: React.FC<PublishModalProps> = ({
   const initializePublish = useLatestCallback(() => {
     if (isOpen) {
       setCurrentStep('VALIDATION');
+      checkedClinicSetupRef.current = undefined;
       setAcknowledgeWarnings(false);
       setAllocationDrafts({});
       // The mode the dialog was opened with (it stays mounted between openings).
@@ -268,20 +271,21 @@ export const PublishModal: React.FC<PublishModalProps> = ({
       loadClinicSetup(repo, schedule)
         .then((setup) => {
           if (checkId !== validationRunRef.current) return;
+          checkedClinicSetupRef.current = setup;
           setHoursHistory(setup.hoursHistory);
           hoursHistoryRef.current = setup.hoursHistory;
           setValidationReport(
             ScheduleValidator.validate(
               schedule, assignments, nurses, seniorityLevels, dutyWindows, sessions, leaveEntries, locks,
-              roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes, setup
+              roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes, setup, setup.availabilityRequests
             )
           );
         })
         .catch((err) => {
           console.warn('[PublishModal] Clinic details could not be loaded for the check:', err);
           if (checkId === validationRunRef.current) setValidationReport(previous => previous ? ({ ...previous, errorCount: previous.errorCount + 1,
-            findings: [...previous.findings, { id: 'hours-history-unavailable', category: 'RULE_VIOLATION', severity: 'ERROR',
-              message: 'The saved hours history could not be loaded. Close this dialog and try again before publishing.', affectedNurseIds: [], cellRefs: [] }] }) : previous);
+            findings: [...previous.findings, { id: 'clinic-inputs-unavailable', category: 'RULE_VIOLATION', severity: 'ERROR',
+              message: 'Clinic availability and roster history could not be checked. Close this dialog and reload before publishing.', affectedNurseIds: [], cellRefs: [] }] }) : previous);
         })
         .finally(() => {
           if (checkId === validationRunRef.current) setIsClinicCheckPending(false);
@@ -396,12 +400,13 @@ export const PublishModal: React.FC<PublishModalProps> = ({
    * instead of making a second one.
    */
   const savePublish = async (logs: string[]) => {
-    const setup = await loadClinicSetup(repo, schedule);
-    await assertPublicationCurrent(repo, { schedule, assignments, nurses, seniorityLevels, dutyWindows, sessions,
-      leaveEntries, locks, roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes });
+    const checkedSetup = checkedClinicSetupRef.current;
+    if (!checkedSetup) throw new Error('Clinic availability and roster history must be checked before publishing. Close this dialog and try again.');
+    const setup = await assertPublicationCurrent(repo, { schedule, assignments, nurses, seniorityLevels, dutyWindows, sessions,
+      leaveEntries, locks, roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes, clinicSetup: checkedSetup });
     const approvedAssignments = applyAllocationDrafts(assignments, allocationDrafts, authService.getCurrentUser()?.uid || '', new Date().toISOString());
     const freshBase = ScheduleValidator.validate(schedule, approvedAssignments, nurses, seniorityLevels, dutyWindows, sessions,
-      leaveEntries, locks, roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes, setup);
+      leaveEntries, locks, roles, rules, workingHoursPeriods, specialties, doctors, leaveTypes, setup, setup.availabilityRequests);
     const freshCheck = publicationReport(freshBase, approvedAssignments, nurses, { doctors, specialties, sessions });
     setValidationReport(freshBase);
     if (freshCheck.errorCount > 0) throw new Error('The roster has problems that must be fixed before publishing. Review Problems and try again.');

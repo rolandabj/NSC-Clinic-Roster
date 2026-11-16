@@ -71,3 +71,11 @@ test('request notes never count as errors or warnings', () => {
   assert.equal(withWish.warnCount, base.warnCount);
   assert.equal(withWish.infoCount, base.infoCount + 1);
 });
+
+test('an approved day off still blocks a shift when a newer approved shift preference exists for that date', () => {
+  const off = request({ id: 'approved-off', status: 'APPROVED', submittedAt: '2026-09-01T00:00:00Z' });
+  const wanted = request({ id: 'approved-shift', available: true, preferredDutyWindowId: DAY_DUTY.id,
+    status: 'APPROVED', submittedAt: '2026-09-02T00:00:00Z' });
+  const findings = wishFindings([shift('2026-10-07')], [off, wanted]);
+  assert.ok(findings.some(f => f.id.startsWith('request-dayoff-shift-') && f.severity === 'ERROR'));
+});

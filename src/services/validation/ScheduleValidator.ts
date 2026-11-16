@@ -23,6 +23,8 @@ import { isAgreedException, isLastResortShift } from '../engine/lastResort';
 import { outsideNurseList } from '../engine/nurseList';
 import { doctorPairingProblems } from '../engine/doctorPairing';
 import { separateLowAcuityCover } from '../engine/lowAcuityLastResort';
+import { followingRosterFindings, mergeFollowingRosterFindings } from '../engine/surroundingRosterChecks';
+import { assignmentCanCoverDoctor, nurseIsAvailable } from '../engine/assignmentPresence';
 import { summarizeNurseHours } from '../reports/hoursAccounting';
 import {
   Schedule,
@@ -136,10 +138,15 @@ export class ScheduleValidator {
     doctors: Doctor[] = [],
     leaveTypes: LeaveType[] = [],
     clinicSetup?: ClinicSetup,
-    /** The nurses' requests (a day off or a shift): only noted (INFO) when the roster does not follow them. */
+    /** Pending wishes are notes; a shift on an approved day off is a hard conflict. */
     availabilityRequests: AvailabilityRequest[] = []
   ): ValidationReport {
     const findings: ValidationFinding[] = [];
+    // Caller requests and the clinic setup must both participate in hard availability checks.
+    availabilityRequests = [...new Map([...(clinicSetup?.availabilityRequests || []), ...availabilityRequests]
+      .map(r => [r.id, r])).values()];
+    const presence = { leaveEntries, locks, availabilityRequests };
+    const doctorCoverage = { ...presence, nurses, roles, doctors, specialties, sessions };
     const rosterOverlaps = hoursHistoryOverlaps(schedule, clinicSetup?.hoursHistory);
     for (const overlap of rosterOverlaps) findings.push({
       id: `schedule-overlap-${overlap.first.id}-${overlap.second.id}`, category: 'RULE_VIOLATION', severity: 'ERROR',
@@ -216,6 +223,17 @@ export class ScheduleValidator {
       hourlyCoverageMap[date] = {};
       const isHoliday = clinic.holidays.has(date);
       const dayAssignments = assignments.filter((a) => a.date === date);
+      const presentAssignments = dayAssignments.filter(a => nurseIsAvailable(nurseMap.get(a.nurseId), date, presence) && dutyMap.has(a.dutyWindowId));
+      for (const a of dayAssignments) {
+        const nurse = nurseMap.get(a.nurseId);
+        if (!nurse || !nurse.active) findings.push({
+          id: `assignment-nurse-${a.id}`, category: 'DATA_ISSUE', severity: 'ERROR',
+          message: nurse
+            ? `${nurse.fullName} has a shift on ${formatDate(date)} but is inactive. Remove the shift or review their profile.`
+            : `A shift on ${formatDate(date)} refers to a nurse whose profile is missing. Assign an active nurse or remove the shift.`,
+          affectedNurseIds: [a.nurseId], cellRefs: [{ nurseId: a.nurseId, date }], date,
+        });
+      }
       for (const a of dayAssignments) {
         const problems = doctorPairingProblems(a, doctors);
         if (problems.length) findings.push({
@@ -227,7 +245,7 @@ export class ScheduleValidator {
           const nurse = nurseMap.get(a.nurseId);
           const ids = assignmentDoctorIds(a);
           const duty = dutyMap.get(a.dutyWindowId);
-          if (nurse?.isClinicNurse && !outsideNurseList(nurse, a, { doctors, specialties, sessions }) &&
+          if (nurseIsAvailable(nurse, date, presence) && nurse?.isClinicNurse && !outsideNurseList(nurse, a, { doctors, specialties, sessions }) &&
             !leaveEntries.some(le => le.nurseId === a.nurseId && le.approved && le.startDate <= date && le.endDate >= date) &&
             ids.every(id => doctorSessionsOn(sessions, date).some(s => s.doctorId === id && duty &&
               overlaps(duty.startTime, duty.endTime, s.startTime, s.endTime)))) {
@@ -256,7 +274,7 @@ export class ScheduleValidator {
       const openHours = coverageSlots(clinic,
         dayAssignments.map(a => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d), daySessions);
       const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
-      const hasSeniorToday = dayAssignments.some((a) => {
+      const hasSeniorToday = presentAssignments.some((a) => {
         const n = nurseMap.get(a.nurseId);
         return !!n && seniorLevelIds.has(n.seniorityLevelId);
       });
@@ -264,7 +282,7 @@ export class ScheduleValidator {
       // Public holiday: one nurse covers the clinic with the on call doctor; doctor sessions are ignored.
       if (isHoliday) {
         openHours.forEach((h) => {
-          const onDuty = dayAssignments.filter((a) => {
+          const onDuty = presentAssignments.filter((a) => {
             const duty = dutyMap.get(a.dutyWindowId);
             return !!duty && overlaps(duty.startTime, duty.endTime, h.start, h.end);
           }).map(a => a.nurseId);
@@ -272,9 +290,9 @@ export class ScheduleValidator {
           hourlyCoverageMap[date][h.start] = { end: h.end, nurses: count, doctors: 0, coveredDoctors: 0, uncoveredDoctors: 0,
             freeNurses: count, deficit: count > 0 ? 0 : 1, holiday: true };
         });
-        const holidayDuties = dayAssignments.map((a) => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d);
+        const holidayDuties = presentAssignments.map((a) => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d);
         const holidayGaps = uncoveredParts(clinic.openTime, clinic.closeTime, holidayDuties);
-        if (dayAssignments.length > 0 && holidayGaps.length > 0) {
+        if (presentAssignments.length > 0 && holidayGaps.length > 0) {
           findings.push({
             id: `holiday-gap-${date}`,
             category: 'COVERAGE_GAP',
@@ -285,7 +303,7 @@ export class ScheduleValidator {
             date,
           });
         }
-        if (dayAssignments.length === 0) {
+        if (presentAssignments.length === 0) {
           findings.push({
             id: `holiday-no-nurse-${date}`,
             category: 'COVERAGE_GAP',
@@ -380,7 +398,7 @@ export class ScheduleValidator {
       const gapRuns: { start: string; end: string }[] = [];
       openHours.forEach((h) => {
         const activeSessions = daySessions.filter(s => overlaps(s.startTime, s.endTime, h.start, h.end));
-        const activeAssignments = dayAssignments.filter(a => {
+        const activeAssignments = presentAssignments.filter(a => {
           const duty = dutyMap.get(a.dutyWindowId);
           return nurseMap.has(a.nurseId) && !!duty && overlaps(duty.startTime, duty.endTime, h.start, h.end);
         });
@@ -390,7 +408,7 @@ export class ScheduleValidator {
             isFreeDuring(a, dutyMap.get(a.dutyWindowId), daySessions, h.start, h.end))
         ).length;
         const coveredDoctors = activeSessions.filter(sess => activeAssignments.some(a =>
-          assignmentCoversDoctor(a, sess.doctorId))).length;
+          assignmentCoversDoctor(a, sess.doctorId) && assignmentCanCoverDoctor(a, doctorCoverage, sess.doctorId))).length;
         const deficit = Math.max(0, minAdditional - freeNurses);
 
         hourlyCoverageMap[date][h.start] = { end: h.end, nurses: activeNurseIds.size, doctors: activeSessions.length,
@@ -424,17 +442,17 @@ export class ScheduleValidator {
       // "If 3 nurses are still on at 19:00 and 2 leave at 19:00, only 1 remains to cover 3 evening doctors."
       const doctorsAfter19 = daySessions.filter((s) => s.endTime > '19:00').length;
       if (doctorsAfter19 > 0) {
-        const nursesBefore19 = dayAssignments.filter((a) => {
+        const nursesBefore19 = presentAssignments.filter((a) => {
           const duty = dutyMap.get(a.dutyWindowId);
           return duty && duty.startTime < '19:00' && duty.endTime >= '19:00';
         }).length;
 
-        const nursesLeavingAt19 = dayAssignments.filter((a) => {
+        const nursesLeavingAt19 = presentAssignments.filter((a) => {
           const duty = dutyMap.get(a.dutyWindowId);
           return duty && duty.endTime === '19:00';
         }).length;
 
-        const nursesRemainingAfter19 = dayAssignments.filter((a) => {
+        const nursesRemainingAfter19 = presentAssignments.filter((a) => {
           const duty = dutyMap.get(a.dutyWindowId);
           return duty && duty.endTime > '19:00';
         }).length;
@@ -477,7 +495,7 @@ export class ScheduleValidator {
               a.note?.toLowerCase().includes('nurse clinic'))
         );
 
-        if (assignedNcNurses.length < ncQuota) {
+        if (new Set(assignedNcNurses.filter(a => nurseIsAvailable(nurseMap.get(a.nurseId), date, presence) && dutyMap.has(a.dutyWindowId) && canBeFreeNurse(nurseMap.get(a.nurseId), roles)).map(a => a.nurseId)).size < ncQuota) {
           const dateObj = new Date(date);
           const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
 
@@ -559,11 +577,11 @@ export class ScheduleValidator {
         if (isNc) return; // Handled specifically above by dedicated rule checker
         if (ncEnabled && phlRole && role.id === phlRole.id) return; // part of the free nurse's job
 
-        const assignedRoleNurses = dayAssignments.filter(
-          (a) => a.kind === 'CLINICAL_ROLE' && a.clinicalRoleId === role.id
+        const assignedRoleNurses = presentAssignments.filter(
+          (a) => a.kind === 'CLINICAL_ROLE' && a.clinicalRoleId === role.id && (role.acronym !== 'PHL' || !!nurseMap.get(a.nurseId)?.capabilityIds.includes(role.id))
         );
         const quota = role.defaultDailyQuota || 1;
-        if (assignedRoleNurses.length < quota) {
+        if (new Set(assignedRoleNurses.map(a => a.nurseId)).size < quota) {
           findings.push({
             id: `role-quota-${date}-${role.acronym}`,
             category: 'RULE_VIOLATION',
@@ -595,7 +613,7 @@ export class ScheduleValidator {
           (a) => assignmentCoversDoctor(a, sess.doctorId)
         );
         // Hours of the session no linked nurse covers (partial cover is allowed, but shown)
-        const linkedAssignments = dayAssignments.filter(a => assignmentCoversDoctor(a, sess.doctorId) && nurseMap.has(a.nurseId));
+        const linkedAssignments = presentAssignments.filter(a => assignmentCoversDoctor(a, sess.doctorId) && assignmentCanCoverDoctor(a, doctorCoverage, sess.doctorId));
         const linkedDuties = linkedAssignments
           .map((a) => dutyMap.get(a.dutyWindowId))
           .filter((d): d is DutyWindow => !!d);
@@ -841,7 +859,8 @@ export class ScheduleValidator {
             date,
           });
         }
-        const request = requestOn(requestsByCell.get(`${nurse.id}_${date}`), nurse.id, date);
+        const dayRequests = requestsByCell.get(`${nurse.id}_${date}`);
+        const request = dayRequests?.find(r => !r.available && r.status === 'APPROVED') || requestOn(dayRequests, nurse.id, date);
         const wait = request?.status === 'PENDING' ? ' (waiting for approval)' : '';
         // An approved day off is already a pinned day off (reported above when broken).
         if (request && !request.available && asgnsToday.length > 0 && !(dayOffLock && request.status === 'APPROVED')) {
@@ -849,8 +868,8 @@ export class ScheduleValidator {
           findings.push({
             id: `request-dayoff-shift-${nurse.id}-${date}`,
             category: approvedOff ? 'RULE_VIOLATION' : 'DATA_ISSUE',
-            // An approved day off is a day off even without its pin: a shift on it needs checking
-            severity: approvedOff ? 'WARN' : 'INFO',
+            // An approved day off is unavailable even when its pin is missing.
+            severity: approvedOff ? 'ERROR' : 'INFO',
             message: approvedOff
               ? `${nurse.fullName} has an approved day off on ${formatDate(date)} but has a shift. Remove the shift, or decline the request in Availability → All requests.`
               : `${nurse.fullName} asked for ${formatDate(date)} off${wait} but has a shift.`,
@@ -1033,6 +1052,7 @@ export class ScheduleValidator {
               .filter((a) => a.date >= week.start && a.date <= week.end)
               .map((a) => ({ nurseId: nurse.id, date: a.date })),
             date: week.end,
+            amount: week.hours,
           });
         }
       }
@@ -1125,9 +1145,11 @@ export class ScheduleValidator {
       }
     });
 
-    const errorCount = findings.filter((f) => f.severity === 'ERROR').length;
-    const warnCount = findings.filter((f) => f.severity === 'WARN').length;
-    const infoCount = findings.filter((f) => f.severity === 'INFO').length;
+    const boundary = followingRosterFindings(schedule, assignments, nurses, dutyWindows, leaveEntries, rules, clinicSetup);
+    const finalFindings = mergeFollowingRosterFindings(findings, boundary);
+    const errorCount = finalFindings.filter((f) => f.severity === 'ERROR').length;
+    const warnCount = finalFindings.filter((f) => f.severity === 'WARN').length;
+    const infoCount = finalFindings.filter((f) => f.severity === 'INFO').length;
 
     return {
       scheduleId: schedule.id,
@@ -1135,7 +1157,7 @@ export class ScheduleValidator {
       errorCount,
       warnCount,
       infoCount,
-      findings,
+      findings: finalFindings,
       hourlyCoverageMap,
     };
   }

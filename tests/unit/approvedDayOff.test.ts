@@ -40,12 +40,12 @@ test('a declined day off request does not stop a shift', async () => {
   assert.equal(assignments.filter((a) => a.nurseId === 'roland').length, 1);
 });
 
-test('a shift on an approved day off is a Check; on a pending one only a Note', () => {
+test('a shift on an approved day off is a Must fix; on a pending one only a Note', () => {
   const schedule = makeSchedule({ startDate: DATE, endDate: DATE, hoursTargetFullTime: 12 });
   const shift = { id: 'a', scheduleId: schedule.id, nurseId: 'roland', date: DATE, dutyWindowId: NINE_SEVEN.id, kind: 'DOCTOR', doctorId: DR.id, locked: false, source: 'MANUAL' } as any;
   const severityWith = (status: AvailabilityRequest['status']) =>
     ScheduleValidator.validate(schedule, [shift], [roland()], [SENIOR], [NINE_SEVEN] as any, [session()], [], [], [], RULES, [], [ORTHO], [DR] as any, [], undefined, [dayOff(status)])
       .findings.find((f) => f.id.startsWith('request-dayoff-shift'))?.severity;
-  assert.equal(severityWith('APPROVED'), 'WARN');
+  assert.equal(severityWith('APPROVED'), 'ERROR');
   assert.equal(severityWith('PENDING'), 'INFO');
 });

@@ -4,6 +4,7 @@ import { doctorPairingProblems } from './doctorPairing';
 import { isFloatShift } from './floatShift';
 import { outsideNurseList } from './nurseList';
 import { isExclusiveNurseClinic } from './nurseClinicUtils';
+import { nurseIsAvailable } from './assignmentPresence';
 
 export interface FloatCoverContext {
   assignments: Assignment[];
@@ -40,10 +41,8 @@ export function separateLowAcuityCover(ctx: FloatCoverContext, pair: Assignment)
   if (!pairDuty) return none;
   const sessions = doctorSessionsOn(ctx.sessions, pair.date);
   const refs = { doctors: ctx.doctors, specialties: ctx.specialties, sessions };
-  const present = (a: Assignment) => nurses.get(a.nurseId)?.active &&
-    !ctx.leave.some(le => le.nurseId === a.nurseId && le.approved && le.startDate <= pair.date && le.endDate >= pair.date) &&
-    !ctx.locks.some(lock => lock.nurseId === a.nurseId && lock.date === pair.date && lock.mode === 'OFF') &&
-    !ctx.requests.some(r => r.nurseId === a.nurseId && r.date === pair.date && !r.available && r.status === 'APPROVED');
+  const present = (a: Assignment) => nurseIsAvailable(nurses.get(a.nurseId), pair.date,
+    { leaveEntries: ctx.leave, locks: ctx.locks, availabilityRequests: ctx.requests });
   const available = day.filter(a => {
     const n = nurses.get(a.nurseId), d = duties.get(a.dutyWindowId);
     return isFloatShift(a) && a.nurseId !== pair.nurseId && !a.locked && a.source !== 'LOCK' &&
