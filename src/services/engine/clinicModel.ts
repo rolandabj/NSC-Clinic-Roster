@@ -22,7 +22,7 @@
 
 import type { HoursHistory } from '../hours/hoursBalance';
 
-import { Assignment, AvailabilityRequest, ClinicalRole, DoctorSession, DutyWindow, Nurse } from '../../types';
+import { Assignment, AvailabilityRequest, ClinicalRole, Doctor, DoctorCoverageInterval, DoctorSession, DutyWindow, Nurse } from '../../types';
 
 /** One nurse's totals over the earlier rosters of this calendar year. */
 export interface YearToDateCounts {
@@ -110,12 +110,13 @@ export function openingHourSlots(setup: ResolvedClinicSetup): { start: string; e
 export function coverageSlots(
   setup: ResolvedClinicSetup,
   duties: DutyWindow[],
-  sessions: DoctorSession[] = []
+  sessions: DoctorSession[] = [],
+  extraIntervals: readonly TimeRange[] = []
 ): { start: string; end: string }[] {
   const boundaries = new Set([setup.openTime, setup.closeTime, ...openingHourSlots(setup).map(h => h.start)]);
-  for (const range of [...duties, ...sessions]) {
+  for (const range of [...duties, ...sessions, ...extraIntervals]) {
     for (const time of [range.startTime, range.endTime]) {
-      if (time > setup.openTime && time < setup.closeTime) boundaries.add(time);
+      if (TIME.test(time) && time > setup.openTime && time < setup.closeTime) boundaries.add(time);
     }
   }
   const times = [...boundaries].sort();
@@ -185,6 +186,11 @@ export function isFreeDuring(
   end: string
 ): boolean {
   if (!duty || !overlaps(duty.startTime, duty.endTime, start, end)) return false;
+  if (assignment.doctorCoverage !== undefined) {
+    const resolved = resolveDoctorCoverage(assignment, duty, daySessions);
+    if (resolved.problems.length || duty.startTime > start || duty.endTime < end) return false;
+    return !resolved.intervals.some(r => overlaps(r.startTime, r.endTime, start, end));
+  }
   const doctorIds = assignmentDoctorIds(assignment);
   if (doctorIds.length === 0) return true;
   return !doctorIds.some((docId) => {
@@ -193,15 +199,164 @@ export function isFreeDuring(
   });
 }
 
+/** A time range within one clinic day. */
+export interface TimeRange { startTime: string; endTime: string }
+export type DoctorCoverageRef = Pick<Assignment, 'kind' | 'doctorId' | 'secondDoctorId' | 'doctorCoverage'> & Partial<Pick<Assignment, 'date'>>;
+type CoverageDisplayRef = Pick<Assignment, 'doctorId' | 'secondDoctorId' | 'doctorCoverage'> & Partial<Pick<Assignment, 'kind'>>;
+export interface ResolvedDoctorCoverage { intervals: DoctorCoverageInterval[]; problems: string[] }
+
+function validCoverageInterval(value: unknown): value is DoctorCoverageInterval {
+  if (!value || typeof value !== 'object') return false;
+  const r = value as Partial<DoctorCoverageInterval>;
+  return typeof r.doctorId === 'string' && !!r.doctorId.trim() && typeof r.startTime === 'string' &&
+    typeof r.endTime === 'string' && TIME.test(r.startTime) && TIME.test(r.endTime) && r.startTime < r.endTime;
+}
+
+/** Canonical time order, with repeated and touching cover for the same doctor joined. */
+export function canonicalDoctorCoverage(intervals: readonly DoctorCoverageInterval[]): DoctorCoverageInterval[] {
+  if (!Array.isArray(intervals) || !Array.from(intervals).every(validCoverageInterval)) return [];
+  const sorted = intervals.map(r => ({ doctorId: r.doctorId, startTime: r.startTime, endTime: r.endTime }))
+    .sort((a, b) => a.doctorId.localeCompare(b.doctorId) || a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime));
+  const result: DoctorCoverageInterval[] = [];
+  for (const r of sorted) {
+    const last = result[result.length - 1];
+    if (last?.doctorId === r.doctorId && r.startTime <= last.endTime) last.endTime = last.endTime > r.endTime ? last.endTime : r.endTime;
+    else result.push(r);
+  }
+  return result.sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime) || a.doctorId.localeCompare(b.doctorId));
+}
+
+function coverageStructureProblems(a: CoverageDisplayRef, duty?: TimeRange): string[] {
+  const raw: unknown = a.doctorCoverage;
+  if (!Array.isArray(raw)) return ['Doctor cover times must be a list of valid intervals.'];
+  if (!Array.from(raw).every(validCoverageInterval)) return ['Doctor cover needs a doctor and valid start and end times, such as 09:00 to 13:00.'];
+  const problems: string[] = [];
+  const ids = [a.doctorId, a.secondDoctorId].filter((id): id is string => !!id);
+  const intervalIds = new Set(raw.map(r => r.doctorId));
+  if (intervalIds.size > 2) problems.push('A nurse may cover at most two distinct doctors on one date.');
+  if (a.kind && a.kind !== 'DOCTOR') {
+    problems.push('Doctor cover times require a doctor duty.');
+  } else {
+    if (!a.doctorId) problems.push('Choose a first doctor before setting doctor cover times.');
+    if (a.secondDoctorId && a.secondDoctorId === a.doctorId) problems.push('A shift cannot name the same doctor twice.');
+    if (raw.some(r => !ids.includes(r.doctorId))) problems.push('Doctor cover times must name only the doctors on this duty.');
+    if (ids.some(id => !intervalIds.has(id))) problems.push('Each doctor on this duty needs explicit cover times.');
+  }
+  if (duty && (!TIME.test(duty.startTime) || !TIME.test(duty.endTime) || duty.startTime >= duty.endTime ||
+    raw.some(r => r.startTime < duty.startTime || r.endTime > duty.endTime))) {
+    problems.push('Doctor cover times must stay within the nurse duty.');
+  }
+  return problems;
+}
+
+/** Explicit cover is authoritative. Invalid explicit data never becomes full duty cover. */
+export function resolveDoctorCoverage(a: DoctorCoverageRef, duty: TimeRange | undefined,
+  daySessions?: readonly DoctorSession[]): ResolvedDoctorCoverage {
+  const date = a.date || daySessions?.find(s => !s.cancelled)?.date;
+  const sessions = date ? doctorSessionsOn([...(daySessions || [])], date) : [];
+  if (a.doctorCoverage === undefined) {
+    if (!duty) return { intervals: [], problems: [] };
+    return { intervals: canonicalDoctorCoverage(assignmentDoctorIds(a).flatMap(doctorId => {
+      const session = sessions.find(s => s.doctorId === doctorId);
+      if (!session) return [];
+      const startTime = duty.startTime > session.startTime ? duty.startTime : session.startTime;
+      const endTime = duty.endTime < session.endTime ? duty.endTime : session.endTime;
+      return startTime < endTime ? [{ doctorId, startTime, endTime }] : [];
+    })), problems: [] };
+  }
+  const problems = coverageStructureProblems(a, duty);
+  if (!duty) problems.push('The duty for doctor cover times is missing.');
+  if (!problems.length && daySessions !== undefined) for (const r of a.doctorCoverage) {
+    const session = sessions.find(s => s.doctorId === r.doctorId);
+    if (!session || !TIME.test(session.startTime) || !TIME.test(session.endTime) || session.startTime >= session.endTime ||
+      r.startTime < session.startTime || r.endTime > session.endTime) {
+      problems.push('Doctor cover times must stay within the active doctor session.');
+      break;
+    }
+  }
+  return { intervals: problems.length ? [] : canonicalDoctorCoverage(a.doctorCoverage), problems };
+}
+
+export function effectiveDoctorCoverage(a: DoctorCoverageRef, duty: TimeRange | undefined,
+  daySessions?: readonly DoctorSession[]): DoctorCoverageInterval[] {
+  return resolveDoctorCoverage(a, duty, daySessions).intervals;
+}
+
+export function doctorCoverageProblems(a: DoctorCoverageRef, duty: TimeRange | undefined,
+  daySessions?: readonly DoctorSession[]): string[] {
+  return resolveDoctorCoverage(a, duty, daySessions).problems;
+}
+
+/** The exact periods during which one nurse is assigned to both doctors. */
+export function simultaneousDoctorIntervals(a: DoctorCoverageRef, duty: TimeRange | undefined,
+  daySessions?: readonly DoctorSession[]): TimeRange[] {
+  const intervals = effectiveDoctorCoverage(a, duty, daySessions);
+  const boundaries = [...new Set(intervals.flatMap(r => [r.startTime, r.endTime]))].sort();
+  const result: TimeRange[] = [];
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const startTime = boundaries[i], endTime = boundaries[i + 1];
+    const ids = new Set(intervals.filter(r => overlaps(r.startTime, r.endTime, startTime, endTime)).map(r => r.doctorId));
+    if (ids.size < 2) continue;
+    const last = result[result.length - 1];
+    if (last?.endTime === startTime) last.endTime = endTime;
+    else result.push({ startTime, endTime });
+  }
+  return result;
+}
+
+/** Duty time outside all doctor cover; invalid explicit cover never supplies free time. */
+export function freeDoctorIntervals(a: DoctorCoverageRef, duty: TimeRange | undefined,
+  daySessions?: readonly DoctorSession[]): TimeRange[] {
+  if (!duty) return [];
+  const resolved = resolveDoctorCoverage(a, duty, daySessions);
+  return resolved.problems.length ? [] : uncoveredParts(duty.startTime, duty.endTime, resolved.intervals)
+    .map(r => ({ startTime: r.start, endTime: r.end }));
+}
+
+function stableCoverageRaw(value: unknown): string {
+  try {
+    const seen = new WeakSet<object>();
+    const normalize = (v: unknown): unknown => {
+      if (!v || typeof v !== 'object') return typeof v === 'bigint' ? String(v) : v;
+      if (seen.has(v)) return '[circular]';
+      seen.add(v);
+      return Array.isArray(v) ? v.map(normalize) : Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([k, item]) => [k, normalize(item)]));
+    };
+    return JSON.stringify(normalize(value)) ?? String(value);
+  } catch { return '[unreadable doctor cover]'; }
+}
+
+/** A stable semantic identity for explicit timing; absent timing preserves legacy identities. */
+export function doctorCoverageFingerprint(a: CoverageDisplayRef): string | undefined {
+  if (a.doctorCoverage === undefined) return undefined;
+  return coverageStructureProblems(a).length
+    ? `invalid:${stableCoverageRaw(a.doctorCoverage)}`
+    : `coverage:${JSON.stringify(canonicalDoctorCoverage(a.doctorCoverage))}`;
+}
+
+/** Readable explicit cover for saved staff communications, with free duty time when known. */
+export function doctorCoverageText(a: CoverageDisplayRef, doctors: readonly Pick<Doctor, 'id' | 'fullName'>[], duty?: TimeRange): string {
+  if (a.doctorCoverage === undefined) return '';
+  if (coverageStructureProblems(a, duty).length) return 'Doctor cover needs review';
+  const intervals = canonicalDoctorCoverage(a.doctorCoverage);
+  if (intervals.some(r => !doctors.some(d => d.id === r.doctorId))) return 'Doctor cover needs review';
+  const lines = intervals.map(r => ({ startTime: r.startTime, endTime: r.endTime,
+    label: doctors.find(d => d.id === r.doctorId)!.fullName }));
+  if (duty) lines.push(...uncoveredParts(duty.startTime, duty.endTime, intervals)
+    .map(r => ({ startTime: r.start, endTime: r.end, label: 'Float' })));
+  return lines.sort((a, b) => a.startTime.localeCompare(b.startTime) || a.endTime.localeCompare(b.endTime) || a.label.localeCompare(b.label))
+    .map(r => `${r.label} ${r.startTime} to ${r.endTime}`).join('\n');
+}
+
 /** Minutes of [start, end) that a duty covers. */
-export function coveredMinutes(duty: DutyWindow, start: string, end: string): number {
+export function coveredMinutes(duty: TimeRange, start: string, end: string): number {
   const from = Math.max(toMinutes(duty.startTime), toMinutes(start));
   const to = Math.min(toMinutes(duty.endTime), toMinutes(end));
   return Math.max(0, to - from);
 }
 
 /** The parts of [start, end) that none of the duties cover. */
-export function uncoveredParts(start: string, end: string, duties: DutyWindow[]): { start: string; end: string }[] {
+export function uncoveredParts(start: string, end: string, duties: readonly TimeRange[]): { start: string; end: string }[] {
   const parts: { start: string; end: string }[] = [];
   let cursor = toMinutes(start);
   const stop = toMinutes(end);

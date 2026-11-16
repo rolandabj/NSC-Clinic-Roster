@@ -53,6 +53,7 @@ import {
   WorkingHoursPeriod,
   AvailabilityRequest,
 } from '../../types';
+import { assertTimedFillSupported } from '../../services/engine/timedCoverageSafety';
 import { loadClinicSetup } from '../../services/engine/clinicSetupService';
 import { decideRequest, recordHolidayDayOff } from '../../services/requests/staffRequestService';
 import { authService } from '../../services/auth/authService';
@@ -327,8 +328,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // A phone (under 700 px wide or under 500 px high) reads the roster one day at a time and does not change it.
   const isPhone = usePhoneLayout();
   const dayViewLookups = useMemo(
-    () => cellLookupsOf({ dutyWindows, doctors, roles, specialties, leaveTypes }),
-    [dutyWindows, doctors, roles, specialties, leaveTypes]
+    () => cellLookupsOf({ dutyWindows, doctors, roles, specialties, leaveTypes, sessions }),
+    [dutyWindows, doctors, roles, specialties, leaveTypes, sessions]
   );
   const [isAllDaysExpanded, setIsAllDaysExpanded] = useState(false);
 
@@ -866,6 +867,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const handleOpenPreflight = async (mode: RegenerateMode, targetSchedule?: Schedule) => {
     const sched = targetSchedule || activeSchedule;
     if (!sched) return;
+    try { assertTimedFillSupported(sched, mode, assignments, locks); }
+    catch (error) { notify((error as Error).message, 'error'); return; }
 
     let currentSessions = sessions;
 
@@ -960,6 +963,8 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // --- RUN DETERMINISTIC ENGINE PASS ---
   const handleExecuteGeneration = async () => {
     if (!activeSchedule) return;
+    try { assertTimedFillSupported(activeSchedule, activeGenerationMode, assignments, locks); }
+    catch (error) { notify((error as Error).message, 'error'); return; }
     setIsGenerating(true);
 
     try {
@@ -1886,6 +1891,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
                 onSessionsChange={handleSessionsChange}
                 assignments={assignments}
                 nurses={nurses}
+                dutyWindows={dutyWindows}
+                leaveEntries={leaveEntries}
+                locks={locks}
+                roles={roles}
+                availabilityRequests={availabilityRequests}
               />
             )}
 

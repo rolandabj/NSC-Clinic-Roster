@@ -33,7 +33,7 @@ import { escapeHtml, safeColor } from '../../utils/escapeHtml';
 
 const WEEKDAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 import { isFloatShift } from '../engine/floatShift';
-import { assignmentDoctorIds } from '../engine/clinicModel';
+import { assignmentDoctorIds, doctorCoverageText } from '../engine/clinicModel';
 
 export interface GenerateEmailPayloadParams {
   clinicName: string;
@@ -139,11 +139,13 @@ export class RosterPublishService {
 
         const docIds = assignmentDoctorIds(a);
         let target = 'General Pool';
-        if (isFloatShift(a)) target = 'Float';
+        const timed = doctorCoverageText(a, doctors, dw);
+        if (timed) target = timed;
+        else if (isFloatShift(a)) target = 'Float';
         else if (docIds.length > 0) target = docIds.map((id) => docMap.get(id)?.fullName || 'Doctor').join(' + ');
         else if (a.clinicalRoleId) target = roleMap.get(a.clinicalRoleId)?.name || 'Clinical Role';
         else if (a.specialtyId) target = spMap.get(a.specialtyId)?.name || 'Specialty';
-        target = h(target);
+        target = h(target).replace(/\n/g, '<br>');
 
         return `
           <tr style="border-bottom: 1px solid #e2e8f0;">

@@ -15,6 +15,8 @@ import { formatDate } from '../../utils/dateUtils';
 import { readableTextOn } from '../../utils/colorContrast';
 import { isFloatShift } from '../../services/engine/floatShift';
 import { assignmentDoctorIds } from '../../services/engine/clinicModel';
+import { timedCoverageViewOf } from '../workbook/grid/timedCoverageView';
+import { shortDoctorNames } from '../workbook/grid/cellView';
 import { versionName } from '../../services/history/versionKinds';
 import { Field, IconButton, Input, Switch, cx } from '../ui';
 
@@ -75,6 +77,7 @@ export const VersionRoster: React.FC<VersionRosterProps> = ({
     () => ({
       duties: new Map(dutyWindows.map((d) => [d.id, d])),
       doctors: new Map(doctors.map((d) => [d.id, d])),
+      doctorShort: shortDoctorNames(doctors),
       roles: new Map(roles.map((r) => [r.id, r])),
       specialties: new Map(specialties.map((s) => [s.id, s])),
       seniority: new Map(seniorityLevels.map((s) => [s.id, s])),
@@ -177,6 +180,8 @@ export const VersionRoster: React.FC<VersionRosterProps> = ({
                   const duty = asgn ? maps.duties.get(asgn.dutyWindowId) : null;
                   const leaveType = leave ? maps.leaveTypes.get(leave.leaveTypeId) : null;
                   const target = asgn ? shiftTargetName(asgn, maps, true) : '';
+                  const timed = timedCoverageViewOf(asgn, duty || undefined, doctors, undefined, maps.doctorShort);
+                  const timedCover = timed.coverageMode !== 'legacy';
                   return (
                     <td key={dateStr} className="border-r border-line p-1 text-center align-middle">
                       {leave ? (
@@ -190,13 +195,18 @@ export const VersionRoster: React.FC<VersionRosterProps> = ({
                         <span
                           className="block rounded px-1 py-0.5 text-xs font-semibold"
                           style={{ backgroundColor: duty.color, color: readableTextOn(duty.color) }}
-                          title={`${duty.name}, ${duty.startTime} to ${duty.endTime}${target ? `, ${target}` : ''}${pinned ? ', pinned day' : ''}`}
+                          title={`${duty.name}, ${duty.startTime} to ${duty.endTime}${timedCover ? `, ${timed.coverageBadge}\n${timed.coverageText}` : target ? `, ${target}` : ''}${pinned ? ', pinned day' : ''}`}
                         >
                           <span className="flex items-center justify-center gap-0.5">
                             {duty.acronym}
                             {pinned && <Lock aria-label="Pinned day" className="size-3 shrink-0" />}
                           </span>
-                          {target && <span className="block max-w-16 truncate font-normal">{target}</span>}
+                          {timedCover ? <>
+                            <span className="block font-semibold">{timed.coverageBadge}</span>
+                            {timed.coverageLines.split('\n').map((line, i) => <span key={`${i}:${line}`} className={`block font-normal ${i % 2 ? 'tabular-nums' : 'truncate'}`}>
+                              {i % 2 && line.includes(' to ') ? <><span className="block whitespace-nowrap">{line.split(' to ')[0]}</span>{' '}<span className="block whitespace-nowrap">to {line.split(' to ')[1]}</span></> : line}
+                            </span>)}
+                          </> : target && <span className="block max-w-16 truncate font-normal">{target}</span>}
                         </span>
                       ) : (
                         <span className="sr-only">No shift</span>

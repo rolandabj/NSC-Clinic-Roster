@@ -22,7 +22,7 @@ import { hasAllocationReview } from '../engine/allocationReview';
 import { isAgreedException, isLastResortShift } from '../engine/lastResort';
 import { outsideNurseList } from '../engine/nurseList';
 import { doctorPairingProblems } from '../engine/doctorPairing';
-import { separateLowAcuityCover } from '../engine/lowAcuityLastResort';
+import { separateLowAcuityCover, timedFloatRelief } from '../engine/lowAcuityLastResort';
 import { followingRosterFindings, mergeFollowingRosterFindings } from '../engine/surroundingRosterChecks';
 import { assignmentCanCoverDoctor, nurseIsAvailable } from '../engine/assignmentPresence';
 import { summarizeNurseHours } from '../reports/hoursAccounting';
@@ -64,6 +64,9 @@ import {
   resolveClinicSetup,
   uncoveredParts,
   doctorSessionsOn,
+  effectiveDoctorCoverage,
+  doctorCoverageProblems,
+  simultaneousDoctorIntervals,
 } from '../engine/clinicModel';
 
 export type FindingSeverity = 'ERROR' | 'WARN' | 'INFO';
@@ -223,6 +226,11 @@ export class ScheduleValidator {
       hourlyCoverageMap[date] = {};
       const isHoliday = clinic.holidays.has(date);
       const dayAssignments = assignments.filter((a) => a.date === date);
+      const daySessions = isHoliday ? [] : doctorSessionsOn(sessions, date);
+      const doctorIntervals = new Map(dayAssignments.map(a => [a.id,
+        effectiveDoctorCoverage(a, dutyMap.get(a.dutyWindowId), daySessions)]));
+      const intervalsFor = (a: Assignment, doctorId?: string) => (doctorIntervals.get(a.id) || [])
+        .filter(range => !doctorId || range.doctorId === doctorId);
       const presentAssignments = dayAssignments.filter(a => nurseIsAvailable(nurseMap.get(a.nurseId), date, presence) && dutyMap.has(a.dutyWindowId));
       for (const a of dayAssignments) {
         const nurse = nurseMap.get(a.nurseId);
@@ -235,25 +243,42 @@ export class ScheduleValidator {
         });
       }
       for (const a of dayAssignments) {
-        const problems = doctorPairingProblems(a, doctors);
-        if (problems.length) findings.push({
+        const duty = dutyMap.get(a.dutyWindowId);
+        const timingProblems = doctorCoverageProblems(a, duty, daySessions);
+        if (timingProblems.length) findings.push({
+          id: `doctor-cover-times-${a.id}`, category: 'DATA_ISSUE', severity: 'ERROR',
+          message: `${nurseMap.get(a.nurseId)?.fullName || 'A nurse'} on ${formatDate(date)}: ${timingProblems.join(' ')}`,
+          affectedNurseIds: [a.nurseId], cellRefs: [{ nurseId: a.nurseId, date }], date,
+        });
+        const problems = doctorPairingProblems(a, doctors, { duty, sessions: daySessions });
+        if (problems.length && timingProblems.length === 0) findings.push({
           id: `low-acuity-pair-${a.nurseId}-${date}`, category: 'RULE_VIOLATION', severity: 'ERROR',
           message: `${nurseMap.get(a.nurseId)?.fullName || 'A nurse'} on ${formatDate(date)}: ${problems.join(' ')}`,
           affectedNurseIds: [a.nurseId], cellRefs: [{ nurseId: a.nurseId, date }], date,
         });
-        if (!isHoliday && a.secondDoctorId && problems.length === 0) {
+        const shared = simultaneousDoctorIntervals(a, duty, daySessions);
+        if (!isHoliday && a.secondDoctorId && problems.length === 0 && !timingProblems.length && shared.length > 0) {
           const nurse = nurseMap.get(a.nurseId);
           const ids = assignmentDoctorIds(a);
-          const duty = dutyMap.get(a.dutyWindowId);
           if (nurseIsAvailable(nurse, date, presence) && nurse?.isClinicNurse && !outsideNurseList(nurse, a, { doctors, specialties, sessions }) &&
             !leaveEntries.some(le => le.nurseId === a.nurseId && le.approved && le.startDate <= date && le.endDate >= date) &&
             ids.every(id => doctorSessionsOn(sessions, date).some(s => s.doctorId === id && duty &&
               overlaps(duty.startTime, duty.endTime, s.startTime, s.endTime)))) {
             const plus = resolveRule(rules, 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS', 'rule-nurse-plus-one', ['additional nurse', 'above doctors', 'plus one']);
-            const cover = separateLowAcuityCover({ assignments: dayAssignments, nurses, duties: dutyWindows, doctors,
+            const floatContext = { assignments: dayAssignments, nurses, duties: dutyWindows, doctors,
               specialties, sessions, roles, leave: leaveEntries, locks, requests: availabilityRequests, clinic,
-              minFreeNurses: plus?.enabled === false ? 0 : plus?.value ?? 1 }, a);
-            if (cover.replacement || cover.searchLimited) {
+              minFreeNurses: plus?.enabled === false ? 0 : plus?.value ?? 1 };
+            const relief = dayAssignments.some(assignment => assignment.doctorCoverage !== undefined)
+              ? timedFloatRelief(floatContext, a) : [];
+            const cover = separateLowAcuityCover(floatContext, a);
+            if (relief.length > 0) {
+              const affectedNurseIds = [...new Set([a.nurseId, ...relief.map(r => r.floatAssignment.nurseId)])];
+              findings.push({ id: `low-acuity-float-${a.id}`, category: 'DOCTOR_COVER', severity: 'ERROR',
+                message: `${nurse.fullName} covers two low acuity doctors on ${formatDate(date)}, but eligible Float cover is available during ${relief.map(r => `${r.startTime} to ${r.endTime} (${nurseMap.get(r.floatAssignment.nurseId)?.fullName || 'a Float nurse'} with ${doctors.find(d => d.id === r.doctorId)?.fullName || 'a doctor'})`).join('; ')} without reducing required Nurse Clinic cover. Use separate cover for these times before publishing.`,
+                affectedNurseIds, cellRefs: affectedNurseIds.map(nurseId => ({ nurseId, date })), date,
+                amount: relief.reduce((sum, r) => sum + toMinutes(r.endTime) - toMinutes(r.startTime), 0) / 60,
+              });
+            } else if (cover.replacement || cover.searchLimited) {
               const floats = cover.replacement?.floats || [];
               const affectedNurseIds = [a.nurseId, ...floats.map(f => f.nurseId)];
               findings.push({ id: `low-acuity-float-${a.id}`, category: 'DOCTOR_COVER', severity: 'ERROR',
@@ -264,15 +289,15 @@ export class ScheduleValidator {
               });
             } else findings.push({
               id: `low-acuity-cover-${a.id}`, category: 'DOCTOR_COVER', severity: 'INFO',
-              message: `${nurse.fullName} is assigned to ${ids.map(id => doctors.find(d => d.id === id)?.fullName || 'Doctor').join(' and ')} on ${formatDate(date)}. One nurse covers two low acuity doctors as a last resort. No complete eligible Float replacement is available for the required clinic hours without reducing required Nurse Clinic cover. The duty hours count once.`,
+              message: `${nurse.fullName} is assigned to ${ids.map(id => doctors.find(d => d.id === id)?.fullName || 'Doctor').join(' and ')} on ${formatDate(date)}. One nurse covers two low acuity doctors as a last resort from ${shared.map(r => `${r.startTime} to ${r.endTime}`).join(' and ')}. No complete eligible Float replacement is available for the required clinic hours without reducing required Nurse Clinic cover. The duty hours count once.`,
               affectedNurseIds: [a.nurseId], cellRefs: [{ nurseId: a.nurseId, date }], date,
             });
           }
         }
       }
-      const daySessions = clinic.holidays.has(date) ? [] : doctorSessionsOn(sessions, date);
       const openHours = coverageSlots(clinic,
-        dayAssignments.map(a => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d), daySessions);
+        dayAssignments.map(a => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d), daySessions,
+        [...doctorIntervals.values()].flat());
       const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
       const hasSeniorToday = presentAssignments.some((a) => {
         const n = nurseMap.get(a.nurseId);
@@ -408,7 +433,8 @@ export class ScheduleValidator {
             isFreeDuring(a, dutyMap.get(a.dutyWindowId), daySessions, h.start, h.end))
         ).length;
         const coveredDoctors = activeSessions.filter(sess => activeAssignments.some(a =>
-          assignmentCoversDoctor(a, sess.doctorId) && assignmentCanCoverDoctor(a, doctorCoverage, sess.doctorId))).length;
+          assignmentCoversDoctor(a, sess.doctorId) && assignmentCanCoverDoctor(a, doctorCoverage, sess.doctorId) &&
+          intervalsFor(a, sess.doctorId).some(range => range.startTime <= h.start && range.endTime >= h.end))).length;
         const deficit = Math.max(0, minAdditional - freeNurses);
 
         hourlyCoverageMap[date][h.start] = { end: h.end, nurses: activeNurseIds.size, doctors: activeSessions.length,
@@ -613,12 +639,11 @@ export class ScheduleValidator {
           (a) => assignmentCoversDoctor(a, sess.doctorId)
         );
         // Hours of the session no linked nurse covers (partial cover is allowed, but shown)
-        const linkedAssignments = presentAssignments.filter(a => assignmentCoversDoctor(a, sess.doctorId) && assignmentCanCoverDoctor(a, doctorCoverage, sess.doctorId));
-        const linkedDuties = linkedAssignments
-          .map((a) => dutyMap.get(a.dutyWindowId))
-          .filter((d): d is DutyWindow => !!d);
-        if (linkedDuties.length > 0) {
-          const missing = uncoveredParts(sess.startTime, sess.endTime, linkedDuties);
+        const linkedAssignments = presentAssignments.filter(a => assignmentCoversDoctor(a, sess.doctorId) &&
+          assignmentCanCoverDoctor(a, doctorCoverage, sess.doctorId) && intervalsFor(a, sess.doctorId).length > 0);
+        const linkedCover = linkedAssignments.flatMap(a => intervalsFor(a, sess.doctorId));
+        if (linkedCover.length > 0) {
+          const missing = uncoveredParts(sess.startTime, sess.endTime, linkedCover);
           if (missing.length > 0) {
             findings.push({
               id: `session-partial-${sess.id}`,
@@ -635,15 +660,13 @@ export class ScheduleValidator {
         }
         // A complete handover is a note; extra overlapping cover still asks for review.
         const boundaries = [...new Set([sess.startTime, sess.endTime,
-          ...linkedDuties.flatMap(d => [d.startTime, d.endTime])])]
+          ...linkedCover.flatMap(d => [d.startTime, d.endTime])])]
           .filter(t => t >= sess.startTime && t <= sess.endTime).sort();
         const overlapRuns: { start: string; end: string; ids: Set<string>; amount: number }[] = [];
         for (let i = 0; i < boundaries.length - 1; i++) {
           const start = boundaries[i], end = boundaries[i + 1];
-          const ids = new Set(linkedAssignments.filter(a => {
-            const d = dutyMap.get(a.dutyWindowId);
-            return d && overlaps(d.startTime, d.endTime, start, end);
-          }).map(a => a.nurseId));
+          const ids = new Set(linkedAssignments.filter(a => intervalsFor(a, sess.doctorId)
+            .some(range => overlaps(range.startTime, range.endTime, start, end))).map(a => a.nurseId));
           if (ids.size < 2) continue;
           const amount = (toMinutes(end) - toMinutes(start)) * (ids.size - 1) / 60;
           const last = overlapRuns[overlapRuns.length - 1];
@@ -653,22 +676,16 @@ export class ScheduleValidator {
             last.amount += amount;
           } else overlapRuns.push({ start, end, ids, amount });
         }
-        const coveringAssignments = linkedAssignments.filter(a => {
-          const d = dutyMap.get(a.dutyWindowId);
-          return d && overlaps(d.startTime, d.endTime, sess.startTime, sess.endTime);
-        });
+        const coveringAssignments = linkedAssignments;
         const needsHandover = new Set(coveringAssignments.map(a => a.nurseId)).size > 1 &&
-          uncoveredParts(sess.startTime, sess.endTime, linkedDuties).length === 0 &&
-          !linkedDuties.some(d => d.startTime <= sess.startTime && d.endTime >= sess.endTime) &&
+          uncoveredParts(sess.startTime, sess.endTime, linkedCover).length === 0 &&
           [...new Set(coveringAssignments.map(a => a.nurseId))].every(id =>
             uncoveredParts(sess.startTime, sess.endTime, coveringAssignments.filter(a => a.nurseId !== id)
-              .map(a => dutyMap.get(a.dutyWindowId)!)).length > 0);
+              .flatMap(a => intervalsFor(a, sess.doctorId))).length > 0);
         if (needsHandover) {
-          const cover = [...coveringAssignments].sort((a, b) => dutyMap.get(a.dutyWindowId)!.startTime.localeCompare(dutyMap.get(b.dutyWindowId)!.startTime))
-            .map(a => {
-              const d = dutyMap.get(a.dutyWindowId)!;
-              return `${nurseMap.get(a.nurseId)?.fullName || 'A nurse'} (${d.startTime < sess.startTime ? sess.startTime : d.startTime} to ${d.endTime > sess.endTime ? sess.endTime : d.endTime})`;
-            }).join(', ');
+          const cover = [...coveringAssignments].sort((a, b) => intervalsFor(a, sess.doctorId)[0].startTime.localeCompare(intervalsFor(b, sess.doctorId)[0].startTime))
+            .map(a => `${nurseMap.get(a.nurseId)?.fullName || 'A nurse'} (${intervalsFor(a, sess.doctorId)
+              .map(range => `${range.startTime} to ${range.endTime}`).join(' and ')})`).join(', ');
           findings.push({ id: `session-handover-${sess.id}`, category: 'DOCTOR_COVER', severity: 'INFO',
             message: `${doctorLabel(sess)} on ${formatDate(date)} has handover cover: ${cover}.${overlapRuns.length ? ` Overlap: ${overlapRuns.map(r => `${r.start} to ${r.end}`).join(' and ')}.` : ' The duties meet without overlap.'}`,
             affectedNurseIds: [...new Set(coveringAssignments.map(a => a.nurseId))],
@@ -695,7 +712,7 @@ export class ScheduleValidator {
             date,
           });
         }
-        if (linkedDuties.length === 0) {
+        if (linkedCover.length === 0) {
           findings.push({
             id: `unassigned-session-${sess.id}`,
             hour: sess.startTime,

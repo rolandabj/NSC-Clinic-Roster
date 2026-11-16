@@ -33,6 +33,8 @@ interface CellEditorDialogProps {
   editorTarget: { nurseId: string; date: string };
   /** What the editor starts with (the cell as it is, or the defaults for an empty cell). */
   defaults: CellChoice;
+  /** Existing timed cover is read only; notes and pinning preserve it. */
+  timedCoverageSummary?: string;
   nurseMap: Map<string, Nurse>;
   doctors: Doctor[];
   doctorMap: Map<string, Doctor>;
@@ -57,6 +59,7 @@ interface CellEditorDialogProps {
 export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
   editorTarget,
   defaults,
+  timedCoverageSummary,
   nurseMap,
   doctors,
   doctorMap,
@@ -85,7 +88,7 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
   const secondLowAcuityDoctors = selectedFirstDoctor?.lowAcuity
     ? doctors.filter((d) => d.lowAcuity && d.id !== editorTargetRefId)
     : [];
-  const effectiveSecondTargetRefId =
+  const effectiveSecondTargetRefId = timedCoverageSummary ? editorSecondTargetRefId || undefined :
     editorKind === 'DOCTOR' &&
     selectedFirstDoctor?.lowAcuity &&
     editorSecondTargetRefId &&
@@ -180,6 +183,10 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
       }
     >
       <div className="space-y-5 text-sm">
+        {timedCoverageSummary && <Notice tone="info" title="Doctor cover times">
+          <p className="whitespace-pre-line">{timedCoverageSummary}</p>
+          <p>You can change the note or pin this duty. Clear the day before changing its shift or doctors.</p>
+        </Notice>}
         <div className="grid grid-cols-2 gap-2 rounded-lg bg-sunken p-1" role="group" aria-label="Shift or leave">
           {(
             [
@@ -190,6 +197,7 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
             <button
               key={id}
               type="button"
+              disabled={!!timedCoverageSummary}
               aria-pressed={editorCategory === id}
               onClick={() => setEditorCategory(id)}
               className={cx(
@@ -205,7 +213,7 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
 
         {editorCategory === 'DUTY' && (
           <>
-            <fieldset className="space-y-2">
+            <fieldset className="space-y-2" disabled={!!timedCoverageSummary}>
               <legend className="mb-2 font-semibold text-ink">The shift</legend>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {dutyWindows.map((dw) => (
@@ -227,7 +235,7 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
               </div>
             </fieldset>
 
-            <fieldset className="space-y-3">
+            <fieldset className="space-y-3" disabled={!!timedCoverageSummary}>
               <legend className="mb-2 font-semibold text-ink">Who or what the nurse works with</legend>
               {isTargetExclusiveNC && (editorKind === 'DOCTOR' || editorKind === 'SPECIALTY') && (
                 <Notice tone="warning" title="Works in Nurse Clinic only">

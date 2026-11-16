@@ -1,7 +1,14 @@
-import type { Assignment, Doctor } from '../../types';
+import type { Assignment, Doctor, DoctorSession } from '../../types';
+import { doctorCoverageProblems, simultaneousDoctorIntervals, type TimeRange } from './clinicModel';
 
-/** A second doctor is allowed only when both distinct doctors have low acuity profiles. */
-export function doctorPairingProblems(cell: Pick<Assignment, 'kind' | 'doctorId' | 'secondDoctorId'>, doctors: Doctor[]): string[] {
+/** Concurrent two doctor cover requires low acuity; explicit sequential cover does not. */
+export function doctorPairingProblems(cell: Pick<Assignment, 'kind' | 'doctorId' | 'secondDoctorId' | 'doctorCoverage'> & Partial<Pick<Assignment, 'date'>>,
+  doctors: Doctor[], timing?: { duty?: TimeRange; sessions?: readonly DoctorSession[] }): string[] {
+  if (cell.doctorCoverage !== undefined) {
+    const problems = doctorCoverageProblems(cell, timing?.duty, timing?.sessions);
+    if (problems.length) return problems;
+    if (!simultaneousDoctorIntervals(cell, timing?.duty, timing?.sessions).length) return [];
+  }
   if (!cell.secondDoctorId) return [];
   if (cell.kind !== 'DOCTOR' || !cell.doctorId) return ['Choose a doctor shift and a first doctor before adding a second doctor.'];
   if (cell.secondDoctorId === cell.doctorId) return ['A shift cannot name the same doctor twice.'];

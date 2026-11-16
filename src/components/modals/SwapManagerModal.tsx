@@ -38,7 +38,7 @@ import { notify } from '../common/dialogs';
 import { authService } from '../../services/auth/authService';
 import { formatDate } from '../../utils/dateUtils';
 import { swapShifts } from '../../services/schedule/shiftMoves';
-import { assignmentDoctorIds } from '../../services/engine/clinicModel';
+import { assignmentDoctorIds, doctorCoverageText } from '../../services/engine/clinicModel';
 
 /** One empty list for absent props, so the checks below aren't redone on every render. */
 const NONE: never[] = [];
@@ -287,7 +287,7 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
             {dw?.acronym} ({dw?.startTime} to {dw?.endTime})
           </span>
         </p>
-        <p className="text-ink-muted">Working with: {target}</p>
+        <p className="whitespace-pre-line text-ink-muted">Working with: {asgn.doctorCoverage !== undefined ? doctorCoverageText(asgn, doctors, dw) : target}</p>
       </div>
     );
   };

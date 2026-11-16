@@ -8,8 +8,9 @@ import {
   Search,
   RefreshCw,
 } from 'lucide-react';
-import { Doctor, DoctorSession, Specialty, Schedule, Assignment, Nurse } from '../../types';
-import { assignmentCoversDoctor, assignmentDoctorIds } from '../../services/engine/clinicModel';
+import { Doctor, DoctorSession, Specialty, Schedule, Assignment, Nurse, DutyWindow, LeaveEntry, LockEntry, ClinicalRole, AvailabilityRequest } from '../../types';
+import { doctorSessionsOn } from '../../services/engine/clinicModel';
+import { doctorSessionCoverView } from './doctorSessionCoverView';
 import { formatDate } from '../../utils/dateUtils';
 import { getRepository } from '../../services/repository';
 import { EditDoctorShiftModal } from '../modals/EditDoctorShiftModal';
@@ -32,6 +33,11 @@ interface DoctorsScheduleSheetProps {
   onSessionsChange?: (next: DoctorSession[]) => void;
   assignments?: Assignment[];
   nurses?: Nurse[];
+  dutyWindows?: DutyWindow[];
+  leaveEntries?: LeaveEntry[];
+  locks?: LockEntry[];
+  roles?: ClinicalRole[];
+  availabilityRequests?: AvailabilityRequest[];
 }
 
 const WEEKDAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -47,7 +53,12 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
   onDoctorsChange,
   onSessionsChange,
   assignments,
-  nurses,
+  nurses = [],
+  dutyWindows = [],
+  leaveEntries = [],
+  locks = [],
+  roles = [],
+  availabilityRequests = [],
 }) => {
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -391,17 +402,12 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                   </td>
 
                   {displayedDates.map((dateStr) => {
-                    const sess = sessions.find(
-                      (s) => s.doctorId === doc.id && s.date === dateStr && !s.cancelled
-                    );
-                    const pairedAssignment = assignments?.find(
-                      (a) => a.date === dateStr && assignmentCoversDoctor(a, doc.id)
-                    );
-                    const otherDocId = pairedAssignment
-                      ? assignmentDoctorIds(pairedAssignment).find((id) => id !== doc.id)
-                      : undefined;
-                    const otherDoc = otherDocId ? doctors.find((d) => d.id === otherDocId) : undefined;
-                    const pairedNurse = pairedAssignment ? nurses?.find((n) => n.id === pairedAssignment.nurseId) : null;
+                    const sess = doctorSessionsOn(sessions, dateStr).find(s => s.doctorId === doc.id);
+                    const cover = sess ? doctorSessionCoverView(sess, assignments || [], dutyWindows, {
+                      nurses, roles, doctors, specialties, sessions, leaveEntries, locks, availabilityRequests,
+                    }) : null;
+                    const pairedNurse = cover?.rows[0] ? nurses.find(n => n.id === cover.rows[0].nurseId) : null;
+                    const coveringNurseCount = new Set(cover?.rows.map(r => r.nurseId)).size;
                     const nursePref = pairedNurse?.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === doc.id);
                     const nurseSpecPref = !nursePref && pairedNurse && doc.specialtyIds
                       ? pairedNurse.preferences?.find(
@@ -412,13 +418,11 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                         )
                       : null;
 
-                    const nurseHasSpecificAllocations = pairedNurse?.preferences?.some(
-                      (p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY'
-                    );
-                    const isAllocationMismatch = pairedNurse && nurseHasSpecificAllocations && !nursePref && !nurseSpecPref;
+                    const isAllocationMismatch = !!cover?.needsReview;
 
                     const priorityBadge = isAllocationMismatch
-                      ? 'Mismatch'
+                      ? 'Review'
+                      : coveringNurseCount > 1 ? `${coveringNurseCount} nurses`
                       : nursePref
                       ? `P${nursePref.rank}`
                       : nurseSpecPref
@@ -428,7 +432,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                       : null;
 
                     const nurseRankDesc = isAllocationMismatch
-                      ? `⚠ Not a usual match: ${pairedNurse?.fullName} doesn't usually work with ${doc.fullName} or this department`
+                      ? 'Doctor cover needs review'
                       : nursePref
                       ? `Works with this doctor, choice ${nursePref.rank}`
                       : nurseSpecPref
@@ -445,7 +449,7 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                             onClick={() => handleCellClick(doc, dateStr)}
                             role="button"
                             tabIndex={0}
-                            aria-label={`Change clinic for ${doc.fullName} on ${formatDate(dateStr)}: ${sess.startTime}–${sess.endTime}${pairedNurse ? `, nurse ${pairedNurse.fullName}` : ''}`}
+                            aria-label={`Change clinic for ${doc.fullName} on ${formatDate(dateStr)}: ${sess.startTime}–${sess.endTime}${cover?.summary ? `, ${cover.summary.replace(/\n/g, '; ')}` : ''}`}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
                                 e.preventDefault();
@@ -457,17 +461,17 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                                 ? 'bg-rose-50 border border-rose-300 text-rose-950 hover:bg-rose-100'
                                 : 'bg-indigo-50 border border-indigo-200 hover:border-indigo-400 hover:bg-indigo-100/90 text-indigo-900'
                             }`}
-                            title={`Click to change: ${sess.startTime}–${sess.endTime}${sess.room ? ` in ${sess.room}` : ''} (${sess.source === 'PATTERN' ? 'every week' : 'this day only'})${pairedNurse ? `\nNurse: ${pairedNurse.fullName} (${nurseRankDesc}${otherDoc ? `, shared with ${otherDoc.fullName}` : ''})` : '\nNo nurse with this doctor yet'}`}
+                            title={`Click to change: ${sess.startTime}–${sess.endTime}${sess.room ? ` in ${sess.room}` : ''} (${sess.source === 'PATTERN' ? 'every week' : 'this day only'})${cover?.summary ? `\n${cover.summary}` : '\nNo nurse with this doctor yet'}`}
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-bold font-mono">
-                                {sess.startTime.substring(0, 2)}–{sess.endTime.substring(0, 2)}
+                                <span className="block">{sess.startTime}</span>{' '}<span className="block">to {sess.endTime}</span>
                               </span>
                               <div className="flex items-center gap-0.5">
                                 {priorityBadge && (
                                   <span
                                     className={`text-xs font-bold px-1 py-0.2 rounded ${
-                                      priorityBadge === 'Mismatch'
+                                      priorityBadge === 'Review'
                                         ? 'bg-rose-100 text-rose-800 border border-rose-300 font-extrabold'
                                         : priorityBadge === 'P1'
                                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
@@ -497,11 +501,15 @@ export const DoctorsScheduleSheet: React.FC<DoctorsScheduleSheetProps> = ({
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center justify-between text-xs text-slate-500 mt-0.5">
-                              <span className="truncate max-w-[50px] font-medium text-slate-700">
-                                {pairedNurse ? pairedNurse.fullName.split(' ')[0] : (sess.room || 'Room')}
-                              </span>
-                              <Edit2 className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 text-indigo-600 transition-opacity shrink-0 ml-0.5" />
+                            <div className="mt-0.5 space-y-1 text-xs text-slate-600">
+                              {cover?.rows.map(r => <div key={`${r.nurseId}:${r.startTime}:${r.endTime}`}>
+                                <span className="block truncate font-medium text-slate-700" title={r.name}>{r.name}</span>
+                                <span className="block tabular-nums"><span className="block whitespace-nowrap">{r.startTime}</span>{' '}<span className="block whitespace-nowrap">to {r.endTime}</span></span>
+                                {r.sharedText && <span className="block text-brand-strong">{r.sharedText}</span>}
+                              </div>)}
+                              {cover?.gaps.map(g => <span key={`${g.start}:${g.end}`} className="block font-semibold text-danger">No nurse {g.start} to {g.end}</span>)}
+                              {cover?.needsReview && <span className="block font-semibold text-danger">Review cover</span>}
+                              <Edit2 className="ml-auto size-2.5 shrink-0 text-indigo-600 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
                             </div>
                           </div>
                         ) : (

@@ -18,6 +18,7 @@ import { isFloatShift } from '../../../services/engine/floatShift';
 import { describeRequest } from '../../../services/engine/explainCell';
 import { formatDayDate } from '../../../utils/dateUtils';
 import { tint } from '../../../utils/colorContrast';
+import { timedCoverageViewOf, type TimedCoverageView } from './timedCoverageView';
 
 /**
  * What one roster grid cell shows, worked out ahead of drawing it.
@@ -26,7 +27,7 @@ import { tint } from '../../../utils/colorContrast';
  * compared field by field: `reuseCellViews` keeps the old object when nothing changed,
  * and the memoized cell is then not drawn again.
  */
-export interface CellView {
+export interface CellView extends TimedCoverageView {
   /** `${nurseId}|${date}`, as in the cell's `data-cell`. */
   key: string;
   nurseId: string;
@@ -208,6 +209,8 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
   const { dateStr, isWeekend, holiday, isToday } = day;
 
   const duty = asgn ? dutyMap.get(asgn.dutyWindowId) : undefined;
+  const timed = timedCoverageViewOf(!leave && lock?.mode !== 'OFF' ? asgn : undefined, duty, lookups.allocationRefs.doctors, lookups.allocationRefs.sessions, lookups.doctorShort);
+  const showTimed = !!asgn && !leave && lock?.mode !== 'OFF' && timed.coverageMode !== 'legacy';
   const leaveType = leave ? leaveTypeMap.get(leave.leaveTypeId) : undefined;
   const pendingLeaveType = pendingLeave ? leaveTypeMap.get(pendingLeave.leaveTypeId) : undefined;
   const pendingLeaveText = pendingLeave ? `Leave asked for, waiting for approval: ${pendingLeaveType?.name || 'Leave'}` : '';
@@ -272,7 +275,7 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
 
   const docObj = asgn?.doctorId ? doctorMap.get(asgn.doctorId) : undefined;
   const secondDocObj = secondDocId ? doctorMap.get(secondDocId) : undefined;
-  const pairedDoctors = !!secondDocId && !leave && lock?.mode !== 'OFF';
+  const pairedDoctors = !leave && lock?.mode !== 'OFF' && (showTimed ? timed.coverageMode === 'shared' : !!secondDocId);
   const docPrefOf = (docId?: string) => (docId ? nurse.preferences?.find((p) => p.kind === 'DOCTOR' && p.refId === docId) : undefined);
   const specPrefOf = (doc?: Doctor, hasDirect?: boolean) =>
     !hasDirect && doc && doc.specialtyIds
@@ -334,13 +337,13 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
     mismatch = !!outside;
     mismatchReason = outside ? `${nurse.fullName} is not eligible for ${outside.name}. Review clinical eligibility in the nurse profile.` : '';
   }
-  const pairNote = pairedDoctors && docObj?.lowAcuity && secondDocObj?.lowAcuity && !mismatch
+  const pairNote = showTimed ? timed.coverageSharingText : pairedDoctors && docObj?.lowAcuity && secondDocObj?.lowAcuity && !mismatch
     ? 'One nurse covers 2 low acuity doctors. Duty hours count once.' : '';
   const firstRank = docPref?.rank ?? specPref?.rank;
   const secondRank = secondDocPref?.rank ?? secondSpecPref?.rank;
   const pairRank = firstRank !== undefined && secondRank !== undefined ? Math.max(firstRank, secondRank) : undefined;
 
-  const pairingDesc = isNurseClinic
+  const pairingDesc = showTimed ? `${timed.coverageBadge}: ${timed.coverageText.replace(/\n/g, '; ')}` : isNurseClinic
     ? 'Nurse Clinic (no doctor)'
     : isFloatPool
     ? 'Float (not with a doctor)'
@@ -415,7 +418,7 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
       : content === 'off'
       ? 'Day off'
       : content === 'shift'
-      ? `${pairedDoctors ? '2 doctors, ' : ''}${[shownName, rankBadge, duty?.startTime, duty?.endTime].filter(Boolean).join(' ')}, ${duty ? `${duty.name} shift` : 'shift'}${duty?.isPriority ? ', used first' : ''}`
+      ? showTimed ? `${timed.coverageBadge}, ${timed.coverageText.replace(/\n/g, '; ')}. Paid duty ${duty?.startTime || ''} to ${duty?.endTime || ''}, ${duty ? `${duty.name} shift` : 'shift'}` : `${pairedDoctors ? '2 doctors, ' : ''}${[shownName, rankBadge, duty?.startTime, duty?.endTime].filter(Boolean).join(' ')}, ${duty ? `${duty.name} shift` : 'shift'}${duty?.isPriority ? ', used first' : ''}`
       : content === 'pendingLeave'
       ? `${pendingLeaveType?.acronym || 'L'}, leave asked for, waiting for approval`
       : 'No shift';
@@ -430,6 +433,7 @@ export function cellViewOf(facts: CellFacts, lookups: CellLookups): CellView {
   const color = leave ? leaveType?.color || '#f59e0b' : asgn ? duty?.color || '#3b82f6' : '';
 
   return {
+    ...timed,
     key: `${nurse.id}|${dateStr}`,
     nurseId: nurse.id,
     date: dateStr,

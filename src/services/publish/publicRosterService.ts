@@ -26,10 +26,10 @@ import { getRepository } from '../repository';
 import type { IRepository } from '../repository/IRepository';
 
 /**
- * Bumped when the snapshot's contents change (2: only this roster's people and
- * dates, generic leave, no employee codes), so older snapshots are rebuilt.
+ * Bumped when the snapshot's contents change (3 adds timed doctor cover),
+ * so older snapshots are rebuilt without private notes or staff contact details.
  */
-export const PUBLIC_ROSTER_FORMAT = 2;
+export const PUBLIC_ROSTER_FORMAT = 3;
 
 export interface PublicRosterDoc {
   id: string;
@@ -103,7 +103,14 @@ export async function syncPublicRoster(link: ShareLink): Promise<void> {
   const inRoster = (d: string) => d >= schedule.startDate && d <= schedule.endDate;
   const snapshotAssignments = (version.snapshot?.assignments || [])
     .filter((a) => inRoster(a.date))
-    .map((a) => pick(a, ['id', 'nurseId', 'date', 'dutyWindowId', 'kind', 'doctorId', 'secondDoctorId', 'specialtyId', 'clinicalRoleId']));
+    .map((a) => ({
+      ...pick(a, ['id', 'nurseId', 'date', 'dutyWindowId', 'kind', 'doctorId', 'secondDoctorId', 'specialtyId', 'clinicalRoleId']),
+      ...(a.doctorCoverage !== undefined ? { doctorCoverage: (Array.isArray(a.doctorCoverage) ? a.doctorCoverage : []).map(c => ({
+        doctorId: typeof c?.doctorId === 'string' ? c.doctorId : '',
+        startTime: typeof c?.startTime === 'string' ? c.startTime : '',
+        endTime: typeof c?.endTime === 'string' ? c.endTime : '',
+      })) } : {}),
+    }));
   const snapshotLeave = (version.snapshot?.leaveEntries || [])
     .filter((le) => le.approved && le.endDate >= schedule.startDate && le.startDate <= schedule.endDate)
     .map((le) => ({

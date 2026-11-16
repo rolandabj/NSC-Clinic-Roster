@@ -107,7 +107,7 @@ export const GridCell = memo(function GridCell({
         // The doctor's first name or the role (or the leave) on the first line; the start time and the marks on the second; the end time on the third.
         <div
           // A small grid: the name (cut short when long) and the rank side by side, so the rank always shows; the second line under both.
-          className={`${heightClass} ${view.pairedDoctors ? 'min-h-[8em]' : ''} grid grid-cols-[minmax(0,1fr)_auto] content-center items-baseline gap-x-0.5 rounded-sm px-1 leading-tight ${
+          className={`${view.coverageMode !== 'legacy' ? 'min-h-[8em]' : heightClass} ${view.pairedDoctors && view.coverageMode === 'legacy' ? 'min-h-[8em]' : ''} grid grid-cols-[minmax(0,1fr)_auto] content-center items-baseline gap-x-0.5 rounded-sm ${view.coverageMode !== 'legacy' ? 'px-0' : 'px-1'} leading-tight ${
             view.content === 'off'
               ? 'bg-sunken text-ink-muted'
               : view.content === 'pendingLeave'
@@ -122,6 +122,13 @@ export const GridCell = memo(function GridCell({
               : undefined
           }
         >
+          {view.coverageMode !== 'legacy' ? <>
+            <span aria-hidden="true" className={`col-span-2 w-fit max-w-full rounded px-0.5 text-center font-semibold ${view.coverageMode === 'review' ? 'bg-danger-soft text-danger' : 'bg-brand-soft text-brand-strong'}`}>{view.coverageMode === 'sequential' ? 'In turn' : view.coverageBadge}</span>
+            {view.coverageLines.split('\n').map((line, index) => <span key={`${index}:${line}`} aria-hidden="true" className={`col-span-2 ${index % 2 ? 'tabular-nums text-ink-muted' : 'truncate font-semibold'}`}>
+              {index % 2 && line.includes(' to ') ? <><span className="block whitespace-nowrap">{line.split(' to ')[0]}</span>{' '}<span className="block whitespace-nowrap">to {line.split(' to ')[1]}</span></> : line}
+            </span>)}
+            <span aria-hidden="true" className="col-span-2 mt-0.5 border-t border-line text-ink-muted">Duty</span>
+          </> : <>
           {view.pairedDoctors && <span aria-hidden="true" className="col-span-2 w-fit max-w-full rounded bg-brand-soft px-0.5 text-center font-semibold text-brand-strong">
             2 doctors
           </span>}
@@ -135,6 +142,7 @@ export const GridCell = memo(function GridCell({
             <span className={`rounded-sm text-xs font-bold ${view.rankBadge === '!' ? 'px-0.5 bg-danger-soft text-danger' : 'text-ink-muted'}`}>{view.rankBadge}</span>
           )}{' '}
           {view.pairedDoctors && <span className="col-span-2 truncate font-semibold">{view.secondaryDoctorLabel}</span>}
+          </>}
           {(view.startTime || view.pinned || view.handChange || view.pendingMark || ProblemIcon) && (
             // The problem's icon first, so a narrow cell (75 % zoom) cuts off the time, not the problem.
             <span className="col-span-2 flex items-center gap-0.5 overflow-hidden whitespace-nowrap text-ink-muted tabular-nums" aria-hidden="true">

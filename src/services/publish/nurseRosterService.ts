@@ -33,6 +33,7 @@ import type { IRepository } from '../repository/IRepository';
 /** How far back a private page still shows shifts (so last week stays visible). */
 export const NURSE_ROSTER_LOOKBACK_DAYS = 31;
 import { isFloatShift } from '../engine/floatShift';
+import { doctorCoverageText } from '../engine/clinicModel';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -155,6 +156,7 @@ type ShiftRefs = {
   doctors: Pick<Doctor, 'id' | 'fullName'>[];
   clinicalRoles: Pick<ClinicalRole, 'id' | 'name'>[];
   specialties: Pick<Specialty, 'id' | 'name'>[];
+  dutyWindows?: Pick<DutyWindow, 'id' | 'startTime' | 'endTime'>[];
 };
 
 /**
@@ -162,9 +164,11 @@ type ShiftRefs = {
  * "Blood Collection", or "Float" as in the emails.
  */
 export function shiftDetail(
-  a: Pick<Assignment, 'doctorId' | 'clinicalRoleId' | 'specialtyId'> & { secondDoctorId?: string },
+  a: Pick<Assignment, 'doctorId' | 'clinicalRoleId' | 'specialtyId' | 'secondDoctorId' | 'doctorCoverage'> & Partial<Pick<Assignment, 'kind' | 'dutyWindowId'>>,
   refs: ShiftRefs
 ): string {
+  const timed = doctorCoverageText(a, refs.doctors, refs.dutyWindows?.find(d => d.id === a.dutyWindowId));
+  if (timed) return timed;
   if (isFloatShift(a)) return 'Float';
   if (a.doctorId) {
     const formatDr = (id: string) => {
@@ -253,6 +257,7 @@ export function buildNurseRosterDoc(input: BuildNurseRosterInput): NurseRosterDo
         shiftName: duty.name,
         detail: shiftDetail(a, input),
         scheduleName: schedule.name,
+        ...(a.doctorCoverage !== undefined ? { assignmentId: a.id } : {}),
       };
       shifts.set(`${a.date}|${duty.startTime}|${duty.acronym}|${shift.detail}`, shift);
     }
@@ -281,7 +286,7 @@ export function buildNurseRosterDoc(input: BuildNurseRosterInput): NurseRosterDo
 }
 
 /** Build only the latest published snapshot. Draft shifts and private staff fields never enter the sheet. */
-export function buildTeamRosterSheet(input: ShiftRefs & {
+export function buildTeamRosterSheet(input: Omit<ShiftRefs, 'dutyWindows'> & {
   schedule: Pick<Schedule, 'id' | 'name' | 'startDate' | 'endDate'>;
   version: ScheduleVersion;
   nurses: Pick<Nurse, 'id' | 'fullName' | 'active'>[];

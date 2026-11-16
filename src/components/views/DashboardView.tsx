@@ -122,7 +122,7 @@ async function loadPlannerData(timezone: string, canApprove: boolean): Promise<P
     ]);
   const activeNurses = nurses.filter((n) => n.active);
   const activeDoctors = doctors.filter((d) => d.active);
-  const refs = { doctors, clinicalRoles: roles, specialties };
+  const refs = { doctors, clinicalRoles: roles, specialties, dutyWindows };
 
   const roster = chooseScheduleToOpen(schedules, readStoredId(), null, today) || null;
   const todayRoster = schedules.find((s) => s.startDate <= today && s.endDate >= today) || null;
@@ -239,7 +239,7 @@ async function loadViewerData(timezone: string, linkedNurseId: string | undefine
   const versions = (
     await Promise.all(recent.map((s) => repo.list('versions', { field: 'scheduleId', operator: '==', value: s.id })))
   ).flat();
-  const refs = { doctors, clinicalRoles: roles, specialties };
+  const refs = { doctors, clinicalRoles: roles, specialties, dutyWindows };
   const published = latestPublishedVersions(versions);
 
   // Only what was published counts for nurses (not a draft still being planned).
@@ -260,7 +260,7 @@ async function loadViewerData(timezone: string, linkedNurseId: string | undefine
   let myLeaveDays: string[] = [];
   const me = linkedNurseId ? nurses.find((n) => n.id === linkedNurseId) : undefined;
   if (me) {
-    const doc = buildNurseRosterDoc({ token: '', nurse: me, schedules, versions, dutyWindows, ...refs, today });
+    const doc = buildNurseRosterDoc({ token: '', nurse: me, schedules, versions, ...refs, today });
     const until = addDaysIso(today, 13);
     myShifts = doc.shifts.filter((s) => s.date >= today && s.date <= until);
     myLeaveDays = doc.leaveDays.filter((d) => d >= today && d <= until);

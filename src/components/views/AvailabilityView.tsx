@@ -41,6 +41,8 @@ import { countPendingApprovals, decideRequest } from '../../services/requests/st
 import { canApproveRequests, canEditClinicData } from '../../services/auth/access';
 import { authService } from '../../services/auth/authService';
 import { NurseSelfServicePanel } from './NurseSelfServicePanel';
+import { doctorCoverageText } from '../../services/engine/clinicModel';
+import { timedPinNoteUpdate } from '../../services/engine/timedCoverageSafety';
 
 interface AvailabilityViewProps {
   context: ClinicContextState;
@@ -487,7 +489,11 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
     try {
       if (editingLockEntry.id) {
-        await repo.update('locks', editingLockEntry.id, {
+        const saved = await repo.get('locks', editingLockEntry.id);
+        if (!saved) throw new Error('This pin no longer exists. Close this dialog and reload the page.');
+        if (saved.doctorCoverage !== undefined || editingLockEntry.doctorCoverage !== undefined) {
+          await repo.update('locks', editingLockEntry.id, timedPinNoteUpdate(saved, editingLockEntry));
+        } else await repo.update('locks', editingLockEntry.id, {
           mode: editingLockEntry.mode || 'ASSIGNMENT',
           dutyWindowId: editingLockEntry.dutyWindowId,
           assignmentKind: editingLockEntry.assignmentKind,
@@ -1187,6 +1193,15 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       >
         {editingLockEntry && (
           <form id="pin-editor" onSubmit={handleSaveLockEntry} noValidate className="space-y-4 text-sm">
+            {editingLockEntry.doctorCoverage !== undefined && <Notice tone="info" title="Doctor cover times">
+              <p className="whitespace-pre-line">{doctorCoverageText({ kind: editingLockEntry.assignmentKind,
+                doctorId: editingLockEntry.targetRefId, secondDoctorId: editingLockEntry.secondTargetRefId,
+                doctorCoverage: editingLockEntry.doctorCoverage }, doctors,
+                dutyWindows.find(d => d.id === editingLockEntry.dutyWindowId))}</p>
+              <p>You can change the note. Remove the pin before changing its shift or doctors.</p>
+            </Notice>}
+            <fieldset disabled={editingLockEntry.doctorCoverage !== undefined} className="space-y-4">
+            <legend className="sr-only">Pinned duty details</legend>
             <Field label="Nurse">
               {(f) => (
                 <Select {...f} value={editingLockEntry.nurseId} onChange={(e) => setEditingLockEntry({ ...editingLockEntry, nurseId: e.target.value })}>
@@ -1302,6 +1317,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                   )}
               </>
             )}
+            </fieldset>
             <Field label="Note" optional hint="For example, asked for by the clinic manager.">
               {(f) => <Input {...f} value={editingLockEntry.note || ''} onChange={(e) => setEditingLockEntry({ ...editingLockEntry, note: e.target.value })} />}
             </Field>

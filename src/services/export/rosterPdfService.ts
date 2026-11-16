@@ -13,12 +13,14 @@
 
 import {
   Assignment,
+  AvailabilityRequest,
   ClinicalRole,
   Doctor,
   DoctorSession,
   DutyWindow,
   LeaveEntry,
   LeaveType,
+  LockEntry,
   Nurse,
   Schedule,
   SeniorityLevel,
@@ -28,7 +30,8 @@ import { isWeekendDate } from '../../utils/weekend';
 import { calculateDutyDurationHours, summarizeNurseHours } from '../reports/hoursAccounting';
 import { getScheduleDates } from './rosterExportService';
 import { isFloatShift } from '../engine/floatShift';
-import { assignmentCoversDoctor, assignmentDoctorIds } from '../engine/clinicModel';
+import { assignmentCoversDoctor, assignmentDoctorIds, doctorCoverageText, effectiveDoctorCoverage, uncoveredParts } from '../engine/clinicModel';
+import { assignmentCanCoverDoctor } from '../engine/assignmentPresence';
 
 export interface RosterPdfOptions {
   clinicName: string;
@@ -43,6 +46,8 @@ export interface RosterPdfOptions {
   sessions: DoctorSession[];
   roles: ClinicalRole[];
   specialties: Specialty[];
+  locks?: LockEntry[];
+  availabilityRequests?: AvailabilityRequest[];
   versionNumber?: number;
   /** Days to include (default: the whole schedule). */
   dates?: string[];
@@ -135,6 +140,8 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
   const leaveTypeMap = new Map(leaveTypes.map((l) => [l.id, l]));
   const seniorityMap = new Map(seniorityLevels.map((s) => [s.id, s]));
   const nurseMap = new Map(nurses.map((n) => [n.id, n]));
+  const coverageContext = { nurses, doctors, sessions, roles, specialties, leaveEntries,
+    locks: options.locks || [], availabilityRequests: options.availabilityRequests || [] };
   const shiftByNurseDate = new Map(assignments.map((a) => [`${a.nurseId}_${a.date}`, a]));
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
@@ -244,7 +251,8 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
             } else if (isFloatShift(a) || a.note?.toLowerCase().includes('float')) target = 'Float';
             else if (a.clinicalRoleId) target = roleMap.get(a.clinicalRoleId)?.acronym || (a.clinicalRoleId === 'role-nurse-clinic' ? 'NC' : 'Role');
             else if (a.specialtyId) target = specialtyMap.get(a.specialtyId)?.code || 'Pool';
-            row.push(`${duty?.acronym || 'Duty'}\n${target}`);
+            const timeline = doctorCoverageText(a, doctors, duty);
+            row.push(`${duty?.acronym || 'Duty'}\n${timeline || target}`);
             fills.set(`${nurse.id}_${i}`, tint(hexToRgb(duty?.color, [79, 70, 229])));
           } else {
             row.push('');
@@ -308,16 +316,18 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
             return row.push('Cancelled');
           }
           count++;
-          const paired = assignments
-            .filter((a) => a.date === date && assignmentCoversDoctor(a, dr.id))
-            .map((a) => firstName(nurseMap.get(a.nurseId)?.fullName || '?'));
+          const daySessions = sessions.filter(s => s.date === date);
+          const cover = assignments.filter(a => a.date === date && assignmentCoversDoctor(a, dr.id) &&
+            assignmentCanCoverDoctor(a, coverageContext, dr.id))
+            .flatMap(a => effectiveDoctorCoverage(a, dutyMap.get(a.dutyWindowId), daySessions)
+              .filter(range => range.doctorId === dr.id)
+              .map(range => ({ ...range, nurse: firstName(nurseMap.get(a.nurseId)?.fullName || '?') })));
+          const missing = uncoveredParts(sess.startTime, sess.endTime, cover);
           const time = `${shortTime(sess.startTime)}–${shortTime(sess.endTime)}`;
-          if (paired.length === 0) {
-            fills.set(`${dr.id}_${i}`, { fill: MISSING_FILL, text: MISSING_TEXT });
-            return row.push(`${time}\nNo nurse`);
-          }
-          fills.set(`${dr.id}_${i}`, { fill: SESSION_FILL });
-          return row.push(`${time}\n${paired.join('\n')}`);
+          const breakdown = [...cover.map(range => `${range.nurse} ${range.startTime} to ${range.endTime}`),
+            ...missing.map(range => `No nurse ${range.start} to ${range.end}`)];
+          fills.set(`${dr.id}_${i}`, missing.length ? { fill: MISSING_FILL, text: MISSING_TEXT } : { fill: SESSION_FILL });
+          return row.push(`${time}\n${breakdown.join('\n') || 'No nurse'}`);
         });
         row.push(String(count));
         return row;
@@ -405,9 +415,9 @@ export async function exportRosterToPdf(options: RosterPdfOptions): Promise<Arra
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   [
-    "Nurses' roster: the shift on top, then the doctor's first name, NC (Nurse Clinic), Float, or a specialty code.",
-    "Doctors' sessions: the session hours (9–18:30 means 09:00 to 18:30), then the nurse or nurses with the doctor.",
-    'Red cells: a doctor session with no nurse. Shaded columns: weekends. PH: public holiday.',
+    "Nurses' roster: the shift, then the doctor, NC (Nurse Clinic), Float, or specialty. Timed cover shows each doctor's cover times.",
+    "Doctors' sessions: the session hours, then each nurse's cover times and any time with no nurse.",
+    'Red cells: a doctor session with missing nurse cover. Shaded columns: weekends. PH: public holiday.',
     'Total: duty hours plus credited leave hours in the days shown.',
   ].forEach((line) => {
     doc.text(line, margin, y);

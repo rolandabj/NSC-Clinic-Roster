@@ -7,6 +7,7 @@
  */
 
 import { hoursHistoryOverlaps } from '../../services/hours/hoursBalance';
+import { doctorCoverageText } from '../../services/engine/clinicModel';
 import { loadClinicSetup } from '../../services/engine/clinicSetupService';
 import { getRepository } from '../../services/repository';
 
@@ -186,6 +187,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       dutyWindows,
       leaveEntries,
       leaveTypes,
+      locks,
+      availabilityRequests,
       seniorityLevels,
       doctors,
       sessions,
@@ -217,6 +220,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         dutyWindows,
         leaveEntries,
         leaveTypes,
+        locks,
+        availabilityRequests,
         seniorityLevels,
         doctors,
         sessions,
@@ -247,6 +252,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       dutyWindows,
       leaveEntries,
       leaveTypes,
+      locks,
+      availabilityRequests,
       seniorityLevels,
       doctors,
       sessions,
@@ -267,6 +274,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       dutyWindows,
       leaveEntries,
       leaveTypes,
+      locks,
+      availabilityRequests,
       seniorityLevels,
       doctors,
       sessions,
@@ -562,7 +571,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                           return (
                             <td key={dateStr} className="border border-black p-0.5 text-center">
                               <div className="font-bold">{duty?.acronym || 'D'}</div>
-                              {targetCode && <div className="text-[7px] text-slate-600 truncate max-w-[28px]">{targetCode}</div>}
+                              {asgn.doctorCoverage !== undefined
+                                ? <div className="whitespace-pre-line break-words text-[7px] leading-tight text-slate-600">{doctorCoverageText(asgn, doctors, duty)}</div>
+                                : targetCode && <div className="text-[7px] text-slate-600 truncate max-w-[28px]">{targetCode}</div>}
                             </td>
                           );
                         } else {
@@ -688,7 +699,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                           {entry.dutyWindow ? `${entry.dutyWindow.startTime}–${entry.dutyWindow.endTime}` : '—'}
                         </td>
                         <td className="border border-black p-1 font-sans">
-                          {entry.assignment && isFloatShift(entry.assignment)
+                          {entry.assignment?.doctorCoverage !== undefined
+                            ? <span className="whitespace-pre-line">{doctorCoverageText(entry.assignment, doctors, entry.dutyWindow)}</span>
+                            : entry.assignment && isFloatShift(entry.assignment)
                             ? 'Float'
                             : entry.assignment && assignmentDoctorIds(entry.assignment).length > 0
                             ? assignmentDoctorIds(entry.assignment)

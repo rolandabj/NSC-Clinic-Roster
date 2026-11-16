@@ -27,7 +27,7 @@
 .roster-paper-table .roster-total { width:52px; background:#f8fafc; }
 .roster-paper-table .roster-weekend { background:#e2e8f0; }
 .roster-time { margin:4px 0; font-variant-numeric:tabular-nums; color:#334155; }
-.roster-detail { overflow-wrap:anywhere; color:#475569; }
+.roster-detail { white-space:pre-line; overflow-wrap:anywhere; color:#475569; }
 .roster-leave { background:#fff7ed; color:#9a3412; }
 /* Days off: muted but readable (#94a3b8 on this background was 2.6:1). */
 .roster-off { background:#fafbfc; color:#475569; }

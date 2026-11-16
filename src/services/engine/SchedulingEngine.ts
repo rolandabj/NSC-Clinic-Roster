@@ -38,6 +38,7 @@ import {
 import { isExclusiveNurseClinic } from './nurseClinicUtils';
 import { FLOAT_ROLE_ID, isFloatShift } from './floatShift';
 import { outsideNurseList } from './nurseList';
+import { assertTimedFillSupported } from './timedCoverageSafety';
 import { assignmentCanCoverDoctor, nurseIsAvailable } from './assignmentPresence';
 import { LAST_RESORT_NOTE } from './lastResort';
 import { resolveFullTimeTarget, leaveDaysInRange, shiftHoursAllowed } from '../hours/hoursPolicy';
@@ -410,6 +411,7 @@ export class SchedulingEngine {
     clinicSetup?: ClinicSetup,
     options: { keepManual?: boolean; onlyDates?: { start: string; end: string } } = {}
   ): Promise<GenerationResult> {
+    assertTimedFillSupported(schedule, mode, existingAssignments, locks);
     const conflicts = hoursHistoryOverlaps(schedule, clinicSetup?.hoursHistory);
     if (conflicts.length) throw new Error(`Hours cannot be calculated because "${conflicts[0].first.name}" overlaps "${conflicts[0].second.name}". Resolve the overlapping rosters first.`);
     const startTimeMs = performance.now();
@@ -611,6 +613,7 @@ export class SchedulingEngine {
           kind: lock.assignmentKind || 'SPECIALTY',
           doctorId: lock.assignmentKind === 'DOCTOR' ? lock.targetRefId : undefined,
           ...(lock.secondTargetRefId ? { secondDoctorId: lock.secondTargetRefId } : {}),
+          ...(lock.doctorCoverage !== undefined ? { doctorCoverage: lock.doctorCoverage } : {}),
           clinicalRoleId: lock.assignmentKind === 'CLINICAL_ROLE' ? lock.targetRefId : undefined,
           specialtyId: lock.assignmentKind === 'SPECIALTY' ? lock.targetRefId : undefined,
           locked: true,

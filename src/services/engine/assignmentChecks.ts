@@ -135,7 +135,7 @@ export function checkAssignment(ctx: AssignmentCheckContext, cell: Assignment): 
     }
   }
 
-  reasons.push(...doctorPairingProblems(cell, ctx.doctors || []));
+  reasons.push(...doctorPairingProblems(cell, ctx.doctors || [], { duty, sessions: ctx.sessions || [] }));
   if (nurse?.doctorEligibility != null) {
     const outside = outsideNurseList(nurse, cell, { doctors: ctx.doctors || [], specialties: ctx.specialties || [], sessions: ctx.sessions || [] });
     if (outside) reasons.push(`${name} is not eligible for ${outside.name}. Review clinical eligibility in the nurse profile.`);

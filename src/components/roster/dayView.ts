@@ -86,7 +86,9 @@ export function dayViewOf(
       },
       data.lookups
     );
-    return { nurseId: nurse.id, name: nurse.fullName, summary: cellSummary(view), problemKind: view.problemKind, color: view.color };
+    return { nurseId: nurse.id, name: nurse.fullName,
+      summary: view.coverageMode === 'legacy' ? cellSummary(view) : `${view.coverageBadge}\n${view.coverageText}\nPaid duty ${view.startTime} to ${view.endTime}`,
+      problemKind: view.problemKind, color: view.color };
   });
   const problems = onDay
     .map((f) => ({ id: f.id, kind: KIND[f.severity], message: f.message }))

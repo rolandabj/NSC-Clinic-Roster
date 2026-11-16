@@ -1,4 +1,5 @@
 import type { Assignment, AllocationReview } from '../../types';
+import { doctorCoverageFingerprint } from './clinicModel';
 
 /** A review belongs to one saved shift and pairing, not to a reusable note prefix. */
 export function allocationSignature(a: Assignment): string {
@@ -6,6 +7,8 @@ export function allocationSignature(a: Assignment): string {
     a.doctorId || null, a.specialtyId || null];
   // Preserve existing reviews of single doctor shifts; paired shifts include both doctors.
   if (a.secondDoctorId) identity.push(a.secondDoctorId);
+  const coverage = doctorCoverageFingerprint(a);
+  if (coverage !== undefined) identity.push(coverage);
   return JSON.stringify(identity);
 }
 

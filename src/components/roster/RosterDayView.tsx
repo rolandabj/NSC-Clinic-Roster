@@ -136,7 +136,7 @@ export const RosterDayView: React.FC<{
                     </span>
                   )}
                 </p>
-                <p className="text-sm text-ink-muted">{row.summary}</p>
+                <p className="whitespace-pre-line text-sm text-ink-muted">{row.summary}</p>
               </li>
             );
           })}

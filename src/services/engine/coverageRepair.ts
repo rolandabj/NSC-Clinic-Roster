@@ -2,7 +2,7 @@
 import type { Assignment, ClinicalRole, DoctorSession, DutyWindow, Nurse } from '../../types';
 import type { ValidationFinding } from '../validation/ScheduleValidator';
 import { assignmentCoversDoctor, canBeFreeNurse, coverageSlots, doctorSessionsOn, isFreeDuring, nurseClinicRoleOf, overlaps, toMinutes,
-  uncoveredParts, type ResolvedClinicSetup } from './clinicModel';
+  uncoveredParts, effectiveDoctorCoverage, type ResolvedClinicSetup } from './clinicModel';
 import { FLOAT_ROLE_ID } from './floatShift';
 import { nurseIsAvailable, type AvailabilityContext } from './assignmentPresence';
 
@@ -70,6 +70,8 @@ export async function repairCoverage(ctx: CoverageRepairContext) {
   const coverage = (date: string, list: Assignment[]): DayCoverage => {
     const day = list.filter(a => a.date === date && nurseIsAvailable(nurses.get(a.nurseId), date, ctx.availability || { leaveEntries: [] }));
     const sessions = dailySessions.get(date) || [];
+    const intervals = new Map(day.map(a => [a.id, effectiveDoctorCoverage(a, duties.get(a.dutyWindowId), sessions)]));
+    const coverFor = (a: Assignment, doctorId?: string) => (intervals.get(a.id) || []).filter(r => !doctorId || r.doctorId === doctorId);
     const doctorGaps = new Map<string, Gap[]>();
     const qualified = new Map<string, Gap[]>();
     let missing = 0, overlap = 0;
@@ -77,25 +79,24 @@ export async function repairCoverage(ctx: CoverageRepairContext) {
       const linked = day.filter(a => assignmentCoversDoctor(a, sess.doctorId) &&
         (ctx.canCover ? ctx.canCover(a, sess) : ctx.canPair(a.nurseId, sess)));
       const gaps = uncoveredParts(sess.startTime, sess.endTime,
-        linked.map(a => duties.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d));
+        linked.flatMap(a => coverFor(a, sess.doctorId)));
       qualified.set(sess.id, uncoveredParts(sess.startTime, sess.endTime,
-        linked.filter(a => ctx.canPair(a.nurseId, sess)).map(a => duties.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d)));
+        linked.filter(a => ctx.canPair(a.nurseId, sess)).flatMap(a => coverFor(a, sess.doctorId))));
       doctorGaps.set(sess.id, gaps); missing += gaps.reduce((sum, g) => sum + minutes(g), 0);
-      const bounds = [...new Set([sess.startTime, sess.endTime, ...linked.flatMap(a => {
-        const d = duties.get(a.dutyWindowId); return d ? [d.startTime, d.endTime] : [];
-      })])].filter(t => t >= sess.startTime && t <= sess.endTime).sort();
+      const bounds = [...new Set([sess.startTime, sess.endTime,
+        ...linked.flatMap(a => coverFor(a, sess.doctorId).flatMap(r => [r.startTime, r.endTime]))])]
+        .filter(t => t >= sess.startTime && t <= sess.endTime).sort();
       for (let i = 0; i < bounds.length - 1; i++) {
-        const count = new Set(linked.filter(a => {
-          const d = duties.get(a.dutyWindowId);
-          return d && overlaps(d.startTime, d.endTime, bounds[i], bounds[i + 1]);
-        }).map(a => a.nurseId)).size;
+        const count = new Set(linked.filter(a => coverFor(a, sess.doctorId)
+          .some(r => overlaps(r.startTime, r.endTime, bounds[i], bounds[i + 1]))).map(a => a.nurseId)).size;
         overlap += Math.max(0, count - 1) * (toMinutes(bounds[i + 1]) - toMinutes(bounds[i]));
       }
     }
     const free: Gap[] = [];
     const quota = ctx.clinic.holidays.has(date) ? 1 : ctx.minFreeNurses;
     const checks = coverageSlots(ctx.clinic,
-      day.map(a => duties.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d), sessions);
+      day.map(a => duties.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d), sessions,
+      [...intervals.values()].flat());
     for (const h of checks) {
       const onDuty = day.filter(a => {
         const d = duties.get(a.dutyWindowId);
@@ -119,7 +120,7 @@ export async function repairCoverage(ctx: CoverageRepairContext) {
   const duration = (list: Assignment[], id: string, through?: string) => list.filter(a => a.nurseId === id && (!through || a.date <= through)).reduce((sum, a) => sum + hours(a), 0);
   const fixedFinding = (f: ValidationFinding) => f.severity === 'ERROR' || f.category === 'RULE_VIOLATION' ||
     /^(role-quota-|holiday-|h7-|hours-over-|hours-part-short-)/.test(f.id);
-  const editable = (a: Assignment) => a.source === 'GENERATED' && !a.locked && !a.secondDoctorId &&
+  const editable = (a: Assignment) => a.source === 'GENERATED' && !a.locked && !a.secondDoctorId && a.doctorCoverage === undefined &&
     duties.get(a.dutyWindowId)?.active === true && ctx.movable(a) && !ctx.clinic.holidays.has(a.date);
   const occupied = (id: string, date: string) => assignments.some(a => a.nurseId === id && a.date === date);
   const canFill = (id: string, target: RepairTarget) => target.session

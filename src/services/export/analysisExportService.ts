@@ -27,6 +27,7 @@ import {
   AvailabilityRequest,
   ClinicalRole,
   Doctor,
+  DoctorCoverageInterval,
   DoctorSession,
   DutyWindow,
   LeaveEntry,
@@ -43,8 +44,9 @@ import {
   ClinicSetup,
   assignmentCoversDoctor,
   canBeFreeNurse,
-  coveredMinutes,
   doctorSessionsOn,
+  effectiveDoctorCoverage,
+  freeDoctorIntervals,
   resolveClinicSetup,
   toMinutes,
   uncoveredParts,
@@ -94,15 +96,24 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 const minutesBetween = (start: string, end: string) => Math.max(0, toMinutes(end) - toMinutes(start));
 const weekdayOf = (date: string) => WEEKDAYS[new Date(`${date}T00:00:00Z`).getUTCDay()];
 
+/** Strip fields unrelated to the recorded cover, including unexpected private data. */
+const coverageSnapshot = (raw: DoctorCoverageInterval[]): DoctorCoverageInterval[] => Array.isArray(raw)
+  ? raw.filter(r => !!r && typeof r === 'object').map(r => ({ doctorId: typeof r.doctorId === 'string' ? r.doctorId : '',
+    startTime: typeof r.startTime === 'string' ? r.startTime : '', endTime: typeof r.endTime === 'string' ? r.endTime : '' })) : [];
+const unionMinutes = (start: string, end: string, ranges: { startTime: string; endTime: string }[]) =>
+  minutesBetween(start, end) - uncoveredParts(start, end, ranges).reduce((sum, r) => sum + minutesBetween(r.start, r.end), 0);
+
 /** A short guide to the file, written into it so the file explains itself. */
 const FIELD_GUIDE: string[] = [
   'One roster exported for analysis. Ids match the app database; names are added for reading.',
   'hours: one shift per day counts its real length; an approved leave day counts the leave hours instead of any shift on it.',
   'nurses[].hours.target = full time target x contract percent. difference = total minus target.',
   'days[].hoursNeeded: doctorSessions = sum of doctor session lengths (ignored on public holidays); freeNurse = opening hours, because every opening hour needs one free nurse (Nurse Clinic); total = both.',
-  'Doctor session hours measure clinic demand, not a minimum nurse hours requirement: one nurse may cover two low acuity doctors. Exact gaps are in review.coverage.',
+  'Doctor session hours measure clinic demand, not a minimum nurse hours requirement: one nurse may cover two eligible doctors in sequence, or two low acuity doctors together as a last resort. Exact gaps are in review.coverage.',
   'days[].hoursRostered = sum of the shift lengths of nurses working that day (leave days not counted).',
   'days[].doctorSessions[].nurses: nurses assigned to that doctor that day, with the minutes of the session their shift covers; uncovered lists the parts of the session no assigned nurse covers.',
+  'doctorCoverage: optional explicit doctor times. Missing means the legacy duty and session intersection; present times are authoritative. Invalid times never become whole duty cover.',
+  'shifts[].effectiveDoctorCoverage contains valid available doctor cover. busyMinutes counts its union once, even while covering two doctors. freeIntervals show valid available duty time outside assigned doctor cover. floatMinutes counts that time only on doctor or Float duties; a dedicated clinic role is not Float.',
   'preferenceRank on a doctor shift: the best rank the nurse gave that doctor by name, or one of the doctor\'s specialties (null = not in her list). nurse.preferenceFocus decides whether doctors or specialties come first when both need her.',
   'source: GENERATED = filled by the engine, MANUAL = changed by hand, LOCK = from a pinned day.',
   'review: publication blockers from the same policy as Publish, exact missing coverage minutes, pairing review status and profile reviews for the planner. canProceed does not send or approve anything.',
@@ -214,6 +225,10 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
       const nurse = nurseMap.get(a.nurseId);
       const duty = dutyMap.get(a.dutyWindowId);
       const dayDocSessions = doctorSessionsOn(sessions, a.date);
+      const effectiveCoverage = effectiveDoctorCoverage(a, duty, dayDocSessions)
+        .filter(r => assignmentCanCoverDoctor(a, coverageContext, r.doctorId));
+      const freeIntervals = nurseIsAvailable(nurse, a.date, coverageContext)
+        ? freeDoctorIntervals(a, duty, dayDocSessions) : [];
       const session = a.doctorId ? dayDocSessions.find((s) => s.doctorId === a.doctorId) : undefined;
       const secondDocId =
         a.kind === 'DOCTOR' && a.doctorId && a.secondDoctorId && a.secondDoctorId !== a.doctorId ? a.secondDoctorId : undefined;
@@ -255,6 +270,12 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
         start: duty?.startTime || null,
         end: duty?.endTime || null,
         hours: dutyHours(a.dutyWindowId),
+        ...(a.doctorCoverage === undefined ? {} : { doctorCoverage: coverageSnapshot(a.doctorCoverage) }),
+        effectiveDoctorCoverage: effectiveCoverage,
+        busyMinutes: duty ? unionMinutes(duty.startTime, duty.endTime, effectiveCoverage) : 0,
+        freeIntervals,
+        floatMinutes: a.kind === 'DOCTOR' || isFloatShift(a)
+          ? freeIntervals.reduce((sum, r) => sum + minutesBetween(r.startTime, r.endTime), 0) : 0,
         late: isLateDuty(duty, lateThreshold),
         kind: a.kind,
         doctorId: a.doctorId || null,
@@ -354,6 +375,7 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
         target,
         secondTargetId: l.secondTargetRefId || null,
         secondTarget,
+        ...(l.doctorCoverage === undefined ? {} : { doctorCoverage: coverageSnapshot(l.doctorCoverage) }),
         fromApprovedDayOffRequest: l.id.startsWith('lock-off-'),
       };
     });
@@ -385,8 +407,10 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
     const workingNurseIds = Array.from(new Set(dayShifts.map((a) => a.nurseId)));
 
     const doctorSessions = daySessions.map((s) => {
-      const withDoctor = dayShifts.filter(a => assignmentCoversDoctor(a, s.doctorId) && assignmentCanCoverDoctor(a, coverageContext, s.doctorId));
-      const coverDuties = withDoctor.map((a) => dutyMap.get(a.dutyWindowId)).filter((d): d is DutyWindow => !!d);
+      const withDoctor = dayShifts.filter(a => assignmentCoversDoctor(a, s.doctorId) && assignmentCanCoverDoctor(a, coverageContext, s.doctorId))
+        .map(a => ({ assignment: a, intervals: effectiveDoctorCoverage(a, dutyMap.get(a.dutyWindowId), daySessions)
+          .filter(r => r.doctorId === s.doctorId) })).filter(a => a.intervals.length);
+      const coverDuties = withDoctor.flatMap(a => a.intervals);
       return {
         sessionId: s.id,
         doctorId: s.doctorId,
@@ -398,14 +422,15 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
         hours: round1(minutesBetween(s.startTime, s.endTime) / 60),
         room: s.room || null,
         source: s.source,
-        nurses: withDoctor.map((a) => {
+        nurses: withDoctor.map(({ assignment: a, intervals }) => {
           const duty = dutyMap.get(a.dutyWindowId);
           const pairing = pairingRank(nurseMap.get(a.nurseId), s.doctorId, s.specialtyId);
           return {
             nurseId: a.nurseId,
             nurse: nurseName(a.nurseId),
             shift: duty?.acronym || null,
-            coveredMinutes: duty ? coveredMinutes(duty, s.startTime, s.endTime) : 0,
+            intervals,
+            coveredMinutes: unionMinutes(s.startTime, s.endTime, intervals),
             preferenceRank: pairing.rank,
             preferenceMatchedBy: pairing.by,
             source: a.source,
@@ -431,6 +456,8 @@ export function buildRosterAnalysis(input: RosterAnalysisInput) {
         total: round1(doctorHours + freeNurseHours),
       },
       hoursRostered: round1(rostered),
+      doctorBusyMinutes: shifts.filter(a => a.date === date).reduce((sum, a) => sum + a.busyMinutes, 0),
+      floatMinutes: shifts.filter(a => a.date === date).reduce((sum, a) => sum + a.floatMinutes, 0),
       nursesWorking: workingNurseIds.length,
       seniorsWorking: workingNurseIds.filter((id) => isSenior(nurseMap.get(id))).length,
       freeNurseCapableWorking: workingNurseIds.filter((id) => canBeFreeNurse(nurseMap.get(id), roles)).length,

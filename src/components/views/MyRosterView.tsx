@@ -169,7 +169,7 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
           {day.shifts.map((s, i) => (
             <div key={i}>
               <p className="font-semibold text-ink">{shiftLine(s)}</p>
-              {s.detail && <p className="text-ink-muted">{s.detail}</p>}
+              {s.detail && <p className="whitespace-pre-line text-ink-muted">{s.detail}</p>}
             </div>
           ))}
           {day.leave && <p className="font-semibold text-ink">Leave</p>}
@@ -218,7 +218,7 @@ export const MyRosterView: React.FC<MyRosterViewProps> = ({ token }) => {
               {mine.next.shifts.map((s, i) => (
                 <div key={i}>
                   <p>{shiftLine(s)}</p>
-                  {s.detail && <p className="text-ink-muted">{s.detail}</p>}
+                  {s.detail && <p className="whitespace-pre-line text-ink-muted">{s.detail}</p>}
                 </div>
               ))}
             </>

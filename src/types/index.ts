@@ -103,13 +103,21 @@ export type AuditAction =
   | 'REBALANCE';
 
 // Roster Template for Phase 14
+/** Doctor cover within a nurse's duty; end points touch without overlapping. */
+export interface DoctorCoverageInterval {
+  doctorId: string;
+  startTime: string;
+  endTime: string;
+}
+
 export interface TemplateSlotPattern {
   nurseId: string;
   weekday: number; // 0 = Sun ... 6 = Sat
   dutyWindowId: string;
   kind: AssignmentKind;
   targetRefId?: string; // doctorId, specialtyId, or clinicalRoleId
-  secondTargetRefId?: string; // optional second low acuity doctorId when kind === 'DOCTOR'
+  secondTargetRefId?: string; // optional second doctorId when kind === 'DOCTOR'
+  doctorCoverage?: DoctorCoverageInterval[];
 }
 
 export interface RosterTemplate {
@@ -319,7 +327,8 @@ export interface LockEntry {
   dutyWindowId?: string; // required if mode === 'ASSIGNMENT'
   assignmentKind?: AssignmentKind;
   targetRefId?: string; // doctorId, specialtyId, or clinicalRoleId
-  secondTargetRefId?: string; // optional second low acuity doctorId when assignmentKind === 'DOCTOR'
+  secondTargetRefId?: string; // optional second doctorId when assignmentKind === 'DOCTOR'
+  doctorCoverage?: DoctorCoverageInterval[];
   note?: string;
   createdAt: string;
 }
@@ -373,6 +382,7 @@ export interface Assignment {
   kind: AssignmentKind;
   doctorId?: string;
   secondDoctorId?: string;
+  doctorCoverage?: DoctorCoverageInterval[];
   specialtyId?: string;
   clinicalRoleId?: string;
   locked: boolean;
@@ -554,6 +564,8 @@ export interface NurseLink {
 
 /** One shift on a nurse's private page (already worded, nothing else about the roster). */
 export interface NurseRosterShift {
+  /** Stable source shift identity for calendar updates when only its detail changes. */
+  assignmentId?: string;
   date: string;
   startTime: string;
   endTime: string;

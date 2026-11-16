@@ -10,6 +10,7 @@
 
 import type { Assignment, DutyWindow, Doctor, ClinicalRole, Specialty, NurseRosterDoc, NurseRosterShift } from '../../types';
 import { isFloatShift } from '../engine/floatShift';
+import { doctorCoverageText } from '../engine/clinicModel';
 
 interface IcsParams {
   calendarName: string;
@@ -18,6 +19,8 @@ interface IcsParams {
   nurseId: string;
   assignments: (Pick<Assignment, 'id' | 'nurseId' | 'date' | 'dutyWindowId' | 'doctorId' | 'clinicalRoleId' | 'specialtyId'> & {
     secondDoctorId?: string;
+    doctorCoverage?: Assignment['doctorCoverage'];
+    kind?: Assignment['kind'];
   })[];
   dutyWindows: Pick<DutyWindow, 'id' | 'name' | 'acronym' | 'startTime' | 'endTime'>[];
   doctors: Pick<Doctor, 'id' | 'fullName'>[];
@@ -111,7 +114,8 @@ export function shortHash(value: string): string {
 }
 
 /** The event id of a shift on a nurse's page: two shifts on the same day and time never share one. */
-export function nurseShiftUid(nurseId: string, s: Pick<NurseRosterShift, 'date' | 'startTime' | 'acronym' | 'detail'>): string {
+export function nurseShiftUid(nurseId: string, s: Pick<NurseRosterShift, 'date' | 'startTime' | 'acronym' | 'detail' | 'assignmentId'>): string {
+  if (s.assignmentId) return `${nurseId}-${encodeURIComponent(s.assignmentId)}@clinicroster`;
   const acronym = String(s.acronym || '').replace(/[^A-Za-z0-9]/g, '') || 'shift';
   return `${nurseId}-${s.date}-${s.startTime.replace(':', '')}-${acronym}-${shortHash(s.detail || '')}@clinicroster`;
 }
@@ -147,7 +151,9 @@ export function buildNurseIcs(params: IcsParams): string {
     }
 
     let pairing = 'General Pool';
-    if (isFloatShift(a)) pairing = 'Float';
+    const timed = doctorCoverageText(a, params.doctors, duty);
+    if (timed) pairing = timed;
+    else if (isFloatShift(a)) pairing = 'Float';
     else if (a.doctorId) {
       const ids = a.secondDoctorId && a.secondDoctorId !== a.doctorId ? [a.doctorId, a.secondDoctorId] : [a.doctorId];
       pairing = ids.map((id) => doctorMap.get(id)?.fullName || 'Doctor').join(' + ');

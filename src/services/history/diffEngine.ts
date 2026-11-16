@@ -15,7 +15,7 @@ import {
 } from '../../types';
 
 import { isFloatShift } from '../engine/floatShift';
-import { assignmentDoctorIds } from '../engine/clinicModel';
+import { assignmentDoctorIds, doctorCoverageFingerprint, doctorCoverageText } from '../engine/clinicModel';
 
 export type ChangeType = 'ADDED' | 'REMOVED' | 'MODIFIED';
 
@@ -70,7 +70,10 @@ function formatAssignment(
   let targetName = 'Specialty Pool';
 
   const docIds = assignmentDoctorIds(asgn);
-  if (isFloatShift(asgn)) {
+  const timed = doctorCoverageText(asgn, [...doctorMap.values()], duty);
+  if (timed) {
+    targetName = timed.replace(/\n/g, '; ');
+  } else if (isFloatShift(asgn)) {
     targetName = 'Float';
   } else if (docIds.length > 0) {
     targetName = docIds.map((id) => doctorMap.get(id)?.fullName || 'Doctor').join(' + ');
@@ -209,8 +212,9 @@ export function computeScheduleDiff(
         (baseAsgn.specialtyId || '') !== (targetAsgn.specialtyId || '') ||
         baseAsgn.kind !== targetAsgn.kind;
       const isLockChanged = !!baseAsgn.locked !== !!targetAsgn.locked;
+      const isCoverageChanged = doctorCoverageFingerprint(baseAsgn) !== doctorCoverageFingerprint(targetAsgn);
 
-      if (isDutyChanged || isTargetChanged || isLockChanged) {
+      if (isDutyChanged || isTargetChanged || isLockChanged || isCoverageChanged) {
         const formattedBefore = formatAssignment(
           baseAsgn,
           dutyMap,
@@ -228,7 +232,10 @@ export function computeScheduleDiff(
         modifiedCount++;
 
         let desc = `${weekday} ${date}: `;
-        if (isDutyChanged && isTargetChanged) {
+        if (isCoverageChanged) {
+          desc += `changed doctor cover ${formattedBefore.targetName} → ${formattedAfter.targetName}`;
+          if (isDutyChanged) desc += `; changed shift ${formattedBefore.dutyName} (${formattedBefore.dutyTimes}) → ${formattedAfter.dutyName} (${formattedAfter.dutyTimes})`;
+        } else if (isDutyChanged && isTargetChanged) {
           desc += `changed ${formattedBefore.dutyAcronym} (${formattedBefore.targetName}) → ${formattedAfter.dutyAcronym} (${formattedAfter.targetName})`;
         } else if (isDutyChanged) {
           desc += `changed shift ${formattedBefore.dutyName} (${formattedBefore.dutyTimes}) → ${formattedAfter.dutyName} (${formattedAfter.dutyTimes})`;

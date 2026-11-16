@@ -14,10 +14,12 @@ import { CsvValue, downloadCsv, toCsv } from '../../utils/csv';
 import {
   Schedule,
   Assignment,
+  AvailabilityRequest,
   Nurse,
   DutyWindow,
   LeaveEntry,
   LeaveType,
+  LockEntry,
   SeniorityLevel,
   Doctor,
   DoctorSession,
@@ -32,7 +34,8 @@ import {
   NurseHoursAccounting,
 } from '../reports/hoursAccounting';
 import { isFloatShift } from '../engine/floatShift';
-import { assignmentCoversDoctor, assignmentDoctorIds } from '../engine/clinicModel';
+import { assignmentCoversDoctor, assignmentDoctorIds, doctorCoverageText, effectiveDoctorCoverage, uncoveredParts } from '../engine/clinicModel';
+import { assignmentCanCoverDoctor } from '../engine/assignmentPresence';
 
 export interface RosterExportOptions {
   clinicName: string;
@@ -50,6 +53,8 @@ export interface RosterExportOptions {
   rules?: Rule[];
   workingHoursPeriods?: WorkingHoursPeriod[];
   hoursHistory?: HoursHistory;
+  locks?: LockEntry[];
+  availabilityRequests?: AvailabilityRequest[];
   versionNumber?: number;
   blockIndex?: number; // Optional specific block export
   blockDates?: string[]; // Optional specific block dates
@@ -110,6 +115,8 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
   const specialtyMap = new Map(specialties.map((s) => [s.id, s]));
   const seniorityMap = new Map(seniorityLevels.map((s) => [s.id, s]));
   const leaveTypeMap = new Map(leaveTypes.map((l) => [l.id, l]));
+  const coverageContext = { nurses, doctors, sessions, roles, specialties, leaveEntries,
+    locks: options.locks || [], availabilityRequests: options.availabilityRequests || [] };
 
   const wb = XLSX.utils.book_new();
 
@@ -191,7 +198,8 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
           const s = specialtyMap.get(asgn.specialtyId);
           targetLabel = s ? s.code : 'POOL';
         }
-        row.push(`${duty?.acronym || 'D'} (${targetLabel || duty?.name || ''})`);
+        const timeline = doctorCoverageText(asgn, doctors, duty);
+        row.push(timeline ? `${duty?.acronym || 'D'}\n${timeline}` : `${duty?.acronym || 'D'} (${targetLabel || duty?.name || ''})`);
       } else {
         row.push('—');
       }
@@ -281,6 +289,7 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
     'Source',
     'Locked',
     'Notes',
+    'Doctor Cover Times',
   ]);
 
   assignments.forEach((a) => {
@@ -323,6 +332,7 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
       a.source,
       a.locked ? 'YES' : 'NO',
       a.note || '',
+      doctorCoverageText(a, doctors, duty),
     ]);
   });
 
@@ -404,11 +414,15 @@ export async function exportRosterToExcel(options: RosterExportOptions) {
     const dateObj = new Date(sess.date);
     const weekday = WEEKDAY_NAMES[dateObj.getUTCDay()];
 
-    // Find paired nurse
-    const asgn = assignments.find(
-      (a) => a.date === sess.date && assignmentCoversDoctor(a, sess.doctorId)
-    );
-    const pairedNurse = asgn ? nurseMap.get(asgn.nurseId)?.fullName : 'Unassigned';
+    const daySessions = sessions.filter(s => s.date === sess.date);
+    const cover = assignments.filter(a => a.date === sess.date && assignmentCoversDoctor(a, sess.doctorId) &&
+      assignmentCanCoverDoctor(a, coverageContext, sess.doctorId))
+      .flatMap(a => effectiveDoctorCoverage(a, dutyMap.get(a.dutyWindowId), daySessions)
+        .filter(range => range.doctorId === sess.doctorId)
+        .map(range => ({ ...range, nurse: nurseMap.get(a.nurseId)?.fullName || a.nurseId })));
+    const missing = uncoveredParts(sess.startTime, sess.endTime, cover);
+    const pairedNurse = sess.cancelled ? '' : [...cover.map(range => `${range.nurse} ${range.startTime} to ${range.endTime}`),
+      ...missing.map(range => `Unassigned ${range.start} to ${range.end}`)].join('\n') || 'Unassigned';
 
     docsAoa.push([
       sess.date,
@@ -496,7 +510,8 @@ export function exportRosterToCsvMatrix(options: RosterExportOptions): string {
           const s = specialtyMap.get(asgn.specialtyId);
           targetLabel = s ? s.code : '';
         }
-        const cellText = targetLabel ? `${duty?.acronym || 'D'}-${targetLabel}` : duty?.acronym || 'D';
+        const timeline = doctorCoverageText(asgn, doctors, duty);
+        const cellText = timeline ? `${duty?.acronym || 'D'}\n${timeline}` : targetLabel ? `${duty?.acronym || 'D'}-${targetLabel}` : duty?.acronym || 'D';
         row.push(cellText);
       } else {
         row.push('—');
@@ -549,6 +564,7 @@ export function exportRosterToCsvLong(options: RosterExportOptions): string {
     'Source',
     'Locked',
     'Notes',
+    'Doctor Cover Times',
   ];
 
   const rows: CsvValue[][] = [headers];
@@ -589,6 +605,7 @@ export function exportRosterToCsvLong(options: RosterExportOptions): string {
       a.source,
       a.locked ? 'YES' : 'NO',
       a.note || '',
+      doctorCoverageText(a, doctors, duty),
     ]);
   });
 

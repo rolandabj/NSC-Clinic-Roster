@@ -117,3 +117,26 @@ test('publication refuses changed leave affecting a following roster boundary du
   const fresh = { ...input, leaveEntries: [makeLeave({ nurseId: 'a', startDate: '2026-10-12', endDate: '2026-10-12' })] };
   await assert.rejects(() => assertPublicationCurrent(repository(fresh), input), /changed/);
 });
+test('publication refuses a timing only doctor coverage change after preview', async () => {
+  const a: Assignment = { ...boundaryShift('2026-10-05', 'sched-1'), kind: 'DOCTOR', doctorId: 'one',
+    doctorCoverage: [{ doctorId: 'one', startTime: '09:00', endTime: '13:00' }] };
+  const input = { ...expected(), assignments: [a] };
+  const fresh = { ...input, assignments: [{ ...a, doctorCoverage: [{ doctorId: 'one', startTime: '09:00', endTime: '14:00' }] }] };
+  await assert.rejects(() => assertPublicationCurrent(repository(fresh), input), /changed/);
+});
+test('publication treats reordered equivalent explicit coverage as the same input', async () => {
+  const a: Assignment = { ...boundaryShift('2026-10-05', 'sched-1'), kind: 'DOCTOR', doctorId: 'one', secondDoctorId: 'two',
+    doctorCoverage: [{ doctorId: 'one', startTime: '09:00', endTime: '13:00' }, { doctorId: 'two', startTime: '13:00', endTime: '17:00' }] };
+  const input = { ...expected(), assignments: [a] };
+  const fresh = { ...input, assignments: [{ ...a, doctorCoverage: [...a.doctorCoverage!].reverse() }] };
+  await assert.doesNotReject(() => assertPublicationCurrent(repository(fresh), input));
+});
+test('publication accepts touching intervals split differently when doctor coverage is unchanged', async () => {
+  const a: Assignment = { ...boundaryShift('2026-10-05', 'sched-1'), kind: 'DOCTOR', doctorId: 'one',
+    doctorCoverage: [{ doctorId: 'one', startTime: '09:00', endTime: '13:00' }] };
+  const input = { ...expected(), assignments: [a] };
+  const fresh = { ...input, assignments: [{ ...a, doctorCoverage: [
+    { doctorId: 'one', startTime: '11:00', endTime: '13:00' }, { doctorId: 'one', startTime: '09:00', endTime: '11:00' },
+  ] }] };
+  await assert.doesNotReject(() => assertPublicationCurrent(repository(fresh), input));
+});

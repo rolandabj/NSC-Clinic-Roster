@@ -7,6 +7,7 @@
  * since Phase 7, slice 3b.
  */
 
+import { assertTimedFillSupported } from '../../services/engine/timedCoverageSafety';
 import React, { useState, useEffect } from 'react';
 import { useLatestCallback } from '../common/useLatestCallback';
 import { Copy, Layers, Save, Sparkles, Trash2 } from 'lucide-react';
@@ -117,6 +118,7 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
             kind: a.kind,
             targetRefId: a.doctorId || a.clinicalRoleId || a.specialtyId,
             ...(a.kind === 'DOCTOR' && a.secondDoctorId ? { secondTargetRefId: a.secondDoctorId } : {}),
+            ...(a.doctorCoverage !== undefined ? { doctorCoverage: a.doctorCoverage } : {}),
           });
         }
       }
@@ -238,6 +240,11 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
   const handleApplyTemplate = async () => {
     const template = savedTemplates.find((t) => t.id === selectedTemplateId);
     if (!template) return;
+    if (template.patterns.some(p => p.doctorCoverage !== undefined)) {
+      notify('This template has timed doctor cover and cannot be applied yet.', 'warning'); return;
+    }
+    try { assertTimedFillSupported(schedule, 'GENERATE_ALL', assignments, locks); }
+    catch (error) { notify((error as Error).message, 'error'); return; }
 
     // One shift per nurse per weekday, as the template gives it (the first one if a template has two).
     const byNurseWeekday = new Map<string, TemplateSlotPattern>();
@@ -288,6 +295,10 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
     try {
       const sourceAsgns = await repo.list('assignments', { field: 'scheduleId', operator: '==', value: selectedSourceScheduleId });
       const sourceSchedule = allSchedules.find((s) => s.id === selectedSourceScheduleId);
+      assertTimedFillSupported(schedule, 'GENERATE_ALL', assignments, locks);
+      if (sourceAsgns.some(a => a.doctorCoverage !== undefined)) {
+        throw new Error('The source roster has timed doctor cover and cannot be copied yet.');
+      }
 
       // Build weekday pattern from source schedule
       const patternsByNurseWeekday = new Map<string, Assignment>();

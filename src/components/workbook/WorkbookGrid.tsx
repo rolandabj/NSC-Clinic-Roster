@@ -23,6 +23,8 @@ import { ValidationReport, ValidationFinding } from '../../services/validation/S
 import { summarizeNurseHours, NurseHoursSummary } from '../../services/reports/hoursAccounting';
 import { formatDate } from '../../utils/dateUtils';
 import { outsideNurseList } from '../../services/engine/nurseList';
+import { doctorCoverageText } from '../../services/engine/clinicModel';
+import { preserveTimedDoctorCoverage } from '../../services/engine/timedCoverageSafety';
 import { doctorPairingProblems } from '../../services/engine/doctorPairing';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import { applyPreferenceFocus } from '../../services/engine/preferenceOrder';
@@ -723,7 +725,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     if (editorCategory === 'DUTY') {
       const isLocked = !editorAllowOverwrite;
 
-      const newAssignment: Assignment = {
+      let newAssignment: Assignment = {
         id: `asgn-manual-${nurseId}-${date}-${Date.now()}`,
         scheduleId: schedule.id,
         nurseId,
@@ -738,7 +740,10 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         source: isLocked ? 'LOCK' : 'MANUAL',
         note: editorNote.trim() || (isLocked ? 'Pinned duty shift' : undefined),
       };
-      const pairingProblems = doctorPairingProblems(newAssignment, doctors);
+      try {
+        newAssignment = preserveTimedDoctorCoverage(assignments.find(a => a.nurseId === nurseId && a.date === date), newAssignment);
+      } catch (error) { notify((error as Error).message, 'error'); return false; }
+      const pairingProblems = doctorPairingProblems(newAssignment, doctors, { duty: dutyMap.get(newAssignment.dutyWindowId), sessions });
       if (pairingProblems.length) { notify(pairingProblems.join(' '), 'error'); return false; }
       const nurse = nurseMap.get(nurseId);
       if (nurse?.doctorEligibility != null && outsideNurseList(nurse, newAssignment, { doctors, specialties, sessions })) {
@@ -757,6 +762,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
           assignmentKind: editorKind,
           targetRefId: editorTargetRefId,
           ...(newAssignment.secondDoctorId ? { secondTargetRefId: newAssignment.secondDoctorId } : {}),
+          ...(newAssignment.doctorCoverage !== undefined ? { doctorCoverage: newAssignment.doctorCoverage } : {}),
           note: editorNote.trim() || 'Pinned duty assignment',
           createdAt: new Date().toISOString(),
         };
@@ -884,9 +890,13 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     );
     if (onLeave) return;
 
+    if (assignments.some(a => a.nurseId === nurseId && a.date === date && a.doctorCoverage !== undefined)) {
+      notify('Clear this timed duty before pasting another duty here.', 'error'); return;
+    }
     const filtered = assignments.filter((a) => !(a.nurseId === nurseId && a.date === date));
     const pasted: Assignment = {
       ...clipboardAssignment,
+      scheduleId: schedule.id,
       id: `asgn-manual-${nurseId}-${date}-${Date.now()}`,
       nurseId,
       date,
@@ -894,7 +904,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       locked: false,
       source: 'MANUAL',
     };
-    const pairingProblems = doctorPairingProblems(pasted, doctors);
+    const pairingProblems = doctorPairingProblems(pasted, doctors, { duty: dutyMap.get(pasted.dutyWindowId), sessions });
     if (pairingProblems.length) { notify(pairingProblems.join(' '), 'error'); return; }
     const nurse = nurseMap.get(nurseId);
     if (nurse?.doctorEligibility != null && outsideNurseList(nurse, pasted, { doctors, specialties, sessions })) {
@@ -1098,6 +1108,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     if (lock?.mode === 'OFF') return 'Day off, pinned';
     if (!asgn) return '';
     const duty = dutyMap.get(asgn.dutyWindowId);
+    if (asgn.doctorCoverage !== undefined) return `${duty ? `${duty.name} shift` : 'Shift'}, ${doctorCoverageText(asgn, doctors, duty)}${pinned}`;
     if (isFloatShift(asgn)) return `${duty ? `${duty.name} shift` : 'Shift'}, float${pinned}`;
     const docIds = assignmentDoctorIds(asgn);
     const what = docIds.length > 0
@@ -1212,6 +1223,10 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
           key={cellKeyOf(editorTarget.nurseId, editorTarget.date)}
           editorTarget={editorTarget}
           defaults={editorDefaults}
+          timedCoverageSummary={(() => {
+            const a = assignments.find(a => a.nurseId === editorTarget.nurseId && a.date === editorTarget.date);
+            return a?.doctorCoverage !== undefined ? doctorCoverageText(a, doctors, dutyMap.get(a.dutyWindowId)) || 'Review doctor cover times.' : undefined;
+          })()}
           nurseMap={nurseMap}
           doctors={doctors}
           doctorMap={doctorMap}

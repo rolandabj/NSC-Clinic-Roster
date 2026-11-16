@@ -14,9 +14,19 @@ Plan: `tasks/scheduler-improvement-plan.md`. Implementation approval does not ap
 - [x] Guide and graph updated; work committed and pushed
 - [x] Owner review before Stage 2 (approved on 16-11-2026)
 
+## Stage 2
+
+- [x] Optional doctor cover times on duties, pins and templates
+- [x] Shared exact interval validation, busy time and free time
+- [x] Existing views, reports, communications and calendars read the times
+- [x] Timing changes affect history, reviews and publication freshness
+- [x] Notes, pins and copies preserve timing; automatic timed writers remain guarded
+- [x] Unit, type, lint, build, email, browser and clinic replay checks
+- [x] Guide and graph updated; work committed and pushed
+
 ## Remaining stages
 
-- [ ] Stage 2: timed cover foundation and all readers
+- [x] Stage 2: timed cover foundation and all readers
 - [ ] Owner review before Stage 3
 - [ ] Stage 3: sequential cover, partial Float relief and manual editing
 - [ ] Owner review before Stage 4

@@ -1,7 +1,7 @@
 import type { Assignment, ClinicalRole, Doctor, DoctorSession, DutyWindow, LeaveEntry, LeaveType, LockEntry,
   Nurse, Rule, Schedule, SeniorityLevel, Specialty, WorkingHoursPeriod } from '../../types';
 import type { IRepository } from '../repository/IRepository';
-import { resolveClinicSetup, type ClinicSetup } from '../engine/clinicModel';
+import { doctorCoverageFingerprint, resolveClinicSetup, type ClinicSetup } from '../engine/clinicModel';
 import { loadClinicSetup } from '../engine/clinicSetupService';
 
 export interface PublicationInputs {
@@ -25,20 +25,25 @@ function content(input: PublicationInputs) {
   const inRoster = (date?: string) => !!date && date >= s.startDate && date <= s.endDate;
   const boundaryDates = [s.startDate, s.endDate, ...clinic.priorAssignments.map(a => a.date), ...clinic.followingAssignments.map(a => a.date)].sort();
   const boundaryStart = boundaryDates[0], boundaryEnd = boundaryDates[boundaryDates.length - 1];
+  const timed = (a: Assignment) => a.doctorCoverage === undefined ? a : { ...a, doctorCoverage: doctorCoverageFingerprint(a) };
+  const timedLock = (lock: LockEntry) => lock.doctorCoverage === undefined ? lock : { ...lock,
+    doctorCoverage: doctorCoverageFingerprint({ kind: lock.assignmentKind, doctorId: lock.targetRefId,
+      secondDoctorId: lock.secondTargetRefId, doctorCoverage: lock.doctorCoverage }),
+  };
   return canonical({ ...lists,
     clinicSetup: { openTime: clinic.openTime, closeTime: clinic.closeTime,
       holidayDates: [...clinic.holidays].filter(inRoster),
-      priorAssignments: clinic.priorAssignments, followingAssignments: clinic.followingAssignments,
+      priorAssignments: clinic.priorAssignments.map(timed), followingAssignments: clinic.followingAssignments.map(timed),
       availabilityRequests: (setup.availabilityRequests || []).filter(r => inRoster(r.date) || inRoster(r.holidayDate)),
     },
     schedule: { id: s.id, name: s.name, startDate: s.startDate, endDate: s.endDate,
       hoursTargetFullTime: s.hoursTargetFullTime, workingHoursPeriodId: s.workingHoursPeriodId },
-    assignments: input.assignments.filter(a => a.scheduleId === s.id),
+    assignments: input.assignments.filter(a => a.scheduleId === s.id).map(timed),
     nurses: input.nurses.filter(n => n.active),
     doctors: input.doctors.filter(d => d.active),
     sessions: input.sessions.filter(x => x.date >= s.startDate && x.date <= s.endDate),
     leaveEntries: input.leaveEntries.filter(x => x.startDate <= boundaryEnd && x.endDate >= boundaryStart),
-    locks: input.locks.filter(x => x.date >= s.startDate && x.date <= s.endDate),
+    locks: input.locks.filter(x => x.date >= s.startDate && x.date <= s.endDate).map(timedLock),
   });
 }
 
