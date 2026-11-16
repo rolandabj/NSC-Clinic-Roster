@@ -55,7 +55,7 @@ test('partial doctor cover records the exact missing duration and affected nurse
   assert.deepEqual(f.cellRefs, [{ nurseId: 'n1', date }]);
 });
 
-test('a necessary overlapping handover is noted with only its shared session time', () => {
+test('a necessary handover has exact shared time while unrecorded overlap remains an error', () => {
   const report = check([shift('n1', 'early', 'doctor'), shift('n2', 'late', 'doctor')],
     [duty('early', '09:00', '19:00'), duty('late', '11:00', '21:00')], [session()]);
   const f = report.findings.find(f => f.id.startsWith('session-handover-'))!;
@@ -64,6 +64,7 @@ test('a necessary overlapping handover is noted with only its shared session tim
   assert.equal(f.amount, 8);
   assert.match(f.message, /11:00 to 19:00/);
   assert.deepEqual(f.affectedNurseIds.sort(), ['n1', 'n2']);
+  assert.equal(report.findings.find(f => f.id.startsWith('session-overlap-'))?.severity, 'ERROR');
 });
 
 test('a touching handover is not duplicate coverage', () => {

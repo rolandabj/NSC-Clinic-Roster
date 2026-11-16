@@ -24,7 +24,9 @@ import { summarizeNurseHours, NurseHoursSummary } from '../../services/reports/h
 import { formatDate } from '../../utils/dateUtils';
 import { outsideNurseList } from '../../services/engine/nurseList';
 import { doctorCoverageText } from '../../services/engine/clinicModel';
-import { preserveTimedDoctorCoverage } from '../../services/engine/timedCoverageSafety';
+import { manualDoctorCoverageOf } from '../../services/engine/manualDoctorCoverage';
+import { recordManualDoctorOverlaps } from '../../services/engine/manualDoctorOverlap';
+import { authService } from '../../services/auth/authService';
 import { doctorPairingProblems } from '../../services/engine/doctorPairing';
 import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
 import { applyPreferenceFocus } from '../../services/engine/preferenceOrder';
@@ -489,12 +491,20 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         kind: existingAsgn.kind,
         targetRefId: existingAsgn.doctorId || existingAsgn.clinicalRoleId || existingAsgn.specialtyId || '',
         secondTargetRefId: existingAsgn.kind === 'DOCTOR' ? existingAsgn.secondDoctorId || '' : '',
+        ...(existingAsgn.doctorCoverage !== undefined ? { doctorCoverage: existingAsgn.doctorCoverage } : {}),
         note: existingAsgn.note || '',
         allowOverwrite: !existingAsgn.locked && existingAsgn.source !== 'LOCK' && !existingLock,
         leaveTypeId: leaveTypes.find((l) => l.acronym === 'BL')?.id || leaveTypes[0]?.id || '',
         leaveHours,
       };
     }
+    if (existingLock?.mode === 'ASSIGNMENT') return {
+      category: 'DUTY', dutyId: existingLock.dutyWindowId || dutyWindows[0]?.id || '',
+      kind: existingLock.assignmentKind || 'DOCTOR', targetRefId: existingLock.targetRefId || '',
+      secondTargetRefId: existingLock.secondTargetRefId || '', doctorCoverage: existingLock.doctorCoverage,
+      note: existingLock.note || '', allowOverwrite: false,
+      leaveTypeId: leaveTypes.find(l => l.acronym === 'BL')?.id || leaveTypes[0]?.id || '', leaveHours,
+    };
     // Empty cell
     const targetNurse = nurseMap.get(nurseId);
     const isTargetExclusiveNC = targetNurse ? isExclusiveNurseClinic(targetNurse, roles) : false;
@@ -701,6 +711,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       kind: editorKind,
       targetRefId: editorTargetRefId,
       secondTargetRefId: editorSecondTargetRefId,
+      doctorCoverage: editorDoctorCoverage,
       note: editorNote,
       leaveTypeId: editorLeaveTypeId,
       allowOverwrite: editorAllowOverwrite,
@@ -741,7 +752,9 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
         note: editorNote.trim() || (isLocked ? 'Pinned duty shift' : undefined),
       };
       try {
-        newAssignment = preserveTimedDoctorCoverage(assignments.find(a => a.nurseId === nurseId && a.date === date), newAssignment);
+        const doctorCoverage = manualDoctorCoverageOf({ ...newAssignment, doctorCoverage: editorDoctorCoverage },
+          dutyMap.get(newAssignment.dutyWindowId), sessions, assignments.find(a => a.nurseId === nurseId && a.date === date));
+        if (doctorCoverage !== undefined) newAssignment = { ...newAssignment, doctorCoverage };
       } catch (error) { notify((error as Error).message, 'error'); return false; }
       const pairingProblems = doctorPairingProblems(newAssignment, doctors, { duty: dutyMap.get(newAssignment.dutyWindowId), sessions });
       if (pairingProblems.length) { notify(pairingProblems.join(' '), 'error'); return false; }
@@ -843,6 +856,12 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       }
     }
 
+    if (editorCategory === 'DUTY') {
+      const index = nextAssignments.findIndex(a => a.nurseId === nurseId && a.date === date);
+      nextAssignments[index] = recordManualDoctorOverlaps(nextAssignments[index], nextAssignments,
+        { nurses, doctors, sessions, specialties, roles, leaveEntries: nextLeaves, locks: nextLocks,
+          availabilityRequests, dutyWindows }, authService.getCurrentUser()?.uid || '', new Date().toISOString());
+    }
     emitCellEdit(nextAssignments, nextLocks, nextLeaves);
     return true;
   };
@@ -890,11 +909,8 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
     );
     if (onLeave) return;
 
-    if (assignments.some(a => a.nurseId === nurseId && a.date === date && a.doctorCoverage !== undefined)) {
-      notify('Clear this timed duty before pasting another duty here.', 'error'); return;
-    }
     const filtered = assignments.filter((a) => !(a.nurseId === nurseId && a.date === date));
-    const pasted: Assignment = {
+    let pasted: Assignment = {
       ...clipboardAssignment,
       scheduleId: schedule.id,
       id: `asgn-manual-${nurseId}-${date}-${Date.now()}`,
@@ -904,6 +920,10 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       locked: false,
       source: 'MANUAL',
     };
+    try {
+      const doctorCoverage = manualDoctorCoverageOf(pasted, dutyMap.get(pasted.dutyWindowId), sessions);
+      if (doctorCoverage !== undefined) pasted = { ...pasted, doctorCoverage };
+    } catch (error) { notify((error as Error).message, 'error'); return; }
     const pairingProblems = doctorPairingProblems(pasted, doctors, { duty: dutyMap.get(pasted.dutyWindowId), sessions });
     if (pairingProblems.length) { notify(pairingProblems.join(' '), 'error'); return; }
     const nurse = nurseMap.get(nurseId);
@@ -911,6 +931,8 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       notify('This nurse is not eligible for the copied doctor or specialty. Review clinical eligibility in the nurse profile.', 'error');
       return;
     }
+    pasted = recordManualDoctorOverlaps(pasted, [...filtered, pasted], { nurses, doctors, sessions, specialties, roles,
+      leaveEntries, locks, availabilityRequests, dutyWindows }, authService.getCurrentUser()?.uid || '', new Date().toISOString());
     onAssignmentsChange([...filtered, pasted]);
   };
 
@@ -968,7 +990,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
       closePopupToCell();
       // A quick choice is a hand change, not a pinned day (pinning is in More options),
       // so a wrong tap can be changed with another tap.
-      void saveCellChoice(target, { ...base, note: '', leaveHours: '', allowOverwrite: true, ...choice });
+      void saveCellChoice(target, { ...base, doctorCoverage: undefined, note: '', leaveHours: '', allowOverwrite: true, ...choice });
     };
     const shiftWords = (d?: DutyWindow) => (d ? `${d.acronym} shift ${d.startTime} to ${d.endTime}` : '');
 
@@ -1000,13 +1022,15 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
           onSelect: pick({ category: 'DUTY', kind: 'DOCTOR', targetRefId: sess.doctorId, secondTargetRefId: '', dutyId: duty?.id || base.dutyId }),
         });
       }
-      if (asgn?.kind === 'DOCTOR' && asgn.doctorId && doctorMap.get(asgn.doctorId)?.lowAcuity) {
+      if (asgn?.kind === 'DOCTOR' && asgn.doctorId && doctorMap.has(asgn.doctorId)) {
         const firstDoc = doctorMap.get(asgn.doctorId)!;
         const firstSess = daySessions.find((s) => s.doctorId === asgn.doctorId);
         for (const sess of daySessions) {
           if (sess.doctorId === asgn.doctorId) continue;
           const doc = doctorMap.get(sess.doctorId);
-          if (!doc?.lowAcuity) continue;
+          if (!doc || !firstSess) continue;
+          const concurrent = firstSess.startTime < sess.endTime && firstSess.endTime > sess.startTime;
+          if (concurrent && (!firstDoc.lowAcuity || !doc.lowAcuity)) continue;
           const minStart = firstSess ? (firstSess.startTime < sess.startTime ? firstSess.startTime : sess.startTime) : sess.startTime;
           const maxEnd = firstSess ? (firstSess.endTime > sess.endTime ? firstSess.endTime : sess.endTime) : sess.endTime;
           const pairDuty = bestDutyFor(minStart, maxEnd, asgn.dutyWindowId);
@@ -1014,7 +1038,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
             key: `pair-${asgn.doctorId}-${sess.doctorId}`,
             label: `${firstDoc.fullName} + ${doc.fullName}`,
             detail: `${minStart} to ${maxEnd}${pairDuty ? ` · ${shiftWords(pairDuty)}` : ''}`,
-            tag: 'Low acuity pair',
+            tag: concurrent ? 'Low acuity pair' : 'Sequential cover',
             current: asgn.secondDoctorId === sess.doctorId,
             onSelect: pick({
               category: 'DUTY',
@@ -1223,10 +1247,7 @@ const WorkbookGridView: React.FC<WorkbookGridProps> = ({
           key={cellKeyOf(editorTarget.nurseId, editorTarget.date)}
           editorTarget={editorTarget}
           defaults={editorDefaults}
-          timedCoverageSummary={(() => {
-            const a = assignments.find(a => a.nurseId === editorTarget.nurseId && a.date === editorTarget.date);
-            return a?.doctorCoverage !== undefined ? doctorCoverageText(a, doctors, dutyMap.get(a.dutyWindowId)) || 'Review doctor cover times.' : undefined;
-          })()}
+          sessions={sessions}
           nurseMap={nurseMap}
           doctors={doctors}
           doctorMap={doctorMap}

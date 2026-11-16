@@ -24,11 +24,21 @@ Plan: `tasks/scheduler-improvement-plan.md`. Implementation approval does not ap
 - [x] Unit, type, lint, build, email, browser and clinic replay checks
 - [x] Guide and graph updated; work committed and pushed
 
+## Stage 3
+
+- [x] Exact generated handovers and two eligible doctors in sequence
+- [x] Partial Float relief and permitted configured duty extensions
+- [x] Exact manual overlap intent, Check findings and saved audit events
+- [x] Timed manual editor, pins, pastes, swaps, templates and copies
+- [x] Fixed selected date boundaries and protected manual records
+- [x] Final unit, type, lint, build, email, browser and clinic replay checks
+- [x] Guide and graph updated; work committed and pushed
+
 ## Remaining stages
 
 - [x] Stage 2: timed cover foundation and all readers
 - [x] Owner review before Stage 3 (approved on 16-11-2026)
-- [ ] Stage 3: sequential cover, partial Float relief and manual editing
+- [x] Stage 3: sequential cover, partial Float relief and manual editing
 - [ ] Owner review before Stage 4
 - [ ] Stage 4: stronger search, worker and automatic save
 - [ ] Owner review before Stage 5

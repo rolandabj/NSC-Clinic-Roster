@@ -53,7 +53,7 @@ import {
   WorkingHoursPeriod,
   AvailabilityRequest,
 } from '../../types';
-import { assertTimedFillSupported } from '../../services/engine/timedCoverageSafety';
+import { writeManualOverlapAudits } from '../../services/schedule/manualOverlapAudit';
 import { loadClinicSetup } from '../../services/engine/clinicSetupService';
 import { decideRequest, recordHolidayDayOff } from '../../services/requests/staffRequestService';
 import { authService } from '../../services/auth/authService';
@@ -346,6 +346,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   }, [isExpandedView]);
 
   const repo = getRepository();
+  const pendingOverlapAuditScopes = useRef(new Set<string>());
+  const warnedOverlapAuditScopes = useRef(new Set<string>());
+  const overlapAuditNames = useRef({ doctors, nurses });
+  overlapAuditNames.current = { doctors, nurses };
 
   // Saving: only what changed since it was loaded or last saved is written, one
   // save at a time, and records this browser never saw are never deleted. The
@@ -417,6 +421,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setSchedules(uniqueSchedules);
       setNurses(nList.filter((n) => n.active));
       setDoctors(dList.filter((d) => d.active));
+      overlapAuditNames.current = { doctors: dList, nurses: nList };
       setSessions(sessList);
       // Pinned days or leave changed here but not saved yet stay on screen (see adoptLoaded).
       const shownLocks = syncers.locks.adoptLoaded(lkList, 'all');
@@ -517,6 +522,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       setup ? null : 'Opening hours, holidays, availability and surrounding rosters could not be loaded. Reload before filling or publishing.'
     );
     setAssignments(shown);
+    if (list.some(a => a.manualDoctorOverlaps?.length)) {
+      pendingOverlapAuditScopes.current.add(sched.id);
+      void flushOverlapAudit(sched.id);
+    }
     setVersions(withoutBackups(vList).sort((a, b) => b.number - a.number));
     setBackupVersions(vList.filter((v) => v.kind === 'BACKUP'));
     runValidation(sched, shown, inputs);
@@ -549,6 +558,22 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
 
   const notLoadedMessage = 'Not saved: the workspace did not load completely. Reload the page before editing.';
 
+  /** Audit only stored overlap intent. Failed audit writes are retried after the shift save. */
+  const flushOverlapAudit = async (scheduleId: string) => {
+    if (syncers.assignments.hasUnsaved(scheduleId)) return;
+    try {
+      const saved = await repo.list('assignments', { field: 'scheduleId', operator: '==', value: scheduleId });
+      await writeManualOverlapAudits(repo, saved, overlapAuditNames.current);
+      pendingOverlapAuditScopes.current.delete(scheduleId);
+      warnedOverlapAuditScopes.current.delete(scheduleId);
+    } catch {
+      if (!warnedOverlapAuditScopes.current.has(scheduleId)) {
+        warnedOverlapAuditScopes.current.add(scheduleId);
+        notify('The shifts are saved. Their overlap audit could not be recorded yet and will retry.', 'warning');
+      }
+    }
+  };
+
   /** Saves a roster's shifts (only the changed ones). */
   const persistAssignments = async (scheduleId: string, list: Assignment[]): Promise<boolean> => {
     if (!workspaceLoadedRef.current) {
@@ -556,7 +581,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       return false;
     }
     const withSchedule = list.map((a) => (a.scheduleId ? a : { ...a, scheduleId }));
-    return trackSave(syncers.assignments.save(withSchedule, (a) => a.scheduleId === scheduleId, scheduleId), 'Shifts');
+    if (withSchedule.some(a => a.manualDoctorOverlaps?.length)) pendingOverlapAuditScopes.current.add(scheduleId);
+    const saved = await trackSave(syncers.assignments.save(withSchedule, (a) => a.scheduleId === scheduleId, scheduleId), 'Shifts');
+    if (saved && pendingOverlapAuditScopes.current.has(scheduleId)) await flushOverlapAudit(scheduleId);
+    return saved;
   };
 
   const persistLocks = (next: LockEntry[]) => {
@@ -596,8 +624,11 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
       ['Leave', syncers.leaveEntries],
     ] as const) {
       const retry = syncer.retry();
-      if (retry) void trackSave(retry, what);
+      if (retry) void trackSave(retry, what).then(ok => {
+        if (ok && what === 'Shifts') for (const scheduleId of pendingOverlapAuditScopes.current) void flushOverlapAudit(scheduleId);
+      });
     }
+    for (const scheduleId of pendingOverlapAuditScopes.current) void flushOverlapAudit(scheduleId);
   });
 
   useEffect(() => {
@@ -867,8 +898,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const handleOpenPreflight = async (mode: RegenerateMode, targetSchedule?: Schedule) => {
     const sched = targetSchedule || activeSchedule;
     if (!sched) return;
-    try { assertTimedFillSupported(sched, mode, assignments, locks); }
-    catch (error) { notify((error as Error).message, 'error'); return; }
 
     let currentSessions = sessions;
 
@@ -963,8 +992,6 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   // --- RUN DETERMINISTIC ENGINE PASS ---
   const handleExecuteGeneration = async () => {
     if (!activeSchedule) return;
-    try { assertTimedFillSupported(activeSchedule, activeGenerationMode, assignments, locks); }
-    catch (error) { notify((error as Error).message, 'error'); return; }
     setIsGenerating(true);
 
     try {
@@ -2266,6 +2293,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           leaveEntries={leaveEntries}
           locks={locks}
           allSchedules={schedules}
+          doctors={doctors}
+          sessions={sessions}
+          roles={roles}
+          specialties={specialties}
+          rules={rules}
+          availabilityRequests={availabilityRequests}
+          surroundingAssignments={surroundingAssignments}
+          checkRoster={checkRoster}
           isOpen={isTemplateModalOpen}
           onClose={() => setIsTemplateModalOpen(false)}
           onApplyAssignments={(updated, note) => {

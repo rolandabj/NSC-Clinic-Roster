@@ -372,6 +372,18 @@ export interface AllocationReview {
   reason: string;
 }
 
+/** Exact shared doctor time deliberately kept by a planner's saved edit. */
+export interface ManualDoctorOverlap {
+  doctorId: string;
+  date: IsoDateString;
+  startTime: string;
+  endTime: string;
+  nurseIds: string[];
+  members: { assignmentId: string; signature: string }[];
+  recordedBy: string;
+  recordedAt: string;
+}
+
 // 14. Assignment (a filled roster cell)
 export interface Assignment {
   id: string;
@@ -389,6 +401,7 @@ export interface Assignment {
   source: AssignmentSource;
   note?: string;
   allocationReview?: AllocationReview | null;
+  manualDoctorOverlaps?: ManualDoctorOverlap[];
 }
 
 // 15. ScheduleVersion

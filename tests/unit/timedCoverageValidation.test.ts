@@ -107,7 +107,7 @@ test('timed Float diagnostics do not consume the only qualified Nurse Clinic cov
     shift('dedicated-nc', nc.id, { kind: 'CLINICAL_ROLE', doctorId: undefined, clinicalRoleId: 'NC' })] };
   assert.deepEqual(timedFloatRelief(staffed, sharedPair).map(r => [r.startTime, r.endTime]), [['13:15', '17:00']]);
 });
-test('the Stage 2 Float mutation pass preserves timed pairs and timed Float candidates', () => {
+test('the Float mutation pass preserves retained manual timed pairs and timed Float candidates', () => {
   const float = shift('float', secondNurse.id, { kind: 'CLINICAL_ROLE', doctorId: undefined, clinicalRoleId: 'role-float' });
   const explicit = [sharedPair, float];
   assert.deepEqual(applySeparateFloatCover(floatContext(explicit), () => true), explicit);
@@ -116,8 +116,8 @@ test('the Stage 2 Float mutation pass preserves timed pairs and timed Float cand
   const legacy = [legacyPair, timedHelper];
   assert.deepEqual(applySeparateFloatCover(floatContext(legacy), () => true), legacy);
 });
-test('the Stage 2 repair pass cannot repurpose a timed duty to hide its declared gap', async () => {
-  const timed = shift('timed', nurse.id, { source: 'GENERATED', doctorCoverage: [interval('one', '09:00', '13:15')] });
+test('the repair pass preserves a manual timed duty and its declared gap', async () => {
+  const timed = shift('timed', nurse.id, { source: 'MANUAL', doctorCoverage: [interval('one', '09:00', '13:15')] });
   const assignments = [timed];
   const result = await repairCoverage({ assignments, dates: [date], sessions: [sessions[0]], nurses: [nurse], duties: [DAY_DUTY], roles: [], clinic,
     minFreeNurses: 0, movable: () => true, canWorkOnDate: () => true, canPair: () => true,

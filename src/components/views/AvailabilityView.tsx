@@ -35,14 +35,20 @@ import {
   ClinicalRole,
   PublicHoliday,
   IsoDateString,
+  DoctorSession,
 } from '../../types';
 import { formatDate, formatDayDate } from '../../utils/dateUtils';
 import { countPendingApprovals, decideRequest } from '../../services/requests/staffRequestService';
 import { canApproveRequests, canEditClinicData } from '../../services/auth/access';
 import { authService } from '../../services/auth/authService';
 import { NurseSelfServicePanel } from './NurseSelfServicePanel';
-import { doctorCoverageText } from '../../services/engine/clinicModel';
-import { timedPinNoteUpdate } from '../../services/engine/timedCoverageSafety';
+import { assignmentDoctorIds } from '../../services/engine/clinicModel';
+import { assertTimedPinCurrent } from '../../services/engine/timedCoverageSafety';
+import { doctorCoverageDraftOf, manualDoctorCoverageOf } from '../../services/engine/manualDoctorCoverage';
+import { doctorPairingProblems } from '../../services/engine/doctorPairing';
+import { outsideNurseList } from '../../services/engine/nurseList';
+import { isExclusiveNurseClinic } from '../../services/engine/nurseClinicUtils';
+import { DoctorCoverageFields } from '../workbook/grid/DoctorCoverageFields';
 
 interface AvailabilityViewProps {
   context: ClinicContextState;
@@ -70,6 +76,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   const [locks, setLocks] = useState<LockEntry[]>([]);
   const [dutyWindows, setDutyWindows] = useState<DutyWindow[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [sessions, setSessions] = useState<DoctorSession[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [clinicalRoles, setClinicalRoles] = useState<ClinicalRole[]>([]);
   const [holidays, setHolidays] = useState<PublicHoliday[]>([]);
@@ -108,6 +115,14 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
   // Lock Entry Modal
   const [isLockModalOpen, setIsLockModalOpen] = useState(false);
   const [editingLockEntry, setEditingLockEntry] = useState<Partial<LockEntry> | null>(null);
+  const [pinError, setPinError] = useState('');
+  const pinErrorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => setPinError(''), [editingLockEntry, isLockModalOpen]);
+  useEffect(() => {
+    if (!pinError) return;
+    pinErrorRef.current?.scrollIntoView({ block: 'nearest' });
+    pinErrorRef.current?.focus({ preventScroll: true });
+  }, [pinError]);
 
   // Lock Override Modal (when user clicks an existing lock)
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
@@ -141,7 +156,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
 
   const loadData = useLatestCallback(async () => {
     try {
-      const [nList, ltList, leList, lkList, dwList, dList, spList, crList, hList] =
+      const [nList, ltList, leList, lkList, dwList, dList, spList, crList, hList, sessionList] =
         await Promise.all([
           repo.list('nurses'),
           repo.list('leaveTypes'),
@@ -152,6 +167,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
           repo.list('specialties'),
           repo.list('clinicalRoles'),
           repo.list('holidays'),
+          repo.list('doctorSessions'),
         ]);
       setNurses(nList.filter((n) => n.active));
       setLeaveTypes(ltList);
@@ -159,6 +175,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       setLocks(lkList);
       setDutyWindows(dwList);
       setDoctors(dList);
+      setSessions(sessionList);
       setSpecialties(spList);
       setClinicalRoles(crList);
       setHolidays(hList);
@@ -476,51 +493,55 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
     e.preventDefault();
     if (!editingLockEntry || !editingLockEntry.nurseId || !editingLockEntry.date) return;
 
-    const firstDoc =
-      editingLockEntry.assignmentKind === 'DOCTOR' ? doctors.find((d) => d.id === editingLockEntry.targetRefId) : undefined;
-    const secondDoc =
-      editingLockEntry.assignmentKind === 'DOCTOR' && editingLockEntry.secondTargetRefId
-        ? doctors.find((d) => d.id === editingLockEntry.secondTargetRefId)
-        : undefined;
-    const validSecondTargetRefId =
-      editingLockEntry.mode !== 'OFF' && firstDoc?.lowAcuity && secondDoc?.lowAcuity && secondDoc.id !== firstDoc.id
-        ? secondDoc.id
-        : undefined;
-
     try {
+      const mode = editingLockEntry.mode || 'ASSIGNMENT';
+      const [freshSessions, freshDuties, freshDoctors, nurse, freshLocks] = await Promise.all([
+        repo.list('doctorSessions'), repo.list('dutyWindows'), repo.list('doctors'),
+        repo.get('nurses', editingLockEntry.nurseId), repo.list('locks'),
+      ]);
+      const fields: Omit<LockEntry, 'id' | 'createdAt'> = { nurseId: editingLockEntry.nurseId,
+        date: editingLockEntry.date, mode, note: editingLockEntry.note || '',
+        ...(mode === 'ASSIGNMENT' ? { dutyWindowId: editingLockEntry.dutyWindowId,
+          assignmentKind: editingLockEntry.assignmentKind, targetRefId: editingLockEntry.targetRefId,
+          ...(editingLockEntry.secondTargetRefId ? { secondTargetRefId: editingLockEntry.secondTargetRefId } : {}) } : {}) };
+      if (mode === 'ASSIGNMENT') {
+        const duty = freshDuties.find(d => d.id === fields.dutyWindowId && d.active !== false);
+        if (!duty || !nurse?.active) throw new Error('Choose an active nurse and shift.');
+        if (fields.assignmentKind === 'DOCTOR') {
+          const choice = { date: fields.date, kind: 'DOCTOR' as const, dutyWindowId: duty.id,
+            doctorId: fields.targetRefId, secondDoctorId: fields.secondTargetRefId,
+            doctorCoverage: editingLockEntry.doctorCoverage };
+          const visible = doctorCoverageDraftOf(choice, dutyWindows.find(d => d.id === duty.id), sessions);
+          fields.doctorCoverage = manualDoctorCoverageOf({ ...choice, doctorCoverage: visible }, duty, freshSessions);
+          const problems = doctorPairingProblems({ ...choice, doctorCoverage: fields.doctorCoverage }, freshDoctors,
+            { duty, sessions: freshSessions });
+          if (problems.length) throw new Error(problems.join(' '));
+          if (assignmentDoctorIds(choice).some(id => !freshDoctors.some(d => d.id === id && d.active !== false))) {
+            throw new Error('Choose active doctors for this duty.');
+          }
+          if (!nurse.isClinicNurse || isExclusiveNurseClinic(nurse, clinicalRoles)) throw new Error('This nurse cannot cover doctor clinics.');
+          if (nurse.doctorEligibility != null && outsideNurseList(nurse, choice, { doctors: freshDoctors, specialties, sessions: freshSessions })) {
+            throw new Error('This nurse is not eligible for the selected doctor. Review clinical eligibility in the nurse profile.');
+          }
+        }
+      }
       if (editingLockEntry.id) {
-        const saved = await repo.get('locks', editingLockEntry.id);
-        if (!saved) throw new Error('This pin no longer exists. Close this dialog and reload the page.');
-        if (saved.doctorCoverage !== undefined || editingLockEntry.doctorCoverage !== undefined) {
-          await repo.update('locks', editingLockEntry.id, timedPinNoteUpdate(saved, editingLockEntry));
-        } else await repo.update('locks', editingLockEntry.id, {
-          mode: editingLockEntry.mode || 'ASSIGNMENT',
-          dutyWindowId: editingLockEntry.dutyWindowId,
-          assignmentKind: editingLockEntry.assignmentKind,
-          targetRefId: editingLockEntry.targetRefId,
-          secondTargetRefId: validSecondTargetRefId,
-          note: editingLockEntry.note,
-        });
+        const saved = freshLocks.find(l => l.id === editingLockEntry.id) || null;
+        assertTimedPinCurrent(saved, locks.find(l => l.id === editingLockEntry.id));
+        await repo.bulkUpsert('locks', [{ ...fields, id: saved!.id, createdAt: saved!.createdAt }], { replace: true });
         triggerToast('Pinned day updated.');
       } else {
-        await repo.create('locks', {
-          nurseId: editingLockEntry.nurseId,
-          date: editingLockEntry.date,
-          mode: editingLockEntry.mode || 'ASSIGNMENT',
-          dutyWindowId: editingLockEntry.dutyWindowId,
-          assignmentKind: editingLockEntry.assignmentKind,
-          targetRefId: editingLockEntry.targetRefId,
-          ...(validSecondTargetRefId ? { secondTargetRefId: validSecondTargetRefId } : {}),
-          note: editingLockEntry.note || '',
-          createdAt: new Date().toISOString(),
-        });
+        if (freshLocks.some(l => l.nurseId === fields.nurseId && l.date === fields.date)) {
+          throw new Error('This day is already pinned. Change it in the roster, or remove the existing pin first.');
+        }
+        await repo.create('locks', { ...fields, createdAt: new Date().toISOString() });
         triggerToast('Day pinned. Filling a roster leaves it as it is.');
       }
       setIsLockModalOpen(false);
       setEditingLockEntry(null);
-      loadData();
+      await loadData();
     } catch (err: any) {
-      triggerToast(`The pinned day was not saved: ${err.message}`, 'error');
+      setPinError(err?.message || 'The pinned day could not be saved.');
     }
   };
 
@@ -1193,14 +1214,8 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
       >
         {editingLockEntry && (
           <form id="pin-editor" onSubmit={handleSaveLockEntry} noValidate className="space-y-4 text-sm">
-            {editingLockEntry.doctorCoverage !== undefined && <Notice tone="info" title="Doctor cover times">
-              <p className="whitespace-pre-line">{doctorCoverageText({ kind: editingLockEntry.assignmentKind,
-                doctorId: editingLockEntry.targetRefId, secondDoctorId: editingLockEntry.secondTargetRefId,
-                doctorCoverage: editingLockEntry.doctorCoverage }, doctors,
-                dutyWindows.find(d => d.id === editingLockEntry.dutyWindowId))}</p>
-              <p>You can change the note. Remove the pin before changing its shift or doctors.</p>
-            </Notice>}
-            <fieldset disabled={editingLockEntry.doctorCoverage !== undefined} className="space-y-4">
+            {pinError && <div ref={pinErrorRef} tabIndex={-1} className="outline-none"><Notice tone="danger" live title={pinError} /></div>}
+            <fieldset className="space-y-4">
             <legend className="sr-only">Pinned duty details</legend>
             <Field label="Nurse">
               {(f) => (
@@ -1215,7 +1230,7 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
               )}
             </Field>
             <Field label="Day">
-              {(f) => <DateInput {...f} value={editingLockEntry.date || ''} onChange={(iso) => setEditingLockEntry({ ...editingLockEntry, date: iso })} />}
+              {(f) => <DateInput {...f} value={editingLockEntry.date || ''} onChange={(iso) => setEditingLockEntry({ ...editingLockEntry, date: iso, doctorCoverage: undefined })} />}
             </Field>
             <Field label="What is pinned">
               {(f) => (
@@ -1251,12 +1266,12 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                           const isRole = clinicalRoles.some((r) => r.id === targetId);
                           const keepSecond =
                             isDoc &&
-                            targetDoc?.lowAcuity &&
                             editingLockEntry.secondTargetRefId &&
                             editingLockEntry.secondTargetRefId !== targetId;
                           setEditingLockEntry({
                             ...editingLockEntry,
                             targetRefId: targetId,
+                            doctorCoverage: undefined,
                             secondTargetRefId: keepSecond ? editingLockEntry.secondTargetRefId : '',
                             assignmentKind: isDoc ? 'DOCTOR' : isRole ? 'CLINICAL_ROLE' : 'SPECIALTY',
                           });
@@ -1288,20 +1303,19 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                     )}
                   </Field>
                 </div>
-                {editingLockEntry.assignmentKind === 'DOCTOR' &&
-                  doctors.find((d) => d.id === editingLockEntry.targetRefId)?.lowAcuity && (
+                {editingLockEntry.assignmentKind === 'DOCTOR' && (
                     <Field
-                      label="Second low acuity doctor"
+                      label="Second doctor"
                       optional
-                      hint="One nurse can cover up to two low acuity doctors on the same day."
+                      hint="Two doctors may be covered in turn. Shared cover requires two low acuity doctors and is a last resort after suitable Float cover."
                     >
                       {(f) => {
-                        const otherLowDocs = doctors.filter((d) => d.lowAcuity && d.id !== editingLockEntry.targetRefId);
+                        const otherLowDocs = doctors.filter((d) => d.active !== false && d.id !== editingLockEntry.targetRefId);
                         return (
                           <Select
                             {...f}
                             value={editingLockEntry.secondTargetRefId || ''}
-                            onChange={(e) => setEditingLockEntry({ ...editingLockEntry, secondTargetRefId: e.target.value })}
+                            onChange={(e) => setEditingLockEntry({ ...editingLockEntry, secondTargetRefId: e.target.value, doctorCoverage: undefined })}
                             disabled={otherLowDocs.length === 0}
                           >
                             <option value="">None (one doctor only)</option>
@@ -1315,6 +1329,15 @@ export const AvailabilityView: React.FC<AvailabilityViewProps> = ({ context }) =
                       }}
                     </Field>
                   )}
+                {editingLockEntry.assignmentKind === 'DOCTOR' && (() => {
+                  const choice = { date: editingLockEntry.date || '', kind: 'DOCTOR' as const,
+                    dutyWindowId: editingLockEntry.dutyWindowId || '', doctorId: editingLockEntry.targetRefId,
+                    secondDoctorId: editingLockEntry.secondTargetRefId, doctorCoverage: editingLockEntry.doctorCoverage };
+                  const duty = dutyWindows.find(d => d.id === choice.dutyWindowId);
+                  return <DoctorCoverageFields doctorIds={assignmentDoctorIds(choice)} doctors={doctors}
+                    value={doctorCoverageDraftOf(choice, duty, sessions)} date={choice.date} duty={duty} sessions={sessions}
+                    error={pinError} onChange={doctorCoverage => setEditingLockEntry({ ...editingLockEntry, doctorCoverage })} />;
+                })()}
               </>
             )}
             </fieldset>

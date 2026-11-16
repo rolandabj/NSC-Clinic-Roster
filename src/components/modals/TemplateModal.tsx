@@ -7,8 +7,7 @@
  * since Phase 7, slice 3b.
  */
 
-import { assertTimedFillSupported } from '../../services/engine/timedCoverageSafety';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLatestCallback } from '../common/useLatestCallback';
 import { Copy, Layers, Save, Sparkles, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
@@ -21,12 +20,21 @@ import {
   TemplateSlotPattern,
   LeaveEntry,
   LockEntry,
+  Doctor,
+  DoctorSession,
+  ClinicalRole,
+  Specialty,
+  Rule,
+  AvailabilityRequest,
 } from '../../types';
 import { getRepository } from '../../services/repository';
 import { formatDate } from '../../utils/dateUtils';
 import { Button, Dialog, EmptyState, Field, IconButton, Input, Select, TabPanel, Tabs, Textarea, cx } from '../ui';
 import { notify, confirmDialog, type NoticeTone } from '../common/dialogs';
 import { authService } from '../../services/auth/authService';
+import { assertTemplateCoverageCurrent, buildTemplateCoveragePlan, type TemplateCoverageInput,
+  type TemplateCoveragePlan, type TemplateDutyPattern } from '../../services/schedule/templateCoverage';
+import type { RosterCheck } from '../../services/engine/handMoveChecks';
 
 interface TemplateModalProps {
   schedule: Schedule;
@@ -36,6 +44,14 @@ interface TemplateModalProps {
   leaveEntries: LeaveEntry[];
   locks: LockEntry[];
   allSchedules: Schedule[];
+  doctors: Doctor[];
+  sessions: DoctorSession[];
+  roles: ClinicalRole[];
+  specialties: Specialty[];
+  rules: Rule[];
+  availabilityRequests: AvailabilityRequest[];
+  surroundingAssignments?: Assignment[];
+  checkRoster: RosterCheck;
   isOpen: boolean;
   onClose: () => void;
   onApplyAssignments: (updated: Assignment[], note: string) => void;
@@ -49,6 +65,14 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
   leaveEntries,
   locks,
   allSchedules,
+  doctors,
+  sessions,
+  roles,
+  specialties,
+  rules,
+  availabilityRequests,
+  surroundingAssignments,
+  checkRoster,
   isOpen,
   onClose,
   onApplyAssignments,
@@ -62,6 +86,10 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
 
   const repo = getRepository();
+  const currentInput: TemplateCoverageInput = { schedule, assignments, nurses, dutyWindows, leaveEntries, locks,
+    doctors, sessions, roles, specialties, rules, availabilityRequests, surroundingAssignments, checkRoster };
+  const latestInput = useRef(currentInput);
+  latestInput.current = currentInput;
 
   const loadTemplates = useLatestCallback(async () => {
     try {
@@ -147,78 +175,12 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
     return user?.name || user?.email || 'Planner';
   };
 
-  /**
-   * Works out what filling the roster would do, without saving anything.
-   * `shiftFor` gives the shift a nurse should have on a weekday, or nothing.
-   * Pinned days, approved leave and shifts set by hand are kept; every other
-   * existing shift is replaced.
-   */
-  const planFill = (
-    shiftFor: (nurseId: string, weekday: number) => Omit<Assignment, 'id' | 'scheduleId' | 'nurseId' | 'date' | 'locked' | 'source'> | undefined
-  ) => {
-    const lockedNurseDates = new Set(locks.map((l) => `${l.nurseId}_${l.date}`));
-    const leaveNurseDates = new Set(
-      leaveEntries.filter((le) => le.approved).flatMap((le) => {
-        const dates: string[] = [];
-        const cur = new Date(le.startDate);
-        const end = new Date(le.endDate);
-        while (cur <= end) {
-          dates.push(`${le.nurseId}_${cur.toISOString().split('T')[0]}`);
-          cur.setUTCDate(cur.getUTCDate() + 1);
-        }
-        return dates;
-      })
-    );
-
-    // Keep locked and manual assignments
-    const kept = assignments.filter((a) => a.source === 'LOCK' || a.source === 'MANUAL' || a.locked);
-    const keptKeys = new Set(kept.map((a) => `${a.nurseId}_${a.date}`));
-    const replaced = assignments.length - kept.length;
-    const knownDuties = new Set(dutyWindows.map((d) => d.id));
-    const activeNurses = nurses.filter((n) => n.active !== false);
-
-    const added: Assignment[] = [];
-    const cur = new Date(schedule.startDate);
-    const end = new Date(schedule.endDate);
-    while (cur <= end) {
-      const dateStr = cur.toISOString().split('T')[0];
-      const weekday = cur.getUTCDay();
-      for (const nurse of activeNurses) {
-        const key = `${nurse.id}_${dateStr}`;
-        if (keptKeys.has(key) || lockedNurseDates.has(key) || leaveNurseDates.has(key)) continue;
-        const shift = shiftFor(nurse.id, weekday);
-        // Only weekdays the source gives this nurse, and only shifts that still exist.
-        if (!shift || !knownDuties.has(shift.dutyWindowId)) continue;
-        added.push({
-          ...shift,
-          id: uuidv4(),
-          scheduleId: schedule.id,
-          nurseId: nurse.id,
-          date: dateStr,
-          locked: false,
-          source: 'GENERATED',
-        });
-      }
-      cur.setUTCDate(cur.getUTCDate() + 1);
-    }
-
-    // Filled shifts that go: on a day that gets a new shift they are replaced,
-    // otherwise they are only removed.
-    const addedKeys = new Set(added.map((a) => `${a.nurseId}_${a.date}`));
-    const dropped = assignments.filter((a) => !kept.includes(a));
-    const replacedOnly = dropped.filter((a) => addedKeys.has(`${a.nurseId}_${a.date}`)).length;
-    return {
-      result: [...kept, ...added],
-      added: added.length,
-      nurseCount: new Set(added.map((a) => a.nurseId)).size,
-      replaced,
-      replacedOnly,
-      removedOnly: dropped.length - replacedOnly,
-    };
-  };
+  /** Prepare and validate exact copies without changing protected duties. */
+  const planFill = (shiftFor: (nurseId: string, weekday: number) => TemplateDutyPattern | undefined) =>
+    buildTemplateCoveragePlan(currentInput, shiftFor);
 
   /** Asks before filling the roster, saying exactly how many shifts change. */
-  const confirmFill = (plan: ReturnType<typeof planFill>, title: string) => {
+  const confirmFill = (plan: TemplateCoveragePlan, title: string) => {
     if (plan.added === 0 && plan.replaced === 0) {
       notify('There is nothing to fill: no nurse has a shift on these weekdays, or every day is already pinned, on leave or set by hand.', 'info');
       return Promise.resolve(false);
@@ -240,44 +202,39 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
   const handleApplyTemplate = async () => {
     const template = savedTemplates.find((t) => t.id === selectedTemplateId);
     if (!template) return;
-    if (template.patterns.some(p => p.doctorCoverage !== undefined)) {
-      notify('This template has timed doctor cover and cannot be applied yet.', 'warning'); return;
-    }
-    try { assertTimedFillSupported(schedule, 'GENERATE_ALL', assignments, locks); }
-    catch (error) { notify((error as Error).message, 'error'); return; }
-
-    // One shift per nurse per weekday, as the template gives it (the first one if a template has two).
-    const byNurseWeekday = new Map<string, TemplateSlotPattern>();
-    for (const p of template.patterns || []) {
-      const key = `${p.nurseId}_${Number(p.weekday)}`;
-      if (!byNurseWeekday.has(key)) byNurseWeekday.set(key, p);
-    }
-    const plan = planFill((nurseId, weekday) => {
-      const p = byNurseWeekday.get(`${nurseId}_${weekday}`);
-      if (!p) return undefined;
-      return {
-        dutyWindowId: p.dutyWindowId,
-        kind: p.kind,
-        doctorId: p.kind === 'DOCTOR' ? p.targetRefId : undefined,
-        ...(p.kind === 'DOCTOR' && p.secondTargetRefId ? { secondDoctorId: p.secondTargetRefId } : {}),
-        clinicalRoleId: p.kind === 'CLINICAL_ROLE' ? p.targetRefId : undefined,
-        specialtyId: p.kind === 'SPECIALTY' ? p.targetRefId : undefined,
-        note: `From template "${template.name}"`,
-      };
-    });
-    if (!(await confirmFill(plan, `Use template "${template.name}"?`))) return;
-
-    setIsProcessing(true);
     try {
+      // One shift per nurse per weekday, as the template gives it (the first one if a template has two).
+      const byNurseWeekday = new Map<string, TemplateSlotPattern>();
+      for (const p of template.patterns || []) {
+        const key = `${p.nurseId}_${Number(p.weekday)}`;
+        if (!byNurseWeekday.has(key)) byNurseWeekday.set(key, p);
+      }
+      const plan = planFill((nurseId, weekday) => {
+        const p = byNurseWeekday.get(`${nurseId}_${weekday}`);
+        if (!p) return undefined;
+        return {
+          dutyWindowId: p.dutyWindowId,
+          kind: p.kind,
+          doctorId: p.kind === 'DOCTOR' ? p.targetRefId : undefined,
+          ...(p.kind === 'DOCTOR' && p.secondTargetRefId ? { secondDoctorId: p.secondTargetRefId } : {}),
+          ...(p.doctorCoverage !== undefined ? { doctorCoverage: p.doctorCoverage } : {}),
+          clinicalRoleId: p.kind === 'CLINICAL_ROLE' ? p.targetRefId : undefined,
+          specialtyId: p.kind === 'SPECIALTY' ? p.targetRefId : undefined,
+          note: `From template "${template.name}"`,
+        };
+      });
+      if (!(await confirmFill(plan, `Use template "${template.name}"?`))) return;
+      assertTemplateCoverageCurrent(plan, latestInput.current);
+      setIsProcessing(true);
       await repo.create('audit', {
         actor: actorName(),
         action: 'TEMPLATE_APPLY',
         entity: 'Schedule',
         entityId: schedule.id,
-        note: `Applied roster template "${template.name}": ${plan.added} shifts filled, ${plan.replaced} replaced.`,
+        note: `Requested roster fill from template "${template.name}": ${plan.added} shifts to fill, ${plan.replaced} to replace.`,
         timestamp: new Date().toISOString(),
       });
-
+      assertTemplateCoverageCurrent(plan, latestInput.current);
       onApplyAssignments(plan.result, `Applied template "${template.name}"`);
       onClose();
     } catch (err: any) {
@@ -295,10 +252,6 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
     try {
       const sourceAsgns = await repo.list('assignments', { field: 'scheduleId', operator: '==', value: selectedSourceScheduleId });
       const sourceSchedule = allSchedules.find((s) => s.id === selectedSourceScheduleId);
-      assertTimedFillSupported(schedule, 'GENERATE_ALL', assignments, locks);
-      if (sourceAsgns.some(a => a.doctorCoverage !== undefined)) {
-        throw new Error('The source roster has timed doctor cover and cannot be copied yet.');
-      }
 
       // Build weekday pattern from source schedule
       const patternsByNurseWeekday = new Map<string, Assignment>();
@@ -319,22 +272,25 @@ export const TemplateModal: React.FC<TemplateModalProps> = ({
           kind: p.kind,
           doctorId: p.doctorId,
           ...(p.kind === 'DOCTOR' && p.secondDoctorId ? { secondDoctorId: p.secondDoctorId } : {}),
+          ...(p.doctorCoverage !== undefined ? { doctorCoverage: p.doctorCoverage } : {}),
           clinicalRoleId: p.clinicalRoleId,
           specialtyId: p.specialtyId,
           note: `Copied from ${sourceSchedule?.name || 'an earlier roster'}`,
         };
       });
       if (!(await confirmFill(plan, `Copy from ${sourceSchedule?.name || 'the earlier roster'}?`))) return;
+      assertTemplateCoverageCurrent(plan, latestInput.current);
 
       await repo.create('audit', {
         actor: actorName(),
         action: 'UPDATE',
         entity: 'Schedule',
         entityId: schedule.id,
-        note: `Copied assignments from ${sourceSchedule?.name}: ${plan.added} shifts filled, ${plan.replaced} replaced.`,
+        note: `Requested roster fill from ${sourceSchedule?.name || 'an earlier roster'}: ${plan.added} shifts to fill, ${plan.replaced} to replace.`,
         timestamp: new Date().toISOString(),
       });
 
+      assertTemplateCoverageCurrent(plan, latestInput.current);
       onApplyAssignments(plan.result, `Copied from ${sourceSchedule?.name}`);
       onClose();
     } catch (err: any) {

@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Calendar, Check, Star, Stethoscope, Trash2 } from 'lucide-react';
-import type { AssignmentKind, ClinicalRole, Doctor, DutyWindow, LeaveType, Nurse, PublicHoliday, Specialty } from '../../../types';
+import type { AssignmentKind, ClinicalRole, Doctor, DoctorCoverageInterval, DoctorSession, DutyWindow, LeaveType, Nurse, PublicHoliday, Specialty } from '../../../types';
 import { isExclusiveNurseClinic } from '../../../services/engine/nurseClinicUtils';
 import { formatDayDate } from '../../../utils/dateUtils';
 import { readableTextOn } from '../../../utils/colorContrast';
 import { Button, Checkbox, Dialog, Field, Input, Notice, Select, cx } from '../../ui';
+import { doctorCoverageDraftOf, manualDoctorCoverageOf } from '../../../services/engine/manualDoctorCoverage';
+import { doctorPairingProblems } from '../../../services/engine/doctorPairing';
+import { DoctorCoverageFields } from './DoctorCoverageFields';
+import { outsideNurseList } from '../../../services/engine/nurseList';
 
 /** A choice among a few, as a pressed or not pressed button. */
 const choiceClass = (on: boolean) =>
@@ -17,6 +21,7 @@ export interface CellChoice {
   kind: AssignmentKind;
   targetRefId: string;
   secondTargetRefId?: string;
+  doctorCoverage?: DoctorCoverageInterval[];
   note: string;
   leaveTypeId: string;
   /** false = kept (pinned) when the roster is filled again. */
@@ -33,8 +38,7 @@ interface CellEditorDialogProps {
   editorTarget: { nurseId: string; date: string };
   /** What the editor starts with (the cell as it is, or the defaults for an empty cell). */
   defaults: CellChoice;
-  /** Existing timed cover is read only; notes and pinning preserve it. */
-  timedCoverageSummary?: string;
+  sessions: DoctorSession[];
   nurseMap: Map<string, Nurse>;
   doctors: Doctor[];
   doctorMap: Map<string, Doctor>;
@@ -59,7 +63,7 @@ interface CellEditorDialogProps {
 export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
   editorTarget,
   defaults,
-  timedCoverageSummary,
+  sessions,
   nurseMap,
   doctors,
   doctorMap,
@@ -84,33 +88,55 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
   // Hours this leave day counts for this nurse ('' = the leave type's default from Settings).
   const [editorLeaveHours, setEditorLeaveHours] = useState(defaults.leaveHours);
 
-  const selectedFirstDoctor = editorKind === 'DOCTOR' ? doctorMap.get(editorTargetRefId) : undefined;
-  const secondLowAcuityDoctors = selectedFirstDoctor?.lowAcuity
-    ? doctors.filter((d) => d.lowAcuity && d.id !== editorTargetRefId)
-    : [];
-  const effectiveSecondTargetRefId = timedCoverageSummary ? editorSecondTargetRefId || undefined :
-    editorKind === 'DOCTOR' &&
-    selectedFirstDoctor?.lowAcuity &&
-    editorSecondTargetRefId &&
-    editorSecondTargetRefId !== editorTargetRefId &&
-    doctorMap.get(editorSecondTargetRefId)?.lowAcuity
-      ? editorSecondTargetRefId
-      : undefined;
-
-  const save = () =>
-    onSave({
-      category: editorCategory,
-      dutyId: editorDutyId,
-      kind: editorKind,
-      targetRefId: editorTargetRefId,
-      secondTargetRefId: effectiveSecondTargetRefId,
-      note: editorNote,
-      leaveTypeId: editorLeaveTypeId,
-      allowOverwrite: editorAllowOverwrite,
-      leaveHours: editorLeaveHours,
-    });
+  const initialDraft = () => doctorCoverageDraftOf({ date: editorTarget.date, dutyWindowId: defaults.dutyId,
+    kind: defaults.kind, doctorId: defaults.targetRefId, secondDoctorId: defaults.secondTargetRefId,
+    doctorCoverage: defaults.doctorCoverage }, dutyWindows.find(d => d.id === defaults.dutyId), sessions);
+  const [editorCoverage, setEditorCoverage] = useState<DoctorCoverageInterval[]>(initialDraft);
+  const [timingError, setTimingError] = useState('');
+  const timingErrorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!timingError) return;
+    timingErrorRef.current?.scrollIntoView({ block: 'nearest' });
+    timingErrorRef.current?.focus({ preventScroll: true });
+  }, [timingError]);
+  const effectiveSecondTargetRefId = editorKind === 'DOCTOR' && editorSecondTargetRefId !== editorTargetRefId
+    ? editorSecondTargetRefId || undefined : undefined;
+  const selectedDoctorIds = editorKind === 'DOCTOR'
+    ? [editorTargetRefId, ...(effectiveSecondTargetRefId ? [effectiveSecondTargetRefId] : [])].filter(Boolean) : [];
+  const resetDoctor = (firstId: string, secondId: string, dutyId = editorDutyId) => {
+    const nextIds = [firstId, secondId].filter(Boolean);
+    const fresh = doctorCoverageDraftOf({ date: editorTarget.date, kind: 'DOCTOR', doctorId: firstId,
+      secondDoctorId: secondId || undefined, dutyWindowId: dutyId }, dutyWindows.find(d => d.id === dutyId), sessions);
+    setEditorCoverage(previous => nextIds.flatMap(id => {
+      const kept = previous.filter(row => row.doctorId === id);
+      return kept.length ? kept : fresh.filter(row => row.doctorId === id);
+    }));
+    setTimingError('');
+  };
+  const save = () => {
+    try {
+      const duty = dutyWindows.find(d => d.id === editorDutyId);
+      const draft = { date: editorTarget.date, dutyWindowId: editorDutyId, kind: editorKind,
+        doctorId: editorTargetRefId, secondDoctorId: effectiveSecondTargetRefId, doctorCoverage: editorCoverage };
+      const doctorCoverage = editorCategory === 'DUTY' && editorKind === 'DOCTOR'
+        ? manualDoctorCoverageOf(draft, duty, sessions) : undefined;
+      const problems = editorCategory === 'DUTY' && editorKind === 'DOCTOR'
+        ? doctorPairingProblems({ ...draft, doctorCoverage }, doctors, { duty, sessions }) : [];
+      if (problems.length) throw new Error(problems.join(' '));
+      if (editorCategory === 'DUTY' && editorKind === 'DOCTOR' && activeNurse?.doctorEligibility != null) {
+        const outside = outsideNurseList(activeNurse, draft, { doctors, specialties, sessions });
+        if (outside) throw new Error(`This nurse is not eligible for ${outside.name}. Review clinical eligibility in the nurse profile.`);
+      }
+      setTimingError('');
+      onSave({ category: editorCategory, dutyId: editorDutyId, kind: editorKind, targetRefId: editorTargetRefId,
+        secondTargetRefId: effectiveSecondTargetRefId, doctorCoverage, note: editorNote, leaveTypeId: editorLeaveTypeId,
+        allowOverwrite: editorAllowOverwrite, leaveHours: editorLeaveHours });
+    } catch (error) { setTimingError((error as Error).message); }
+  };
 
   const activeNurse = nurseMap.get(editorTarget.nurseId);
+  const notEligible = (doctorId: string) => activeNurse?.doctorEligibility != null && !!outsideNurseList(activeNurse,
+    { kind: 'DOCTOR', doctorId, date: editorTarget.date }, { doctors, specialties, sessions });
   const isTargetExclusiveNC = activeNurse ? isExclusiveNurseClinic(activeNurse, roles) : false;
   const nurseSpecificPrefs = activeNurse?.preferences?.filter((p) => p.kind === 'DOCTOR' || p.kind === 'SPECIALTY') || [];
 
@@ -183,10 +209,6 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
       }
     >
       <div className="space-y-5 text-sm">
-        {timedCoverageSummary && <Notice tone="info" title="Doctor cover times">
-          <p className="whitespace-pre-line">{timedCoverageSummary}</p>
-          <p>You can change the note or pin this duty. Clear the day before changing its shift or doctors.</p>
-        </Notice>}
         <div className="grid grid-cols-2 gap-2 rounded-lg bg-sunken p-1" role="group" aria-label="Shift or leave">
           {(
             [
@@ -197,7 +219,6 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
             <button
               key={id}
               type="button"
-              disabled={!!timedCoverageSummary}
               aria-pressed={editorCategory === id}
               onClick={() => setEditorCategory(id)}
               className={cx(
@@ -213,7 +234,7 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
 
         {editorCategory === 'DUTY' && (
           <>
-            <fieldset className="space-y-2" disabled={!!timedCoverageSummary}>
+            <fieldset className="space-y-2">
               <legend className="mb-2 font-semibold text-ink">The shift</legend>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {dutyWindows.map((dw) => (
@@ -235,7 +256,7 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
               </div>
             </fieldset>
 
-            <fieldset className="space-y-3" disabled={!!timedCoverageSummary}>
+            <fieldset className="space-y-3">
               <legend className="mb-2 font-semibold text-ink">Who or what the nurse works with</legend>
               {isTargetExclusiveNC && (editorKind === 'DOCTOR' || editorKind === 'SPECIALTY') && (
                 <Notice tone="warning" title="Works in Nurse Clinic only">
@@ -256,7 +277,7 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
                     onClick={() => {
                       setEditorKind(k);
                       setEditorSecondTargetRefId('');
-                      if (k === 'DOCTOR') setEditorTargetRefId(doctors[0]?.id || '');
+                      if (k === 'DOCTOR') { const id = doctors[0]?.id || ''; setEditorTargetRefId(id); resetDoctor(id, ''); }
                       if (k === 'CLINICAL_ROLE') setEditorTargetRefId(roles[0]?.id || '');
                       if (k === 'SPECIALTY') setEditorTargetRefId(specialties[0]?.id || '');
                     }}
@@ -274,16 +295,17 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
                     onChange={(e) => {
                       const nextId = e.target.value;
                       setEditorTargetRefId(nextId);
-                      if (editorKind !== 'DOCTOR' || !doctorMap.get(nextId)?.lowAcuity || nextId === editorSecondTargetRefId) {
-                        setEditorSecondTargetRefId('');
+                      if (editorKind === 'DOCTOR') {
+                        const secondId = nextId === editorSecondTargetRefId ? '' : editorSecondTargetRefId;
+                        setEditorSecondTargetRefId(secondId); resetDoctor(nextId, secondId);
                       }
                     }}
                   >
                     {editorKind === 'DOCTOR' &&
                       doctors.map((d) => (
-                        <option key={d.id} value={d.id}>
+                        <option key={d.id} value={d.id} disabled={notEligible(d.id)}>
                           {d.fullName} ({specialties.find((sp) => sp.id === d.specialtyIds[0])?.name || 'Clinic'}
-                          {d.lowAcuity ? ' · Low acuity' : ''})
+                          {d.lowAcuity ? ' · Low acuity' : ''}){notEligible(d.id) ? ' · Not eligible' : ''}
                         </option>
                       ))}
                     {editorKind === 'CLINICAL_ROLE' &&
@@ -301,33 +323,20 @@ export const CellEditorDialog: React.FC<CellEditorDialogProps> = ({
                   </Select>
                 )}
               </Field>
-              {editorKind === 'DOCTOR' && selectedFirstDoctor?.lowAcuity && (
-                <Field
-                  label="Second low acuity doctor"
-                  optional
-                  hint={
-                    secondLowAcuityDoctors.length > 0
-                      ? 'One nurse can cover up to two low acuity doctors on the same day.'
-                      : 'No other doctor is marked low acuity yet.'
-                  }
-                >
-                  {(f) => (
-                    <Select
-                      {...f}
-                      value={effectiveSecondTargetRefId || ''}
-                      onChange={(e) => setEditorSecondTargetRefId(e.target.value)}
-                      disabled={secondLowAcuityDoctors.length === 0}
-                    >
-                      <option value="">None (one doctor only)</option>
-                      {secondLowAcuityDoctors.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.fullName} ({specialties.find((sp) => sp.id === d.specialtyIds[0])?.name || 'Clinic'})
-                        </option>
-                      ))}
-                    </Select>
-                  )}
+              {editorKind === 'DOCTOR' && <>
+                <Field label="Second doctor" optional hint="Cover doctors at separate times. Simultaneous cover needs both doctors marked low acuity and no suitable Float cover.">
+                  {f => <Select {...f} value={effectiveSecondTargetRefId || ''} onChange={event => {
+                    const id = event.target.value; setEditorSecondTargetRefId(id); resetDoctor(editorTargetRefId, id);
+                  }}>
+                    <option value="">None (one doctor only)</option>
+                    {doctors.filter(d => d.id !== editorTargetRefId).map(d => <option key={d.id} value={d.id} disabled={notEligible(d.id)}>{d.fullName}{notEligible(d.id) ? ' · Not eligible' : ''}</option>)}
+                  </Select>}
                 </Field>
-              )}
+                <DoctorCoverageFields doctorIds={selectedDoctorIds} doctors={doctors} value={editorCoverage}
+                  onChange={rows => { setEditorCoverage(rows); setTimingError(''); }} date={editorTarget.date}
+                  duty={dutyWindows.find(d => d.id === editorDutyId)} sessions={sessions} error={timingError} />
+                {timingError && <div ref={timingErrorRef} tabIndex={-1} className="outline-none"><Notice tone="danger" live title="Check doctor cover times">{timingError}</Notice></div>}
+              </>}
             </fieldset>
           </>
         )}

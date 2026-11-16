@@ -29,17 +29,17 @@ test('a normal doctor in a paired duty remains an error and gets no reassuring p
 test('paired cover note disappears when the second doctor is removed',()=>{
  assert.ok(!check([shift('amy')]).findings.some(f=>f.id.startsWith('low-acuity-cover-')));
 });
-test('an overlapping handover is a note when neither nurse alone covers the complete session',()=>{
+test('an overlapping handover has a note but requires a saved manual edit to keep its overlap',()=>{
  const duties=[{...DAY_DUTY,id:'early',endTime:'15:00'},{...DAY_DUTY,id:'late',startTime:'13:00',endTime:'21:00'}];
  const report=check([shift('amy','early'),shift('ben','late')],duties,[{...sessions[0],endTime:'18:30'}]);
  const note=report.findings.find(f=>f.id.startsWith('session-handover-'));
  assert.equal(note?.severity,'INFO');assert.match(note!.message,/13:00 to 15:00/);
- assert.ok(!report.findings.some(f=>f.id.startsWith('session-overlap-')));
+ assert.ok(report.findings.some(f=>f.id.startsWith('session-overlap-')&&f.severity==='ERROR'));
 });
-test('a second nurse is still flagged for review when one nurse already covers the whole session',()=>{
+test('unrecorded second nurse cover is an error when one nurse already covers the whole session',()=>{
  const duties=[DAY_DUTY,{...DAY_DUTY,id:'late',startTime:'13:00'}];
  const report=check([shift('amy'),shift('ben','late')],duties,[sessions[0]]);
- assert.ok(report.findings.some(f=>f.id.startsWith('session-overlap-')&&f.severity==='WARN'));
+ assert.ok(report.findings.some(f=>f.id.startsWith('session-overlap-')&&f.severity==='ERROR'));
  assert.ok(!report.findings.some(f=>f.id.startsWith('session-handover-')));
 });
 test('a handover with a remaining gap stays a coverage problem',()=>{
@@ -89,6 +89,6 @@ test('a paired assignment with no duty overlap for the second clinic gets no cov
 test('a redundant third nurse is not hidden inside an otherwise valid handover note',()=>{
  const duties=[{...DAY_DUTY,id:'early',endTime:'15:00'},{...DAY_DUTY,id:'late',startTime:'13:00',endTime:'21:00'},{...DAY_DUTY,id:'extra',startTime:'11:00',endTime:'17:00'}];
  const report=check([shift('amy','early'),shift('ben','late'),shift('cara','extra')],duties,[{...sessions[0],endTime:'21:00'}],doctors,[...nurses,makeNurse('cara')]);
- assert.ok(report.findings.some(f=>f.id.startsWith('session-overlap-')&&f.severity==='WARN'));
+ assert.ok(report.findings.some(f=>f.id.startsWith('session-overlap-')&&f.severity==='ERROR'));
  assert.ok(!report.findings.some(f=>f.id.startsWith('session-handover-')));
 });

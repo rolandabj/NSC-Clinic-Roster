@@ -151,7 +151,7 @@ export function canBeFreeNurse(nurse: Nurse | undefined, roles: ClinicalRole[]):
   return !phl || nurse.capabilityIds.includes(phl.id);
 }
 
-/** Distinct doctor ids covered by this shift (up to two when paired on low acuity clinics). */
+/** Distinct doctor ids covered by this shift (at most two, in sequence or sharing low acuity clinics). */
 export function assignmentDoctorIds(
   assignment: Pick<Assignment, 'kind' | 'doctorId' | 'secondDoctorId'> | undefined
 ): string[] {

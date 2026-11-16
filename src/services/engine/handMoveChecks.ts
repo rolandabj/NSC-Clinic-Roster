@@ -20,12 +20,23 @@ import type { ValidationFinding } from '../validation/ScheduleValidator';
 import { AssignmentCheckContext, checkAssignment, listProblem } from './assignmentChecks';
 import { AGREED_EXCEPTION_NOTE } from './lastResort';
 import { formatDate } from '../../utils/dateUtils';
+import { recordManualDoctorOverlaps, type ManualDoctorOverlapContext } from './manualDoctorOverlap';
 
 /** The roster check on a list of shifts, with everything else as it is now. */
 export type RosterCheck = (assignments: Assignment[]) => ValidationFinding[];
 
 /** The rest of the check context (the shifts are added by each check). */
 export type MoveContext = Omit<AssignmentCheckContext, 'assignments'>;
+
+/** Explicit swaps record current intent against their own final shift identities. */
+export function recordManualSwapOverlaps(assignments: Assignment[], changedIds: readonly string[], ctx: MoveContext,
+  actor: string, recordedAt: string): Assignment[] {
+  const changed = new Set(changedIds);
+  const context: ManualDoctorOverlapContext = { nurses: ctx.nurses, dutyWindows: ctx.dutyWindows,
+    doctors: ctx.doctors || [], specialties: ctx.specialties || [], sessions: ctx.sessions || [], roles: ctx.roles,
+    leaveEntries: ctx.leaveEntries, locks: ctx.locks, availabilityRequests: ctx.availabilityRequests };
+  return assignments.map(a => changed.has(a.id) ? recordManualDoctorOverlaps(a, assignments, context, actor, recordedAt) : a);
+}
 
 /**
  * What the roster check shows after a change that it didn't show before: "Must fix"
@@ -94,8 +105,8 @@ export function checkSwap(input: {
 
   // The shifts as the swap saves them (a hand change with the swap's note; the reason typed doesn't matter here).
   const notes = swapNotes(name(shiftA.nurseId), name(shiftB.nurseId), 'agreed between the nurses');
-  const toA: Assignment = { ...shiftB, nurseId: shiftA.nurseId, source: 'MANUAL', note: notes.b };
-  const toB: Assignment = { ...shiftA, nurseId: shiftB.nurseId, source: 'MANUAL', note: notes.a };
+  const toA: Assignment = { ...shiftB, manualDoctorOverlaps: undefined, nurseId: shiftA.nurseId, source: 'MANUAL', note: notes.b };
+  const toB: Assignment = { ...shiftA, manualDoctorOverlaps: undefined, nurseId: shiftB.nurseId, source: 'MANUAL', note: notes.a };
   const after = input.assignments.map((x) => (x.id === shiftA.id ? toB : x.id === shiftB.id ? toA : x));
   const cellCtx: AssignmentCheckContext = { ...ctx, assignments: [...(input.prior || []), ...after] };
   issuesA.push(...checkAssignment(cellCtx, toA));
@@ -109,7 +120,9 @@ export function checkSwap(input: {
   if (issuesA.length === 0 && issuesB.length === 0) {
     const mark = (s: Assignment, outside: string | null) => (outside ? { ...s, note: `${AGREED_EXCEPTION_NOTE}. ${s.note}` } : s);
     const marked = after.map((x) => (x === toA ? mark(toA, listA) : x === toB ? mark(toB, listB) : x));
-    const found = input.checkRoster(marked);
+    // Preview intent is private to this check. Saving records it again with the new ids.
+    const intended = recordManualSwapOverlaps(marked, [toA.id, toB.id], ctx, 'Planner preview', '1970-01-01T00:00:00Z');
+    const found = input.checkRoster(intended);
     rosterIssues.push(...newFindings(input.before, found, 'ERROR').map((f) => f.message));
     checks.push(...newFindings(input.before, found, 'WARN').map((f) => f.message));
   }
@@ -147,7 +160,7 @@ export function swapNotes(
 
 /** The fields a fairness move gives the moved shift. */
 export function rebalancedFields(from: Pick<Nurse, 'fullName'>): Partial<Assignment> {
-  return { source: 'GENERATED', note: `Rebalanced from ${from.fullName}` };
+  return { source: 'GENERATED', note: `Rebalanced from ${from.fullName}`, manualDoctorOverlaps: undefined };
 }
 
 export interface MoveSuggestion {
@@ -200,7 +213,10 @@ export function suggestMoves(input: {
         if (input.checkRoster) {
           if (rosterChecks >= maxRosterChecks) return moves;
           rosterChecks++;
-          if (newFindings(before, input.checkRoster(next), 'ERROR').length > 0) continue;
+          const after = input.checkRoster(next);
+          if (after.some(f => f.id.startsWith('session-overlap-') &&
+            f.cellRefs.some(cell => cell.nurseId === moved.nurseId && cell.date === moved.date))) continue;
+          if (newFindings(before, after, 'ERROR').length > 0) continue;
         }
         working = next;
         used.add(shift.id);

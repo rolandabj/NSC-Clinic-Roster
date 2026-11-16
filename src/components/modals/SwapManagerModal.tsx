@@ -31,7 +31,7 @@ import {
 import { getRepository } from '../../services/repository';
 import { approveAllocation } from '../../services/engine/allocationReview';
 import { isAgreedException } from '../../services/engine/lastResort';
-import { checkSwap, RosterCheck, SwapCheck, swapNotes } from '../../services/engine/handMoveChecks';
+import { checkSwap, recordManualSwapOverlaps, RosterCheck, SwapCheck, swapNotes } from '../../services/engine/handMoveChecks';
 import { readableTextOn } from '../../utils/colorContrast';
 import { Button, Dialog, Field, Input, Notice, Select } from '../ui';
 import { notify } from '../common/dialogs';
@@ -222,6 +222,11 @@ export const SwapManagerModal: React.FC<SwapManagerModalProps> = ({
         return { ...a, allocationReview: asException && isAgreedException(a)
           ? approveAllocation(a, user?.uid || '', reasonText, new Date().toISOString()) : null };
       });
+
+      updatedAssignments = recordManualSwapOverlaps(updatedAssignments,
+        updatedAssignments.filter(a => !oldIds.has(a.id)).map(a => a.id),
+        { nurses, dutyWindows, leaveEntries, locks, roles, rules, availabilityRequests, doctors, specialties, sessions },
+        user?.uid || recordedBy, new Date().toISOString());
 
       // Record SwapRequest and AuditEvent
       const repo = getRepository();

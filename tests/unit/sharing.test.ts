@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SchedulingEngine } from '../../src/services/engine/SchedulingEngine';
 import { isLastResortShift } from '../../src/services/engine/lastResort';
+import { effectiveDoctorCoverage } from '../../src/services/engine/clinicModel';
+import { isFloatShift } from '../../src/services/engine/floatShift';
 import type { Assignment, DoctorSession, Rule } from '../../src/types';
 import { makeNurse, makeSchedule, SENIOR } from './fixtures';
 
@@ -34,9 +36,9 @@ test('nurses with the same first choice share his sessions evenly', async () => 
   assert.deepEqual(counts, [4, 4, 4], `sessions per nurse: ${counts.join(', ')}`);
 });
 
-test('a nurse already floating covers the hours a doctor\'s own nurse can\'t', async () => {
+test('an available Float takes the whole session when that avoids a handover', async () => {
   // Dr Ahmad works 9 to 9. Noor (Pediatrics) may only work 9-7 (the 9-9 would take her over
-  // her hours limit); Amy is floating 9-9 by hand and joins him for 7 to 9 pm.
+  // their hours limit); Amy already floats 9-9 and can take the complete session.
   const date = '2026-11-03';
   const noor = makeNurse('noor', { contractPercent: 50, preferences: [{ kind: 'SPECIALTY', refId: PEDS.id, rank: 1 }] });
   const amy = makeNurse('amy', { preferences: [{ kind: 'SPECIALTY', refId: PCC.id, rank: 1 }] });
@@ -47,6 +49,9 @@ test('a nurse already floating covers the hours a doctor\'s own nurse can\'t', a
     [NINE_SEVEN, FULL], [], [PCC, PEDS], [session(DR_PEDS, date, '21:00')], [], [], hoursLimit, undefined, [], [DR_PEDS] as any, []
   );
   const withDoctor = assignments.filter((a) => a.doctorId === DR_PEDS.id);
-  assert.deepEqual(withDoctor.map((a) => a.nurseId).sort(), ['amy', 'noor']);
+  assert.deepEqual(withDoctor.map((a) => a.nurseId), ['amy']);
   assert.ok(isLastResortShift(withDoctor.find((a) => a.nurseId === 'amy')!));
+  assert.deepEqual(effectiveDoctorCoverage(withDoctor[0], FULL, [session(DR_PEDS, date, '21:00')]),
+    [{ doctorId: DR_PEDS.id, startTime: '09:00', endTime: '21:00' }]);
+  assert.ok(isFloatShift(assignments.find(a => a.nurseId === 'noor')!));
 });

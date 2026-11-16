@@ -21,7 +21,8 @@ export function moveShift(
   fields: Partial<Assignment> = {},
   newId: () => string = newMovedShiftId
 ): Assignment {
-  return { ...shift, ...fields, nurseId: toNurseId, id: newId() };
+  const { manualDoctorOverlaps: _oldIntent, ...moved } = { ...shift, ...fields, nurseId: toNurseId, id: newId() };
+  return moved;
 }
 
 /**

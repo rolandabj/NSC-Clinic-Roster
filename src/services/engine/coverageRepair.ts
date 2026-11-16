@@ -5,6 +5,7 @@ import { assignmentCoversDoctor, canBeFreeNurse, coverageSlots, doctorSessionsOn
   uncoveredParts, effectiveDoctorCoverage, type ResolvedClinicSetup } from './clinicModel';
 import { FLOAT_ROLE_ID } from './floatShift';
 import { nurseIsAvailable, type AvailabilityContext } from './assignmentPresence';
+import { subtractDoctorCoverage, withDoctorCoverage } from './timedAllocation';
 
 export interface CoverageRepairContext {
   assignments: Assignment[];
@@ -120,7 +121,7 @@ export async function repairCoverage(ctx: CoverageRepairContext) {
   const duration = (list: Assignment[], id: string, through?: string) => list.filter(a => a.nurseId === id && (!through || a.date <= through)).reduce((sum, a) => sum + hours(a), 0);
   const fixedFinding = (f: ValidationFinding) => f.severity === 'ERROR' || f.category === 'RULE_VIOLATION' ||
     /^(role-quota-|holiday-|h7-|hours-over-|hours-part-short-)/.test(f.id);
-  const editable = (a: Assignment) => a.source === 'GENERATED' && !a.locked && !a.secondDoctorId && a.doctorCoverage === undefined &&
+  const editable = (a: Assignment) => a.source === 'GENERATED' && !a.locked && !a.secondDoctorId &&
     duties.get(a.dutyWindowId)?.active === true && ctx.movable(a) && !ctx.clinic.holidays.has(a.date);
   const occupied = (id: string, date: string) => assignments.some(a => a.nurseId === id && a.date === date);
   const canFill = (id: string, target: RepairTarget) => target.session
@@ -139,6 +140,28 @@ export async function repairCoverage(ctx: CoverageRepairContext) {
     if (examined >= candidateLimit || targetChecks >= perTargetLimit || validated >= 80) return false;
     examined++; targetChecks++;
     if (examined % 100 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+    // Every proposed generated allocation gets exact times. Other nurses' valid
+    // cover remains fixed while the changed duties fill only the remaining parts.
+    const materialized = new Map<string, Assignment | null>();
+    const fixed = assignments.filter(a => !changes.has(a.id));
+    for (const [id, proposal] of changes) {
+      if (!proposal) { materialized.set(id, null); continue; }
+      const sessions = dailySessions.get(proposal.date) || [];
+      if (proposal.kind !== 'DOCTOR') {
+        const { doctorCoverage: _times, manualDoctorOverlaps: _overlaps, ...rest } = proposal;
+        materialized.set(id, { ...rest, allocationReview: null });
+        continue;
+      }
+      const blockers = [...fixed, ...[...materialized.values()].filter((a): a is Assignment => !!a)]
+        .filter(a => a.date === proposal.date && nurseIsAvailable(nurses.get(a.nurseId), a.date, ctx.availability || { leaveEntries: [] }))
+        .flatMap(a => effectiveDoctorCoverage(a, duties.get(a.dutyWindowId), sessions).filter(range => {
+          const sess = sessions.find(s => s.doctorId === range.doctorId);
+          return !!sess && (ctx.canCover ? ctx.canCover(a, sess) : ctx.canPair(a.nurseId, sess));
+        }));
+      const proposed = effectiveDoctorCoverage({ ...proposal, doctorCoverage: undefined }, duties.get(proposal.dutyWindowId), sessions);
+      materialized.set(id, withDoctorCoverage(proposal, subtractDoctorCoverage(proposed, blockers)));
+    }
+    changes = materialized;
     const affected = new Set<string>();
     const changedNurses = new Set<string>();
     for (const [id, next] of changes) {

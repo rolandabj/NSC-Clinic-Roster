@@ -25,6 +25,7 @@ import { doctorPairingProblems } from '../engine/doctorPairing';
 import { separateLowAcuityCover, timedFloatRelief } from '../engine/lowAcuityLastResort';
 import { followingRosterFindings, mergeFollowingRosterFindings } from '../engine/surroundingRosterChecks';
 import { assignmentCanCoverDoctor, nurseIsAvailable } from '../engine/assignmentPresence';
+import { manualDoctorOverlapAllowed, manualDoctorOverlapBoundaries } from '../engine/manualDoctorOverlap';
 import { summarizeNurseHours } from '../reports/hoursAccounting';
 import {
   Schedule,
@@ -268,8 +269,7 @@ export class ScheduleValidator {
             const floatContext = { assignments: dayAssignments, nurses, duties: dutyWindows, doctors,
               specialties, sessions, roles, leave: leaveEntries, locks, requests: availabilityRequests, clinic,
               minFreeNurses: plus?.enabled === false ? 0 : plus?.value ?? 1 };
-            const relief = dayAssignments.some(assignment => assignment.doctorCoverage !== undefined)
-              ? timedFloatRelief(floatContext, a) : [];
+            const relief = timedFloatRelief(floatContext, a);
             const cover = separateLowAcuityCover(floatContext, a);
             if (relief.length > 0) {
               const affectedNurseIds = [...new Set([a.nurseId, ...relief.map(r => r.floatAssignment.nurseId)])];
@@ -289,7 +289,7 @@ export class ScheduleValidator {
               });
             } else findings.push({
               id: `low-acuity-cover-${a.id}`, category: 'DOCTOR_COVER', severity: 'INFO',
-              message: `${nurse.fullName} is assigned to ${ids.map(id => doctors.find(d => d.id === id)?.fullName || 'Doctor').join(' and ')} on ${formatDate(date)}. One nurse covers two low acuity doctors as a last resort from ${shared.map(r => `${r.startTime} to ${r.endTime}`).join(' and ')}. No complete eligible Float replacement is available for the required clinic hours without reducing required Nurse Clinic cover. The duty hours count once.`,
+              message: `${nurse.fullName} is assigned to ${ids.map(id => doctors.find(d => d.id === id)?.fullName || 'Doctor').join(' and ')} on ${formatDate(date)}. One nurse covers two low acuity doctors as a last resort from ${shared.map(r => `${r.startTime} to ${r.endTime}`).join(' and ')}. No eligible Float replacement is available for any shared clinic time without reducing required Nurse Clinic cover. The duty hours count once.`,
               affectedNurseIds: [a.nurseId], cellRefs: [{ nurseId: a.nurseId, date }], date,
             });
           }
@@ -658,23 +658,26 @@ export class ScheduleValidator {
             });
           }
         }
-        // A complete handover is a note; extra overlapping cover still asks for review.
+        // A handover may be useful, but only a saved manual edit can keep overlapping nurses.
         const boundaries = [...new Set([sess.startTime, sess.endTime,
-          ...linkedCover.flatMap(d => [d.startTime, d.endTime])])]
+          ...linkedCover.flatMap(d => [d.startTime, d.endTime]),
+          ...manualDoctorOverlapBoundaries(dayAssignments, sess.doctorId, date)])]
           .filter(t => t >= sess.startTime && t <= sess.endTime).sort();
-        const overlapRuns: { start: string; end: string; ids: Set<string>; amount: number }[] = [];
+        const overlapRuns: { start: string; end: string; ids: Set<string>; amount: number; manual: boolean }[] = [];
         for (let i = 0; i < boundaries.length - 1; i++) {
           const start = boundaries[i], end = boundaries[i + 1];
           const ids = new Set(linkedAssignments.filter(a => intervalsFor(a, sess.doctorId)
             .some(range => overlaps(range.startTime, range.endTime, start, end))).map(a => a.nurseId));
           if (ids.size < 2) continue;
+          const manual = manualDoctorOverlapAllowed(dayAssignments, sess.doctorId, date, start, end, [...ids],
+            { ...doctorCoverage, dutyWindows });
           const amount = (toMinutes(end) - toMinutes(start)) * (ids.size - 1) / 60;
           const last = overlapRuns[overlapRuns.length - 1];
-          if (last?.end === start) {
+          if (last?.end === start && last.manual === manual &&
+            JSON.stringify([...last.ids].sort()) === JSON.stringify([...ids].sort())) {
             last.end = end;
-            ids.forEach(id => last.ids.add(id));
             last.amount += amount;
-          } else overlapRuns.push({ start, end, ids, amount });
+          } else overlapRuns.push({ start, end, ids, amount, manual });
         }
         const coveringAssignments = linkedAssignments;
         const needsHandover = new Set(coveringAssignments.map(a => a.nurseId)).size > 1 &&
@@ -693,10 +696,12 @@ export class ScheduleValidator {
             amount: overlapRuns.reduce((sum, r) => sum + r.amount, 0),
           });
         }
-        for (const run of needsHandover ? [] : overlapRuns) findings.push({
+        for (const run of overlapRuns) findings.push({
           id: `session-overlap-${sess.id}-${run.start}`,
-          category: 'DOCTOR_COVER', severity: 'WARN',
-          message: `${doctorLabel(sess)} on ${formatDate(date)} has more than one nurse from ${run.start} to ${run.end}. Check whether this shared cover is needed.`,
+          category: 'DOCTOR_COVER', severity: run.manual ? 'WARN' : 'ERROR',
+          message: `${doctorLabel(sess)} on ${formatDate(date)} has more than one nurse from ${run.start} to ${run.end}. ${run.manual
+            ? 'This overlap was saved by a planner. Check whether it is still needed.'
+            : 'Keep one nurse with this doctor, or save a manual edit to keep the overlap.'}`,
           affectedNurseIds: [...run.ids], cellRefs: [...run.ids].map(nurseId => ({ nurseId, date })),
           date, hour: run.start, amount: run.amount,
         });

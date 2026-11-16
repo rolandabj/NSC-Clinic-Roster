@@ -5,6 +5,7 @@ import { isFloatShift } from './floatShift';
 import { outsideNurseList } from './nurseList';
 import { isExclusiveNurseClinic } from './nurseClinicUtils';
 import { nurseIsAvailable } from './assignmentPresence';
+import { subtractDoctorCoverage, withDoctorCoverage } from './timedAllocation';
 
 export interface FloatCoverContext {
   assignments: Assignment[];
@@ -107,14 +108,95 @@ export function separateLowAcuityCover(ctx: FloatCoverContext, pair: Assignment)
 /** Recheck generated pairs after top up has made the day's final Float duties available. */
 export function applySeparateFloatCover(ctx: FloatCoverContext, maySplit: (a: Assignment) => boolean): Assignment[] {
   let assignments = ctx.assignments;
-  for (const pair of ctx.assignments) {
-    if (!pair.secondDoctorId || pair.doctorCoverage !== undefined || !maySplit(pair)) continue;
-    const result = separateLowAcuityCover({ ...ctx, assignments }, pair);
-    if (!result.replacement) continue;
-    const changes = new Map(result.replacement.changes.map(a => [a.id, a]));
-    assignments = assignments.map(a => changes.get(a.id) || a);
+  const duties = new Map(ctx.duties.map(d => [d.id, d]));
+  const nurses = new Map(ctx.nurses.map(n => [n.id, n]));
+  const present = (a: Assignment) => nurseIsAvailable(nurses.get(a.nurseId), a.date,
+    { leaveEntries: ctx.leave, locks: ctx.locks, availabilityRequests: ctx.requests });
+  const movable = (a: Assignment) => a.source === 'GENERATED' && !a.locked &&
+    (!ctx.movable || ctx.movable(a)) && !ctx.locks.some(l => l.nurseId === a.nurseId && l.date === a.date);
+  for (const original of ctx.assignments) {
+    const first = assignments.find(a => a.id === original.id)!;
+    if (!first.secondDoctorId || !movable(first) || !maySplit(first) || ctx.clinic.holidays.has(first.date)) continue;
+    const sessions = doctorSessionsOn(ctx.sessions, original.date);
+    const pairNurse = nurses.get(first.nurseId);
+    if (!present(first) || !pairNurse?.isClinicNurse ||
+      outsideNurseList(pairNurse, first, { doctors: ctx.doctors, specialties: ctx.specialties, sessions }) ||
+      doctorPairingProblems(first, ctx.doctors, { duty: duties.get(first.dutyWindowId), sessions }).length) continue;
+    const pairCover = effectiveDoctorCoverage(first, duties.get(first.dutyWindowId), sessions);
+    const candidates = assignments.filter(a => {
+      const n = nurses.get(a.nurseId);
+      return a.date === first.date && a.nurseId !== first.nurseId && movable(a) && present(a) &&
+        n?.isClinicNurse && !isExclusiveNurseClinic(n, ctx.roles) && (isFloatShift(a) || a.kind === 'DOCTOR') &&
+        assignments.filter(other => other.date === a.date && other.nurseId === a.nurseId).length === 1;
+    });
+    let complete = false;
+    // Prefer giving either complete doctor contribution to one nurse before a handover.
+    for (const doctorId of [...assignmentDoctorIds(first)].reverse()) {
+      const contribution = pairCover.filter(r => r.doctorId === doctorId);
+      for (const candidate of candidates) {
+        if (assignmentDoctorIds(candidate).filter(id => id !== doctorId).length >= 2 ||
+          outsideNurseList(nurses.get(candidate.nurseId)!, { ...candidate, kind: 'DOCTOR', doctorId, secondDoctorId: undefined },
+            { doctors: ctx.doctors, specialties: ctx.specialties, sessions })) continue;
+        const free = freeDoctorIntervals(candidate, duties.get(candidate.dutyWindowId), sessions);
+        if (!contribution.length || contribution.some(r => uncoveredParts(r.startTime, r.endTime, free).length)) continue;
+        const nextPair = withDoctorCoverage(first, pairCover.filter(r => r.doctorId !== doctorId));
+        const nextHelper = withDoctorCoverage(candidate, [...effectiveDoctorCoverage(candidate, duties.get(candidate.dutyWindowId), sessions), ...contribution]);
+        const after = assignments.map(a => a.id === first.id ? nextPair : a.id === candidate.id ? nextHelper : a);
+        if (!preservesFreeNurseCover(ctx, assignments, after, first.date)) continue;
+        assignments = after; complete = true; break;
+      }
+      if (complete) break;
+    }
+    if (complete) continue;
+    const whole = separateLowAcuityCover({ ...ctx, assignments, movable }, first).replacement;
+    let preferred = whole ? new Set(whole.floats.map(a => a.id)) : undefined;
+    // A single nurse who can relieve every shared minute avoids an unnecessary handover.
+    if (!preferred) {
+      const shared = simultaneousDoctorIntervals(first, duties.get(first.dutyWindowId), sessions);
+      for (const candidate of assignments.filter(a => a.date === original.date && a.id !== original.id && movable(a))) {
+        const relief = timedFloatRelief({ ...ctx, assignments, movable: a => movable(a) && a.id === candidate.id }, first);
+        if (shared.length && shared.every(r => uncoveredParts(r.startTime, r.endTime, relief).length === 0)) {
+          preferred = new Set([candidate.id]); break;
+        }
+      }
+    }
+    // Recalculate after every transfer. In particular, a Float consumed for one slice
+    // cannot still count as the free Nurse Clinic nurse in another overlapping slice.
+    for (let step = 0; step < 512; step++) {
+      const pair = assignments.find(a => a.id === original.id)!;
+      if (!pair.secondDoctorId) break;
+      const relief = timedFloatRelief({ ...ctx, assignments,
+        movable: a => movable(a) && (!preferred || preferred.has(a.id)) }, pair)[0];
+      if (!relief) {
+        if (preferred) { preferred = undefined; continue; }
+        break;
+      }
+      const helper = assignments.find(a => a.id === relief.floatAssignment.id)!;
+      const transferred = { doctorId: relief.doctorId, startTime: relief.startTime, endTime: relief.endTime };
+      const nextPair = withDoctorCoverage(pair, subtractDoctorCoverage(
+        effectiveDoctorCoverage(pair, duties.get(pair.dutyWindowId), sessions), [transferred]));
+      const nextHelper = withDoctorCoverage(helper, [...effectiveDoctorCoverage(helper, duties.get(helper.dutyWindowId), sessions), transferred]);
+      assignments = assignments.map(a => a.id === pair.id ? { ...nextPair, note: 'Separate doctor cover using available Float time' }
+        : a.id === helper.id ? { ...nextHelper, note: 'Doctor cover using available Float time' } : a);
+    }
   }
   return assignments;
+}
+
+/** A full handover can free the paired nurse while consuming Float time elsewhere. */
+function preservesFreeNurseCover(ctx: FloatCoverContext, before: Assignment[], after: Assignment[], date: string): boolean {
+  if (ctx.minFreeNurses <= 0) return true;
+  const duties = new Map(ctx.duties.map(d => [d.id, d]));
+  const nurses = new Map(ctx.nurses.map(n => [n.id, n]));
+  const sessions = doctorSessionsOn(ctx.sessions, date);
+  const present = (a: Assignment) => nurseIsAvailable(nurses.get(a.nurseId), date,
+    { leaveEntries: ctx.leave, locks: ctx.locks, availabilityRequests: ctx.requests });
+  const count = (list: Assignment[], start: string, end: string) => new Set(list.filter(a => a.date === date &&
+    present(a) && canBeFreeNurse(nurses.get(a.nurseId), ctx.roles) && list.filter(other => other.date === date && other.nurseId === a.nurseId)
+      .every(other => isFreeDuring(other, duties.get(other.dutyWindowId), sessions, start, end))).map(a => a.nurseId)).size;
+  const checks = coverageSlots(ctx.clinic, ctx.duties, sessions,
+    [...before, ...after].filter(a => a.date === date).flatMap(a => effectiveDoctorCoverage(a, duties.get(a.dutyWindowId), sessions)));
+  return checks.every(h => count(after, h.start, h.end) >= Math.min(ctx.minFreeNurses, count(before, h.start, h.end)));
 }
 
 export interface TimedFloatRelief {

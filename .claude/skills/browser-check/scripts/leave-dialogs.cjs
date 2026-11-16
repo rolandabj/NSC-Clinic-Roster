@@ -48,7 +48,7 @@ const shots = args.includes('--shots') ? args[args.indexOf('--shots') + 1] : nul
   const pin = page.getByRole('dialog', { name: 'Pin a day' });
   await pin.waitFor({ timeout: 5000 });
   await pin.getByLabel('Nurse').selectOption('amy');
-  await pin.getByLabel('Day').fill('20-10-2026');
+  await pin.getByLabel('Day', { exact: true }).fill('20-10-2026');
   await pin.getByLabel('What is pinned').selectOption('OFF');
   check('a day off hides the shift fields', (await pin.getByLabel('Shift').count()) === 0);
   check('the pin dialog has no text under 12 px', (await smallText(pin)) === 0);

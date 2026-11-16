@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import { rosterReviewText } from '../../src/services/export/rosterReviewText';
 import { approveAllocation } from '../../src/services/engine/allocationReview';
+import { recordManualDoctorOverlaps } from '../../src/services/engine/manualDoctorOverlap';
 import assert from 'node:assert/strict';
 import {
   ANALYSIS_FORMAT,
@@ -182,7 +183,7 @@ test('file name', () => {
 });
 
 
-test('analysis exports exact coverage intervals and groups shared doctor coverage warnings', () => {
+test('analysis exports exact coverage intervals and groups unrecorded doctor overlap errors', () => {
   const a = buildRosterAnalysis(input({
     assignments: [shift('a1', 'amy', '2026-10-05'),
       shift('b1', 'ben', '2026-10-05', { dutyWindowId: LATE.id })],
@@ -192,7 +193,19 @@ test('analysis exports exact coverage intervals and groups shared doctor coverag
   assert.equal(a.hourlyCoverage['2026-10-06']['09:00'].uncoveredDoctors, 1);
   assert.equal(a.hourlyCoverage['2026-10-06']['09:00'].end, '10:00');
   assert.equal(a.problems.filter(p => p.rule === 'session-overlap').length, 1);
-  assert.equal(a.summary.problems.byRule['session-overlap'].WARN, 1);
+  assert.equal(a.summary.problems.byRule['session-overlap'].ERROR, 1);
+});
+
+test('analysis keeps the manual overlap finding but excludes its private planner metadata', () => {
+  const data = input({ assignments: [shift('first', 'amy', '2026-10-05'), shift('edited', 'ben', '2026-10-05', { source: 'MANUAL' })] });
+  const edited = recordManualDoctorOverlaps(data.assignments[1], data.assignments, {
+    nurses: data.nurses, doctors: data.doctors, sessions: data.sessions, roles: data.roles, specialties: data.specialties,
+    dutyWindows: data.dutyWindows, leaveEntries: data.leaveEntries,
+  }, 'private-overlap-planner', '2026-11-16T10:00:00Z');
+  const result = buildRosterAnalysis({ ...data, assignments: [data.assignments[0], edited] });
+  assert.equal(result.summary.problems.byRule['session-overlap'].WARN, 1);
+  assert.ok(!JSON.stringify(result).includes('private-overlap-planner'));
+  assert.ok(!JSON.stringify(result).includes('manualDoctorOverlaps'));
 });
 
 // Stage 5: clinical permission, ranked preferences and publication checks are separate.

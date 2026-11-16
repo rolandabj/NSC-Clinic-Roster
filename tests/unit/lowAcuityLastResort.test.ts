@@ -65,11 +65,12 @@ test('a Float working different hours does not prevent last resort sharing', () 
   assert.ok(!floatProblem(report));
   assert.ok(pairNote(report));
 });
-test('partial Float cover cannot replace an entire shared clinic unless a handover completes it', () => {
+test('partial eligible Float cover must replace sharing during its available hours', () => {
   const early = { ...DAY_DUTY, id: 'early', endTime: '13:00' };
   const report = check([pair, { ...float, dutyWindowId: early.id }], { duties: [DAY_DUTY, early] });
-  assert.ok(!floatProblem(report));
-  assert.ok(pairNote(report));
+  assert.equal(floatProblem(report)?.severity, 'ERROR');
+  assert.match(floatProblem(report)!.message, /09:00 to 13:00/);
+  assert.ok(!pairNote(report));
 });
 test('two Float duties can provide a complete handover instead of a paired clinic', () => {
   const duties = [{ ...DAY_DUTY, id: 'early', endTime: '13:00' }, { ...DAY_DUTY, id: 'late', startTime: '13:00' }, DAY_DUTY];
