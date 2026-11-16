@@ -12,7 +12,7 @@ Plan: `tasks/scheduler-improvement-plan.md`. Implementation approval does not ap
 - [x] Reports agree on real coverage and missing minutes
 - [x] Unit, type, lint, build, email and browser checks pass
 - [x] Guide and graph updated; work committed and pushed
-- [ ] Owner review before Stage 2
+- [x] Owner review before Stage 2 (approved on 16-11-2026)
 
 ## Remaining stages
 
