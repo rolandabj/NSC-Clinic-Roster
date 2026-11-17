@@ -39,7 +39,7 @@ Plan: `tasks/scheduler-improvement-plan.md`. Implementation approval does not ap
 - [x] Stage 2: timed cover foundation and all readers
 - [x] Owner review before Stage 3 (approved on 16-11-2026)
 - [x] Stage 3: sequential cover, partial Float relief and manual editing
-- [ ] Owner review before Stage 4
+- [x] Owner review before Stage 4 (approved on 17-11-2026)
 - [ ] Stage 4: stronger search, worker and automatic save
 - [ ] Owner review before Stage 5
 - [ ] Stage 5: clinic verification and coordinated rollout
