@@ -960,9 +960,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1794978343.2128558,
-    "seen": 1794978350.6395185,
-    "ast_hash": "6e168778c90404f067dc135ed52be657",
+    "mtime": 1794978370.6971705,
+    "seen": 1794978378.691707,
+    "ast_hash": "8defd01d8594372065451cec8dc3b6d2",
     "semantic_hash": ""
   },
   "index.html": {
@@ -2814,9 +2814,9 @@
     "semantic_hash": ""
   },
   "tasks/scheduler-improvement-todo.md": {
-    "mtime": 1794977793.8612838,
-    "seen": 1794977918.9733999,
-    "ast_hash": "a171b61ecb45f61281e4408e391d5500",
+    "mtime": 1794978370.6974022,
+    "seen": 1794978378.6917133,
+    "ast_hash": "945b24e815b0cbd5e132fe43ab4d1598",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/timed-cover.cjs": {

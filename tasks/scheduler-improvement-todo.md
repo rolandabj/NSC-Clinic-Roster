@@ -43,7 +43,7 @@ Plan: `tasks/scheduler-improvement-plan.md`. Implementation approval does not ap
 - [x] Fresh server inputs, stale input rejection and bounded fill dates
 - [x] One final save with an authoritative save base, backup and Undo
 - [x] Unit, type, lint, build, email, emulator, browser and clinic replay checks
-- [ ] Guide and graph updated; work committed and pushed
+- [x] Guide and graph updated; work committed and pushed
 
 ## Remaining stages
 
