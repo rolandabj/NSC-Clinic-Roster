@@ -55,7 +55,7 @@ Plan: `tasks/scheduler-improvement-plan.md`. Implementation approval does not ap
 - [x] Actual timed worker output through database, snapshots and communications
 - [x] Cancellation, stale inputs, backup, failed saves and reload checks
 - [x] Planner reload and clinic review actions documented in scheduler-rollout.md
-- [ ] Final browser checks, guide and graph; commit and push
+- [x] Final browser checks, guide and graph; commit and push
 - [ ] Clinic planner closes old tabs and reviews the actual draft before publication
 
 ## Stage checkpoints

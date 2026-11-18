@@ -2,7 +2,7 @@
 
 This file describes the whole web app: what it does, how it is built, where every part of the code lives, how the roster engine thinks, how data is saved, how it is deployed, and how we work on it. Paste it (or point to it) at the start of a new chat so work can continue without re-reading the codebase.
 
-Last updated: 18-11-2026, scheduling improvements Stage 5 (section 16, item 120), on the working branch; not pushed to main yet.
+Last updated: 18-11-2026, scheduling improvements Stage 5 (section 16, item 120), pushed to main.
 
 ---
 
@@ -906,7 +906,7 @@ Added 34 unit tests, bringing the total to 1018. These include twelve save recov
 
 Two full worker clinic replays use the same exported settings. Fresh generation improves the Stage 4 result from 28 to 25 missing doctor hours, with zero Nurse Clinic gaps. It has 2726 paid hours: Aprille works 206 and the other twelve nurses work 210. It has seven publication blockers, consisting of four doctor gaps and three pairing reviews. Empty only on the checked Stage 4 roster instead improves missing time from 28 to 21 hours, with all thirteen nurses still at 210 hours, totalling 2730. Every existing paid id, nurse, date and duty window stays unchanged in this second run. It uses Aprille's spare Float time for Ansam on 02-12-2026 from 11:00 to 16:00 and Diana on 18-12-2026 from 13:00 to 15:00, while retaining Nurse Clinic cover. Nine publication blockers remain: five doctor sessions with gaps and four pairing reviews. Both runs have two sequential two doctor duties, no concurrent sharing and no overlapping nurses on one doctor. Independent minute audits confirm the coverage and paid hours. Both finish in about 107 seconds with a search limit; neither proves the remaining gaps unavoidable. These are different starting states, so the stronger result is not a promise that every fresh generation reaches 21 hours.
 
-The clinic review and exact candidate analysis are kept outside the repository. No live roster was changed, approved, published or emailed. After the host deploys this stage, every planner needs to close old tabs and reload before editing timed shifts. The clinic still needs to arrange remaining cover, confirm actual eligibility and pairing exceptions, review hours and pass publication checks on the actual draft. The guide and code graph are updated. Stage 5 is on the working branch; not pushed to main yet.
+The clinic review and exact candidate analysis are kept outside the repository. No live roster was changed, approved, published or emailed. After the host deploys this stage, every planner needs to close old tabs and reload before editing timed shifts. The clinic still needs to arrange remaining cover, confirm actual eligibility and pairing exceptions, review hours and pass publication checks on the actual draft. The guide and code graph are updated. The owner approved pushing Stage 5 to main on 18-11-2026. Stage 5 is pushed to main. Engineering work for all five stages is complete; clinic rollout and publication still require the planner actions above.
 
 ## 17. Known quirks and ideas for later
 
