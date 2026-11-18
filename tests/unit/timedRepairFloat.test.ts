@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Assignment, Doctor, DoctorSession } from '../../src/types';
-import { applySeparateFloatCover, type FloatCoverContext } from '../../src/services/engine/lowAcuityLastResort';
+import { applySeparateFloatCover, separateLowAcuityCover, timedFloatRelief, type FloatCoverContext } from '../../src/services/engine/lowAcuityLastResort';
 import { repairCoverage } from '../../src/services/engine/coverageRepair';
 import { effectiveDoctorCoverage, resolveClinicSetup } from '../../src/services/engine/clinicModel';
-import { DAY_DUTY, makeNurse } from './fixtures';
+import { ScheduleValidator } from '../../src/services/validation/ScheduleValidator';
+import { LAST_RESORT_NOTE } from '../../src/services/engine/lastResort';
+import { DAY_DUTY, SENIOR, hoursOnlyRules, makeNurse, makeSchedule } from './fixtures';
 
 const date = '2026-11-22';
 const range = (doctorId: string, startTime: string, endTime: string) => ({ doctorId, startTime, endTime });
@@ -23,6 +25,57 @@ const ctx = (assignments: Assignment[]): FloatCoverContext => ({ assignments, nu
   minFreeNurses: 0, movable: a => a.source === 'GENERATED' && !a.locked });
 const cover = (a: Assignment, context: FloatCoverContext) => effectiveDoctorCoverage(a,
   context.duties.find(d => d.id === a.dutyWindowId), context.sessions);
+
+for (const exception of ['paired nurse', 'Float nurse'] as const) test(`Float priority applies to a clinically eligible ${exception} outside their preference list`, () => {
+  const short = { ...DAY_DUTY, id: 'short-exception', startTime: '13:30', endTime: '15:15' };
+  const shared = { ...pair, note: exception === 'paired nurse' ? LAST_RESORT_NOTE : 'Original paired duty' };
+  const context = { ...ctx([shared, { ...float, dutyWindowId: short.id }]), duties: [DAY_DUTY, short],
+    nurses: [makeNurse('amy', { preferences: (exception === 'paired nurse' ? ['one'] : ['one', 'two'])
+      .map((refId, i) => ({ kind: 'DOCTOR' as const, refId, rank: i + 1 })) }),
+    makeNurse('ben', { preferences: [{ kind: 'DOCTOR' as const, refId: exception === 'Float nurse' ? 'third' : 'two', rank: 1 }] })] };
+  const validate = (assignments: Assignment[]) => ScheduleValidator.validate(makeSchedule({ id: 'sched', startDate: date, endDate: date, hoursTargetFullTime: 8 }),
+    assignments, context.nurses, [SENIOR], context.duties, context.sessions, [], [], [], hoursOnlyRules(), [], [], context.doctors, [], context.clinic);
+  assert.deepEqual(timedFloatRelief(context, shared).map(r => [r.startTime, r.endTime]), [['13:30', '15:15']]);
+  assert.ok(validate(context.assignments).findings.some(f => f.id === 'low-acuity-float-pair' && f.severity === 'ERROR'));
+  const result = applySeparateFloatCover(context, () => true);
+  assert.deepEqual(cover(result[1], context), [range('two', '13:30', '15:15')]);
+  assert.deepEqual(cover(result[0], context).filter(r => r.doctorId === 'two'), [range('two', '13:00', '13:30'), range('two', '15:15', '17:00')]);
+  assert.equal(result[exception === 'paired nurse' ? 0 : 1].note, LAST_RESORT_NOTE);
+  assert.ok(validate(result).findings.some(f => f.id === 'low-acuity-cover-pair' && f.severity === 'INFO'));
+  assert.equal(validate(result).findings.some(f => f.severity === 'ERROR'), false);
+  if (exception === 'paired nurse') {
+    const fullyRelieved = applySeparateFloatCover({ ...context, assignments: [shared, float] }, () => true);
+    assert.equal(fullyRelieved[0].secondDoctorId, undefined);
+    assert.equal(fullyRelieved[0].note, 'Separate doctor cover using available Float time');
+  }
+  const denied = { ...context, nurses: [context.nurses[0], { ...context.nurses[1], doctorEligibility: {
+    doctorIds: ['third'], specialtyIds: [], reviewedBy: 'lead', reviewedAt: '2026-11-18T09:00:00Z' } }] };
+  assert.deepEqual(timedFloatRelief(denied, shared), []);
+  assert.deepEqual(applySeparateFloatCover(denied, () => true), denied.assignments);
+});
+
+test('legacy whole Float replacement can use a clinical preference exception without granting clinical permission', () => {
+  const legacy = { ...pair, doctorCoverage: undefined };
+  const context = { ...ctx([legacy, float]), nurses: [nurses[0], makeNurse('ben', {
+    preferences: [{ kind: 'DOCTOR', refId: 'third', rank: 1 }] })] };
+  const replacement = separateLowAcuityCover(context, legacy).replacement;
+  assert.ok(replacement);
+  assert.equal(replacement.doctorId, 'two');
+  assert.equal(replacement.changes.find(a => a.id === float.id)?.note, LAST_RESORT_NOTE);
+});
+
+test('a Float who lists the doctor supplies relief before an eligible preference exception', () => {
+  const short = { ...DAY_DUTY, id: 'preferred-short', startTime: '13:30', endTime: '15:15' };
+  const fallback = { ...float, id: 'first-by-id', nurseId: 'aaron', dutyWindowId: short.id };
+  const named = { ...float, dutyWindowId: short.id };
+  const context = { ...ctx([pair, fallback, named]), duties: [DAY_DUTY, short], nurses: [nurses[0],
+    makeNurse('aaron', { preferences: [{ kind: 'DOCTOR', refId: 'third', rank: 1 }] }),
+    makeNurse('ben', { preferences: [{ kind: 'DOCTOR', refId: 'two', rank: 1 }] })] };
+  assert.deepEqual(timedFloatRelief(context, pair).map(r => r.floatAssignment.id), [named.id]);
+  const result = applySeparateFloatCover(context, () => true);
+  assert.deepEqual(result.find(a => a.id === fallback.id), fallback);
+  assert.deepEqual(cover(result.find(a => a.id === named.id)!, context), [range('two', '13:30', '15:15')]);
+});
 
 test('partial generated Float relief removes only the exact shared minutes and keeps paid duties', () => {
   const short = { ...DAY_DUTY, id: 'short', startTime: '13:30', endTime: '15:15' };

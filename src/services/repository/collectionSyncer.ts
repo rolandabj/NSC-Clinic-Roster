@@ -30,7 +30,8 @@ export function fingerprint(record: object): string {
 
 interface Known<T> {
   item: T;
-  print: string;
+  /** Null means our write may have committed before reporting a failure. */
+  print: string | null;
 }
 
 export interface SyncPlan<T> {
@@ -39,8 +40,8 @@ export interface SyncPlan<T> {
 }
 
 /**
- * What to write to turn the known saved state into the desired one. Only known
- * records that are in scope can be removed; records nobody here saw are never touched.
+ * What to write to turn the known saved state into the desired one. Only records
+ * read or sent by this browser can be removed; unknown records are never touched.
  */
 export function planSync<T extends { id: string }>(
   known: Map<string, Known<T>>,
@@ -55,6 +56,7 @@ export function planSync<T extends { id: string }>(
   // changed in place), so only copies of saved records are compared, by their saved text (`fingerprint`), as before.
   const upserts = desired.filter((d) => {
     const k = known.get(d.id);
+    if (k?.print === null) return true;
     return !(k && k.item === d) && k?.print !== fingerprint(d);
   });
   return { removeIds, upserts };
@@ -74,6 +76,8 @@ export class CollectionSyncer<C extends CollectionName> {
   private running: Promise<void> | null = null;
   /** The scope being written now (it is no longer pending, but not yet saved). */
   private writingScope: string | null = null;
+  /** Reset ends the old account's work, including callbacks from an accepted server call. */
+  private epoch = 0;
 
   constructor(
     private readonly repo: IRepository,
@@ -156,6 +160,7 @@ export class CollectionSyncer<C extends CollectionName> {
 
   /** Forgets everything: unsaved states and what is known (on sign out, so nothing is saved for the next account). */
   reset(): void {
+    this.epoch++;
     this.pending.clear();
     this.failed.clear();
     this.known.clear();
@@ -181,9 +186,10 @@ export class CollectionSyncer<C extends CollectionName> {
     inScope: (item: EntityForCollection<C>) => boolean = () => true,
     scope = 'all'
   ): Promise<boolean> {
+    const epoch = this.epoch;
     this.pending.set(scope, { items, inScope });
     this.failed.delete(scope); // the newer state replaces the failed one for this scope
-    return this.run().then(() => !this.failed.has(scope) && !this.pending.has(scope));
+    return this.run().then(() => epoch === this.epoch && !this.failed.has(scope) && !this.pending.has(scope));
   }
 
   /** Resolves when no save is running (a failed one stays failed). */
@@ -194,11 +200,12 @@ export class CollectionSyncer<C extends CollectionName> {
   /** Tries every failed save again; null when nothing failed. */
   retry(): Promise<boolean> | null {
     if (this.failed.size === 0) return null;
+    const epoch = this.epoch;
     for (const [scope, f] of this.failed) {
       if (!this.pending.has(scope)) this.pending.set(scope, { items: f.items, inScope: f.inScope });
     }
     this.failed.clear();
-    return this.run().then(() => this.failed.size === 0);
+    return this.run().then(() => epoch === this.epoch && this.failed.size === 0);
   }
 
   private run(): Promise<void> {
@@ -215,18 +222,21 @@ export class CollectionSyncer<C extends CollectionName> {
   private async loop(): Promise<void> {
     while (this.pending.size > 0) {
       const [scope, desired] = this.pending.entries().next().value as [string, Desired<EntityForCollection<C>>];
+      const epoch = this.epoch;
       this.pending.delete(scope);
       this.writingScope = scope;
       let wrote = false;
       try {
-        wrote = await this.write(desired.items, desired.inScope);
+        wrote = await this.write(desired.items, desired.inScope, epoch);
       } catch (err) {
+        if (epoch !== this.epoch) continue;
         console.error(`[CollectionSyncer] Saving ${this.collection} (${scope}) failed:`, err);
         // Kept for a retry, unless a newer state for this scope is already waiting.
         if (!this.pending.has(scope)) this.failed.set(scope, { ...desired, error: err });
       } finally {
         this.writingScope = null;
       }
+      if (epoch !== this.epoch) continue;
       // What follows a save never makes the save itself count as failed.
       if (wrote) {
         try {
@@ -239,26 +249,58 @@ export class CollectionSyncer<C extends CollectionName> {
   }
 
   /** Writes what changed; true when anything was written. */
-  private async write(items: EntityForCollection<C>[], inScope: (item: EntityForCollection<C>) => boolean): Promise<boolean> {
+  private async write(items: EntityForCollection<C>[], inScope: (item: EntityForCollection<C>) => boolean, epoch: number): Promise<boolean> {
+    if (epoch !== this.epoch) return false;
     const { removeIds, upserts } = planSync(this.known, items, inScope);
     if (removeIds.length + upserts.length === 0) return false;
     if (this.repo.bulkWrite) {
       // One write: new and changed records first, then removals, in as few batches as
       // possible, so a write cut short leaves the old records, never empty cells.
-      await this.repo.bulkWrite(this.collection, { upserts, removeIds, replace: true });
+      try {
+        await this.repo.bulkWrite(this.collection, { upserts, removeIds, replace: true });
+      } catch (error) {
+        if (epoch === this.epoch) this.rememberUncertain(upserts, removeIds);
+        throw error;
+      }
+      if (epoch !== this.epoch) return false;
       for (const id of removeIds) this.known.delete(id);
       for (const item of upserts) this.known.set(item.id, { item, print: fingerprint(item) });
       return true;
     }
     if (removeIds.length > 0) {
-      await this.repo.bulkRemove(this.collection, removeIds);
+      try {
+        await this.repo.bulkRemove(this.collection, removeIds);
+      } catch (error) {
+        if (epoch === this.epoch) this.rememberUncertain([], removeIds);
+        throw error;
+      }
+      if (epoch !== this.epoch) return false;
       for (const id of removeIds) this.known.delete(id);
     }
     if (upserts.length > 0) {
       // Whole documents, so a cleared field (e.g. a removed doctor) is cleared in the database too.
-      await this.repo.bulkUpsert(this.collection, upserts, { replace: true });
+      try {
+        await this.repo.bulkUpsert(this.collection, upserts, { replace: true });
+      } catch (error) {
+        if (epoch === this.epoch) this.rememberUncertain(upserts, []);
+        throw error;
+      }
+      if (epoch !== this.epoch) return false;
       for (const item of upserts) this.known.set(item.id, { item, print: fingerprint(item) });
     }
     return true;
+  }
+
+  /**
+   * A failed batch may already have changed some records, or its acknowledgement
+   * may have been lost. Retry and Undo must write their desired values again and
+   * may remove new ids we attempted. Records added by other planners stay unknown.
+   */
+  private rememberUncertain(upserts: EntityForCollection<C>[], removeIds: string[]): void {
+    for (const item of upserts) this.known.set(item.id, { item, print: null });
+    for (const id of removeIds) {
+      const previous = this.known.get(id);
+      if (previous) this.known.set(id, { ...previous, print: null });
+    }
   }
 }

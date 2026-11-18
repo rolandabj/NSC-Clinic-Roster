@@ -114,3 +114,61 @@ test('search cannot trade required Nurse Clinic minutes for more doctor cover', 
   assert.equal(result.score.requiredNurseClinicMinutes, before.requiredNurseClinicMinutes);
   assert.equal(result.score.uncoveredDoctorMinutes, before.uncoveredDoctorMinutes);
 });
+
+for (const scenario of [
+  { name: 'after another Nurse Clinic nurse arrives', floatStart: '09:00', floatEnd: '17:00', ncStart: '11:20', ncEnd: '21:00',
+    doctorEnd: '16:00', expectedStart: '11:20', expectedEnd: '16:00', missing: 140 },
+  { name: 'before another Nurse Clinic nurse leaves', floatStart: '13:00', floatEnd: '21:00', ncStart: '09:00', ncEnd: '15:10',
+    doctorEnd: '21:00', expectedStart: '13:00', expectedEnd: '15:10', missing: 590 },
+]) test(`Float time can cover a doctor ${scenario.name}`, async () => {
+  const floatDuty = { ...DAY_DUTY, startTime: scenario.floatStart, endTime: scenario.floatEnd };
+  const ncDuty = { ...DAY_DUTY, id: 'nurse-clinic-duty', startTime: scenario.ncStart, endTime: scenario.ncEnd };
+  const original = shift('paid-float', 'one');
+  const protectedNC = { ...shift('protected-nc', 'nc'), dutyWindowId: ncDuty.id,
+    clinicalRoleId: 'role-nurse-clinic', source: 'MANUAL' as const, note: 'Keep this Nurse Clinic shift' };
+  const initial = [original, protectedNC];
+  const input = { ...base({ schedule: makeSchedule({ startDate: date, endDate: date, hoursTargetFullTime: 12 }),
+    nurses: [nurse('one', ['a']), makeNurse('nc', { isClinicNurse: false, capabilityIds: ['role-nurse-clinic'] })]
+      .map(n => ({ ...n, capabilityIds: ['role-nurse-clinic'] })),
+    sessions: [clinic('a', date, scenario.doctorEnd)], dutyWindows: [floatDuty, ncDuty],
+    clinicSetup: { openTime: '09:00', closeTime: '21:00' },
+    roles: [{ id: 'role-nurse-clinic', name: 'Nurse Clinic', acronym: 'NC', description: '', defaultDailyQuota: 1 }],
+    rules: base().rules.map(r => r.id === 'rule-nurse-clinic' || r.id === 'rule-nurse-plus-one'
+      ? { ...r, enabled: true, severity: 'HARD', value: 1 } : r),
+  }), initialAssignments: initial, baselineAssignments: initial, preservePaidDuties: true };
+  const result = await searchSchedule(input, { maxRounds: 1, maxExamined: 50 });
+  assert.equal(result.score.requiredNurseClinicMinutes, 0);
+  assert.equal(result.score.hardViolations, 0);
+  assert.equal(result.score.uncoveredDoctorMinutes, scenario.missing);
+  const covered = result.assignments.find(a => a.id === original.id)!;
+  assert.equal(covered.dutyWindowId, original.dutyWindowId);
+  assert.deepEqual(covered.doctorCoverage, [{ doctorId: 'a', startTime: scenario.expectedStart, endTime: scenario.expectedEnd }]);
+  assert.deepEqual(result.assignments.find(a => a.id === protectedNC.id), protectedNC);
+});
+
+test('the final Float pass covers a partial gap opened by the last wider exchange', async () => {
+  const full = { ...DAY_DUTY, id: 'full', endTime: '21:00' };
+  const ncLate = { ...full, id: 'nc-late', startTime: '11:00' };
+  const original = { ...shift('old-doctor', 'one', 'a'), doctorCoverage: [{ doctorId: 'a', startTime: '09:00', endTime: '16:00' }] };
+  const float = shift('paid-float', 'float');
+  const nc = [{ ...shift('nc-first', 'nc'), source: 'MANUAL' as const, clinicalRoleId: 'role-nurse-clinic', dutyWindowId: ncLate.id },
+    { ...shift('nc-second', 'nc', undefined, next), source: 'MANUAL' as const, clinicalRoleId: 'role-nurse-clinic', dutyWindowId: full.id }];
+  const initial = [original, float, ...nc];
+  const input = { ...base({ schedule: makeSchedule({ startDate: date, endDate: next, hoursTargetFullTime: 12 }),
+    nurses: [nurse('one', ['a', 'b']), nurse('float', ['a']), makeNurse('nc', { isClinicNurse: false, contractPercent: 200 })]
+      .map(n => ({ ...n, capabilityIds: ['role-nurse-clinic'] })),
+    sessions: [clinic('a', date, '16:00'), clinic('b', next, '21:00')], dutyWindows: [DAY_DUTY, full, ncLate],
+    clinicSetup: { openTime: '09:00', closeTime: '21:00' },
+    roles: [{ id: 'role-nurse-clinic', name: 'Nurse Clinic', acronym: 'NC', description: '', defaultDailyQuota: 1 }],
+    rules: [...base().rules.map((r): Rule => r.id === 'rule-nurse-clinic' || r.id === 'rule-nurse-plus-one'
+      ? { ...r, enabled: true, severity: 'HARD', value: 1 } : r),
+    { id: 'rule-h7-max-hours', name: 'Maximum hours', templateKey: 'MAX_WORKING_HOURS_PER_PERIOD', enabled: true, severity: 'HARD', value: 100 } as Rule],
+  }), initialAssignments: initial, baselineAssignments: initial };
+  const result = await searchSchedule(input, { maxRounds: 1, maxExamined: 300 });
+  assert.equal(result.score.uncoveredDoctorMinutes, 120);
+  assert.equal(result.score.requiredNurseClinicMinutes, 0);
+  assert.equal(result.score.hardViolations, 0);
+  assert.deepEqual(result.assignments.find(a => a.id === float.id)?.doctorCoverage,
+    [{ doctorId: 'a', startTime: '11:00', endTime: '16:00' }]);
+  for (const saved of nc) assert.deepEqual(result.assignments.find(a => a.id === saved.id), saved);
+});

@@ -112,6 +112,155 @@ test('new records are written before old ones are removed, in one write when the
   assert.deepEqual(state.calls, ['write newer / new']);
 });
 
+test('Undo after a partially committed combined save restores old values and removes only this browser\'s new records', async () => {
+  const old = shift('old', '2026-10-05');
+  const removed = shift('removed', '2026-10-06');
+  const added = shift('added', '2026-10-07');
+  const baseline = [old, removed];
+  const { repo, data } = memoryRepo(baseline, true);
+  const complete = repo.bulkWrite;
+  let first = true;
+  repo.bulkWrite = async (collection: string, changes: { upserts: Assignment[]; removeIds: string[] }) => {
+    if (!first) return complete(collection, changes);
+    first = false;
+    changes.upserts.forEach(item => data.set(item.id, item));
+    throw new Error('A later batch failed after the upserts committed');
+  };
+  const syncer = new CollectionSyncer(repo, 'assignments');
+  syncer.replaceKnown(baseline, inRoster);
+  assert.equal(await syncer.save([{ ...old, dutyWindowId: 'L' }, added], inRoster, 'R'), false);
+  assert.equal(data.get(old.id)?.dutyWindowId, 'L');
+  assert.ok(data.has(added.id));
+  const otherPlanner = shift('other-planner', '2026-10-08', { nurseId: 'mary' });
+  data.set(otherPlanner.id, otherPlanner);
+  assert.equal(await syncer.save(baseline, inRoster, 'R'), true);
+  assert.deepEqual([...data.values()].sort((a, b) => a.id.localeCompare(b.id)),
+    [...baseline, otherPlanner].sort((a, b) => a.id.localeCompare(b.id)));
+  assert.equal(syncer.hasUnsaved('R'), false);
+});
+
+test('Retry repeats uncertain upserts even when the desired records are the same objects', async () => {
+  const old = shift('old', '2026-10-05');
+  const desired = [shift('new-one', '2026-10-06'), shift('new-two', '2026-10-07')];
+  const { repo, data, state } = memoryRepo([old], true);
+  const complete = repo.bulkWrite;
+  let first = true;
+  repo.bulkWrite = async (collection: string, changes: { upserts: Assignment[]; removeIds: string[] }) => {
+    if (!first) return complete(collection, changes);
+    first = false;
+    data.set(changes.upserts[0].id, changes.upserts[0]);
+    throw new Error('The first upsert committed, but the next batch failed');
+  };
+  const syncer = new CollectionSyncer(repo, 'assignments');
+  syncer.replaceKnown([old], inRoster);
+  assert.equal(await syncer.save(desired, inRoster, 'R'), false);
+  assert.equal(data.has('new-two'), false);
+  assert.equal(await syncer.retry(), true);
+  assert.deepEqual([...data.values()].sort((a, b) => a.id.localeCompare(b.id)), desired);
+  assert.deepEqual(state.calls, ['write new-one,new-two / old']);
+});
+
+test('Undo restores a removed record after a save committed but its acknowledgement was lost', async () => {
+  const baseline = [shift('old-one', '2026-10-05'), shift('old-two', '2026-10-06')];
+  const replacement = shift('new', '2026-10-07');
+  const { repo, data } = memoryRepo(baseline, true);
+  const complete = repo.bulkWrite;
+  let first = true;
+  repo.bulkWrite = async (collection: string, changes: { upserts: Assignment[]; removeIds: string[] }) => {
+    await complete(collection, changes);
+    if (first) { first = false; throw new Error('The save committed, but its acknowledgement was lost'); }
+  };
+  const syncer = new CollectionSyncer(repo, 'assignments');
+  syncer.replaceKnown(baseline, inRoster);
+  assert.equal(await syncer.save([replacement], inRoster, 'R'), false);
+  assert.deepEqual([...data.keys()], ['new']);
+  assert.equal(await syncer.save(baseline, inRoster, 'R'), true);
+  assert.deepEqual([...data.values()].sort((a, b) => a.id.localeCompare(b.id)), baseline);
+});
+
+test('Undo restores the same original objects after a partial fallback removal', async () => {
+  const baseline = [shift('old-one', '2026-10-05'), shift('old-two', '2026-10-06')];
+  const { repo, data } = memoryRepo(baseline);
+  const complete = repo.bulkRemove;
+  let first = true;
+  repo.bulkRemove = async (collection: string, ids: string[]) => {
+    if (!first) return complete(collection, ids);
+    first = false;
+    data.delete(ids[0]);
+    throw new Error('Only the first removal committed');
+  };
+  const syncer = new CollectionSyncer(repo, 'assignments');
+  syncer.replaceKnown(baseline, inRoster);
+  assert.equal(await syncer.save([], inRoster, 'R'), false);
+  assert.equal(data.has('old-one'), false);
+  assert.equal(await syncer.save(baseline, inRoster, 'R'), true);
+  assert.deepEqual([...data.values()].sort((a, b) => a.id.localeCompare(b.id)), baseline);
+});
+
+test('Retry completes a partially committed fallback upsert without deleting another planner\'s addition', async () => {
+  const desired = [shift('new-one', '2026-10-05'), shift('new-two', '2026-10-06')];
+  const { repo, data } = memoryRepo([]);
+  const complete = repo.bulkUpsert;
+  let first = true;
+  repo.bulkUpsert = async (collection: string, items: Assignment[]) => {
+    if (!first) return complete(collection, items);
+    first = false;
+    data.set(items[0].id, items[0]);
+    throw new Error('Only the first upsert committed');
+  };
+  const syncer = new CollectionSyncer(repo, 'assignments');
+  syncer.replaceKnown([], inRoster);
+  assert.equal(await syncer.save(desired, inRoster, 'R'), false);
+  const otherPlanner = shift('other-planner', '2026-10-07', { nurseId: 'mary' });
+  data.set(otherPlanner.id, otherPlanner);
+  assert.equal(await syncer.retry(), true);
+  assert.deepEqual([...data.values()].sort((a, b) => a.id.localeCompare(b.id)), [...desired, otherPlanner]);
+});
+
+test('Undo removes candidate records and restores old values after a fallback upsert reported failure', async () => {
+  const old = shift('old', '2026-10-05');
+  const added = shift('new', '2026-10-06');
+  const { repo, data } = memoryRepo([old]);
+  const complete = repo.bulkUpsert;
+  let first = true;
+  repo.bulkUpsert = async (collection: string, items: Assignment[]) => {
+    await complete(collection, items);
+    if (first) { first = false; throw new Error('The upserts committed before the connection failed'); }
+  };
+  const syncer = new CollectionSyncer(repo, 'assignments');
+  syncer.replaceKnown([old], inRoster);
+  assert.equal(await syncer.save([{ ...old, dutyWindowId: 'L' }, added], inRoster, 'R'), false);
+  assert.deepEqual([...data.keys()], ['old', 'new']);
+  assert.equal(await syncer.save([old], inRoster, 'R'), true);
+  assert.deepEqual([...data.values()], [old]);
+});
+
+test('a newer Undo queued during a partial save repairs the database before reporting success', async () => {
+  const old = shift('old', '2026-10-05');
+  const replacement = shift('new', '2026-10-06');
+  const { repo, data } = memoryRepo([old], true);
+  const complete = repo.bulkWrite;
+  let release!: () => void;
+  let first = true;
+  const paused = new Promise<void>(resolve => { release = resolve; });
+  repo.bulkWrite = async (collection: string, changes: { upserts: Assignment[]; removeIds: string[] }) => {
+    if (!first) return complete(collection, changes);
+    first = false;
+    data.set(changes.upserts[0].id, changes.upserts[0]);
+    await paused;
+    throw new Error('A later batch failed while Undo was queued');
+  };
+  const syncer = new CollectionSyncer(repo, 'assignments');
+  syncer.replaceKnown([old], inRoster);
+  const saving = syncer.save([replacement], inRoster, 'R');
+  const undoing = syncer.save([old], inRoster, 'R');
+  release();
+  await Promise.all([saving, undoing]);
+  assert.deepEqual([...data.values()], [old]);
+  assert.equal(syncer.hasUnsaved('R'), false);
+  assert.equal(syncer.lastError, null);
+});
+
 test('live updates: someone else\'s change is shown once nothing here is unsaved, and held back while a save failed', async () => {
   mock.timers.enable({ apis: ['setTimeout'] });
   try {
@@ -228,6 +377,117 @@ test('signing out drops unsaved changes so the next account never saves them', a
   syncer.reset();
   assert.equal(syncer.hasUnsaved(), false);
   assert.equal(syncer.retry(), null);
+});
+
+test('a retry that fails after reset cannot restore old pending state or uncertain records', async () => {
+  const old = shift('old', '2026-10-05');
+  const replacement = shift('old-account-change', '2026-10-06');
+  const { repo } = memoryRepo([old], true);
+  let calls = 0;
+  let rejectWrite!: (error: Error) => void;
+  const pending = new Promise<void>((_, reject) => { rejectWrite = reject; });
+  repo.bulkWrite = async () => {
+    if (++calls === 1) throw new Error('The first attempt failed');
+    await pending;
+  };
+  const saved: string[] = [];
+  const syncer = new CollectionSyncer(repo, 'assignments', undefined, scope => saved.push(scope));
+  syncer.replaceKnown([old], inRoster);
+  assert.equal(await syncer.save([replacement], inRoster, 'R'), false);
+  const retrying = syncer.retry();
+  assert.ok(retrying);
+  syncer.reset();
+  rejectWrite(new Error('The retry failed after the old account signed out'));
+  assert.equal(await retrying, false);
+  assert.equal(syncer.hasUnsaved(), false);
+  assert.equal(syncer.lastError, null);
+  assert.equal(syncer.differsFromKnown([], inRoster), false);
+  assert.equal(syncer.retry(), null);
+  assert.deepEqual(saved, []);
+  assert.equal(calls, 2);
+});
+
+test('a successful in flight save after reset cannot restore old known records or report them saved', async () => {
+  const old = shift('old', '2026-10-05');
+  const replacement = shift('old-account-change', '2026-10-06');
+  const { repo, data } = memoryRepo([old], true);
+  const complete = repo.bulkWrite;
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  repo.bulkWrite = async (collection: string, changes: { upserts: Assignment[]; removeIds: string[] }) => {
+    await pending;
+    await complete(collection, changes);
+  };
+  const saved: string[] = [];
+  const syncer = new CollectionSyncer(repo, 'assignments', undefined, scope => saved.push(scope));
+  syncer.replaceKnown([old], inRoster);
+  const saving = syncer.save([replacement], inRoster, 'R');
+  syncer.reset();
+  release();
+  assert.equal(await saving, false);
+  assert.ok(data.has(replacement.id), 'an already accepted server call cannot be unsent');
+  assert.equal(syncer.differsFromKnown([], inRoster), false);
+  assert.equal(syncer.hasUnsaved(), false);
+  assert.deepEqual(saved, []);
+});
+
+for (const outcome of ['success', 'failure'] as const) {
+  test(`a new save queued after reset succeeds when the old request reports ${outcome}`, async () => {
+    const old = shift('old', '2026-10-05');
+    const oldChange = shift('old-account-change', '2026-10-06');
+    const newChange = shift('new-account-change', '2026-10-07');
+    const { repo, data } = memoryRepo([old], true);
+    const complete = repo.bulkWrite;
+    let first = true;
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => { release = resolve; });
+    repo.bulkWrite = async (collection: string, changes: { upserts: Assignment[]; removeIds: string[] }) => {
+      if (!first) return complete(collection, changes);
+      first = false;
+      await pending;
+      if (outcome === 'failure') throw new Error('The old account request failed late');
+      await complete(collection, changes);
+    };
+    const saved: string[] = [];
+    const syncer = new CollectionSyncer(repo, 'assignments', undefined, scope => saved.push(scope));
+    syncer.replaceKnown([old], inRoster);
+    const oldSaving = syncer.save([oldChange], inRoster, 'R');
+    syncer.reset();
+    const newSaving = syncer.save([newChange], inRoster, 'R');
+    release();
+    assert.equal(await oldSaving, false);
+    assert.equal(await newSaving, true);
+    assert.ok(data.has(newChange.id));
+    assert.equal(syncer.differsFromKnown([newChange], inRoster), false);
+    assert.equal(syncer.hasUnsaved(), false);
+    assert.equal(syncer.lastError, null);
+    assert.deepEqual(saved, ['R']);
+  });
+}
+
+test('reset during a fallback removal prevents the old account upsert phase from starting', async () => {
+  const old = shift('old', '2026-10-05');
+  const replacement = shift('old-account-change', '2026-10-06');
+  const { repo, data, state } = memoryRepo([old]);
+  const complete = repo.bulkRemove;
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  repo.bulkRemove = async (collection: string, ids: string[]) => {
+    await complete(collection, ids);
+    await pending;
+  };
+  const saved: string[] = [];
+  const syncer = new CollectionSyncer(repo, 'assignments', undefined, scope => saved.push(scope));
+  syncer.replaceKnown([old], inRoster);
+  const saving = syncer.save([replacement], inRoster, 'R');
+  syncer.reset();
+  release();
+  assert.equal(await saving, false);
+  assert.equal(data.has(replacement.id), false);
+  assert.deepEqual(state.calls, ['remove old']);
+  assert.equal(syncer.hasUnsaved(), false);
+  assert.equal(syncer.differsFromKnown([], inRoster), false);
+  assert.deepEqual(saved, []);
 });
 
 test("saving a published roster's shifts counts at once: this browser's copy is dropped, and the roster is stamped for other browsers at most once a minute", async () => {

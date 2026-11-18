@@ -45,13 +45,27 @@ Plan: `tasks/scheduler-improvement-plan.md`. Implementation approval does not ap
 - [x] Unit, type, lint, build, email, emulator, browser and clinic replay checks
 - [x] Guide and graph updated; work committed and pushed
 
-## Remaining stages
+## Stage 5
+
+- [x] Independent small clinic answers and minute audits
+- [x] Same input clinic comparisons with honest search limits and hours
+- [x] Partial Nurse Clinic preserving Float cover and preference exception relief
+- [x] Partial save, uncertain acknowledgement, Retry and Undo recovery
+- [x] Sign out invalidates stale save callbacks and retries
+- [x] Actual timed worker output through database, snapshots and communications
+- [x] Cancellation, stale inputs, backup, failed saves and reload checks
+- [x] Planner reload and clinic review actions documented in scheduler-rollout.md
+- [ ] Final browser checks, guide and graph; commit and push
+- [ ] Clinic planner closes old tabs and reviews the actual draft before publication
+
+## Stage checkpoints
 
 - [x] Stage 2: timed cover foundation and all readers
 - [x] Owner review before Stage 3 (approved on 16-11-2026)
 - [x] Stage 3: sequential cover, partial Float relief and manual editing
 - [x] Owner review before Stage 4 (approved on 17-11-2026)
 - [x] Stage 4: stronger search, worker and automatic save
-- [ ] Owner review before Stage 5
-- [ ] Stage 5: clinic verification and coordinated rollout
+- [x] Owner review before Stage 5 (approved on 18-11-2026)
+- [x] Stage 5 engineering: clinic verification and rollout instructions
 - [x] Stage 4 main push approved by the owner on 18-11-2026
+- [x] Stage 5 main push approved by the owner on 18-11-2026

@@ -13,6 +13,7 @@ import { withDoctorCoverage, normalizeGeneratedDoctorCoverage } from './timedAll
 import { resolveRule } from './SchedulingEngine';
 import { dutyDurationHours, resolveNurseHoursBalance, countHoursInRange } from '../hours/hoursBalance';
 import { shiftHoursAllowed } from '../hours/hoursPolicy';
+import { applySeparateFloatCover } from './lowAcuityLastResort';
 
 export interface SchedulingSearchInput extends SchedulingObjectiveInput {
   initialAssignments: Assignment[];
@@ -83,6 +84,7 @@ function dedupeKey(value: string): string {
 export async function searchSchedule(input: SchedulingSearchInput, options: SchedulingSearchOptions = {}): Promise<SchedulingSearchResult> {
   const now = options.now || clock, started = now();
   const deadline = Math.min(options.deadlineMs ?? started + 110_000, started + 110_000);
+  const beamDeadline = deadline - Math.min(3_000, Math.max(0, deadline - started) / 10);
   const width = Math.max(1, Math.min(24, options.maxStates ?? 24));
   const maxChanged = Math.max(1, Math.min(6, options.maxChangedDuties ?? 6));
   const maxExamined = Math.max(0, options.maxExamined ?? Infinity);
@@ -142,7 +144,7 @@ export async function searchSchedule(input: SchedulingSearchInput, options: Sche
   let examined = 0, accepted = 0, limited = false, yieldedAt = started, reportedAt = started, operations = 0;
   const checkpoint = () => {
     if (options.isCancelled?.()) throw new SchedulingSearchCancelledError();
-    if (now() >= deadline) throw new SearchDeadline();
+    if (now() >= beamDeadline) throw new SearchDeadline();
     if (examined >= maxExamined) throw new SearchLimit();
   };
   const tick = async () => {
@@ -188,7 +190,8 @@ export async function searchSchedule(input: SchedulingSearchInput, options: Sche
     nurses.filter(n => eligible(n, a.doctorId, a.date)).length - nurses.filter(n => eligible(n, b.doctorId, b.date)).length ||
     b.missingMinutes - a.missingMinutes || a.date.localeCompare(b.date) || a.doctorId.localeCompare(b.doctorId)).map(doctorJob)];
 
-  function build(job: Job, nurse: Nurse, duty: DutyWindow, previous: Assignment | undefined, preserve: boolean, share: boolean): Assignment | undefined {
+  function build(job: Job, nurse: Nurse, duty: DutyWindow, previous: Assignment | undefined, preserve: boolean, share: boolean,
+    list: Assignment[], preserveFreeCover = false): Assignment | undefined {
     const base: Assignment = { id: previous?.id || `asgn-search-${input.schedule.id}-${nurse.id}-${job.date}`,
       nurseId: nurse.id, scheduleId: input.schedule.id, date: job.date, dutyWindowId: duty.id, source: 'GENERATED', locked: false,
       kind: 'CLINICAL_ROLE', clinicalRoleId: FLOAT_ROLE_ID };
@@ -199,12 +202,40 @@ export async function searchSchedule(input: SchedulingSearchInput, options: Sche
     const ids = [...new Set([...own.map(r => r.doctorId), job.doctorId!])];
     if (ids.length > 2 || share && ids.some(id => !doctorsById.get(id)?.lowAcuity)) return undefined;
     const free = share || !own.length ? [duty] : freeDoctorIntervals({ ...previous!, doctorCoverage: own }, duty, daySessions.get(job.date) || []);
-    const extra = free.flatMap(range => {
+    let extra = free.flatMap(range => {
       const startTime = [range.startTime, duty.startTime, job.startTime].sort().at(-1)!;
       const endTime = [range.endTime, duty.endTime, job.endTime].sort()[0];
       return startTime < endTime ? [{ doctorId: job.doctorId!, startTime, endTime }] : [];
     });
     if (!extra.length) return undefined;
+    if (preserveFreeCover && minFree > 0 && qualified.has(nurse.id)) {
+      const day = list.filter(a => a.date === job.date), clinics = daySessions.get(job.date) || [];
+      const full = withDoctorCoverage(base, [...own, ...extra]);
+      const after = [...day.filter(a => a.nurseId !== nurse.id), full];
+      // Spare Nurse Clinic capacity can begin or end inside the doctor gap.
+      // Split at actual duty and doctor boundaries, then keep every safe slice.
+      const boundaries = [...new Set([clinic.openTime, clinic.closeTime,
+        ...extra.flatMap(r => [r.startTime, r.endTime]),
+        ...[...day, full].flatMap(a => {
+          const d = dutyMap.get(a.dutyWindowId);
+          return [...(d ? [d.startTime, d.endTime] : []),
+            ...effectiveDoctorCoverage(a, d, clinics).flatMap(r => [r.startTime, r.endTime])];
+        })])].sort();
+      const freeCount = (shifts: Assignment[], start: string, end: string) => new Set(shifts.filter(a => {
+        const d = dutyMap.get(a.dutyWindowId);
+        return present(a) && qualified.has(a.nurseId) && d && d.startTime <= start && d.endTime >= end &&
+          shifts.filter(other => other.nurseId === a.nurseId)
+            .every(other => isFreeDuring(other, dutyMap.get(other.dutyWindowId), clinics, start, end));
+      }).map(a => a.nurseId)).size;
+      extra = boundaries.slice(0, -1).flatMap((startTime, i) => {
+        const endTime = boundaries[i + 1];
+        if (!extra.some(r => r.startTime <= startTime && r.endTime >= endTime)) return [];
+        const quota = startTime >= clinic.openTime && endTime <= clinic.closeTime ? minFree : 0;
+        return freeCount(after, startTime, endTime) >= Math.min(quota, freeCount(day, startTime, endTime))
+          ? [{ doctorId: job.doctorId!, startTime, endTime }] : [];
+      });
+      if (!extra.length) return undefined;
+    }
     const next = withDoctorCoverage(base, [...own, ...extra]);
     const outside = assignmentDoctorIds(next).some(doctorId => !!outsideNurseList(nurse, { ...next, doctorId, secondDoctorId: undefined }, { doctors, specialties, sessions }));
     next.note = outside ? LAST_RESORT_NOTE : 'Doctor cover improved by schedule search';
@@ -228,9 +259,11 @@ export async function searchSchedule(input: SchedulingSearchInput, options: Sche
         return covered(b) - covered(a) || minutes(a) - minutes(b) || a.id.localeCompare(b.id);
       });
       const local = new Set<string>();
-      for (const duty of duties) for (const mode of job.kind === 'doctor' ? [0, 1, 2] : [1]) {
+      const modes = job.kind === 'doctor' ? [0, 1, 2] : [1];
+      const freeModes = job.kind === 'doctor' && minFree > 0 && qualified.has(nurse.id) ? [false, true] : [false];
+      for (const duty of duties) for (const mode of modes) for (const preserveFree of freeModes) {
         checkpoint();
-        const replacement = build(job, nurse, duty, previous, mode !== 1, mode === 2);
+        const replacement = build(job, nurse, duty, previous, mode !== 1, mode === 2, list, preserveFree);
         if (!replacement) continue;
         const next = previous ? list.map(a => a === previous ? replacement : a) : [...list, replacement];
         const keyNext = dedupeKey(stateKey(next));
@@ -302,20 +335,55 @@ export async function searchSchedule(input: SchedulingSearchInput, options: Sche
       nurses, doctors, roles: input.roles, clinic, minFreeNurses: minFree,
       movable, present, canCover: (a, s: DoctorSession) => assignmentCanCoverDoctor(a, coverContext, s.doctorId),
       canPair: (nurseId, s) => eligible(nurseMap.get(nurseId)!, s.doctorId, s.date) });
-    if (objective.admissible(initial, normalized)) initial = normalized;
+    const separate = applySeparateFloatCover({ assignments: normalized, nurses, duties: input.dutyWindows, doctors, specialties,
+      sessions, roles: input.roles, leave: input.leaveEntries, locks: input.locks, requests, clinic, minFreeNurses: minFree, movable }, movable);
+    if (objective.admissible(initial, separate)) initial = separate;
   }
   const initialFindings = objective.validate(initial);
   let best: State = { assignments: initial, findings: initialFindings, score: objective.score(initial, initialFindings), key: stateKey(initial) };
-  let frontier = [best];
-  const initialHistoryKey = dedupeKey(best.key);
-  const visited = new Set<string>([initialHistoryKey]);
-  let retainedKeyBytes = initialHistoryKey.length * 2;
   let termination: SchedulingSearchResult['termination'] = 'exhausted';
   function report() {
     reportedAt = now();
     options.onProgress?.({ elapsedMs: Math.max(0, reportedAt - started), bestUncoveredDoctorMinutes: best.score.uncoveredDoctorMinutes,
       examinedStates: examined, acceptedExchanges: accepted });
   }
+
+  async function polishFloat(until: number): Promise<boolean> {
+    let improved = false;
+    // At most one checked conversion per existing gap, using the same paid duty.
+    // This pass can also use Float time made useful by a later wider exchange.
+    for (const job of jobsFor(best.assignments).filter(job => job.kind === 'doctor')) {
+      if (now() >= until || examined >= maxExamined || options.isCancelled?.()) break;
+      const state = best;
+      let chosen = state;
+      for (const previous of state.assignments.filter(a => a.date === job.date && isFloatShift(a) && movable(a))) {
+        if (now() >= until || examined >= maxExamined || options.isCancelled?.()) break;
+        const nurse = nurseMap.get(previous.nurseId), duty = dutyMap.get(previous.dutyWindowId);
+        if (!nurse || !duty || !jobEligible(nurse, job)) continue;
+        const next = build(job, nurse, duty, previous, true, false, state.assignments, true);
+        if (!next) continue;
+        examined++;
+        const assignments = state.assignments.map(a => a.id === previous.id ? next : a);
+        const findings = objective.validate(assignments);
+        if (objective.admissible(state.assignments, assignments, state.findings, findings)) {
+          const score = objective.score(assignments, findings);
+          if (objective.compare(score, chosen.score) < 0) chosen = { assignments, findings, score, key: stateKey(assignments) };
+        }
+        if (now() - reportedAt >= 500) report();
+        if (now() - yieldedAt >= 8) {
+          await (options.yieldControl?.() || new Promise<void>(resolve => setTimeout(resolve, 0)));
+          yieldedAt = now();
+        }
+      }
+      if (chosen !== state) { best = chosen; improved = true; accepted++; report(); }
+    }
+    return improved;
+  }
+  await polishFloat(beamDeadline);
+  let frontier = [best];
+  const initialHistoryKey = dedupeKey(best.key);
+  const visited = new Set<string>([initialHistoryKey]);
+  let retainedKeyBytes = initialHistoryKey.length * 2;
   try {
     checkpoint(); report();
     if (retainedKeyBytes > maxRetainedKeyBytes) throw new SearchLimit();
@@ -380,6 +448,7 @@ export async function searchSchedule(input: SchedulingSearchInput, options: Sche
     else if (error instanceof SearchLimit) termination = 'limit';
     else throw error;
   }
+  if (await polishFloat(deadline) && termination === 'exhausted') termination = 'limit';
   if (options.isCancelled?.()) throw new SchedulingSearchCancelledError();
   report();
   return { assignments: best.assignments, score: best.score, findings: best.findings, termination, examined, accepted, elapsedMs: Math.max(0, now() - started) };

@@ -4,8 +4,10 @@ import { doctorPairingProblems } from './doctorPairing';
 import { isFloatShift } from './floatShift';
 import { outsideNurseList } from './nurseList';
 import { isExclusiveNurseClinic } from './nurseClinicUtils';
-import { nurseIsAvailable } from './assignmentPresence';
+import { assignmentCanCoverDoctor, nurseIsAvailable } from './assignmentPresence';
 import { subtractDoctorCoverage, withDoctorCoverage } from './timedAllocation';
+import { LAST_RESORT_NOTE, isLastResortShift } from './lastResort';
+import { applyPreferenceFocus } from './preferenceOrder';
 
 export interface FloatCoverContext {
   assignments: Assignment[];
@@ -31,6 +33,31 @@ export interface FloatReplacement {
 }
 export interface FloatCoverResult { replacement?: FloatReplacement; searchLimited: boolean }
 
+const coverageContext = (ctx: FloatCoverContext) => ({ nurses: ctx.nurses, roles: ctx.roles, doctors: ctx.doctors,
+  specialties: ctx.specialties, sessions: ctx.sessions, leaveEntries: ctx.leave, locks: ctx.locks, availabilityRequests: ctx.requests });
+
+/** A preference exception may provide separate cover, but never clinical permission. */
+function canProvideCover(ctx: FloatCoverContext, assignment: Assignment, doctorId?: string): boolean {
+  const proposal = doctorId ? { ...assignment, kind: 'DOCTOR' as const, doctorId, secondDoctorId: undefined,
+    note: LAST_RESORT_NOTE } : { ...assignment, note: LAST_RESORT_NOTE };
+  return assignmentCanCoverDoctor(proposal, coverageContext(ctx), doctorId);
+}
+
+function withCoverNote(ctx: FloatCoverContext, assignment: Assignment, note: string): Assignment {
+  const nurse = ctx.nurses.find(n => n.id === assignment.nurseId);
+  const outside = nurse && outsideNurseList(nurse, assignment, ctx);
+  return { ...assignment, note: outside && !outside.eligibility ? LAST_RESORT_NOTE
+    : isLastResortShift({ note }) ? 'Separate doctor cover using available Float time' : note };
+}
+
+function preferenceRank(ctx: FloatCoverContext, assignment: Assignment, doctorId: string): number {
+  const nurse = ctx.nurses.find(n => n.id === assignment.nurseId);
+  if (!nurse) return Infinity;
+  const proposal = { ...assignment, kind: 'DOCTOR' as const, doctorId, secondDoctorId: undefined };
+  return Math.min(Infinity, ...(applyPreferenceFocus(nurse).preferences || []).filter(p =>
+    (p.kind === 'DOCTOR' || p.kind === 'SPECIALTY') && !outsideNurseList({ preferences: [p] }, proposal, ctx)).map(p => p.rank));
+}
+
 /** Find separate doctor cover using current Float duties, preserving required free nurse cover. */
 export function separateLowAcuityCover(ctx: FloatCoverContext, pair: Assignment): FloatCoverResult {
   const none = { searchLimited: false };
@@ -41,7 +68,6 @@ export function separateLowAcuityCover(ctx: FloatCoverContext, pair: Assignment)
   const pairDuty = duties.get(pair.dutyWindowId);
   if (!pairDuty) return none;
   const sessions = doctorSessionsOn(ctx.sessions, pair.date);
-  const refs = { doctors: ctx.doctors, specialties: ctx.specialties, sessions };
   const present = (a: Assignment) => nurseIsAvailable(nurses.get(a.nurseId), pair.date,
     { leaveEntries: ctx.leave, locks: ctx.locks, availabilityRequests: ctx.requests });
   const available = day.filter(a => {
@@ -72,16 +98,18 @@ export function separateLowAcuityCover(ctx: FloatCoverContext, pair: Assignment)
     const end = session.endTime < pairDuty.endTime ? session.endTime : pairDuty.endTime;
     if (start >= end) continue;
     const remainingDoctorId = assignmentDoctorIds(pair).find(id => id !== doctorId)!;
-    const single: Assignment = { ...pair, doctorId: remainingDoctorId, secondDoctorId: undefined, allocationReview: undefined };
+    const single = withCoverNote(ctx, { ...pair, doctorId: remainingDoctorId, secondDoctorId: undefined, allocationReview: undefined },
+      pair.note || 'Separate doctor cover using available Float time');
     const candidates = available.filter(a => overlaps(duties.get(a.dutyWindowId)!.startTime, duties.get(a.dutyWindowId)!.endTime, start, end) &&
-      !outsideNurseList(nurses.get(a.nurseId)!, { ...a, kind: 'DOCTOR', doctorId, secondDoctorId: undefined }, refs))
-      .sort((a, b) => duties.get(b.dutyWindowId)!.endTime.localeCompare(duties.get(a.dutyWindowId)!.endTime) || a.id.localeCompare(b.id));
+      canProvideCover(ctx, a, doctorId))
+      .sort((a, b) => preferenceRank(ctx, a, doctorId) - preferenceRank(ctx, b, doctorId) ||
+        duties.get(b.dutyWindowId)!.endTime.localeCompare(duties.get(a.dutyWindowId)!.endTime) || a.id.localeCompare(b.id));
     const existing = day.filter(a => a.id !== pair.id && present(a) && assignmentCoversDoctor(a, doctorId) &&
-      nurses.get(a.nurseId)?.isClinicNurse && !outsideNurseList(nurses.get(a.nurseId)!, a, refs))
+      assignmentCanCoverDoctor(a, coverageContext(ctx), doctorId))
       .flatMap(a => effectiveDoctorCoverage(a, duties.get(a.dutyWindowId), sessions).filter(r => r.doctorId === doctorId));
     if (!uncoveredParts(start, end, existing).length || uncoveredParts(start, end, [...existing, ...candidates.map(a => duties.get(a.dutyWindowId)!)]).length) continue;
-    const convert = (a: Assignment): Assignment => ({ ...a, kind: 'DOCTOR', doctorId, secondDoctorId: undefined,
-      clinicalRoleId: undefined, specialtyId: undefined, allocationReview: undefined, note: 'Separate doctor cover using an available Float nurse' });
+    const convert = (a: Assignment): Assignment => withCoverNote(ctx, { ...a, kind: 'DOCTOR', doctorId, secondDoctorId: undefined,
+      clinicalRoleId: undefined, specialtyId: undefined, allocationReview: undefined }, 'Separate doctor cover using an available Float nurse');
     const changesFor = (selected: Assignment[]) => [single, ...selected.map(convert)];
     // Taking over the complete contribution of the paired duty avoids introducing a new doctor gap.
     const search = (selected: Assignment[]): Assignment[] | undefined => {
@@ -119,8 +147,7 @@ export function applySeparateFloatCover(ctx: FloatCoverContext, maySplit: (a: As
     if (!first.secondDoctorId || !movable(first) || !maySplit(first) || ctx.clinic.holidays.has(first.date)) continue;
     const sessions = doctorSessionsOn(ctx.sessions, original.date);
     const pairNurse = nurses.get(first.nurseId);
-    if (!present(first) || !pairNurse?.isClinicNurse ||
-      outsideNurseList(pairNurse, first, { doctors: ctx.doctors, specialties: ctx.specialties, sessions }) ||
+    if (!present(first) || !pairNurse?.isClinicNurse || !canProvideCover(ctx, first) ||
       doctorPairingProblems(first, ctx.doctors, { duty: duties.get(first.dutyWindowId), sessions }).length) continue;
     const pairCover = effectiveDoctorCoverage(first, duties.get(first.dutyWindowId), sessions);
     const candidates = assignments.filter(a => {
@@ -133,14 +160,15 @@ export function applySeparateFloatCover(ctx: FloatCoverContext, maySplit: (a: As
     // Prefer giving either complete doctor contribution to one nurse before a handover.
     for (const doctorId of [...assignmentDoctorIds(first)].reverse()) {
       const contribution = pairCover.filter(r => r.doctorId === doctorId);
-      for (const candidate of candidates) {
+      for (const candidate of [...candidates].sort((a, b) => preferenceRank(ctx, a, doctorId) - preferenceRank(ctx, b, doctorId) || a.id.localeCompare(b.id))) {
         if (assignmentDoctorIds(candidate).filter(id => id !== doctorId).length >= 2 ||
-          outsideNurseList(nurses.get(candidate.nurseId)!, { ...candidate, kind: 'DOCTOR', doctorId, secondDoctorId: undefined },
-            { doctors: ctx.doctors, specialties: ctx.specialties, sessions })) continue;
+          !canProvideCover(ctx, candidate, doctorId)) continue;
         const free = freeDoctorIntervals(candidate, duties.get(candidate.dutyWindowId), sessions);
         if (!contribution.length || contribution.some(r => uncoveredParts(r.startTime, r.endTime, free).length)) continue;
-        const nextPair = withDoctorCoverage(first, pairCover.filter(r => r.doctorId !== doctorId));
-        const nextHelper = withDoctorCoverage(candidate, [...effectiveDoctorCoverage(candidate, duties.get(candidate.dutyWindowId), sessions), ...contribution]);
+        const nextPair = withCoverNote(ctx, withDoctorCoverage(first, pairCover.filter(r => r.doctorId !== doctorId)),
+          first.note || 'Separate doctor cover using available Float time');
+        const nextHelper = withCoverNote(ctx, withDoctorCoverage(candidate,
+          [...effectiveDoctorCoverage(candidate, duties.get(candidate.dutyWindowId), sessions), ...contribution]), 'Doctor cover using available Float time');
         const after = assignments.map(a => a.id === first.id ? nextPair : a.id === candidate.id ? nextHelper : a);
         if (!preservesFreeNurseCover(ctx, assignments, after, first.date)) continue;
         assignments = after; complete = true; break;
@@ -176,8 +204,8 @@ export function applySeparateFloatCover(ctx: FloatCoverContext, maySplit: (a: As
       const nextPair = withDoctorCoverage(pair, subtractDoctorCoverage(
         effectiveDoctorCoverage(pair, duties.get(pair.dutyWindowId), sessions), [transferred]));
       const nextHelper = withDoctorCoverage(helper, [...effectiveDoctorCoverage(helper, duties.get(helper.dutyWindowId), sessions), transferred]);
-      assignments = assignments.map(a => a.id === pair.id ? { ...nextPair, note: 'Separate doctor cover using available Float time' }
-        : a.id === helper.id ? { ...nextHelper, note: 'Doctor cover using available Float time' } : a);
+      assignments = assignments.map(a => a.id === pair.id ? withCoverNote(ctx, nextPair, pair.note || 'Separate doctor cover using available Float time')
+        : a.id === helper.id ? withCoverNote(ctx, nextHelper, 'Doctor cover using available Float time') : a);
     }
   }
   return assignments;
@@ -228,6 +256,8 @@ export function timedFloatRelief(ctx: FloatCoverContext, pair: Assignment): Time
       day.filter(other => other.nurseId === a.nurseId).length === 1 &&
       (isFloatShift(a) || a.kind === 'DOCTOR') && (free.get(a.id) || []).length > 0;
   }).sort((a, b) => a.id.localeCompare(b.id));
+  const candidatesByDoctor = new Map(assignmentDoctorIds(pair).map(doctorId => [doctorId,
+    [...candidates].sort((a, b) => preferenceRank(ctx, a, doctorId) - preferenceRank(ctx, b, doctorId) || a.id.localeCompare(b.id))]));
   const boundaries = [...new Set([ctx.clinic.openTime, ctx.clinic.closeTime,
     ...shared.flatMap(r => [r.startTime, r.endTime]),
     ...day.flatMap(a => (free.get(a.id) || []).flatMap(r => [r.startTime, r.endTime])),
@@ -242,13 +272,12 @@ export function timedFloatRelief(ctx: FloatCoverContext, pair: Assignment): Time
     const quota = startTime >= ctx.clinic.openTime && endTime <= ctx.clinic.closeTime ? ctx.minFreeNurses : 0;
     let chosen: TimedFloatRelief | undefined;
     for (const doctorId of [...assignmentDoctorIds(pair)].reverse()) {
-      for (const a of candidates) {
+      for (const a of candidatesByDoctor.get(doctorId) || []) {
         const ownIds = assignmentDoctorIds(a);
         if (!ownIds.includes(doctorId) && ownIds.length >= 2) continue;
         if (!(free.get(a.id) || []).some(r => r.startTime <= startTime && r.endTime >= endTime)) continue;
         const n = nurses.get(a.nurseId)!;
-        if (outsideNurseList(n, { ...a, kind: 'DOCTOR', doctorId, secondDoctorId: undefined },
-          { doctors: ctx.doctors, specialties: ctx.specialties, sessions })) continue;
+        if (!canProvideCover(ctx, a, doctorId)) continue;
         const cost = canBeFreeNurse(n, ctx.roles) ? 1 : 0;
         if (freeNurses - cost < Math.min(quota, freeNurses)) continue;
         chosen = { doctorId, floatAssignment: a, startTime, endTime };

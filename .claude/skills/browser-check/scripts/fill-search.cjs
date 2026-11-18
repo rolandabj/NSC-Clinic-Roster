@@ -71,6 +71,8 @@ show();
     await p.keyboard.press('Shift+Tab');
     check(await dialog.evaluate(el => el.contains(document.activeElement)), 'saving keeps reverse keyboard focus inside the dialog');
     await p.evaluate(() => window.__fillFixture.show('searching'));
+    await p.waitForFunction(() => [...document.querySelectorAll('[role="dialog"] button')]
+      .some(button => button.textContent.trim() === 'Cancel search' && !button.matches(':disabled')));
     await dialog.getByRole('button', { name: 'Cancel search', exact: true }).focus();
     check(await dialog.getByRole('button', { name: 'Cancel search', exact: true }).evaluate(el => el === document.activeElement), 'search cancellation can receive keyboard focus');
     await p.evaluate(() => window.__fillFixture.show('saving'));

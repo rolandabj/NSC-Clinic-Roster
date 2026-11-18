@@ -16,6 +16,8 @@ npm exec --yes --package=firebase-tools@14.12.0 -- firebase emulators:exec --con
 
 Checks include two simultaneous planner saves, migration of existing roster dates into the calendar index, publishing metadata, date edits, conflicting imports with no partial writes, deleting and reusing dates, and ignoring a stale calendar index in a backup restore.
 
+The timed clinic check runs the real worker for two doctors in sequence, saves and reloads exact coverage, keeps a backup and restores the prior roster with Undo. A changed server clinic must stop the final guard without writing a result or backup. A simulated connection failure after one actual batch of 450 shifts commits verifies that Undo removes attempted candidate shifts and preserves a record added by another planner.
+
 # Email server routing checks
 
 After building, verify all supported startup paths without sending mail or accessing production data:
