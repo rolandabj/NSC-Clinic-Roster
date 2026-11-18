@@ -607,7 +607,7 @@ export class SchedulingEngine {
     activeLocks.forEach((lock) => {
       const key = `${lock.nurseId}_${lock.date}`;
       if (lock.mode === 'ASSIGNMENT' && lock.dutyWindowId) {
-        const lockAssignment: Assignment = {
+        let lockAssignment: Assignment = {
           id: `asgn-lock-${schedule.id}-${lock.nurseId}-${lock.date}`,
           scheduleId: schedule.id,
           nurseId: lock.nurseId,
@@ -628,10 +628,7 @@ export class SchedulingEngine {
           (saved.doctorId || '') === (lockAssignment.doctorId || '') && (saved.secondDoctorId || '') === (lockAssignment.secondDoctorId || '') &&
           (saved.clinicalRoleId || '') === (lockAssignment.clinicalRoleId || '') && (saved.specialtyId || '') === (lockAssignment.specialtyId || '') &&
           doctorCoverageFingerprint(saved) === doctorCoverageFingerprint(lockAssignment)) {
-          lockAssignment.id = saved.id;
-          lockAssignment.source = saved.source;
-          if (saved.allocationReview !== undefined) lockAssignment.allocationReview = saved.allocationReview;
-          if (saved.manualDoctorOverlaps !== undefined) lockAssignment.manualDoctorOverlaps = saved.manualDoctorOverlaps;
+          lockAssignment = saved;
         }
         // Count a pinned shift once, even when it was also kept from before
         if (resultAssignmentsMap.get(key)?.source !== 'LOCK') preservedLocksCount++;

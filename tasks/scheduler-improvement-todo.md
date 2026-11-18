@@ -34,13 +34,24 @@ Plan: `tasks/scheduler-improvement-plan.md`. Implementation approval does not ap
 - [x] Final unit, type, lint, build, email, browser and clinic replay checks
 - [x] Guide and graph updated; work committed and pushed
 
+## Stage 4
+
+- [x] One common comparison for safety, Nurse Clinic, exact doctor gaps and later preferences
+- [x] Private worker with 24 candidate states and exchanges of up to six changed duties
+- [x] Two minute deadline, final validation reserve and ongoing progress
+- [x] Cancellation through the last server check without saving intermediate states
+- [x] Fresh server inputs, stale input rejection and bounded fill dates
+- [x] One final save with an authoritative save base, backup and Undo
+- [x] Unit, type, lint, build, email, emulator, browser and clinic replay checks
+- [ ] Guide and graph updated; work committed and pushed
+
 ## Remaining stages
 
 - [x] Stage 2: timed cover foundation and all readers
 - [x] Owner review before Stage 3 (approved on 16-11-2026)
 - [x] Stage 3: sequential cover, partial Float relief and manual editing
 - [x] Owner review before Stage 4 (approved on 17-11-2026)
-- [ ] Stage 4: stronger search, worker and automatic save
+- [x] Stage 4: stronger search, worker and automatic save
 - [ ] Owner review before Stage 5
 - [ ] Stage 5: clinic verification and coordinated rollout
-- [ ] Main push approved separately
+- [x] Stage 4 main push approved by the owner on 18-11-2026

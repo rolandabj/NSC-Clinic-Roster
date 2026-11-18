@@ -16,7 +16,7 @@ import { useAppContext } from '../common/AppContext';
 import { WhoCanCover } from '../workbook/WhoCanCover';
 import { useLatestCallback } from '../common/useLatestCallback';
 import { RosterSteps } from '../roster/RosterSteps';
-import { FillDialog } from '../roster/FillDialog';
+import { FillDialog, type FillRunProgress } from '../roster/FillDialog';
 import { RosterPicker } from '../roster/RosterPicker';
 import { RosterToolbar } from '../roster/RosterToolbar';
 import { useRosterChecks, type CheckInputs } from '../roster/useRosterChecks';
@@ -55,6 +55,11 @@ import {
 } from '../../types';
 import { writeManualOverlapAudits } from '../../services/schedule/manualOverlapAudit';
 import { loadClinicSetup } from '../../services/engine/clinicSetupService';
+import { startSchedulingRun, type SchedulingRun } from '../../services/schedule/schedulingRun';
+import { generationInputFingerprint, loadGenerationInputs, type GenerationInputs } from '../../services/schedule/generationSaveGuard';
+import { isSchedulingCancelled } from '../../services/engine/schedulingWorkerClient';
+import { schedulingClockMs } from '../../services/engine/workerProtocol';
+import { getWeekendDays, setClinicWeekendDays } from '../../utils/weekend';
 import { decideRequest, recordHolidayDayOff } from '../../services/requests/staffRequestService';
 import { authService } from '../../services/auth/authService';
 import type { ClinicSetup } from '../../services/engine/clinicModel';
@@ -65,7 +70,6 @@ import {
   GenerationProgress,
   RegenerateMode,
 } from '../../services/engine/types';
-import { ScheduleValidator } from '../../services/validation/ScheduleValidator';
 import { WorkbookGrid } from '../workbook/WorkbookGrid';
 import { DoctorsScheduleSheet } from '../workbook/DoctorsScheduleSheet';
 import { CoverageSheet } from '../workbook/CoverageSheet';
@@ -204,6 +208,14 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     doctors,
     leaveTypes,
   });
+  const generationScreenInputs = useRef({ schedule: activeSchedule, assignments, ...currentCheckInputs() });
+  generationScreenInputs.current = { schedule: activeSchedule, assignments, ...currentCheckInputs() };
+  const localGenerationFingerprint = () => {
+    const current = generationScreenInputs.current;
+    if (!current.schedule) return '';
+    return generationInputFingerprint({ ...current, schedule: current.schedule,
+      clinicSetup: clinicSetupRef.current || {}, weekendDays: getWeekendDays() });
+  };
   // The problem report and the check that keeps it up to date (`useRosterChecks`).
   const { validationReport, setValidationReport, checks, runValidation, checkRoster, lastCheckedHistoryRef } = useRosterChecks({
     inputs: currentCheckInputs(),
@@ -230,6 +242,20 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   const [preflightSummary, setPreflightSummary] = useState<GenerationPreflightSummary | null>(null);
   const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [fillRunProgress, setFillRunProgress] = useState<FillRunProgress | undefined>();
+  const [isCancellingGeneration, setIsCancellingGeneration] = useState(false);
+  const activeSchedulingRun = useRef<SchedulingRun | null>(null);
+  const generationMounted = useRef(true);
+  useEffect(() => {
+    generationMounted.current = true;
+    return () => { generationMounted.current = false; activeSchedulingRun.current?.cancel(); };
+  }, []);
+  const handleCancelGeneration = () => {
+    const run = activeSchedulingRun.current;
+    if (!run || run.isCommitting()) return;
+    setIsCancellingGeneration(true);
+    run.cancel();
+  };
   const [activeGenerationMode, setActiveGenerationMode] = useState<RegenerateMode>('GENERATE_ALL');
   const [clearIncludeManual, setClearIncludeManual] = useState(false);
   // Generate All keeps cells changed by hand unless this is unticked.
@@ -478,6 +504,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
    * problem list, and remembers it so later reloads stay on it.
    */
   const openSchedule = async (sched: Schedule, inputs?: CheckInputs) => {
+    if (activeScheduleRef.current?.id !== sched.id) activeSchedulingRun.current?.cancel();
     const request = ++openRequestRef.current;
     const switching = openScheduleIdRef.current !== sched.id || activeScheduleRef.current?.id !== sched.id;
     loadingRef.current = true;
@@ -989,269 +1016,124 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
     }
   };
 
-  // --- RUN DETERMINISTIC ENGINE PASS ---
+  // --- PRIVATE WORKER SEARCH AND ONE CHECKED FINAL SAVE ---
   const handleExecuteGeneration = async () => {
-    if (!activeSchedule) return;
+    const schedule = activeScheduleRef.current;
+    if (!schedule || activeSchedulingRun.current) return;
+    const originalLocal = localGenerationFingerprint();
+    const mode = activeGenerationMode;
+    const range = fillRange.enabled && mode !== 'CLEAR_GENERATED'
+      ? { start: fillRange.start, end: fillRange.end } : undefined;
+    const startedAt = schedulingClockMs();
+    let candidateApplied = false;
     setIsGenerating(true);
-
-    try {
-      // Fresh clinic details for this roster (holidays or the previous roster may have changed).
-      // Without them the generator would ignore public holidays and the previous roster.
-      let generationClinicSetup: ClinicSetup;
-      const historySeqForFill = startHistoryLoad();
-      try {
-        generationClinicSetup = await loadClinicSetup(repo, activeSchedule);
-      } catch (err: any) {
-        setClinicSetupError('Opening hours, holidays, availability and surrounding rosters could not be loaded.');
-        triggerToast(`Not filled: the clinic details could not be loaded (${err?.message || 'database unavailable'}). Try again.`, 'error');
-        setIsGenerating(false);
-        return;
-      }
-      // The fill itself uses exactly what it just loaded.
-      applyHistory(historySeqForFill, generationClinicSetup.hoursHistory);
-      clinicSetupRef.current = generationClinicSetup;
-      adoptSurrounding(generationClinicSetup);
-      adoptAvailability(generationClinicSetup);
-      setClinicSetupError(null);
-
-      // A backup copy of the roster as it is now, so a fill or clear can be undone
-      // even after leaving the page (More > Backup copies).
-      let backupKept = false;
-      if (assignments.length > 0) {
-        try {
-          await saveBackup(activeSchedule, activeGenerationMode === 'CLEAR_GENERATED' ? 'Before clearing' : 'Before filling');
-          backupKept = true;
-        } catch (err: any) {
-          const goOn = await confirmDialog({
-            title: 'No backup copy',
-            message: `A backup copy of the roster couldn't be saved (${err?.message || err}). Go on anyway? Undo still works until you leave the page.`,
-            confirmLabel: 'Go on',
-            danger: true,
-          });
-          if (!goOn) {
-            setIsGenerating(false);
-            return;
-          }
+    setIsCancellingGeneration(false);
+    setFillRunProgress({ phase: 'generating', elapsedMs: 0 });
+    const run = startSchedulingRun({
+      repo, scheduleId: schedule.id, mode,
+      options: { keepManual: mode !== 'GENERATE_ALL' || keepManualOnGenerate, onlyDates: range, clearIncludeManual },
+      assertLocalCurrent: () => {
+        if (!generationMounted.current || activeScheduleRef.current?.id !== schedule.id) {
+          throw new Error('The open roster changed. The search result was not saved.');
         }
-      }
-      const backupNote = backupKept ? ' A backup copy was kept (More, Backup copies).' : '';
-      const beforeRun = snapshotNow();
-      if (beforeRun) setUndoStack((prev) => [beforeRun, ...prev].slice(0, 50));
-      setRedoStack([]);
-
-      if (activeGenerationMode === 'CLEAR_GENERATED') {
-        const result = await SchedulingEngine.generate(
-          activeSchedule,
-          'CLEAR_GENERATED',
-          assignments,
-          nurses,
-          seniorityLevels,
-          dutyWindows,
-          roles,
-          specialties,
-          sessions,
-          locks,
-          leaveEntries,
-          rules,
-          (progress) => {
-            setGenerationProgress(progress);
-          },
-          workingHoursPeriods,
-          doctors,
-          leaveTypes,
-          generationClinicSetup
-        );
-
-        let finalAssignments = result.assignments;
-        if (clearIncludeManual) {
-          finalAssignments = finalAssignments.filter((a) => a.source === 'LOCK');
+        if (localGenerationFingerprint() !== originalLocal) {
+          throw new Error('The roster or clinic details changed during filling. Reload and fill again before saving a result.');
         }
-
-        setAssignments(finalAssignments);
-        const clearSaved = await persistAssignments(activeSchedule.id, finalAssignments);
-
-        const report = ScheduleValidator.validate(
-          activeSchedule,
-          finalAssignments,
-          nurses,
-          seniorityLevels,
-          dutyWindows,
-          sessions,
-          leaveEntries,
-          locks,
-          roles,
-          rules,
-          workingHoursPeriods,
-          specialties,
-          doctors,
-          leaveTypes,
-          clinicSetupRef.current,
-          availabilityRequestsRef.current
-        );
-        checks.cancel();
-        setValidationReport(report);
-
-        const clearedCount = assignments.length - finalAssignments.length;
-        triggerToast(
-          clearSaved
-            ? `Cleared ${clearedCount} shifts. ${finalAssignments.length} shifts kept (pinned${clearIncludeManual ? '' : ' or changed by hand'}).${backupNote}`
-            : `Cleared ${clearedCount} shifts on screen, but saving failed. See the message at the top.`,
-          clearSaved ? 'success' : 'error'
-        );
-        setIsPreflightModalOpen(false);
-        setIsGenerating(false);
-        return;
-      }
-
-      // STEP 1: Guarantee doctor's recurring schedule is filled first for the entire schedule period
-      let currentSessions = sessions;
-      if (activeSchedule.startDate && activeSchedule.endDate && doctors.length > 0) {
-        try {
-          const fillResult = await populateRecurringDoctorSessionsForSchedule({
-            repo,
-            startDate: activeSchedule.startDate,
-            endDate: activeSchedule.endDate,
-            doctors,
-          });
-          if (fillResult.createdCount > 0) {
-            currentSessions = await repo.list('doctorSessions');
-            setSessions(currentSessions);
-          }
-        } catch (fillErr) {
-          console.error('Failed to auto-populate doctor recurring schedule before generation:', fillErr);
+      },
+      dependencies: { loadInputs: async (repository, id) => {
+        await Promise.all([syncers.assignments.idle(), syncers.locks.idle(), syncers.leaveEntries.idle()]);
+        if (hasUnsavedChanges()) throw new Error('Save the changes already on screen before filling the roster.');
+        return loadGenerationInputs(repository, id);
+      } },
+      onProgress: progress => {
+        if (!generationMounted.current) return;
+        setGenerationProgress(progress);
+        setFillRunProgress({ phase: progress.phase === 'constructing' ? 'generating' : progress.phase,
+          elapsedMs: progress.elapsedMs, uncoveredDoctorMinutes: progress.bestUncoveredDoctorMinutes });
+      },
+      onCommitStart: () => setFillRunProgress(previous => ({ ...previous, phase: 'saving', elapsedMs: schedulingClockMs() - startedAt })),
+      commit: async ({ baseline, fresh, result, addedSessions }) => {
+        // Backups and recurring clinics are deliberately deferred until Cancel has ended and inputs match.
+        let backupNote = '';
+        if (baseline.assignments.length) {
+          await saveBackup(baseline.schedule, mode === 'CLEAR_GENERATED' ? 'Before clearing' : 'Before filling', baseline);
+          backupNote = ' A backup copy was kept (More, Backup copies).';
         }
-      }
-
-      // Filling only some dates: shifts outside them are passed in as hand changes, so
-      // they stay and still count for hours and rest, and are put back unchanged after.
-      const useRange = fillRange.enabled && !!fillRange.start && !!fillRange.end;
-      const inRange = (date: string) => !useRange || (date >= fillRange.start && date <= fillRange.end);
-      const engineInput = useRange
-        ? assignments
-            .filter(
-              (a) => !inRange(a.date) || activeGenerationMode !== 'GENERATE_ALL' || keepManualOnGenerate || a.source !== 'MANUAL'
-            )
-            .map((a) => (inRange(a.date) ? a : { ...a, source: 'MANUAL' as const }))
-        : assignments;
-
-      const engineResult = await SchedulingEngine.generate(
-        activeSchedule,
-        activeGenerationMode,
-        engineInput,
-        nurses,
-        seniorityLevels,
-        dutyWindows,
-        roles,
-        specialties,
-        currentSessions,
-        locks,
-        leaveEntries,
-        rules,
-        (progress) => {
-          setGenerationProgress(progress);
-        },
-        workingHoursPeriods,
-        doctors,
-          leaveTypes,
-          generationClinicSetup,
-          {
-            keepManual: useRange || activeGenerationMode !== 'GENERATE_ALL' || keepManualOnGenerate,
-            onlyDates: useRange ? { start: fillRange.start, end: fillRange.end } : undefined,
-          }
-      );
-      const result = useRange
-        ? {
-            ...engineResult,
-            assignments: [
-              ...assignments.filter((a) => !inRange(a.date)),
-              ...engineResult.assignments.filter((a) => inRange(a.date)),
-            ],
-          }
-        : engineResult;
-
-      // If engine resolved an authoritative period target, synchronize the schedule record
-      let effectiveSchedule = activeSchedule;
-      if (
-        result.effectiveFullTimeTarget &&
-        (result.effectiveFullTimeTarget !== activeSchedule.hoursTargetFullTime ||
-          (result.periodName && result.periodName !== activeSchedule.periodName))
-      ) {
-        const scheduleUpdates: Partial<Schedule> = {
-          hoursTargetFullTime: result.effectiveFullTimeTarget,
-        };
-        if (result.periodName) {
-          scheduleUpdates.periodName = result.periodName;
+        if (addedSessions.length) await repo.bulkUpsert('doctorSessions', addedSessions);
+        let effectiveSchedule = fresh.schedule;
+        if (mode !== 'CLEAR_GENERATED' && result.effectiveFullTimeTarget &&
+          (result.effectiveFullTimeTarget !== fresh.schedule.hoursTargetFullTime || result.periodName && result.periodName !== fresh.schedule.periodName)) {
+          const update: Partial<Schedule> = { hoursTargetFullTime: result.effectiveFullTimeTarget,
+            ...(result.periodName ? { periodName: result.periodName } : {}) };
+          await repo.update('schedules', schedule.id, update);
+          effectiveSchedule = { ...fresh.schedule, ...update };
         }
-        await repo.update('schedules', activeSchedule.id, scheduleUpdates);
-        effectiveSchedule = {
-          ...activeSchedule,
-          ...scheduleUpdates,
-        };
+        if (hasUnsavedChanges()) throw new Error('Save the changes already on screen before applying the filled roster.');
+        // The checked server roster is also the save base. A stale live snapshot
+        // must not leave removed duties behind or skip a change back to an older value.
+        const changedSaveBase = syncers.assignments.differsFromKnown(fresh.assignments, a => a.scheduleId === schedule.id) ||
+          syncers.locks.differsFromKnown(fresh.locks) || syncers.leaveEntries.differsFromKnown(fresh.leaveEntries);
+        syncers.assignments.adoptLoaded(fresh.assignments, schedule.id, a => a.scheduleId === schedule.id);
+        syncers.locks.adoptLoaded(fresh.locks, 'all');
+        syncers.leaveEntries.adoptLoaded(fresh.leaveEntries, 'all');
+        // Undo contains the actual precommit server roster, never a private search state.
+        setUndoStack(previous => [{ scheduleId: schedule.id, assignments: baseline.assignments,
+          locks: baseline.locks, leaveEntries: baseline.leaveEntries }, ...(changedSaveBase ? [] : previous)].slice(0, 50));
+        setRedoStack([]);
         setActiveSchedule(effectiveSchedule);
-        setSchedules((prev) =>
-          prev.map((s) => (s.id === effectiveSchedule.id ? effectiveSchedule : s))
-        );
-      }
-
-      setAssignments(result.assignments);
-      const generatedSaved = await persistAssignments(effectiveSchedule.id, result.assignments);
-
-      const report = ScheduleValidator.validate(
-        effectiveSchedule,
-        result.assignments,
-        nurses,
-        seniorityLevels,
-        dutyWindows,
-        currentSessions,
-        leaveEntries,
-        locks,
-        roles,
-        rules,
-        workingHoursPeriods,
-        specialties,
-        doctors,
-          leaveTypes,
-          clinicSetupRef.current,
-          availabilityRequestsRef.current
-      );
-      checks.cancel();
-      setValidationReport(report);
-
-      const overtimeCount = report.findings.filter(
-        (f) => f.category === 'HOURS_IMBALANCE' && f.id.startsWith('hours-over-')
-      ).length;
-
-      if (!generatedSaved) {
-        triggerToast('The roster was filled, but saving failed. See the message at the top; it retries automatically.', 'error');
+        setSchedules(previous => previous.map(item => item.id === effectiveSchedule.id ? effectiveSchedule : item));
+        setNurses(fresh.nurses); setDoctors(fresh.doctors); setSessions([...fresh.sessions, ...addedSessions]);
+        setLocks(fresh.locks); setLeaveEntries(fresh.leaveEntries); setLeaveTypes(fresh.leaveTypes);
+        setSeniorityLevels(fresh.seniorityLevels); setDutyWindows(fresh.dutyWindows); setClinicalRoles(fresh.roles);
+        setSpecialties(fresh.specialties); setRules(fresh.rules); setWorkingHoursPeriods(fresh.workingHoursPeriods);
+        setClinicWeekendDays(fresh.weekendDays);
+        const seq = startHistoryLoad(); adoptSetup(seq, fresh.clinicSetup); setClinicSetupError(null);
+        setAssignments(result.assignments);
+        candidateApplied = true;
+        const saved = await persistAssignments(schedule.id, result.assignments);
+        checks.cancel(); setValidationReport(result.validation);
+        if (!saved) throw new Error('The checked result is on screen but could not be saved. Use Retry now or Undo.');
+        if (mode === 'CLEAR_GENERATED') {
+          triggerToast(`Cleared ${baseline.assignments.length - result.assignments.length} shifts. Pinned shifts stay.${backupNote}`);
+        } else {
+          const missing = result.search.finalUncoveredDoctorMinutes;
+          const limited = result.search.termination === 'deadline' || result.search.termination === 'limit';
+          triggerToast(`Roster filled: ${result.assignments.length} shifts. ` +
+            (missing ? `${missing} minutes of doctor cover still need a nurse. ` : 'All doctor sessions have cover. ') +
+            (result.validation.errorCount ? `${result.validation.errorCount} problems marked Must fix. ` : '') +
+            (limited && missing ? 'The search was limited; another solution may exist. ' : '') + backupNote,
+            result.validation.errorCount ? 'warning' : 'success');
+        }
+        if (result.validation.errorCount || result.search.finalUncoveredDoctorMinutes) setIsProblemsOpen(true);
         setIsPreflightModalOpen(false);
-        setIsGenerating(false);
-        return;
+      },
+    });
+    activeSchedulingRun.current = run;
+    try { await run.promise; }
+    catch (error: any) {
+      if (!generationMounted.current) return;
+      if (isSchedulingCancelled(error)) {
+        triggerToast('Filling cancelled. Nothing was saved.', 'info');
+        setIsPreflightModalOpen(false);
+      } else {
+        triggerToast(`Could not fill the roster: ${error?.message || 'the search stopped'}`, 'error');
+        if (candidateApplied) setIsPreflightModalOpen(false);
       }
-      triggerToast(
-        (useRange
-          ? `Filled ${formatDate(fillRange.start)} to ${formatDate(fillRange.end)}: ${result.assignments.filter((a) => inRange(a.date)).length} shifts.`
-          : `Roster filled: ${result.assignments.length} shifts.`) +
-          (overtimeCount > 0 ? ` ${overtimeCount} nurse${overtimeCount === 1 ? ' is' : 's are'} over their hours.` : '') +
-          (report.errorCount > 0 ? ` ${report.errorCount} problem${report.errorCount === 1 ? '' : 's'} to fix.` : ' No problems to fix.') +
-          backupNote
-      );
-      // Show what still needs fixing next to the grid.
-      if (report.errorCount > 0) setIsProblemsOpen(true);
-      setIsPreflightModalOpen(false);
-      setIsGenerating(false);
-    } catch (err: any) {
-      triggerToast(`Could not fill the roster: ${err.message}`, 'error');
-      setIsGenerating(false);
+    } finally {
+      if (activeSchedulingRun.current === run) {
+        activeSchedulingRun.current = null;
+        if (generationMounted.current) { setIsGenerating(false); setIsCancellingGeneration(false); setFillRunProgress(undefined); }
+      }
     }
   };
 
   // --- BACKUP COPIES ---
   /** Keeps a copy of the roster as it is now; only the last few backups are kept. */
-  const saveBackup = async (sched: Schedule, note: string) => {
+  const saveBackup = async (sched: Schedule, note: string, snapshot?: GenerationInputs) => {
     const { created, removedIds } = await saveRosterBackup(
       repo,
       sched,
-      { assignments, leaveEntries, locks, rules },
+      snapshot || { assignments, leaveEntries, locks, rules },
       context.currentUser?.name || context.currentUser?.email || 'Planner',
       note
     );
@@ -1479,7 +1361,7 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
   useEffect(() => subscribeLiveLocksAndLeave(), [subscribeLiveLocksAndLeave]);
 
   // Edits, Undo and Redo (`useRosterEdits`): every change goes through `applyEdit`.
-  const { undoStack, redoStack, setUndoStack, setRedoStack, clearUndo, snapshotNow, applyEdit, handleUndo, handleRedo } = useRosterEdits({
+  const { undoStack, redoStack, setUndoStack, setRedoStack, clearUndo, applyEdit, handleUndo, handleRedo } = useRosterEdits({
     activeSchedule,
     loadingRef,
     liveRef,
@@ -2137,7 +2019,10 @@ export const SchedulesView: React.FC<SchedulesViewProps> = ({
           setClearIncludeManual={setClearIncludeManual}
           isGenerating={isGenerating}
           progress={generationProgress}
-          onClose={() => setIsPreflightModalOpen(false)}
+          runProgress={fillRunProgress}
+          onCancel={handleCancelGeneration}
+          isCancelling={isCancellingGeneration}
+          onClose={() => activeSchedulingRun.current ? handleCancelGeneration() : setIsPreflightModalOpen(false)}
           onRun={handleExecuteGeneration}
           onNurseClinicRule={handleUpdateNurseClinicRule}
         />

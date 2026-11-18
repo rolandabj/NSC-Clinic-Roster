@@ -102,9 +102,9 @@
     "semantic_hash": ""
   },
   "src/components/common/useDialogA11y.ts": {
-    "mtime": 1794653737.4232037,
-    "seen": 1794731511.1003761,
-    "ast_hash": "6c2a48858146f2b803c0c14144075a5b",
+    "mtime": 1794977852.508442,
+    "seen": 1794977918.9729698,
+    "ast_hash": "7d71c54df3a30d393e417d62e37b621e",
     "semantic_hash": ""
   },
   "src/components/layout/AppShell.tsx": {
@@ -306,9 +306,9 @@
     "semantic_hash": ""
   },
   "src/components/views/SchedulesView.tsx": {
-    "mtime": 1794850227.3153892,
-    "seen": 1794850611.779871,
-    "ast_hash": "56bf5017bdae6ddd8cba311e78f39dff",
+    "mtime": 1794977475.484465,
+    "seen": 1794977918.9730568,
+    "ast_hash": "c13eca678a0194eb6bbe21cb8f244934",
     "semantic_hash": ""
   },
   "src/components/views/SettingsView.tsx": {
@@ -444,9 +444,9 @@
     "semantic_hash": ""
   },
   "src/services/engine/SchedulingEngine.ts": {
-    "mtime": 1794849956.3056836,
-    "seen": 1794850611.7799673,
-    "ast_hash": "44815d6bbce5997051e715a8cdf38095",
+    "mtime": 1794924697.3034208,
+    "seen": 1794977918.9731152,
+    "ast_hash": "9e465ed3091d133d1c06b8d8e905d7fb",
     "semantic_hash": ""
   },
   "src/services/engine/assignmentChecks.ts": {
@@ -546,15 +546,15 @@
     "semantic_hash": ""
   },
   "src/services/repository/FirestoreRepository.ts": {
-    "mtime": 1794653737.4407346,
-    "seen": 1794731511.1005273,
-    "ast_hash": "d8a1ed4e73a2888cad3a79e6715b57fb",
+    "mtime": 1794906834.806063,
+    "seen": 1794977918.9731922,
+    "ast_hash": "d0c70601165867fc6795d7b8386164d1",
     "semantic_hash": ""
   },
   "src/services/repository/IRepository.ts": {
-    "mtime": 1794653737.4408946,
-    "seen": 1794731511.1005282,
-    "ast_hash": "8e926b813b201e1e6ceec2bf5b796aee",
+    "mtime": 1794906833.1991758,
+    "seen": 1794977918.9731932,
+    "ast_hash": "9023aa481c4ead84fdda68d3f94f6ae2",
     "semantic_hash": ""
   },
   "src/services/repository/assignmentSync.ts": {
@@ -630,9 +630,9 @@
     "semantic_hash": ""
   },
   "src/services/validation/ScheduleValidator.ts": {
-    "mtime": 1794849396.5876775,
-    "seen": 1794850611.7801337,
-    "ast_hash": "fb02fd039e4182442625cbac094ee723",
+    "mtime": 1794978151.0923445,
+    "seen": 1794978246.2055435,
+    "ast_hash": "01a25c94d837a3bbf45abacdfd7841b7",
     "semantic_hash": ""
   },
   "src/types/index.ts": {
@@ -852,9 +852,9 @@
     "semantic_hash": ""
   },
   "src/services/fairness/yearToDate.ts": {
-    "mtime": 1794653737.438796,
-    "seen": 1794731511.1004999,
-    "ast_hash": "2eb2c4058d28bbf809c26a1ab53ff19f",
+    "mtime": 1794924586.0832322,
+    "seen": 1794977918.9731545,
+    "ast_hash": "1a86ffeb85dae77a1dce20a9980b5e88",
     "semantic_hash": ""
   },
   "src/services/history/versionList.ts": {
@@ -960,9 +960,9 @@
     "semantic_hash": ""
   },
   "PROJECT_GUIDE.md": {
-    "mtime": 1794906228.1911287,
-    "seen": 1794906236.0842028,
-    "ast_hash": "8968d517390a05a4df6d1aa2197d5143",
+    "mtime": 1794978343.2128558,
+    "seen": 1794978350.6395185,
+    "ast_hash": "6e168778c90404f067dc135ed52be657",
     "semantic_hash": ""
   },
   "index.html": {
@@ -1128,9 +1128,9 @@
     "semantic_hash": ""
   },
   "tests/integration/scheduleTransactions.test.ts": {
-    "mtime": 1794653737.443814,
-    "seen": 1794731511.100662,
-    "ast_hash": "4ed94b177ecc728fbffb2f65b9384119",
+    "mtime": 1794924690.0001042,
+    "seen": 1794977918.9732344,
+    "ast_hash": "feed82e9bb773776199a94908b493982",
     "semantic_hash": ""
   },
   "tests/unit/continuousHours.test.ts": {
@@ -1914,9 +1914,9 @@
     "semantic_hash": ""
   },
   "src/components/roster/FillDialog.tsx": {
-    "mtime": 1794653737.424198,
-    "seen": 1794731511.1004014,
-    "ast_hash": "402c31775adec04a5a2aa4c437c35f7c",
+    "mtime": 1794977619.7249365,
+    "seen": 1794977918.9730177,
+    "ast_hash": "2ee6405ea3a79876a647fd1eb18776cb",
     "semantic_hash": ""
   },
   "src/components/roster/RosterPicker.tsx": {
@@ -2808,15 +2808,15 @@
     "semantic_hash": ""
   },
   "tasks/scheduler-improvement-plan.md": {
-    "mtime": 1794777560.0663395,
-    "seen": 1794811947.1705165,
-    "ast_hash": "b7d2e2276b0aeb423f78a19373b62210",
+    "mtime": 1794977856.7803452,
+    "seen": 1794977918.9733984,
+    "ast_hash": "36995d188778ac14034f91eca750c16c",
     "semantic_hash": ""
   },
   "tasks/scheduler-improvement-todo.md": {
-    "mtime": 1794906228.1965702,
-    "seen": 1794906236.0842094,
-    "ast_hash": "d5e4174a4bff74d9efd7206d8b185fec",
+    "mtime": 1794977793.8612838,
+    "seen": 1794977918.9733999,
+    "ast_hash": "a171b61ecb45f61281e4408e391d5500",
     "semantic_hash": ""
   },
   ".claude/skills/browser-check/scripts/timed-cover.cjs": {
@@ -2955,6 +2955,114 @@
     "mtime": 1794849271.160883,
     "seen": 1794850611.7803552,
     "ast_hash": "536aaee334b9975a93e1e574e70725f4",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/fill-lifecycle.cjs": {
+    "mtime": 1794977817.933328,
+    "seen": 1794977918.972882,
+    "ast_hash": "d8bc1d35a81a8ac6c71b0d7ab48eb702",
+    "semantic_hash": ""
+  },
+  ".claude/skills/browser-check/scripts/fill-search.cjs": {
+    "mtime": 1794977906.9534998,
+    "seen": 1794977918.9728835,
+    "ast_hash": "898313c8c879be31c3f693715bb379c5",
+    "semantic_hash": ""
+  },
+  "src/services/engine/scheduling.worker.ts": {
+    "mtime": 1794924972.9358544,
+    "seen": 1794977918.9731362,
+    "ast_hash": "12f662dad53d50386912124a76b92a40",
+    "semantic_hash": ""
+  },
+  "src/services/engine/schedulingObjective.ts": {
+    "mtime": 1794977423.5963588,
+    "seen": 1794977918.9731371,
+    "ast_hash": "a99c946871dab22a988481432f659274",
+    "semantic_hash": ""
+  },
+  "src/services/engine/schedulingSearch.ts": {
+    "mtime": 1794977658.601033,
+    "seen": 1794977918.9731383,
+    "ast_hash": "704f9c308b558bd2877d55b20b07912a",
+    "semantic_hash": ""
+  },
+  "src/services/engine/schedulingWorkerClient.ts": {
+    "mtime": 1794906762.8184998,
+    "seen": 1794977918.9731395,
+    "ast_hash": "64db958310e7142bc40035056614806a",
+    "semantic_hash": ""
+  },
+  "src/services/engine/schedulingWorkerRunner.ts": {
+    "mtime": 1794925302.3019218,
+    "seen": 1794977918.9731402,
+    "ast_hash": "2ce95ff585a0fe18cef0d10825b6a9a4",
+    "semantic_hash": ""
+  },
+  "src/services/engine/workerProtocol.ts": {
+    "mtime": 1794924970.191824,
+    "seen": 1794977918.9731467,
+    "ast_hash": "f1536d5839e026052636e7611ffa8911",
+    "semantic_hash": ""
+  },
+  "src/services/schedule/generationSaveGuard.ts": {
+    "mtime": 1794924587.4573429,
+    "seen": 1794977918.9732084,
+    "ast_hash": "5f59918b10cb74ed9b8a9228816e5d0f",
+    "semantic_hash": ""
+  },
+  "src/services/schedule/schedulingRun.ts": {
+    "mtime": 1794977632.7329698,
+    "seen": 1794977918.9732158,
+    "ast_hash": "a8a5bf4f4d3c8c6249dbdca0d331d557",
+    "semantic_hash": ""
+  },
+  "tests/unit/fillDialogSearch.test.ts": {
+    "mtime": 1794977621.5489395,
+    "seen": 1794977918.973272,
+    "ast_hash": "2b1f306087d03b78941d10b72e24d2a1",
+    "semantic_hash": ""
+  },
+  "tests/unit/generationSaveGuard.test.ts": {
+    "mtime": 1794924646.510611,
+    "seen": 1794977918.9732773,
+    "ast_hash": "b2a1213fff5ad1e532c2a32d2cd1fef2",
+    "semantic_hash": ""
+  },
+  "tests/unit/schedulingObjective.test.ts": {
+    "mtime": 1794978272.2266948,
+    "seen": 1794978350.639455,
+    "ast_hash": "3be38c6023df2f47d0c08226d24014de",
+    "semantic_hash": ""
+  },
+  "tests/unit/schedulingRun.test.ts": {
+    "mtime": 1794977662.449041,
+    "seen": 1794977918.9733348,
+    "ast_hash": "3817e83e864368532377b0525993752b",
+    "semantic_hash": ""
+  },
+  "tests/unit/schedulingSearch.test.ts": {
+    "mtime": 1794977659.9730356,
+    "seen": 1794977918.9733353,
+    "ast_hash": "52ca932e369995194e19b475c9fa6786",
+    "semantic_hash": ""
+  },
+  "tests/unit/schedulingSeed.test.ts": {
+    "mtime": 1794924681.5311658,
+    "seen": 1794977918.973336,
+    "ast_hash": "54b8afd970a8cb40bd9e11dc826baea2",
+    "semantic_hash": ""
+  },
+  "tests/unit/schedulingWorkerClient.test.ts": {
+    "mtime": 1794906745.5104163,
+    "seen": 1794977918.973337,
+    "ast_hash": "45539e38c592b283009fec409d9826e4",
+    "semantic_hash": ""
+  },
+  "tests/unit/schedulingWorkerRunner.test.ts": {
+    "mtime": 1794925271.6648712,
+    "seen": 1794977918.9733377,
+    "ast_hash": "7636cf1e960d4fa977a82adf21fad62a",
     "semantic_hash": ""
   }
 }

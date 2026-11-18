@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { initializeApp, deleteApp } from 'firebase/app';
-import { getFirestore, connectFirestoreEmulator, doc, setDoc, getDocs, collection, getDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, connectFirestoreEmulator, doc, setDoc, getDocs, collection, getDoc, deleteDoc, disableNetwork, enableNetwork } from 'firebase/firestore';
 import { FirestoreRepository } from '../../src/services/repository/FirestoreRepository';
 import { rosterSaveQueues } from '../../src/services/repository/rosterSaveQueues';
 import { makeSchedule } from '../unit/fixtures';
@@ -73,6 +73,24 @@ try {
   await a.repo.bulkWrite!('assignments', { upserts: many, removeIds: [], replace: true });
   await a.repo.bulkWrite!('assignments', { upserts: [shiftOf('new-1')], removeIds: many.map((x) => x.id), replace: true });
   assert.deepEqual((await getDocs(collection(a.db, 'assignments'))).docs.map((d) => d.id), ['new-1']);
+  // Final generation reads bypass both the app cache and an offline SDK fallback.
+  const staleShift = { ...shiftOf('new-1'), dutyWindowId: 'stale' };
+  (a.repo as any).cache = { list: async () => [staleShift], getDoc: () => ({ item: staleShift }) };
+  await setDoc(doc(b.db, 'assignments', 'new-1'), { ...shiftOf('new-1'), dutyWindowId: 'server' });
+  assert.equal((await a.repo.get('assignments', 'new-1'))?.dutyWindowId, 'stale');
+  assert.equal((await a.repo.list('assignments'))[0].dutyWindowId, 'stale');
+  assert.equal((await a.repo.getFresh('assignments', 'new-1'))?.dutyWindowId, 'server');
+  const freshList = await a.repo.listFresh('assignments', { field: 'scheduleId', operator: '==', value: 'replacement' });
+  assert.deepEqual(freshList.map(item => [item.id, item.dutyWindowId]), [['new-1', 'server']]);
+  assert.equal(await a.repo.getFresh('assignments', 'missing'), null);
+  assert.deepEqual(await a.repo.listFresh('assignments', { field: 'scheduleId', operator: '==', value: 'missing' }), []);
+  await disableNetwork(a.db);
+  try {
+    await assert.rejects(a.repo.getFresh('assignments', 'new-1'), /offline|unavailable|network/i);
+    await assert.rejects(a.repo.listFresh('assignments'), /offline|unavailable|network/i);
+  } finally {
+    await enableNetwork(a.db);
+  }
   // Saving a published roster's shifts stamps the roster, so other browsers count the change at once.
   (a.repo as any).cache = { getDoc: () => undefined };
   const before = '2026-01-01T00:00:00.000Z';
@@ -85,7 +103,7 @@ try {
   for (let i = 0; i < 50 && (await stampOf()) === before; i++) await new Promise((resolve) => setTimeout(resolve, 100));
   assert.notEqual(await stampOf(), before);
   assert.equal((await getDoc(doc(a.db, 'schedules', 'replacement'))).data()!.status, 'PUBLISHED');
-  console.log('PASS: simultaneous planners, legacy bootstrap, updates, atomic imports, deletion, protected calendar restore, combined shift writes and the stamp after saving a published roster');
+  console.log('PASS: simultaneous planners, legacy bootstrap, updates, atomic imports, deletion, protected calendar restore, combined shift writes, authoritative server reads and the stamp after saving a published roster');
 } finally {
   await Promise.all(apps.map(app => deleteApp(app)));
   await env.cleanup();

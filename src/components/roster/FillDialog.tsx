@@ -2,13 +2,21 @@ import React from 'react';
 import { Sparkles, Trash2 } from 'lucide-react';
 import type { Assignment } from '../../types';
 import type { GenerationPreflightSummary, GenerationProgress, RegenerateMode } from '../../services/engine/types';
-import { formatDate } from '../../utils/dateUtils';
+import { formatDate, parseDayMonthYear } from '../../utils/dateUtils';
 import { Button, Checkbox, DateInput, Dialog, Field, Notice, cx } from '../ui';
 
 export interface FillRange {
   enabled: boolean;
   start: string;
   end: string;
+}
+
+/** User facing progress only. Intermediate roster candidates stay private to the search. */
+export interface FillRunProgress {
+  phase: 'generating' | 'searching' | 'validating' | 'saving';
+  elapsedMs: number;
+  uncoveredDoctorMinutes?: number;
+  searchLimited?: boolean;
 }
 
 interface FillDialogProps {
@@ -26,6 +34,9 @@ interface FillDialogProps {
   setClearIncludeManual: (include: boolean) => void;
   isGenerating: boolean;
   progress: GenerationProgress | null;
+  runProgress?: FillRunProgress;
+  onCancel?: () => void;
+  isCancelling?: boolean;
   onClose: () => void;
   onRun: () => void;
   /** The Nurse Clinic rule: never broken (HARD), when possible (SOFT), or off. */
@@ -49,11 +60,30 @@ export const FillDialog: React.FC<FillDialogProps> = ({
   setClearIncludeManual,
   isGenerating,
   progress,
+  runProgress,
+  onCancel,
+  isCancelling = false,
   onClose,
   onRun,
   onNurseClinicRule,
 }) => {
   const isClear = mode === 'CLEAR_GENERATED';
+  const saving = isGenerating && runProgress?.phase === 'saving';
+  const canCancel = isGenerating && !!onCancel && !saving && !isCancelling;
+  const cancel = () => {
+    if (!isGenerating) onClose();
+    else if (canCancel) onCancel?.();
+  };
+  const percent = Number.isFinite(progress?.percent) ? Math.max(0, Math.min(100, progress!.percent)) : undefined;
+  const elapsedSeconds = Math.max(0, Math.floor((runProgress?.elapsedMs || 0) / 1000));
+  const missing = runProgress?.uncoveredDoctorMinutes;
+  const missingMinutes = missing !== undefined && Number.isFinite(missing) ? Math.max(0, Math.round(missing)) : undefined;
+  const coverTime = missingMinutes === undefined ? '' : missingMinutes < 60 ? `${missingMinutes} min`
+    : `${Math.floor(missingMinutes / 60)} h${missingMinutes % 60 ? ` ${missingMinutes % 60} min` : ''}`;
+  const status = isCancelling ? 'Cancelling without saving' : saving ? 'Saving the checked result'
+    : runProgress?.phase === 'searching' ? 'Searching for better doctor cover'
+    : runProgress?.phase === 'validating' ? 'Checking the final result'
+    : progress?.statusText || 'Starting the roster search';
   // With "Only fill some dates", the counts are for those dates only.
   const ranged = !isClear && fillRange.enabled && !!fillRange.start && !!fillRange.end;
   const touched = assignments.filter((a) => !ranged || (a.date >= fillRange.start && a.date <= fillRange.end));
@@ -75,9 +105,15 @@ export const FillDialog: React.FC<FillDialogProps> = ({
     : summary.nurseClinicRuleSeverity === 'HARD'
     ? 'HARD'
     : 'SOFT';
-  const badRange = !isClear && fillRange.enabled && (!fillRange.start || !fillRange.end || fillRange.start > fillRange.end);
+  const validRangeDate = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) && parseDayMonthYear(date) === date;
+  const rangeError = !validRangeDate(fillRange.start) || !validRangeDate(fillRange.end)
+    ? 'Enter both dates as DD-MM-YYYY.'
+    : fillRange.start > fillRange.end ? 'The last day is before the first day.'
+    : fillRange.start < summary.startDate || fillRange.end > summary.endDate
+      ? 'Choose dates within this roster.' : undefined;
+  const badRange = !isClear && fillRange.enabled && !!rangeError;
   const NURSE_CLINIC = [
-    { id: 'HARD', label: 'Never broken', hint: 'Filled before the doctors’ second nurses', run: () => onNurseClinicRule('HARD', true) },
+    { id: 'HARD', label: 'Never broken', hint: 'Keeps a free nurse for every opening hour', run: () => onNurseClinicRule('HARD', true) },
     { id: 'SOFT', label: 'When possible', hint: 'Doctors first, then Nurse Clinic', run: () => onNurseClinicRule('SOFT', true) },
     { id: 'OFF', label: 'Off', hint: 'No Nurse Clinic shifts', run: () => onNurseClinicRule('SOFT', false) },
   ] as const;
@@ -85,13 +121,13 @@ export const FillDialog: React.FC<FillDialogProps> = ({
   return (
     <Dialog
       open
-      // It can't be closed while a fill is running (as Cancel).
-      onClose={() => !isGenerating && onClose()}
+      onClose={cancel}
+      closeDisabled={isGenerating && !canCancel}
       title={`${title}: ${summary.scheduleName}`}
       footer={
         <>
-          <Button disabled={isGenerating} onClick={onClose}>
-            Cancel
+          <Button disabled={isGenerating && !canCancel} onClick={cancel}>
+            {isCancelling ? 'Cancelling' : isGenerating ? 'Cancel search' : 'Cancel'}
           </Button>
           <Button variant={isClear ? 'danger' : 'primary'} icon={isClear ? Trash2 : Sparkles} busy={isGenerating} disabled={badRange} onClick={onRun}>
             {isClear ? 'Clear shifts' : mode === 'EMPTY_ONLY' ? 'Fill empty cells' : 'Fill roster'}
@@ -113,6 +149,7 @@ export const FillDialog: React.FC<FillDialogProps> = ({
             </p>
             {manualCount > 0 && (
               <Checkbox
+                disabled={isGenerating}
                 checked={clearIncludeManual}
                 onChange={(e) => setClearIncludeManual(e.target.checked)}
                 label={`Also remove the ${plural(manualCount, 'shift')} I changed by hand`}
@@ -123,8 +160,9 @@ export const FillDialog: React.FC<FillDialogProps> = ({
           <>
             <p className="text-ink">
               <strong>Kept:</strong> {kept.join(', ')}
-              {mode === 'EMPTY_ONLY' ? `, and every shift already on the roster (${assignments.length})` : ''}
+              {mode === 'EMPTY_ONLY' ? `, and every existing paid shift (${assignments.length})` : ''}
               {ranged ? `, and everything outside ${formatDate(fillRange.start)} to ${formatDate(fillRange.end)}` : ''}.{' '}
+              {mode === 'EMPTY_ONLY' && <>Available Float time in those shifts may cover doctors. </>}
               {mode === 'GENERATE_ALL' && (
                 <>
                   <strong>Replaced:</strong> {plural(filledCount + (keepManual ? 0 : manualCount), 'shift')}
@@ -133,7 +171,7 @@ export const FillDialog: React.FC<FillDialogProps> = ({
               )}
             </p>
             {mode === 'GENERATE_ALL' && manualCount > 0 && (
-              <Checkbox checked={keepManual} onChange={(e) => setKeepManual(e.target.checked)} label={`Keep the ${plural(manualCount, 'shift')} I changed by hand`} />
+              <Checkbox disabled={isGenerating} checked={keepManual} onChange={(e) => setKeepManual(e.target.checked)} label={`Keep the ${plural(manualCount, 'shift')} I changed by hand`} />
             )}
             <fieldset className="space-y-3 rounded-lg border border-line p-3" disabled={isGenerating}>
               <Checkbox
@@ -144,7 +182,7 @@ export const FillDialog: React.FC<FillDialogProps> = ({
               />
               {fillRange.enabled && (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="From" error={fillRange.start && fillRange.end && fillRange.start > fillRange.end ? 'The last day is before the first day.' : undefined}>
+                  <Field label="From" error={rangeError}>
                     {(f) => <DateInput {...f} value={fillRange.start} min={summary.startDate} max={summary.endDate} onChange={(iso) => setFillRange((r) => ({ ...r, start: iso }))} />}
                   </Field>
                   <Field label="To">
@@ -156,12 +194,13 @@ export const FillDialog: React.FC<FillDialogProps> = ({
 
             <p className="text-ink-muted">
               {plural(summary.activeNursesCount, 'nurse')} ({summary.bloodCollectionNursesCount} can take blood) and{' '}
-              {plural(summary.doctorSessionsCount, 'doctor clinic')} over {plural(summary.totalDays, 'day')}. Doctors get their nurses first, then
-              Nurse Clinic and the other jobs are filled.
+              {plural(summary.doctorSessionsCount, 'doctor clinic')} over {plural(summary.totalDays, 'day')}. The search follows the clinic rules
+              while improving doctor cover.
               {summary.targetWorkingHoursFullTime
                 ? ` A full time nurse has a goal of ${summary.targetWorkingHoursFullTime} h${summary.detectedPeriodName ? ` (${summary.detectedPeriodName})` : ''}.`
                 : ''}
             </p>
+            <p className="text-ink-muted">The search and final checks use all selected dates for up to two minutes. Only the final checked result is saved.</p>
 
             <fieldset className="space-y-2" disabled={isGenerating}>
               <legend className="mb-2 font-semibold text-ink">A free nurse for Nurse Clinic every opening hour</legend>
@@ -189,15 +228,23 @@ export const FillDialog: React.FC<FillDialogProps> = ({
           </>
         )}
 
-        {isGenerating && progress && (
-          <div className="space-y-2 rounded-lg border border-line bg-sunken p-3" role="status">
+        {isGenerating && (
+          <div className="space-y-2 rounded-lg border border-line bg-sunken p-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="font-semibold text-ink">{progress.statusText}</span>
-              <span className="font-semibold text-brand-strong">{progress.percent}%</span>
+              <span className="font-semibold text-ink" role="status" aria-atomic="true">{status}</span>
+              {percent !== undefined && <span className="font-semibold text-brand-strong">{Math.round(percent)}%</span>}
             </div>
-            <div className="h-2 w-full overflow-hidden rounded bg-line" aria-hidden="true">
-              <div className="h-full bg-brand transition-all duration-100" style={{ width: `${progress.percent}%` }} />
+            {/* Named progress and polite phase changes follow MDN's progress and status guidance:
+                https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/status_role */}
+            <div role="progressbar" aria-label="Roster search progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}
+              className="h-2 w-full overflow-hidden rounded bg-line">
+              <div className="h-full bg-brand transition-all duration-100 motion-reduce:transition-none" style={{ width: `${percent || 0}%` }} />
             </div>
+            {runProgress && <p className="text-ink-muted">Elapsed: {elapsedSeconds} seconds.</p>}
+            {missingMinutes !== undefined && <p className="font-semibold text-ink">Missing doctor cover in the best result: {coverTime}.</p>}
+            {saving ? <p className="text-ink-muted">The search is finished and the final result is being saved.</p>
+              : canCancel && <p className="text-ink-muted">Cancel stops the search without saving.</p>}
+            {!isClear && <p className="text-ink-muted">Remaining gaps may still have another solution.</p>}
           </div>
         )}
       </div>

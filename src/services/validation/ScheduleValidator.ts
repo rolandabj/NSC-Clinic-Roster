@@ -261,8 +261,8 @@ export class ScheduleValidator {
         if (!isHoliday && a.secondDoctorId && problems.length === 0 && !timingProblems.length && shared.length > 0) {
           const nurse = nurseMap.get(a.nurseId);
           const ids = assignmentDoctorIds(a);
-          if (nurseIsAvailable(nurse, date, presence) && nurse?.isClinicNurse && !outsideNurseList(nurse, a, { doctors, specialties, sessions }) &&
-            !leaveEntries.some(le => le.nurseId === a.nurseId && le.approved && le.startDate <= date && le.endDate >= date) &&
+          // A preference exception never waives the requirement to use eligible Float cover first.
+          if (nurse && assignmentCanCoverDoctor(a, doctorCoverage) &&
             ids.every(id => doctorSessionsOn(sessions, date).some(s => s.doctorId === id && duty &&
               overlaps(duty.startTime, duty.endTime, s.startTime, s.endTime)))) {
             const plus = resolveRule(rules, 'MIN_ADDITIONAL_NURSE_OVER_DOCTORS', 'rule-nurse-plus-one', ['additional nurse', 'above doctors', 'plus one']);

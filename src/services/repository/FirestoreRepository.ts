@@ -13,6 +13,7 @@ import {
   doc,
   getDocs,
   getDoc,
+  getDocFromServer,
   setDoc,
   deleteDoc,
   onSnapshot,
@@ -161,6 +162,33 @@ export class FirestoreRepository implements IRepository {
       console.warn(`[FirestoreRepository] list failed for ${colName}:`, err?.message || err);
       // Never pretend a failed read is an empty collection: screens would show
       // an empty roster and a later save could delete the real records.
+      throw err;
+    }
+  }
+
+  /** Final generation checks must not use a cached snapshot or an offline fallback. */
+  async listFresh<T extends CollectionName>(
+    colName: T,
+    filter?: { field: string; operator: '==' | '!='; value: any }
+  ): Promise<EntityForCollection<T>[]> {
+    try {
+      const colRef = collection(this.db, colName);
+      const q = filter ? query(colRef, where(filter.field, filter.operator, filter.value)) : query(colRef);
+      const snapshot = await getDocsFromServer(q);
+      return snapshot.docs.map(snap => ({ id: snap.id, ...snap.data() } as EntityForCollection<T>));
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
+      throw err;
+    }
+  }
+
+  /** Read the authoritative document, failing rather than accepting an offline copy. */
+  async getFresh<T extends CollectionName>(colName: T, id: string): Promise<EntityForCollection<T> | null> {
+    try {
+      const snapshot = await getDocFromServer(doc(this.db, colName, id));
+      return snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } as EntityForCollection<T> : null;
+    } catch (err: any) {
+      quotaTracker.notifyQuotaExceeded(err);
       throw err;
     }
   }

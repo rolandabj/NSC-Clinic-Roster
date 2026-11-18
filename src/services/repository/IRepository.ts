@@ -24,6 +24,12 @@ export interface IRepository {
     filter?: { field: string; operator: '==' | '!='; value: any }
   ): Promise<EntityForCollection<T>[]>;
 
+  /** Read the server directly for a final save check; fail when the server is unavailable. */
+  listFresh?<T extends CollectionName>(
+    collection: T,
+    filter?: { field: string; operator: '==' | '!='; value: any }
+  ): Promise<EntityForCollection<T>[]>;
+
   /**
    * One page of a collection, ordered by one field (see paging.ts). Optional: callers use
    * listPage() in paging.ts, which reads the whole list when a repository has no paging.
@@ -40,6 +46,9 @@ export interface IRepository {
     collection: T,
     id: string
   ): Promise<EntityForCollection<T> | null>;
+
+  /** Read one document directly from the server, bypassing the live collection cache. */
+  getFresh?<T extends CollectionName>(collection: T, id: string): Promise<EntityForCollection<T> | null>;
 
   /**
    * Create a new document. If id is omitted, one is generated.

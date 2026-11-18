@@ -26,6 +26,8 @@ export interface YearToDateInput {
   lateThreshold?: string;
   /** Used to find the Nurse Clinic role (role-nurse-clinic is always counted). */
   roles?: ClinicalRole[];
+  /** Explicit clinic weekdays for detached worker input and authoritative save checks. */
+  weekendDays?: readonly number[];
 }
 
 const emptyCounts = (): YearToDateCounts => ({ weekendDays: 0, holidays: 0, lateShifts: 0, nurseClinic: 0, rosters: 0 });
@@ -37,6 +39,7 @@ export function computeYearToDate({
   holidayDates,
   lateThreshold = '21:00',
   roles = [],
+  weekendDays,
 }: YearToDateInput): YearToDate {
   const holidays = new Set(holidayDates);
   const duties = new Map(dutyWindows.map((d) => [d.id, d]));
@@ -56,7 +59,10 @@ export function computeYearToDate({
       seen.add(key);
       const counts = (result[a.nurseId] ||= emptyCounts());
       inRoster.add(a.nurseId);
-      if (isWeekendDate(a.date)) counts.weekendDays++;
+      const weekend = weekendDays
+        ? weekendDays.includes(new Date(`${a.date}T00:00:00Z`).getUTCDay())
+        : isWeekendDate(a.date);
+      if (weekend) counts.weekendDays++;
       if (holidays.has(a.date)) counts.holidays++;
       if (isLateDuty(duties.get(a.dutyWindowId), lateThreshold)) counts.lateShifts++;
       if (a.kind === 'CLINICAL_ROLE' && a.clinicalRoleId && ncIds.has(a.clinicalRoleId)) counts.nurseClinic++;
@@ -164,6 +170,8 @@ export async function loadYearToDate(
   options: {
     lateThreshold?: string;
     roles?: ClinicalRole[];
+    /** Use the server clinic setting instead of a browser's stored preference. */
+    weekendDays?: readonly number[];
     /** All rosters, when the caller already has them (saves a read). */
     schedules?: Schedule[];
   } = {}
@@ -176,5 +184,6 @@ export async function loadYearToDate(
     holidayDates,
     lateThreshold: options.lateThreshold,
     roles: options.roles,
+    weekendDays: options.weekendDays,
   });
 }

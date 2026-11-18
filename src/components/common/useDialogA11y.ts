@@ -53,8 +53,16 @@ export function useDialogA11y<T extends HTMLElement>(isOpen: boolean, onClose?: 
 
     const focusables = () =>
       Array.from(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) || []).filter(
-        (el) => el.offsetParent !== null || el === document.activeElement
+        (el) => !el.matches(':disabled') && !el.closest('[inert]') &&
+          (el.offsetParent !== null || el === document.activeElement)
       );
+
+    const focusPanel = () => {
+      const panel = ref.current;
+      if (!panel) return;
+      if (!panel.hasAttribute('tabindex')) panel.setAttribute('tabindex', '-1');
+      panel.focus();
+    };
 
     // Move focus inside unless something inside already has it (e.g. autoFocus).
     const raf = requestAnimationFrame(() => {
@@ -62,10 +70,7 @@ export function useDialogA11y<T extends HTMLElement>(isOpen: boolean, onClose?: 
       if (!panel || panel.contains(document.activeElement)) return;
       const first = focusables()[0];
       if (first) first.focus();
-      else {
-        if (!panel.hasAttribute('tabindex')) panel.setAttribute('tabindex', '-1');
-        panel.focus();
-      }
+      else focusPanel();
     });
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -81,16 +86,17 @@ export function useDialogA11y<T extends HTMLElement>(isOpen: boolean, onClose?: 
       const items = focusables();
       if (items.length === 0) {
         e.preventDefault();
+        focusPanel();
         return;
       }
       const first = items[0];
       const last = items[items.length - 1];
       const active = document.activeElement as HTMLElement | null;
       const inside = !!active && !!ref.current?.contains(active);
-      if (e.shiftKey && (active === first || !inside)) {
+      if (e.shiftKey && (active === first || !inside || !items.includes(active!))) {
         e.preventDefault();
         last.focus();
-      } else if (!e.shiftKey && (active === last || !inside)) {
+      } else if (!e.shiftKey && (active === last || !inside || !items.includes(active!))) {
         e.preventDefault();
         first.focus();
       }
